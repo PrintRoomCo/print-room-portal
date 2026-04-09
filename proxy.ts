@@ -2,12 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createSupabaseMiddlewareClient } from '@/lib/supabase-middleware'
 
 /**
- * Next.js middleware:
+ * Next.js proxy (formerly middleware):
  * 1. Refreshes the Supabase session on every request (keeps cookies alive)
  * 2. Redirects unauthenticated users away from portal routes to /sign-in
  * 3. Redirects authenticated users away from auth routes to /account
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request })
   const supabase = createSupabaseMiddlewareClient(request, response)
 
