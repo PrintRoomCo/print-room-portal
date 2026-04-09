@@ -1,0 +1,408 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Quote calculator animations — replaces framer-motion for SSR safety */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Print Room Unified Design System
+ * Hero reference: Shopify storefront (print-room-no-design-tool)
+ * Charcoal primary, clean/solid components, selective glass on sidebar + modals
+ */
+
+/* ============================================
+ * CSS VARIABLES
+ * ============================================ */
+@layer base {
+  :root {
+    /* Brand colors (RGB triplets for Tailwind alpha support) */
+    --color-primary: 30 35 38;         /* #1E2326 - dark charcoal */
+    --color-primary-dark: 20 23 26;    /* darker charcoal for hover */
+    --color-brand-blue: 43 57 144;     /* #2B3990 - brand accent */
+    --color-brand-yellow: 241 255 165; /* #F1FFA5 - secondary accent */
+    --color-surface: 248 250 244;      /* #F8FAF4 - sidebar/secondary bg */
+
+    /* Design system tokens (HSL) */
+    --background: 0 0% 100%;
+    --foreground: 210 12% 13%;         /* #1E2326 */
+    --card: 0 0% 100%;
+    --card-foreground: 210 12% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 12% 13%;
+    --primary: 210 12% 13%;            /* #1E2326 - charcoal */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 210 12% 13%;
+    --radius: 0.5rem;
+
+    /* Clean shadow system */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
+    --shadow-xl: 0 16px 48px rgba(0,0,0,0.12);
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer components {
+  /* ============================================
+   * BUTTON SYSTEM
+   * Pill-shaped, charcoal primary, spring easing
+   * ============================================ */
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full border-2 border-[rgb(var(--color-brand-blue))] bg-transparent px-6 py-2.5 text-sm font-medium text-[rgb(var(--color-brand-blue))] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-primary:hover {
+    @apply bg-[rgb(var(--color-brand-blue))] text-white;
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-6 py-2.5 text-sm font-medium text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-secondary:hover {
+    @apply bg-gray-50 border-gray-300;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full bg-transparent px-5 py-2.5 text-sm font-medium text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-ghost:hover {
+    @apply bg-gray-100;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center rounded-full bg-[rgb(var(--color-brand-blue))] px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    box-shadow: var(--shadow-sm);
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-accent:hover {
+    opacity: 0.9;
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center rounded-full bg-red-500 px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    box-shadow: var(--shadow-sm);
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-danger:hover {
+    @apply bg-red-600;
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Hero CTA - Blue outline → blue fill on hover. Use for major conversion CTAs. */
+  .btn-hero {
+    @apply inline-flex items-center justify-center rounded-full border-2 border-[rgb(var(--color-brand-blue))] bg-transparent px-8 py-4 text-[rgb(var(--color-brand-blue))] font-medium italic relative overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-size: 1.25rem;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .btn-hero::after {
+    content: '\00a0\2192';
+  }
+
+  .btn-hero:hover {
+    @apply bg-[rgb(var(--color-brand-blue))] text-white;
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(43, 57, 144, 0.25);
+  }
+
+  .btn-hero:hover::before {
+    opacity: 1;
+  }
+
+  /* ============================================
+   * CARD SYSTEM
+   * Solid white, clean borders, no glass
+   * ============================================ */
+
+  .card {
+    @apply bg-white text-card-foreground rounded-2xl border border-gray-100;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .card-interactive {
+    @apply bg-white text-card-foreground rounded-2xl border border-gray-100 cursor-pointer transition-all duration-300;
+    box-shadow: var(--shadow-sm);
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-interactive:hover {
+    @apply border-gray-200;
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-elevated {
+    @apply bg-white text-card-foreground rounded-2xl border border-gray-100;
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-solid {
+    @apply bg-white text-card-foreground rounded-2xl border border-gray-200;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ============================================
+   * SIDEBAR (selective glass - kept)
+   * ============================================ */
+
+  .glass-sidebar {
+    @apply bg-[#ECFCCB] backdrop-blur-sm border-r border-lime-200/60;
+  }
+
+  /* Floating mobile header */
+  .header-floating-wrapper {
+    @apply fixed top-0 left-0 right-0 z-40 px-3 pt-2 pointer-events-none;
+  }
+
+  .header-floating-inner {
+    @apply bg-[#ECFCCB]/90 backdrop-blur-md rounded-2xl border border-lime-200/60 px-4 py-2 flex items-center justify-between pointer-events-auto;
+    box-shadow: var(--shadow-md);
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground rounded-full transition-all duration-300 font-dm-sans;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sidebar-link:hover {
+    @apply bg-white/50;
+  }
+
+  .sidebar-link-active {
+    @apply bg-white text-foreground border border-gray-100;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ============================================
+   * INPUT SYSTEM
+   * Gray-fill pill style
+   * ============================================ */
+
+  .input-glass {
+    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200;
+  }
+
+  .input-glass:focus {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .select-glass {
+    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-gray-200 text-foreground focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 appearance-none cursor-pointer;
+  }
+
+  .select-glass:focus {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .textarea-glass {
+    @apply w-full px-5 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 resize-none;
+  }
+
+  .textarea-glass:focus {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  }
+
+  /* ============================================
+   * BADGE SYSTEM
+   * Solid colors, no glass
+   * ============================================ */
+
+  .glass-badge-green {
+    @apply bg-[rgb(var(--color-brand-yellow))] text-[rgb(var(--color-brand-blue))] border border-[rgb(var(--color-brand-blue))]/15 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-blue {
+    @apply bg-[rgb(var(--color-brand-blue))]/10 text-[rgb(var(--color-brand-blue))] border border-[rgb(var(--color-brand-blue))]/20 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-yellow {
+    @apply bg-[#F1FFA5] text-black border border-black/10 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-red {
+    @apply bg-red-50 text-red-800 border border-red-200 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-gray {
+    @apply bg-gray-50 text-gray-800 border border-gray-200 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-purple {
+    @apply bg-purple-50 text-purple-800 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-orange {
+    @apply bg-orange-50 text-orange-800 border border-orange-200 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .glass-badge-cyan {
+    @apply bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* ============================================
+   * CONTAINER UTILITIES
+   * ============================================ */
+
+  .glass-chip {
+    @apply bg-white border border-gray-200 rounded-xl;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .glass-company-badge {
+    @apply bg-[#F1FFA5] border border-black/10 rounded-xl;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .glass-info-box {
+    @apply bg-[#F1FFA5] border border-black/10 rounded-xl;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .glass-success-box {
+    @apply bg-[rgb(var(--color-brand-yellow))]/20 border border-[rgb(var(--color-brand-blue))]/15 rounded-xl;
+  }
+
+  .glass-error-box {
+    @apply bg-red-50 border border-red-200 rounded-xl;
+  }
+
+  .glass-warning-box {
+    @apply bg-amber-50 border border-amber-200 rounded-xl;
+  }
+
+  /* ============================================
+   * MODAL SYSTEM (selective glass - kept)
+   * ============================================ */
+
+  .glass-modal {
+    @apply bg-white/95 backdrop-blur-sm border border-gray-200 rounded-2xl;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .glass-modal-content {
+    @apply bg-white/95 backdrop-blur-sm border border-gray-200 rounded-2xl;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .glass-modal-backdrop {
+    @apply fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+  }
+
+  .glass-modal-header {
+    @apply border-b border-gray-100 px-6 py-4;
+  }
+
+  .glass-modal-footer {
+    @apply border-t border-gray-100 px-6 py-4;
+  }
+
+  /* ============================================
+   * PROGRESS & STEPS
+   * ============================================ */
+
+  .glass-step-circle {
+    @apply w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-step-circle-active {
+    @apply border-[rgb(var(--color-brand-blue))] bg-[rgb(var(--color-brand-blue))] text-white;
+    box-shadow: var(--shadow-md);
+  }
+
+  .glass-step-circle-completed {
+    @apply border-[rgb(var(--color-brand-blue))] bg-[rgb(var(--color-brand-blue))] text-white;
+  }
+
+  .glass-step-circle-pending {
+    @apply border-gray-200 bg-white text-gray-400;
+  }
+
+  /* ============================================
+   * FILTER TABS
+   * ============================================ */
+
+  .filter-tab {
+    @apply px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-gray-50 text-gray-700 border border-gray-200;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .filter-tab:hover {
+    @apply bg-gray-100;
+  }
+
+  .filter-tab-active {
+    @apply bg-[rgb(var(--color-brand-blue))] text-white border-transparent;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ============================================
+   * QUANTITY CONTROLS
+   * ============================================ */
+
+  .quantity-control {
+    @apply inline-flex items-center rounded-full bg-white border border-gray-200 overflow-hidden;
+  }
+
+  .quantity-btn {
+    @apply w-9 h-9 flex items-center justify-center text-gray-600 transition-colors duration-200 disabled:opacity-50;
+  }
+
+  .quantity-btn:hover {
+    @apply bg-gray-100;
+  }
+
+  .quantity-value {
+    @apply w-12 text-center text-sm font-medium text-gray-900 bg-transparent;
+  }
+}
