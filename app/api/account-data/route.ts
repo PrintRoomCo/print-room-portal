@@ -34,23 +34,21 @@ export async function GET() {
 
     stores = storesData || []
 
-    // Fetch recent quotes for the company
+    // Fetch quotes for the company
     const { data: quotesData } = await adminClient
       .from('quotes')
-      .select('id, quote_number, status, total_amount, currency, line_items, created_at')
+      .select('id, reference, quote_number, status, customer_name, customer_email, customer_company, subtotal, total_amount, currency, source, created_at')
       .eq('organization_id', membership.organization_id)
       .order('created_at', { ascending: false })
-      .limit(5)
 
     recentQuotes = quotesData || []
   } else {
     // Individual user — fetch quotes by email
     const { data: quotesData } = await adminClient
       .from('quotes')
-      .select('id, quote_number, status, total_amount, currency, line_items, created_at')
+      .select('id, reference, quote_number, status, customer_name, customer_email, customer_company, subtotal, total_amount, currency, source, created_at')
       .eq('customer_email', user.email)
       .order('created_at', { ascending: false })
-      .limit(5)
 
     recentQuotes = quotesData || []
   }

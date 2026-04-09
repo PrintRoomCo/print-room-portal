@@ -15,7 +15,7 @@ interface SidebarProps {
 // Navigation items with permission requirements
 const allNavItems = [
   { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false },
-  { name: 'Orders', href: '/order-tracker', icon: TrackerIcon, requiresCompany: false },
+  { name: 'Projects', href: '/order-tracker', icon: TrackerIcon, requiresCompany: false },
   { name: 'My Quotes', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false },
 ] as const
 
@@ -88,6 +88,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                 alt="Print Room Logo"
                 width={32}
                 height={32}
+                style={{ width: 'auto', height: 'auto' }}
                 className="object-contain"
               />
               <span className="text-pr-blue text-base font-normal lowercase">portal</span>
@@ -155,6 +156,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                 alt="Print Room Logo"
                 width={56}
                 height={56}
+                style={{ width: 'auto', height: 'auto' }}
                 className="object-contain"
               />
             </div>

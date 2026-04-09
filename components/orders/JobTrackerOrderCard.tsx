@@ -30,9 +30,21 @@ interface JobTrackerOrderCardProps {
   showCustomerEmail?: boolean
 }
 
+const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
+
+function isTrackerCompleted(status: string): boolean {
+  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return COMPLETED_STATUSES.some((s) => normalized.includes(s))
+}
+
 export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOrderCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showReorderModal, setShowReorderModal] = useState(false)
+  const [reorderChanges, setReorderChanges] = useState('')
+  const [reorderSubmitting, setReorderSubmitting] = useState(false)
+  const [reorderSuccess, setReorderSuccess] = useState(false)
 
+  const completed = isTrackerCompleted(tracker.status)
   const quoteData = tracker.quote_data as QuoteData | null
   const items = quoteData?.items || []
   const subtotal = quoteData?.subtotal || 0
@@ -55,10 +67,10 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
   return (
     <div className="card-elevated overflow-hidden">
-      <button
-        type="button"
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 text-left hover:bg-gray-50 transition-colors duration-300"
+        className="w-full p-6 text-left hover:bg-gray-50 transition-colors duration-300 cursor-pointer"
       >
         <div className="flex gap-6">
           {/* Product Image */}
@@ -88,7 +100,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h3 className="font-semibold text-black">
-                  Order {tracker.quote_number || `#${tracker.monday_item_id || tracker.tracker_token}`}
+                  Project {tracker.quote_number || `#${tracker.monday_item_id || tracker.tracker_token}`}
                 </h3>
                 {tracker.monday_project_name && (
                   <p className="text-sm text-gray-600 truncate">{tracker.monday_project_name}</p>
@@ -116,6 +128,15 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                   <span className="text-black font-normal text-sm">{currency}</span>
                 </p>
                 <div className="flex gap-2 mt-2 justify-end">
+                  {completed && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowReorderModal(true) }}
+                      className="btn-secondary"
+                    >
+                      Reorder
+                    </button>
+                  )}
                   {tracker.quote_id && (
                     <Link
                       href={`/my-collections/${tracker.quote_id}`}
@@ -133,7 +154,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       onClick={(e) => e.stopPropagation()}
                       className="btn-primary"
                     >
-                      Track Order
+                      Track Project
                     </a>
                   )}
                 </div>
@@ -176,7 +197,119 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
             </div>
           </div>
         </div>
-      </button>
+      </div>
+
+      {/* Reorder Modal */}
+      {showReorderModal && (
+        <div className="glass-modal-backdrop" onClick={() => !reorderSubmitting && setShowReorderModal(false)}>
+          <div className="glass-modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Reorder Project</h2>
+                <button
+                  type="button"
+                  onClick={() => { setShowReorderModal(false); setReorderSuccess(false); setReorderChanges('') }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close"
+                  disabled={reorderSubmitting}
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {reorderSuccess ? (
+                <div className="text-center py-4">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-3">
+                    <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-gray-600">Reorder request submitted successfully. We&apos;ll be in touch shortly.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Would you like to reorder this project? Let us know about any changes or size breakdown updates.
+                  </p>
+
+                  <div className="mb-4">
+                    <label htmlFor="reorderChanges" className="block text-sm font-medium text-gray-700 mb-1">
+                      Changes or notes (optional)
+                    </label>
+                    <textarea
+                      id="reorderChanges"
+                      value={reorderChanges}
+                      onChange={(e) => setReorderChanges(e.target.value)}
+                      rows={3}
+                      placeholder="e.g., Update sizes, change quantities..."
+                      className="textarea-glass"
+                      disabled={reorderSubmitting}
+                    />
+                  </div>
+
+                  {tracker.proof_files && tracker.proof_files.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Original proof files</p>
+                      <div className="space-y-1">
+                        {tracker.proof_files.map((file, index) => (
+                          <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <span className="truncate">{file.name || `Proof ${index + 1}`}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowReorderModal(false); setReorderChanges('') }}
+                      className="flex-1 btn-secondary"
+                      disabled={reorderSubmitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reorderSubmitting}
+                      className="flex-1 btn-primary"
+                      onClick={async () => {
+                        setReorderSubmitting(true)
+                        try {
+                          const res = await fetch('/api/reorder', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ trackerId: tracker.id, changes: reorderChanges }),
+                          })
+                          if (!res.ok) {
+                            const data = await res.json()
+                            throw new Error(data.error || 'Failed to submit reorder')
+                          }
+                          setReorderSuccess(true)
+                          setTimeout(() => {
+                            setShowReorderModal(false)
+                            setReorderSuccess(false)
+                            setReorderChanges('')
+                          }, 2000)
+                        } catch {
+                          setReorderSubmitting(false)
+                        }
+                      }}
+                    >
+                      {reorderSubmitting ? 'Submitting...' : 'Submit Reorder'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Expanded Details */}
       {isExpanded && (
@@ -237,7 +370,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
           {/* Order Items */}
           {items.length > 0 && (
             <>
-              <h4 className="text-sm font-medium text-black mb-3">Order Items</h4>
+              <h4 className="text-sm font-medium text-black mb-3">Items</h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {items.map((item, index) => (
                   <div
@@ -310,7 +443,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm font-medium text-[rgb(var(--color-primary))] hover:text-[rgb(var(--color-primary-dark))] transition-colors"
             >
-              View Full Order Tracker
+              View Full Project Tracker
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>

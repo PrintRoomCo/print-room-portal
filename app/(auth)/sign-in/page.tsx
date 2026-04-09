@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, Suspense } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
@@ -17,14 +17,17 @@ export default function SignInPage() {
 function SignIn() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signIn } = useAuth()
+  const { sendOtp, verifyOtp } = useAuth()
 
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [step, setStep] = useState<'email' | 'pin'>('email')
+  const [pin, setPin] = useState<string[]>(['', '', '', '', '', ''])
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const captchaRef = useRef<HCaptcha>(null)
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const returnTo = searchParams.get('returnTo') || '/account'
   const hcaptchaSitekey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || null
@@ -49,12 +52,92 @@ function SignIn() {
     }
   }, [error])
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
+
+  const handleVerifyPin = useCallback(
+    async (digits: string[]) => {
+      const code = digits.join('')
+      if (code.length !== 6) return
+
+      setError(null)
+      setIsSubmitting(true)
+
+      const result = await verifyOtp(email, code)
+
+      if (result.error) {
+        setError(result.error)
+        setIsSubmitting(false)
+        setPin(['', '', '', '', '', ''])
+        pinRefs.current[0]?.focus()
+        return
+      }
+
+      router.push(returnTo)
+    },
+    [email, verifyOtp, router, returnTo]
+  )
+
+  function handlePinChange(index: number, value: string) {
+    // Only allow digits
+    const digit = value.replace(/\D/g, '').slice(-1)
+    const newPin = [...pin]
+    newPin[index] = digit
+    setPin(newPin)
+
+    if (digit && index < 5) {
+      pinRefs.current[index + 1]?.focus()
+    }
+
+    // Auto-submit when all 6 digits filled
+    if (digit && index === 5) {
+      handleVerifyPin(newPin)
+    }
+  }
+
+  function handlePinKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinRefs.current[index - 1]?.focus()
+    }
+  }
+
+  function handlePinPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (!pasted) return
+
+    const newPin = [...pin]
+    for (let i = 0; i < 6; i++) {
+      newPin[i] = pasted[i] || ''
+    }
+    setPin(newPin)
+
+    // Focus last filled input or auto-submit
+    if (pasted.length === 6) {
+      handleVerifyPin(newPin)
+    } else {
+      pinRefs.current[Math.min(pasted.length, 5)]?.focus()
+    }
+  }
+
+  async function handleSendCode(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
 
-    const result = await signIn(email, password, captchaToken || undefined)
+    const result = await sendOtp(email, captchaToken || undefined)
 
     if (result.error) {
       setError(result.error)
@@ -62,7 +145,25 @@ function SignIn() {
       return
     }
 
-    router.push(returnTo)
+    setStep('pin')
+    setResendCooldown(60)
+    setIsSubmitting(false)
+    // Focus first pin input after transition
+    setTimeout(() => pinRefs.current[0]?.focus(), 100)
+  }
+
+  async function handleResendCode() {
+    if (resendCooldown > 0) return
+    setError(null)
+
+    const result = await sendOtp(email)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setResendCooldown(60)
   }
 
   return (
@@ -91,7 +192,9 @@ function SignIn() {
             <div className="mb-8 text-center">
               <h2 className="text-2xl font-semibold text-gray-900">Sign In</h2>
               <p className="text-sm text-gray-500 mt-2">
-                Sign in with your email and password
+                {step === 'email'
+                  ? 'Enter your email to receive a sign-in code'
+                  : `We sent a 6-digit code to ${email}`}
               </p>
             </div>
 
@@ -102,86 +205,124 @@ function SignIn() {
               </div>
             )}
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} suppressHydrationWarning>
-              <div className="space-y-4" suppressHydrationWarning>
-                <div suppressHydrationWarning>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input-glass"
-                    suppressHydrationWarning
-                  />
+            {step === 'email' ? (
+              /* Email Step */
+              <form onSubmit={handleSendCode} suppressHydrationWarning>
+                <div className="space-y-4" suppressHydrationWarning>
+                  <div suppressHydrationWarning>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="you@company.com"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="input-glass"
+                      suppressHydrationWarning
+                    />
+                  </div>
                 </div>
 
-                <div suppressHydrationWarning>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Password <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Enter your password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input-glass"
-                    suppressHydrationWarning
-                  />
-                </div>
-              </div>
+                {/* hCaptcha */}
+                {hcaptchaSitekey && (
+                  <div className="mt-6 flex justify-center">
+                    <HCaptcha
+                      ref={captchaRef}
+                      sitekey={hcaptchaSitekey}
+                      onVerify={(token) => setCaptchaToken(token)}
+                      onExpire={() => setCaptchaToken(null)}
+                    />
+                  </div>
+                )}
 
-              {/* Forgot Password Link */}
-              <div className="mt-4 text-right">
-                <a
-                  href="/reset-password"
-                  className="text-sm text-[rgb(var(--color-primary))] hover:underline"
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="mt-8 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
                 >
-                  Forgot password or first time signing in?
-                </a>
-              </div>
+                  {isSubmitting ? 'Sending code...' : 'Send Code'}
+                </button>
 
-              {/* hCaptcha */}
-              {hcaptchaSitekey && (
-                <div className="mt-6 flex justify-center">
-                  <HCaptcha
-                    ref={captchaRef}
-                    sitekey={hcaptchaSitekey}
-                    onVerify={(token) => setCaptchaToken(token)}
-                    onExpire={() => setCaptchaToken(null)}
-                  />
+                {/* Request Access Link */}
+                <p className="mt-6 text-center text-sm text-gray-600">
+                  Don&apos;t have an account?{' '}
+                  <a
+                    href="/request-access"
+                    className="text-[rgb(var(--color-primary))] font-medium hover:underline"
+                  >
+                    Request access
+                  </a>
+                </p>
+              </form>
+            ) : (
+              /* PIN Step */
+              <div>
+                {/* 6-digit PIN inputs */}
+                <div className="flex justify-center gap-3">
+                  {pin.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => { pinRefs.current[index] = el }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      pattern="[0-9]"
+                      aria-label={`Digit ${index + 1} of 6`}
+                      value={digit}
+                      onChange={(e) => handlePinChange(index, e.target.value)}
+                      onKeyDown={(e) => handlePinKeyDown(index, e)}
+                      onPaste={index === 0 ? handlePinPaste : undefined}
+                      disabled={isSubmitting}
+                      className="w-12 h-14 text-center text-xl font-semibold rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/20 focus:border-[rgb(var(--color-primary))] transition-all duration-300 disabled:opacity-50"
+                      autoComplete="one-time-code"
+                    />
+                  ))}
                 </div>
-              )}
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="mt-8 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
-              >
-                {isSubmitting ? 'Signing in...' : 'Sign In'}
-              </button>
+                {isSubmitting && (
+                  <p className="mt-4 text-center text-sm text-gray-500">Verifying...</p>
+                )}
 
-              {/* Request Access Link */}
-              <p className="mt-6 text-center text-sm text-gray-600">
-                Don&apos;t have an account?{' '}
-                <a
-                  href="/request-access"
-                  className="text-[rgb(var(--color-primary))] font-medium hover:underline"
-                >
-                  Request access
-                </a>
-              </p>
-            </form>
+                {/* Resend + Change email */}
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={resendCooldown > 0}
+                    className="text-sm text-[rgb(var(--color-primary))] hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed"
+                  >
+                    {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep('email')
+                      setPin(['', '', '', '', '', ''])
+                      setError(null)
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                  >
+                    Change email
+                  </button>
+                </div>
+
+                {/* Request Access Link */}
+                <p className="mt-6 text-center text-sm text-gray-600">
+                  Don&apos;t have an account?{' '}
+                  <a
+                    href="/request-access"
+                    className="text-[rgb(var(--color-primary))] font-medium hover:underline"
+                  >
+                    Request access
+                  </a>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -208,14 +349,14 @@ function LeftPanel() {
           Welcome Back
         </h1>
         <p className="text-white/80 text-base xl:text-lg max-w-md">
-          Sign in to access your B2B dashboard, manage orders, and explore your
+          Sign in to access your B2B dashboard, manage projects, and explore your
           custom product catalog.
         </p>
 
         <ul className="space-y-2 xl:space-y-3 mt-4 xl:mt-6">
           {[
             'Access your custom designs',
-            'View order history & tracking',
+            'View project history & tracking',
             'Browse your exclusive catalog',
             'Manage team members',
             'Download reports & invoices',

@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { JobTrackerOrderCard } from '@/components/orders/JobTrackerOrderCard'
 import { TrackerSummaryCards } from '@/components/orders/TrackerSummaryCards'
 import type { JobTracker } from '@/lib/job-tracker'
 
-type StatusFilter = 'all' | 'active' | 'completed'
+type StatusFilter = 'active' | 'completed'
 
 const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
 
@@ -22,7 +21,7 @@ export default function OrderTracker() {
   const [isCompanyWide, setIsCompanyWide] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
 
   const fetchTrackers = useCallback(() => {
     fetch('/api/order-tracker')
@@ -44,13 +43,9 @@ export default function OrderTracker() {
   }, [companyLoading, access, fetchTrackers])
 
   const filteredTrackers = useMemo(() => {
-    let result = trackers
-
-    if (statusFilter === 'active') {
-      result = result.filter((t) => !isTrackerCompleted(t.status))
-    } else if (statusFilter === 'completed') {
-      result = result.filter((t) => isTrackerCompleted(t.status))
-    }
+    let result = statusFilter === 'active'
+      ? trackers.filter((t) => !isTrackerCompleted(t.status))
+      : trackers.filter((t) => isTrackerCompleted(t.status))
 
     if (search.trim()) {
       const query = search.toLowerCase().trim()
@@ -93,7 +88,7 @@ export default function OrderTracker() {
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Order Tracker</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
       </div>
 
       {/* Summary Cards */}
@@ -110,14 +105,11 @@ export default function OrderTracker() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by order #, project name, or token..."
+              placeholder="Search by project #, name, or reference..."
               className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/20 focus:border-[rgb(var(--color-primary))] transition-all duration-300"
             />
           </div>
           <div className="flex gap-2">
-            <FilterButton active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
-              All
-            </FilterButton>
             <FilterButton active={statusFilter === 'active'} onClick={() => setStatusFilter('active')}>
               Active
             </FilterButton>
@@ -163,13 +155,10 @@ export default function OrderTracker() {
               />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">No tracked orders yet</h2>
+          <h2 className="text-lg font-semibold text-gray-900">No projects yet</h2>
           <p className="mt-2 text-gray-600 max-w-sm mx-auto">
-            When your orders enter production, they&apos;ll appear here with live status updates.
+            When your projects enter production, they&apos;ll appear here with live status updates.
           </p>
-          <Link href="/my-collections" className="mt-6 btn-primary inline-block">
-            Browse Collections
-          </Link>
         </div>
       )}
     </div>
