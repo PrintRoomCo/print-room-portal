@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { B2BCustomerAccess } from '@/types/company'
@@ -31,6 +31,7 @@ function getNavigationItems(customer: B2BCustomerAccess) {
 
 export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { signOut } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -199,7 +200,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
         >
           <button
             type="button"
-            onClick={() => signOut()}
+            onClick={async () => { await signOut(); router.push('/sign-in') }}
             className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-4'} py-3 text-sm font-medium text-muted-foreground rounded-full hover:bg-white/50 transition-all duration-300 ease-spring font-dm-sans`}
             title={sidebarCollapsed ? 'Sign Out' : undefined}
           >

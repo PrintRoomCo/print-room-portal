@@ -14,13 +14,10 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  sendOtp: (
+  signIn: (
     email: string,
+    password: string,
     captchaToken?: string
-  ) => Promise<{ error: string | null }>
-  verifyOtp: (
-    email: string,
-    token: string
   ) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
@@ -51,28 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const sendOtp = useCallback(
-    async (email: string, captchaToken?: string) => {
+  const signIn = useCallback(
+    async (email: string, password: string, captchaToken?: string) => {
       const supabase = getSupabaseBrowser()
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
+        password,
         options: captchaToken ? { captchaToken } : undefined,
-      })
-      if (error) {
-        return { error: error.message }
-      }
-      return { error: null }
-    },
-    []
-  )
-
-  const verifyOtp = useCallback(
-    async (email: string, token: string) => {
-      const supabase = getSupabaseBrowser()
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token,
-        type: 'email',
       })
       if (error) {
         return { error: error.message }
@@ -88,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, sendOtp, verifyOtp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )
