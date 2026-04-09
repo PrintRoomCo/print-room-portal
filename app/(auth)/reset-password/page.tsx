@@ -74,7 +74,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Image src="/print-room-logo.png" alt="The Print Room" width={160} height={40} className="h-10 w-auto mx-auto" />
+          <Image src="/print-room-logo.png" alt="The Print Room" width={160} height={40} style={{ width: 'auto', height: 'auto' }} className="h-10 w-auto mx-auto" />
           <h1 className="text-2xl font-bold text-gray-900 mt-6 mb-2">Reset Your Password</h1>
           <p className="text-gray-600">
             Enter your email address and we&apos;ll send you a link to reset your password.

@@ -81,6 +81,7 @@ function SignIn() {
                 alt="The Print Room"
                 width={128}
                 height={32}
+                style={{ width: 'auto', height: 'auto' }}
                 className="h-8 w-auto mx-auto"
               />
               <p className="text-gray-600 mt-2 text-sm">B2B Portal Sign In</p>
@@ -102,9 +103,9 @@ function SignIn() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
+            <form onSubmit={handleSubmit} suppressHydrationWarning>
+              <div className="space-y-4" suppressHydrationWarning>
+                <div suppressHydrationWarning>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Email <span className="text-red-500">*</span>
                   </label>
@@ -117,10 +118,11 @@ function SignIn() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="input-glass"
+                    suppressHydrationWarning
                   />
                 </div>
 
-                <div>
+                <div suppressHydrationWarning>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Password <span className="text-red-500">*</span>
                   </label>
@@ -133,6 +135,7 @@ function SignIn() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="input-glass"
+                    suppressHydrationWarning
                   />
                 </div>
               </div>
@@ -195,6 +198,7 @@ function LeftPanel() {
           alt="The Print Room"
           width={192}
           height={48}
+          style={{ width: 'auto', height: 'auto' }}
           className="h-10 xl:h-12 w-auto brightness-0 invert"
         />
       </div>

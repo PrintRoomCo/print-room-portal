@@ -1,6 +1,7 @@
 'use server'
 
 import { getSupabaseServer } from '@/lib/supabase'
+import { createAccountRequestItem } from '@/lib/monday/account-requests'
 
 export async function submitAccessRequest(
   formData: FormData
@@ -55,6 +56,20 @@ export async function submitAccessRequest(
     console.error('[RequestAccess] Insert error:', error)
     return { error: 'Failed to submit your request. Please try again.' }
   }
+
+  // Fire-and-forget: push to Monday.com Account Requests board
+  createAccountRequestItem({
+    fullName: `${firstName.trim()} ${lastName.trim()}`,
+    email: email.trim().toLowerCase(),
+    companyName: companyName?.trim() || null,
+    phone: phone?.trim() || null,
+    customerType: customerType || null,
+    industry: industry || null,
+    estimatedVolume: estimatedVolume || null,
+    message: message?.trim() || null,
+  }).catch((err) => {
+    console.error('[RequestAccess] Monday push failed (non-blocking):', err)
+  })
 
   return { error: null }
 }

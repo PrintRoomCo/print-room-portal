@@ -111,7 +111,7 @@ export default function RequestAccess() {
         <div className="flex items-center justify-center p-6 lg:p-8">
           <div className="w-full max-w-lg py-8">
             <div className="lg:hidden mb-8 text-center">
-              <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} className="h-8 w-auto mx-auto" />
+              <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} style={{ width: 'auto', height: 'auto' }} className="h-8 w-auto mx-auto" />
             </div>
 
             <div className="mb-8">
@@ -246,7 +246,7 @@ function LeftPanel() {
   return (
     <div className="hidden lg:flex lg:w-1/2 bg-pr-blue p-8 xl:p-12 flex-col justify-between h-screen sticky top-0 overflow-hidden">
       <div className="flex-shrink-0">
-        <Image src="/print-room-logo.png" alt="The Print Room" width={192} height={48} className="h-10 xl:h-12 w-auto brightness-0 invert" />
+        <Image src="/print-room-logo.png" alt="The Print Room" width={192} height={48} style={{ width: 'auto', height: 'auto' }} className="h-10 xl:h-12 w-auto brightness-0 invert" />
       </div>
       <div className="space-y-4 xl:space-y-6 flex-1 flex flex-col justify-center py-6">
         <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">Join Our B2B Program</h1>
