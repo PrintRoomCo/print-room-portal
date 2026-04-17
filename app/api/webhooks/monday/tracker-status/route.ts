@@ -357,7 +357,7 @@ async function handleTrackerDateChange(
 ) {
   if (
     event.columnId !== PRODUCTION_COLUMNS.shipDate &&
-    event.columnId !== PRODUCTION_COLUMNS.promiseDate
+    event.columnId !== PRODUCTION_COLUMNS.inHandDate
   ) {
     return NextResponse.json({
       success: true,

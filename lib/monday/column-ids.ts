@@ -18,10 +18,23 @@ export const PRODUCTION_COLUMNS = {
   packingSlip: 'file_mks091cy',
   quoteTotal: 'numeric_mkpqavfj',
   mainStatus: 'color_mkpnas0e',
-  shippingStatus: 'color_mkqzj6fv',
-  trackingUrl: 'link_mkqz77w0',
-  promiseDate: 'date_mkrrgxzh',
+  // "Supplier Status" — covers the inbound blanks shipment from the
+  // garment supplier (AS Colour etc.). Not the customer's shipping status.
+  supplierStatus: 'color_mkqzj6fv',
+  // "Customer Tracker Link" — outbound courier tracking URL for the
+  // finished job going to the customer. This is the one to show on
+  // customer-facing pages.
+  customerTrackingUrl: 'link_mky1w9w',
+  // "Supplier Tracking Link" — inbound courier tracking for blanks
+  // arriving at Print Room. Staff-only; must never be exposed to customers.
+  supplierTrackingUrl: 'link_mkqz77w0',
+  // "In-hand Date" — the customer's promised delivery date; drives
+  // `estimated_delivery_at` on the tracker.
+  inHandDate: 'date_mky2nyht',
+  // "Ship Date" — when the parcel is handed to the courier.
   shipDate: 'date4',
+  // "Design approval date"
+  designApprovalDate: 'date_mkxvx75a',
   trackerUrl: 'text_mkxvmsha',
   decorationMethods: 'dropdown_mkq4q0wq',
 } as const
