@@ -29,4 +29,5 @@ export interface B2BCustomerAccess {
   canViewAllLocations: boolean
   canApproveDesigns: boolean
   canManageUsers: boolean
+  canUseLeavers: boolean
 }

@@ -4,16 +4,9 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useCompany } from '@/contexts/CompanyContext'
 import { JobTrackerOrderCard } from '@/components/orders/JobTrackerOrderCard'
 import { TrackerSummaryCards } from '@/components/orders/TrackerSummaryCards'
-import type { JobTracker } from '@/lib/job-tracker'
+import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
 
 type StatusFilter = 'active' | 'completed'
-
-const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
-
-function isTrackerCompleted(status: string): boolean {
-  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  return COMPLETED_STATUSES.some((s) => normalized.includes(s))
-}
 
 export default function OrderTracker() {
   const { access, loading: companyLoading } = useCompany()

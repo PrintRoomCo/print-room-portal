@@ -3,67 +3,61 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ProductionProgressBar } from '@/components/orders/ProductionProgressBar'
+import { ProjectLineItem } from '@/components/orders/ProjectLineItem'
+import { ReorderForm } from '@/components/orders/ReorderForm'
+import { useAuth } from '@/contexts/AuthContext'
 import type { JobTracker } from '@/lib/job-tracker'
-import { getTrackerUrl, getStatusLabel, getStatusGuidance } from '@/lib/job-tracker'
-
-interface QuoteDataItem {
-  productTitle: string
-  variantTitle?: string
-  quantity: number
-  price: { amount: string; currencyCode: string }
-  image?: { url: string; altText?: string }
-  selectedOptions?: Array<{ name: string; value: string }>
-}
-
-interface QuoteData {
-  items?: QuoteDataItem[]
-  subtotal?: number
-  currencyCode?: string
-  shippingAddress?: {
-    city?: string
-    country?: string
-  }
-}
+import {
+  getItemArtworkUrl,
+  getItemDisplayName,
+  getItemTotalQty,
+  getStatusGuidance,
+  getStatusLabel,
+  getTrackerUrl,
+  isTrackerCompleted,
+} from '@/lib/job-tracker'
 
 interface JobTrackerOrderCardProps {
   tracker: JobTracker
   showCustomerEmail?: boolean
 }
 
-const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
-
-function isTrackerCompleted(status: string): boolean {
-  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  return COMPLETED_STATUSES.some((s) => normalized.includes(s))
-}
-
 export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOrderCardProps) {
+  const { user } = useAuth()
   const [isExpanded, setIsExpanded] = useState(false)
   const [showReorderModal, setShowReorderModal] = useState(false)
-  const [reorderChanges, setReorderChanges] = useState('')
-  const [reorderSubmitting, setReorderSubmitting] = useState(false)
   const [reorderSuccess, setReorderSuccess] = useState(false)
 
   const completed = isTrackerCompleted(tracker.status)
-  const quoteData = tracker.quote_data as QuoteData | null
-  const items = quoteData?.items || []
-  const subtotal = quoteData?.subtotal || 0
+  const quoteData = tracker.quote_data ?? null
+  const items = quoteData?.items ?? []
+  const subtotal = quoteData?.summary?.total ?? quoteData?.summary?.subtotal ?? quoteData?.subtotal ?? 0
   const currency = quoteData?.currencyCode || 'NZD'
   const firstItem = items[0]
+  const productImages = tracker.productImagesByProductId || {}
 
   const getOrderImage = (): string | undefined => {
+    if (firstItem?.productId && productImages[firstItem.productId]) {
+      return productImages[firstItem.productId]
+    }
     if (tracker.product_images && tracker.product_images.length > 0) {
       return tracker.product_images[0]
     }
-    if (firstItem?.image?.url) {
-      return firstItem.image.url
+    if (firstItem) {
+      return getItemArtworkUrl(firstItem) ?? firstItem.image?.url
     }
     return undefined
   }
 
   const orderImage = getOrderImage()
   const trackerUrl = getTrackerUrl(tracker.tracker_token)
-  const totalItems = items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+  const totalItems = items.reduce((sum, item) => sum + getItemTotalQty(item), 0)
+  const firstItemLabel = firstItem ? getItemDisplayName(firstItem) : 'Order'
+
+  function closeReorderModal() {
+    setShowReorderModal(false)
+    setReorderSuccess(false)
+  }
 
   return (
     <div className="card-elevated overflow-hidden">
@@ -78,7 +72,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
             {orderImage ? (
               <img
                 src={orderImage}
-                alt={firstItem?.productTitle || 'Order'}
+                alt={firstItemLabel}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -131,7 +125,11 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                   {completed && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); setShowReorderModal(true) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setReorderSuccess(false)
+                        setShowReorderModal(true)
+                      }}
                       className="btn-secondary"
                     >
                       Reorder
@@ -201,17 +199,24 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
       {/* Reorder Modal */}
       {showReorderModal && (
-        <div className="glass-modal-backdrop" onClick={() => !reorderSubmitting && setShowReorderModal(false)}>
-          <div className="glass-modal-content max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="glass-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeReorderModal()
+          }}
+        >
+          <div
+            className="glass-modal-content max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Reorder Project</h2>
+                <h2 className="text-xl font-bold text-gray-900">Reorder project</h2>
                 <button
                   type="button"
-                  onClick={() => { setShowReorderModal(false); setReorderSuccess(false); setReorderChanges('') }}
+                  onClick={closeReorderModal}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                   aria-label="Close"
-                  disabled={reorderSubmitting}
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -220,91 +225,34 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
               </div>
 
               {reorderSuccess ? (
-                <div className="text-center py-4">
+                <div className="text-center py-6">
                   <div className="w-12 h-12 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-3">
                     <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <p className="text-sm text-gray-600">Reorder request submitted successfully. We&apos;ll be in touch shortly.</p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Would you like to reorder this project? Let us know about any changes or size breakdown updates.
+                  <p className="text-sm text-gray-700">
+                    Once you&apos;ve submitted this information, your account manager will
+                    reach out to confirm pricing and send an updated proof for your
+                    approval.
                   </p>
-
-                  <div className="mb-4">
-                    <label htmlFor="reorderChanges" className="block text-sm font-medium text-gray-700 mb-1">
-                      Changes or notes (optional)
-                    </label>
-                    <textarea
-                      id="reorderChanges"
-                      value={reorderChanges}
-                      onChange={(e) => setReorderChanges(e.target.value)}
-                      rows={3}
-                      placeholder="e.g., Update sizes, change quantities..."
-                      className="textarea-glass"
-                      disabled={reorderSubmitting}
-                    />
-                  </div>
-
-                  {tracker.proof_files && tracker.proof_files.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Original proof files</p>
-                      <div className="space-y-1">
-                        {tracker.proof_files.map((file, index) => (
-                          <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
-                            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                            <span className="truncate">{file.name || `Proof ${index + 1}`}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setShowReorderModal(false); setReorderChanges('') }}
-                      className="flex-1 btn-secondary"
-                      disabled={reorderSubmitting}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reorderSubmitting}
-                      className="flex-1 btn-primary"
-                      onClick={async () => {
-                        setReorderSubmitting(true)
-                        try {
-                          const res = await fetch('/api/reorder', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ trackerId: tracker.id, changes: reorderChanges }),
-                          })
-                          if (!res.ok) {
-                            const data = await res.json()
-                            throw new Error(data.error || 'Failed to submit reorder')
-                          }
-                          setReorderSuccess(true)
-                          setTimeout(() => {
-                            setShowReorderModal(false)
-                            setReorderSuccess(false)
-                            setReorderChanges('')
-                          }, 2000)
-                        } catch {
-                          setReorderSubmitting(false)
-                        }
-                      }}
-                    >
-                      {reorderSubmitting ? 'Submitting...' : 'Submit Reorder'}
-                    </button>
-                  </div>
-                </>
+                </div>
+              ) : user?.email ? (
+                <ReorderForm
+                  tracker={tracker}
+                  userEmail={user.email}
+                  onSubmitted={() => {
+                    setReorderSuccess(true)
+                    setTimeout(() => {
+                      closeReorderModal()
+                    }, 4000)
+                  }}
+                  onCancel={closeReorderModal}
+                />
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Your session has expired. Please sign in again to submit a reorder.
+                </p>
               )}
             </div>
           </div>
@@ -368,43 +316,24 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
           )}
 
           {/* Order Items */}
-          {items.length > 0 && (
+          {items.length > 0 ? (
             <>
               <h4 className="text-sm font-medium text-black mb-3">Items</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <div className="space-y-2">
                 {items.map((item, index) => (
-                  <div
-                    key={`${item.productTitle}-${index}`}
-                    className="glass-chip overflow-hidden"
-                  >
-                    <div className="aspect-square bg-gray-100/50">
-                      {item.image?.url ? (
-                        <img
-                          src={item.image.url}
-                          alt={item.image.altText || item.productTitle}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-300">
-                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2">
-                      <p className="text-xs font-medium text-black line-clamp-2 leading-tight">
-                        {item.productTitle}
-                      </p>
-                      {item.variantTitle && (
-                        <p className="text-xs text-gray-500 truncate">{item.variantTitle}</p>
-                      )}
-                      <p className="text-xs text-black mt-1">Qty: {item.quantity}</p>
-                    </div>
-                  </div>
+                  <ProjectLineItem
+                    key={`${item.productId || item.productName || 'item'}-${index}`}
+                    item={item}
+                    productImageUrl={item.productId ? productImages[item.productId] : undefined}
+                  />
                 ))}
               </div>
             </>
+          ) : (
+            <div className="glass-chip p-4 text-sm text-gray-600">
+              No itemised products on record for this project — your account manager
+              can reference the original quote.
+            </div>
           )}
 
           {/* Proof Files */}

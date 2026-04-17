@@ -1,5 +1,35 @@
 import { getSupabaseServer } from '@/lib/supabase'
+import { resolveProductFrontImages } from '@/lib/product-images'
 import type { JobTracker } from '@/lib/job-tracker'
+
+async function attachProductImages(trackers: JobTracker[]): Promise<JobTracker[]> {
+  if (trackers.length === 0) return trackers
+
+  const productIds = new Set<string>()
+  for (const tracker of trackers) {
+    const items = tracker.quote_data?.items ?? []
+    for (const item of items) {
+      if (item?.productId) productIds.add(item.productId)
+    }
+  }
+
+  if (productIds.size === 0) return trackers
+
+  const imageMap = await resolveProductFrontImages(Array.from(productIds))
+
+  return trackers.map((tracker) => {
+    const items = tracker.quote_data?.items ?? []
+    const trackerImages: Record<string, string> = {}
+    for (const item of items) {
+      if (item?.productId && imageMap[item.productId]) {
+        trackerImages[item.productId] = imageMap[item.productId]
+      }
+    }
+    return Object.keys(trackerImages).length > 0
+      ? { ...tracker, productImagesByProductId: trackerImages }
+      : tracker
+  })
+}
 
 export async function getJobsForUser(
   userId: string,
@@ -21,7 +51,7 @@ export async function getJobsForUser(
     }
 
     if (data && data.length > 0) {
-      return data as JobTracker[]
+      return attachProductImages(data as JobTracker[])
     }
 
     if (fallbackEmail) {
@@ -53,7 +83,7 @@ export async function getJobsForCustomer(
       return []
     }
 
-    return (data || []) as JobTracker[]
+    return attachProductImages((data || []) as JobTracker[])
   } catch (error) {
     console.error('[JobTracker] Error fetching customer jobs:', error)
     return []
@@ -85,7 +115,7 @@ export async function getJobsForCompany(
       return []
     }
 
-    return (data || []) as JobTracker[]
+    return attachProductImages((data || []) as JobTracker[])
   } catch (error) {
     console.error('[JobTracker] Error fetching company jobs:', error)
     return []
@@ -110,7 +140,7 @@ export async function getJobTrackersByQuoteId(
       return []
     }
 
-    return (data || []) as JobTracker[]
+    return attachProductImages((data || []) as JobTracker[])
   } catch (error) {
     console.error('[JobTracker] Error fetching jobs by quote_id:', error)
     return []
@@ -137,7 +167,9 @@ export async function getLatestJobTrackerByQuoteId(
       return null
     }
 
-    return (data as JobTracker | null) ?? null
+    if (!data) return null
+    const [withImages] = await attachProductImages([data as JobTracker])
+    return withImages
   } catch (error) {
     console.error('[JobTracker] Error fetching latest job by quote_id:', error)
     return null

@@ -49,6 +49,14 @@ export const STATUS_GUIDANCE: Record<string, { title: string; body: string }> = 
   },
 }
 
+export const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
+
+export function isTrackerCompleted(status: string | null | undefined): boolean {
+  if (!status) return false
+  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return COMPLETED_STATUSES.some((s) => normalized.includes(s))
+}
+
 export interface TrackingInfo {
   number?: string
   url?: string
@@ -76,6 +84,73 @@ export interface ProductionUpdate {
   metadata?: Record<string, unknown>
 }
 
+export interface QuoteDataLogo {
+  imageUrl?: string
+  url?: string
+  printMethod?: 'screen' | 'embroidery' | 'dtf' | 'heatpress' | string
+  printAreaId?: string
+  position?: { x: number; y: number; width: number; height: number; rotation?: number }
+}
+
+export interface QuoteDataColor {
+  name: string
+  hex: string
+  colorId?: string | number
+}
+
+export interface QuoteDataCustomizations {
+  logos?: QuoteDataLogo[]
+  colors?: {
+    garment?: QuoteDataColor
+    'garment-base'?: QuoteDataColor
+  }
+  neckLabels?: unknown[]
+}
+
+export interface QuoteDataItem {
+  // Shape written by print-room-studio / submit-quote
+  productId?: string
+  productName?: string
+  sizes?: Record<string, number>
+  quantity?: number
+  subtotal?: number
+  artworkTotal?: number
+  designInstanceId?: string
+  customizations?: QuoteDataCustomizations
+  // Tolerated legacy fields so older rows still render
+  productTitle?: string
+  variantTitle?: string
+  image?: { url: string; altText?: string }
+  price?: { amount: string; currencyCode: string }
+  selectedOptions?: Array<{ name: string; value: string }>
+}
+
+export interface QuoteData {
+  items?: QuoteDataItem[]
+  summary?: {
+    total?: number
+    subtotal?: number
+    delivery?: number
+    artworkTotal?: number
+    volumeDiscount?: number
+  }
+  customerName?: string
+  customerPhone?: string
+  leadTime?: string
+  shippingAddress?: {
+    name?: string
+    email?: string
+    phone?: string
+    company?: string
+    street?: string
+    city?: string
+    country?: string
+    postalCode?: string
+  }
+  subtotal?: number
+  currencyCode?: string
+}
+
 export interface JobTracker {
   id: string
   tracker_token: string
@@ -99,10 +174,40 @@ export interface JobTracker {
   production_complete_at: string | null
   product_images: string[]
   proof_files: Array<{ name: string; url: string }> | null
-  quote_data: Record<string, unknown> | null
+  quote_data: QuoteData | null
   created_at: string
   last_synced_at: string | null
   platform: string
+  // Populated server-side by job-tracker-queries for the expanded card view.
+  productImagesByProductId?: Record<string, string>
+}
+
+export function getItemTotalQty(item: QuoteDataItem): number {
+  if (item.sizes && Object.keys(item.sizes).length > 0) {
+    return Object.values(item.sizes).reduce((sum, n) => sum + (n || 0), 0)
+  }
+  return item.quantity ?? 0
+}
+
+export function getItemDisplayName(item: QuoteDataItem): string {
+  return item.productName ?? item.productTitle ?? 'Product'
+}
+
+export function getItemColorName(item: QuoteDataItem): string | undefined {
+  return item.customizations?.colors?.garment?.name
+}
+
+export function getItemColorHex(item: QuoteDataItem): string | undefined {
+  return item.customizations?.colors?.garment?.hex
+}
+
+export function getItemArtworkUrl(item: QuoteDataItem): string | undefined {
+  const logo = item.customizations?.logos?.[0]
+  return logo?.imageUrl ?? logo?.url
+}
+
+export function getItemPrintMethod(item: QuoteDataItem): string | undefined {
+  return item.customizations?.logos?.[0]?.printMethod
 }
 
 export function getStatusStepIndex(status: string | null | undefined): number {

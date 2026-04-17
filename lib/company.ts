@@ -43,6 +43,8 @@ export async function getCompanyAccess(
     .eq('user_id', userId)
     .single()
 
+  const leaversEnabled = Boolean(profile.leavers_enabled)
+
   // No company — individual user
   if (!orgMembership) {
     return buildAccess({
@@ -56,6 +58,7 @@ export async function getCompanyAccess(
       role: 'staff',
       tier: 'bronze',
       isCompanyUser: false,
+      leaversEnabled,
     })
   }
 
@@ -94,6 +97,7 @@ export async function getCompanyAccess(
     role,
     tier,
     isCompanyUser: true,
+    leaversEnabled,
   })
 }
 
@@ -108,17 +112,20 @@ interface AccessInput {
   role: 'admin' | 'manager' | 'staff'
   tier: string
   isCompanyUser: boolean
+  leaversEnabled: boolean
 }
 
 function buildAccess(input: AccessInput): B2BCustomerAccess {
-  const { role, isCompanyUser } = input
+  const { role, isCompanyUser, leaversEnabled, ...rest } = input
 
   const isAdmin = role === 'admin'
   const isManager = role === 'manager'
   const isStaff = role === 'staff'
 
   return {
-    ...input,
+    ...rest,
+    role,
+    isCompanyUser,
     isIndividual: !isCompanyUser,
     isAdmin,
     isManager,
@@ -132,6 +139,7 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     canViewAllLocations: isAdmin,
     canApproveDesigns: isAdmin || isManager,
     canManageUsers: isAdmin,
+    canUseLeavers: leaversEnabled,
   }
 }
 
@@ -150,5 +158,6 @@ async function buildAccessForIndividual(
     role: 'staff',
     tier: 'bronze',
     isCompanyUser: false,
+    leaversEnabled: false,
   })
 }

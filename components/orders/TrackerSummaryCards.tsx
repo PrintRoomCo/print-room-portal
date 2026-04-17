@@ -1,13 +1,6 @@
 'use client'
 
-import type { JobTracker } from '@/lib/job-tracker'
-
-const COMPLETED_STATUSES = ['dispatched', 'delivered', 'complete', 'fulfilled']
-
-function isCompleted(status: string): boolean {
-  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  return COMPLETED_STATUSES.some((s) => normalized.includes(s))
-}
+import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
 
 interface TrackerSummaryCardsProps {
   trackers: JobTracker[]
@@ -16,7 +9,7 @@ interface TrackerSummaryCardsProps {
 
 export function TrackerSummaryCards({ trackers, isCompanyWide }: TrackerSummaryCardsProps) {
   const total = trackers.length
-  const completed = trackers.filter((t) => isCompleted(t.status)).length
+  const completed = trackers.filter((t) => isTrackerCompleted(t.status)).length
   const active = total - completed
 
   const proofAwaitingCount = isCompanyWide
