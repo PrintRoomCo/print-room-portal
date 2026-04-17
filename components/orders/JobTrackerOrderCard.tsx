@@ -14,6 +14,7 @@ import {
   getStatusGuidance,
   getStatusLabel,
   getTrackerUrl,
+  getTrackingNumber,
   isTrackerCompleted,
 } from '@/lib/job-tracker'
 
@@ -263,37 +264,42 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
       {isExpanded && (
         <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4">
           {/* Tracking Info */}
-          {tracker.tracking_info?.number && (
-            <div className="mb-4 p-3 glass-chip">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[rgb(var(--color-brand-blue))]/10 border border-[rgb(var(--color-brand-blue))]/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-[rgb(var(--color-brand-blue))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                    </svg>
+          {(() => {
+            const displayNumber = getTrackingNumber(tracker.tracking_info)
+            const trackingUrl = tracker.tracking_info?.url
+            if (!displayNumber && !trackingUrl) return null
+            return (
+              <div className="mb-4 p-3 glass-chip">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[rgb(var(--color-brand-blue))]/10 border border-[rgb(var(--color-brand-blue))]/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-[rgb(var(--color-brand-blue))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {tracker.tracking_info?.carrier || 'Tracking'}
+                      </p>
+                      {displayNumber && (
+                        <p className="text-xs text-gray-600 font-mono">{displayNumber}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {tracker.tracking_info.carrier || 'Tracking'}
-                    </p>
-                    <p className="text-xs text-gray-600 font-mono">
-                      {tracker.tracking_info.number}
-                    </p>
-                  </div>
+                  {trackingUrl && (
+                    <a
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary text-sm"
+                    >
+                      Track Package
+                    </a>
+                  )}
                 </div>
-                {tracker.tracking_info.url && (
-                  <a
-                    href={tracker.tracking_info.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-primary text-sm"
-                  >
-                    Track Package
-                  </a>
-                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Estimated Delivery */}
           {tracker.estimated_delivery_at && (

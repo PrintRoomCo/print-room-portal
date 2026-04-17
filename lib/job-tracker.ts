@@ -59,9 +59,34 @@ export function isTrackerCompleted(status: string | null | undefined): boolean {
 
 export interface TrackingInfo {
   number?: string
+  /**
+   * Clean numeric tracking number. The writer sets `number` to whatever text
+   * was in the Monday link column (often the full URL), and extracts the
+   * digits-only value here. Prefer this for display via `getTrackingNumber`.
+   */
+  trackingNumber?: string
   url?: string
   carrier?: string
   changed_at?: string
+  updated_at?: string
+}
+
+/**
+ * Returns the displayable tracking number, preferring the clean value and
+ * falling back to extracting digits from whatever `number` holds (which may
+ * be a full URL — see sync-monday.js in print-room-studio).
+ */
+export function getTrackingNumber(info: TrackingInfo | null | undefined): string | undefined {
+  if (!info) return undefined
+  if (info.trackingNumber && /^\d+$/.test(info.trackingNumber.trim())) {
+    return info.trackingNumber.trim()
+  }
+  const raw = info.number?.trim()
+  if (!raw) return info.trackingNumber?.trim() || undefined
+  if (/^\d+$/.test(raw)) return raw
+  const match = raw.match(/\/(\d{10,})(?:[?#/]|$)/)
+  if (match) return match[1]
+  return info.trackingNumber?.trim() || undefined
 }
 
 export interface StatusHistoryEntry {
@@ -175,6 +200,9 @@ export interface JobTracker {
   product_images: string[]
   proof_files: Array<{ name: string; url: string }> | null
   quote_data: QuoteData | null
+  quote_data_source: 'unknown' | 'submit-quote' | 'monday-subitems' | 'manual'
+  monday_board_id: number | null
+  monday_items_synced_at: string | null
   created_at: string
   last_synced_at: string | null
   platform: string
