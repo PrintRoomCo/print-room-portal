@@ -249,6 +249,20 @@ async function handleTrackerStatusChange(
     })
   }
 
+  // Inventory decrement: subitem dispatched event.
+  // Runs alongside the existing tracker-status flow so other side-effects
+  // (emails, status_history, etc.) still run for the parent tracker.
+  if (event.parentItemId && canonicalKey === 'dispatched') {
+    const { shipMondaySubitem } = await import('@/lib/inventory/ship-quote-line')
+    await shipMondaySubitem(
+      supabase,
+      String(event.pulseId),
+      event.pulseName ?? null,
+      event
+    )
+    // Do not return — continue to the existing tracker-status path.
+  }
+
   const tracker = await findTrackerByEvent(supabase, event)
   if (!tracker) {
     return NextResponse.json({ success: true, message: 'Tracker not linked' })
