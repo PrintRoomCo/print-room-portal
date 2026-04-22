@@ -109,6 +109,13 @@ export async function POST(request: Request) {
 
   const adminClient = getSupabaseServer()
 
+  const { data: orgMembership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const organizationId = orgMembership?.organization_id ?? null
+
   const { data: tracker, error: trackerError } = await adminClient
     .from('job_trackers')
     .select('*')
@@ -142,6 +149,34 @@ export async function POST(request: Request) {
     })
 
     const result = await createReorderItem(reorderData)
+
+    const { error: persistErr } = await adminClient
+      .from('reorder_requests')
+      .insert({
+        organization_id: organizationId,
+        user_id: user.id,
+        tracker_id: tracker.id,
+        monday_item_id: result.itemId,
+        payload: {
+          delivery_address: deliveryAddress,
+          in_hand_date: inHandDate,
+          quantity: quantity ?? null,
+          notes: notes ?? null,
+          artwork_urls: artworkUrls ?? [],
+          customer_email: user.email,
+          customer_name: tracker.customer_name ?? null,
+          original_quote_number: tracker.quote_number ?? null,
+          original_job_reference: tracker.job_reference ?? null,
+        },
+      })
+    if (persistErr) {
+      console.error('[Reorder API] Monday item created but Supabase persist failed:', {
+        mondayItemId: result.itemId,
+        userId: user.id,
+        trackerId: tracker.id,
+        error: persistErr.message,
+      })
+    }
 
     return NextResponse.json({ success: true, mondayItemId: result.itemId })
   } catch (err) {
