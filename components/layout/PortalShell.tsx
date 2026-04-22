@@ -8,16 +8,26 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-muted-foreground text-sm">Loading...</div>
+      <div
+        className="min-h-screen flex items-center justify-center bg-white"
+        suppressHydrationWarning
+      >
+        <div className="text-muted-foreground text-sm" suppressHydrationWarning>
+          Loading...
+        </div>
       </div>
     )
   }
 
   if (!access) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-muted-foreground text-sm">Unable to load account data.</div>
+      <div
+        className="min-h-screen flex items-center justify-center bg-white"
+        suppressHydrationWarning
+      >
+        <div className="text-muted-foreground text-sm" suppressHydrationWarning>
+          Unable to load account data.
+        </div>
       </div>
     )
   }
