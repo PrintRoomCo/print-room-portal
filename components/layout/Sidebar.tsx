@@ -89,6 +89,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                 alt="Print Room Logo"
                 width={32}
                 height={32}
+                priority
                 style={{ width: 'auto', height: 'auto' }}
                 className="object-contain"
               />
@@ -157,6 +158,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                 alt="Print Room Logo"
                 width={56}
                 height={56}
+                priority
                 style={{ width: 'auto', height: 'auto' }}
                 className="object-contain"
               />
