@@ -499,7 +499,7 @@ export async function GET(request: Request) {
 }
 ```
 
-- [ ] **Step 2: cURL smoke + commit**
+- [x] **Step 2: cURL smoke + commit**
 
 ---
 
@@ -574,7 +574,7 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 2: cURL smoke + commit**
+- [x] **Step 2: cURL smoke + commit**
 
 ---
 
@@ -619,11 +619,12 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ---
 
 ## Task 9: `POST /api/shop/pricing`
+
 
 **Files:**
 - Create: `print-room-portal/app/api/shop/pricing/route.ts`
