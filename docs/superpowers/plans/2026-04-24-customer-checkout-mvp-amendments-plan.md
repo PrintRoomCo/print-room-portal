@@ -1193,7 +1193,7 @@ git commit -m "feat(inventory): conditional Inventory sidebar entry gated by has
 
 **Files:** none (verification only).
 
-- [ ] **Step 9.1: Boot fresh**
+- [x] **Step 9.1: Boot fresh**
 
 ```bash
 npx tsc --noEmit && npm run build
@@ -1201,13 +1201,13 @@ npx tsc --noEmit && npm run build
 
 Expected: both succeed with zero errors.
 
-- [ ] **Step 9.2: Dev session**
+- [x] **Step 9.2: Dev session**
 
 ```bash
 npm run dev
 ```
 
-- [ ] **Step 9.3: Reorder flow check**
+- [x] **Step 9.3: Reorder flow check**
 
 - Log in as a customer with completed past projects.
 - Navigate to `/order-tracker`.
@@ -1217,7 +1217,7 @@ npm run dev
 - Modal opens. Fill delivery address, in-hand date, optional qty, optional notes.
 - Submit. Expected: success toast, Monday CRM Deal created (check Monday's Deals board → "New Deals" group → the new item's text field should follow the Design/Product/Colour/Sizes pattern).
 
-- [ ] **Step 9.4: Customer inventory flow check**
+- [x] **Step 9.4: Customer inventory flow check**
 
 - Log in as a customer with tracked inventory (Reburger/Bike Glendhu/Otago Polytech, assuming the Inventory sub-app is live; otherwise log as any customer and expect the Inventory tab to be absent).
 - Sidebar has **Inventory** entry.
@@ -1226,7 +1226,7 @@ npm run dev
 - Log in as a customer **without** tracked inventory → Inventory entry is absent from the sidebar.
 - Direct-navigate to `/inventory` while logged in as a non-stocked customer → page loads with the empty state (not a crash).
 
-- [ ] **Step 9.5: Commit the verification pass (marker)**
+- [x] **Step 9.5: Commit the verification pass (marker)**
 
 ```bash
 git commit --allow-empty -m "chore: verified §15.1 + §15.2 flows end-to-end"
