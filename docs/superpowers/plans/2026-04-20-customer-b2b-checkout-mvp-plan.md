@@ -176,7 +176,7 @@ select column_name from information_schema.columns
 - Authenticated users can `select` their own `staff_quotes` rows (where `submitted_by_user_id = auth.uid()`). Staff see all.
 - Authenticated users can `insert` `staff_quotes` with `submitted_by_user_id = auth.uid()` (the quote-request path). Other inserts require service role.
 
-- [ ] **Step 1: Apply**
+- [x] **Step 1: Apply**
 
 `mcp__supabase__apply_migration` `name = "20260420_customer_checkout_rls"`:
 
@@ -242,7 +242,7 @@ create policy staff_quotes_select_staff
   );
 ```
 
-- [ ] **Step 2: Verify policies exist**
+- [x] **Step 2: Verify policies exist**
 
 ```sql
 select polname from pg_policy
@@ -251,7 +251,9 @@ select polname from pg_policy
 -- expect 6 rows (3 per table)
 ```
 
-- [ ] **Step 3: Commit**
+Verified 2026-04-24: `variant_reorder_requests` has 3 new policies; `staff_quotes` has 3 new plus the 2 pre-existing (`staff_quotes_admin_access`, `staff_quotes_own_access`) — total 5, additive and non-conflicting.
+
+- [x] **Step 3: Commit**
 
 ---
 
