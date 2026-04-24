@@ -13,8 +13,8 @@ import type { MondayCreateItemResponse } from './types'
 import type { JobTracker, QuoteDataItem } from '@/lib/job-tracker'
 import {
   getItemColorName,
+  getItemDesignName,
   getItemDisplayName,
-  getItemPrintMethod,
   getItemTotalQty,
 } from '@/lib/job-tracker'
 
@@ -62,26 +62,32 @@ export interface ReorderData {
   artworkUrls?: string[]
   proofFileUrls: string[]
   originalItems: QuoteDataItem[]
+  designNamesByInstanceId?: Record<string, string>
 }
 
-function formatProductsCompact(items: QuoteDataItem[]): string {
+function formatProductsCompact(
+  items: QuoteDataItem[],
+  designNamesByInstanceId?: Record<string, string>
+): string {
   if (!items || items.length === 0) {
     return 'Reorder — details on original job'
   }
   return items
     .map((item) => {
-      const name = getItemDisplayName(item)
+      const designName = getItemDesignName(item, designNamesByInstanceId)
+      const productName = getItemDisplayName(item)
       const qty = getItemTotalQty(item)
-      const method = getItemPrintMethod(item)
-      const parts = [name]
+      const parts = [`${designName} / ${productName}`]
       if (qty > 0) parts.push(`x${qty}`)
-      if (method) parts.push(`(${method})`)
       return parts.join(' ')
     })
     .join(', ')
 }
 
-function formatItemBreakdown(items: QuoteDataItem[]): string[] {
+function formatItemBreakdown(
+  items: QuoteDataItem[],
+  designNamesByInstanceId?: Record<string, string>
+): string[] {
   if (!items || items.length === 0) {
     return [
       'Original order had no itemised records (legacy webhook-only tracker).',
@@ -90,23 +96,29 @@ function formatItemBreakdown(items: QuoteDataItem[]): string[] {
   }
   const lines: string[] = []
   for (const item of items) {
-    const name = getItemDisplayName(item)
+    const designName = getItemDesignName(item, designNamesByInstanceId)
+    const productName = getItemDisplayName(item)
     const color = getItemColorName(item)
-    const method = getItemPrintMethod(item)
     const qty = getItemTotalQty(item)
-    const header = [name, color, method ? `(${method})` : null]
-      .filter(Boolean)
-      .join(' — ')
-    lines.push(`• ${header}`)
+
+    lines.push(`• Design: ${designName}`)
+    lines.push(`  Product: ${productName}`)
+    if (color) lines.push(`  Colour: ${color}`)
+
     const sizeBreakdown = item.sizes
       ? Object.entries(item.sizes)
           .filter(([, n]) => (n ?? 0) > 0)
           .map(([k, n]) => `${k}:${n}`)
           .join(' ')
       : ''
-    if (sizeBreakdown) lines.push(`  Sizes: ${sizeBreakdown} = ${qty}`)
-    else if (qty > 0) lines.push(`  Qty: ${qty}`)
+    if (sizeBreakdown) {
+      lines.push(`  Sizes: ${sizeBreakdown} = ${qty}`)
+    } else if (qty > 0) {
+      lines.push(`  Qty: ${qty}`)
+    }
+    lines.push('')
   }
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
   return lines
 }
 
