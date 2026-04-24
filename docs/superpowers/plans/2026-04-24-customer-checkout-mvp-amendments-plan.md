@@ -854,7 +854,7 @@ npx tsc --noEmit
 
 Expected: zero errors. The `any` cast on the mapper is intentional — PostgREST join shapes are hard to type cleanly without generated types. Leave the cast; generated types land in a follow-up.
 
-- [ ] **Step 5.3: Smoke-test the endpoint**
+- [x] **Step 5.3: Smoke-test the endpoint**
 
 ```bash
 npm run dev
@@ -870,7 +870,7 @@ Test unauthenticated: sign out, hit the URL again. Expected: status 401, body `{
 
 Stop the dev server.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
 ```bash
 git add app/api/inventory/route.ts
