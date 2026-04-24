@@ -159,7 +159,7 @@ function buildFullFormResponse(data: ReorderData): string {
   lines.push('')
 
   lines.push('--- Original Order Items ---')
-  lines.push(...formatItemBreakdown(data.originalItems))
+  lines.push(...formatItemBreakdown(data.originalItems, data.designNamesByInstanceId))
   lines.push('')
 
   if (data.artworkUrls && data.artworkUrls.length > 0) {
@@ -197,7 +197,7 @@ export async function createReorderItem(
   const columnValues: Record<string, unknown> = {
     [COL_CUSTOMER_NAME]: data.customerName,
     [COL_EMAIL]: { email: data.customerEmail, text: data.customerEmail },
-    [COL_PRODUCT]: formatProductsCompact(data.originalItems),
+    [COL_PRODUCT]: formatProductsCompact(data.originalItems, data.designNamesByInstanceId),
     [COL_FULL_FORM_RESPONSE]: { text: buildFullFormResponse(data) },
     [COL_DEAL_STAGE]: { label: DEAL_STAGE_LABEL },
     [COL_DEAL_SOURCE]: { label: DEAL_SOURCE_LABEL },
@@ -275,5 +275,6 @@ export function buildReorderDataFromTracker(
     artworkUrls: input.artworkUrls,
     proofFileUrls,
     originalItems: tracker.quote_data?.items ?? [],
+    designNamesByInstanceId: tracker.designNamesByInstanceId ?? {},
   }
 }
