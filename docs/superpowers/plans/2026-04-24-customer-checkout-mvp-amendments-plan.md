@@ -1110,7 +1110,7 @@ git commit -m "feat(inventory): /inventory customer-facing landing page"
 **Files:**
 - Modify: `components/layout/Sidebar.tsx`
 
-- [ ] **Step 8.1: Extend `allNavItems`**
+- [x] **Step 8.1: Extend `allNavItems`**
 
 At `components/layout/Sidebar.tsx:16-21`, replace the `allNavItems` array with:
 
@@ -1124,7 +1124,7 @@ const allNavItems = [
 ] as const
 ```
 
-- [ ] **Step 8.2: Extend `getNavigationItems`**
+- [x] **Step 8.2: Extend `getNavigationItems`**
 
 Replace the function body at lines 24-30 with:
 
@@ -1139,7 +1139,7 @@ function getNavigationItems(customer: B2BCustomerAccess) {
 }
 ```
 
-- [ ] **Step 8.3: Add `InventoryIcon` component**
+- [x] **Step 8.3: Add `InventoryIcon` component**
 
 Append alongside the other icon functions (after `LeaversIcon`):
 
@@ -1158,7 +1158,7 @@ function InventoryIcon({ className }: { className?: string }) {
 }
 ```
 
-- [ ] **Step 8.4: Compile**
+- [x] **Step 8.4: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -1166,7 +1166,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 8.5: Dev-server verification**
+- [x] **Step 8.5: Dev-server verification**
 
 ```bash
 npm run dev
@@ -1178,7 +1178,7 @@ Log in as:
 
 Stop the dev server.
 
-- [ ] **Step 8.6: Commit**
+- [x] **Step 8.6: Commit**
 
 ```bash
 git add components/layout/Sidebar.tsx
