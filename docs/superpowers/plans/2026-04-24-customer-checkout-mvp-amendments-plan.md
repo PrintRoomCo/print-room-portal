@@ -661,7 +661,7 @@ No `screenprint` method label, no image reference. If the output is wrong, fix a
 rm scripts/test-reorder-formatter.ts
 ```
 
-- [ ] **Step 3.7: Commit**
+- [x] **Step 3.7: Commit**
 
 ```bash
 git add lib/monday/reorder.ts
