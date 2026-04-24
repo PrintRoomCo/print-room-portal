@@ -1568,11 +1568,13 @@ export default async function QuoteRequestsListPage() {
 
 **Acceptance:** nav links `Shop`, `Cart`, `Quote Requests` render inside the portal layout for any authenticated user with an `organization_id`.
 
-- [ ] **Step 1: Read the current layout** to find the nav structure.
+- [x] **Step 1: Read the current layout** to find the nav structure.
 
-- [ ] **Step 2: Add the three entries** to wherever the existing `Account`, `Order Tracker`, `My Collections` links live.
+- [x] **Step 2: Add the three entries** to wherever the existing `Account`, `Order Tracker`, `My Collections` links live.
 
-- [ ] **Step 3: Commit**
+> **Implementation note 2026-04-24:** shipped **two** entries (Catalog + Quote Requests), not three. Jamie's 2026-04-24 direction: cart is a floating top-right chip (see `components/cart/CartChip.tsx`), NOT a sidebar entry. Both new entries gated by `requiresCompany: true` so non-B2B users don't see them. Order in the sidebar: My Account → Projects → **Catalog** → My Quotes → **Quote Requests** → Leavers Quotes → Inventory.
+
+- [x] **Step 3: Commit**
 
 ---
 

@@ -12,11 +12,14 @@ interface SidebarProps {
   customer: B2BCustomerAccess
 }
 
-// Navigation items with permission requirements
+// Navigation items with permission requirements.
+// Cart is intentionally NOT a sidebar entry — it's a floating top-right chip (see CartChip).
 const allNavItems = [
   { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Projects', href: '/projects', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
+  { name: 'Catalog', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'My Quotes', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
+  { name: 'Quote Requests', href: '/quote-requests', icon: QuoteRequestsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiresTrackedInventory: false },
   { name: 'Inventory', href: '/inventory', icon: InventoryIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: true },
 ] as const
@@ -311,6 +314,32 @@ function InventoryIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m-8-14l8 4m-8-4v10l8 4m0-10v10"
+      />
+    </svg>
+  )
+}
+
+function ShopIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.1 5.5a1 1 0 001 1.5H19M9 21a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"
+      />
+    </svg>
+  )
+}
+
+function QuoteRequestsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12h6m-6 4h4m2-10H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-4-4z"
       />
     </svg>
   )
