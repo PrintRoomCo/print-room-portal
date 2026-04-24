@@ -273,7 +273,7 @@ git commit -m "feat(reorder): add getItemDesignName helper + tracker enrichment"
 - Modify: `components/orders/ProjectLineItem.tsx`
 - Modify: `components/orders/JobTrackerOrderCard.tsx` — pass `designNamesByInstanceId` to each `<ProjectLineItem>` invocation
 
-- [ ] **Step 2.1: Update `ProjectLineItemProps`**
+- [x] **Step 2.1: Update `ProjectLineItemProps`**
 
 Replace the current interface:
 
@@ -295,7 +295,7 @@ export interface ProjectLineItemProps {
 
 The `productImageUrl` prop is removed — §15.1 drops the thumbnail entirely.
 
-- [ ] **Step 2.2: Replace the component body**
+- [x] **Step 2.2: Replace the component body**
 
 Full replacement for the component (everything from `export function ProjectLineItem` to the closing brace). Paste:
 
@@ -377,7 +377,7 @@ export function ProjectLineItem({
 }
 ```
 
-- [ ] **Step 2.3: Update imports at the top of `ProjectLineItem.tsx`**
+- [x] **Step 2.3: Update imports at the top of `ProjectLineItem.tsx`**
 
 Replace the import block with:
 
@@ -394,7 +394,7 @@ import {
 
 Remove: `getItemArtworkUrl`, `getItemPrintMethod` — no longer used here. Also remove the local `capitalise` helper function (it was only used for `printMethod`).
 
-- [ ] **Step 2.4: Update `JobTrackerOrderCard.tsx` callers**
+- [x] **Step 2.4: Update `JobTrackerOrderCard.tsx` callers**
 
 `JobTrackerOrderCard` uses `ProjectLineItem` when rendering the expanded body (not directly shown in the earlier read, but it's the parent card — verify with `grep -n "ProjectLineItem" components/orders/JobTrackerOrderCard.tsx`).
 
@@ -409,7 +409,7 @@ For every `<ProjectLineItem ... />` invocation, replace the `productImageUrl` pr
 
 Remove any `getOrderImage()`-derived `productImageUrl` pass-through for ProjectLineItem. (The order card's own header thumbnail at lines 40-53 of `JobTrackerOrderCard.tsx` can stay — that's the card-level hero image, not the per-line image. Chris's §15.1 drop rule applies to the *line-item* display.)
 
-- [ ] **Step 2.5: Compile**
+- [x] **Step 2.5: Compile**
 
 ```bash
 npx tsc --noEmit
