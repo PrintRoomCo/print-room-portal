@@ -1791,3 +1791,28 @@ From Quote Builder plan:
 - `staff_quotes.submitted_by_user_id` consumer (staff quote builder surfaces these as unassigned drafts).
 
 This plan does not export new shared contracts — it is the terminal consumer in the spec dependency chain.
+
+---
+
+## Constraints added by 2026-04-24 amendments plan
+
+The amendments plan at [2026-04-24-customer-checkout-mvp-amendments-plan.md](./2026-04-24-customer-checkout-mvp-amendments-plan.md) adds two forward-looking constraints this plan must honour when implementing the catalogue and cart surfaces:
+
+### Catalogue nav label
+
+- The `/shop` sidebar entry must render with the label **"Catalog"** (not "Shop"). Matches the Shopify vocabulary customers know. Route path stays `/shop`.
+
+### Cart-chip visibility
+
+When the cart chip/indicator is added to the layout (part of this plan's cart tasks), its visibility must be scoped to the following routes only:
+
+- `/shop`
+- `/shop/[productId]`
+- `/cart`
+- `/checkout`
+- `/order-tracker`
+- `/inventory`
+
+On all other portal routes (`/account`, `/my-collections`, `/projects`, `/leavers-quotes`, etc.), the cart chip must not render. Use `usePathname()` from `next/navigation` and a `startsWith` check against the scoped route list.
+
+Rationale: Chris's 2026-04-24 call — customers on non-ordering pages shouldn't see a cart indicator, to avoid confusion between browsing contexts.
