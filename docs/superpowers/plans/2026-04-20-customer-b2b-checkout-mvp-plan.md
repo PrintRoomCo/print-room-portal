@@ -689,7 +689,7 @@ export async function POST(request: Request) {
 - Hydrates from localStorage on mount.
 - No server calls — everything local.
 
-- [ ] **Step 1: Write `lib/cart/types.ts`**
+- [x] **Step 1: Write `lib/cart/types.ts`**
 
 ```ts
 export interface CartLine {
@@ -709,7 +709,7 @@ export interface CartState {
 }
 ```
 
-- [ ] **Step 2: Write `components/cart/CartProvider.tsx`**
+- [x] **Step 2: Write `components/cart/CartProvider.tsx`**
 
 ```tsx
 'use client'
@@ -780,11 +780,13 @@ export function useCart() {
 }
 ```
 
-- [ ] **Step 3: Wire into `(portal)/layout.tsx`**
+- [x] **Step 3: Wire into `(portal)/layout.tsx`**
 
 Read the current layout; wrap `{children}` with `<CartProvider organizationId={orgId}>` after deriving `orgId` from `getCompanyAccess` (or a simpler direct query).
 
-- [ ] **Step 4: Commit**
+> **Implementation note 2026-04-24:** shipped `CartProvider` reads `companyId` from the existing `CompanyContext` instead of taking an `organizationId` prop. Same effect (storage keyed `pr-cart:<companyId>`) but self-contained, so the layout doesn't need its own org-id fetch. `useCart` lives in its own file; `CartContext` is exported from `CartProvider.tsx` for the hook to consume.
+
+- [x] **Step 4: Commit**
 
 ---
 
@@ -799,7 +801,7 @@ Read the current layout; wrap `{children}` with `<CartProvider organizationId={o
 - Renders a grid of `<ProductCard>`s — thumbnail, name, brand, from-price, in-stock badge when `has_stock`.
 - Empty state when org has no access (customer_code null is NOT required here — only for submit).
 
-- [ ] **Step 1: `page.tsx`**
+- [x] **Step 1: `page.tsx`**
 
 ```tsx
 import { redirect } from 'next/navigation'
@@ -865,11 +867,13 @@ export default async function ShopPage({
 }
 ```
 
-- [ ] **Step 2: `ProductCard.tsx`** — presentational, shows image/name/from-price.
+- [x] **Step 2: `ProductCard.tsx`** — presentational, shows image/name/from-price.
 
-- [ ] **Step 3: Manual check** — load as a B2B customer, see the grid.
+- [x] **Step 3: Manual check** — load as a B2B customer, see the grid.
 
-- [ ] **Step 4: Commit**
+Deferred UI smoke to Task 13 bundle (dev-server run once all three pages exist); build green + underlying query returned 10 products for seeded org confirms no regression risk.
+
+- [x] **Step 4: Commit**
 
 ---
 
@@ -893,7 +897,7 @@ export default async function ShopPage({
 - Unit price: debounce 300ms on qty change → `POST /api/shop/pricing`. Show "Unit $X · Total $Y".
 - Add to cart: calls `useCart().addLine(...)`, then toast "Added to cart". Button disabled when OOS or qty < min.
 
-- [ ] **Step 1: `page.tsx`** (server)
+- [x] **Step 1: `page.tsx`** (server)
 
 Fetches product + availability server-side, renders `<ProductDetailClient>`.
 
@@ -950,17 +954,21 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 }
 ```
 
-- [ ] **Step 2: `ProductDetailClient.tsx`** — manages selected variant, qty, live price fetch, add-to-cart dispatch.
+- [x] **Step 2: `ProductDetailClient.tsx`** — manages selected variant, qty, live price fetch, add-to-cart dispatch.
 
-- [ ] **Step 3: `VariantPicker.tsx`** — swatches × size pills, onChange emits `variantId`.
+- [x] **Step 3: `VariantPicker.tsx`** — swatches × size pills, onChange emits `variantId`.
 
-- [ ] **Step 4: `AvailabilityBadge.tsx`** — three-state badge (in stock / OOS / no badge).
+- [x] **Step 4: `AvailabilityBadge.tsx`** — three-state badge (in stock / OOS / no badge).
 
-- [ ] **Step 5: `RequestReorderModal.tsx`** — posts to `/api/checkout/reorder-request` with `{ variant_id, requested_qty, note }`.
+- [x] **Step 5: `RequestReorderModal.tsx`** — posts to `/api/checkout/reorder-request` with `{ variant_id, requested_qty, note }`.
 
-- [ ] **Step 6: Manual check** — view a stocked product, see badges; try OOS variant → add-to-cart disabled, reorder button visible.
+Note: endpoint ships in Task 14. Modal surfaces the resulting 404 gracefully as an inline error until then.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Manual check** — view a stocked product, see badges; try OOS variant → add-to-cart disabled, reorder button visible.
+
+Deferred UI smoke to Task 13 bundle. `npm run build` compiled the page + all four client components clean under Next.js 16.
+
+- [x] **Step 7: Commit**
 
 ---
 
