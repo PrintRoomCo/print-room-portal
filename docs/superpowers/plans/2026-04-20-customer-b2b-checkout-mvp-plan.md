@@ -1037,7 +1037,7 @@ Also added `components/cart/CartChip.tsx` (spec §15.3) — fixed-position float
 - Calls `notifyStaffReorder(row)` — v1 logs to console.
 - Returns `{ ok: true, id }`.
 
-- [ ] **Step 1: Write the helper**
+- [x] **Step 1: Write the helper**
 
 ```ts
 // lib/checkout/reorder-request.ts
@@ -1071,7 +1071,7 @@ export async function createReorderRequest(
 }
 ```
 
-- [ ] **Step 2: Write the route**
+- [x] **Step 2: Write the route**
 
 ```ts
 import { NextResponse } from 'next/server'
@@ -1100,7 +1100,7 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ---
 
@@ -1121,7 +1121,9 @@ export async function POST(request: Request) {
 - Returns `{ order_id, order_ref, monday_item_id, monday_push_error }`.
 - On `OUT_OF_STOCK` from the RPC: 409 `{ error: 'OUT_OF_STOCK' }`.
 
-- [ ] **Step 1: Write `lib/checkout/submit.ts`**
+> **Implementation note 2026-04-24:** `b2b_accounts.payment_terms` CHECK constraint permits only `{'prepay','net20','net30'}`. The plan code below defaulted to `'net_20'` (underscore), which fails the constraint and 500s the RPC. Shipped helper uses `'net20'` as fallback. Seeded tenant's `context.paymentTerms = 'net30'` so the fallback is rarely hit in practice.
+
+- [x] **Step 1: Write `lib/checkout/submit.ts`**
 
 ```ts
 import type { B2BCustomerContext } from '@/lib/checkout/server'
@@ -1266,7 +1268,7 @@ export async function submitCustomerOrder(admin: any, input: CheckoutInput): Pro
 }
 ```
 
-- [ ] **Step 2: Write the route**
+- [x] **Step 2: Write the route**
 
 ```ts
 import { NextResponse } from 'next/server'
@@ -1324,7 +1326,7 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ---
 
@@ -1340,7 +1342,7 @@ export async function POST(request: Request) {
 - Does NOT reserve stock, does NOT push Monday.
 - Returns `{ staff_quote_id }`.
 
-- [ ] **Step 1: Helper**
+- [x] **Step 1: Helper**
 
 ```ts
 // lib/checkout/quote-request.ts
@@ -1391,7 +1393,7 @@ export async function createQuoteRequest(
 }
 ```
 
-- [ ] **Step 2: Route**
+- [x] **Step 2: Route**
 
 ```ts
 import { NextResponse } from 'next/server'
@@ -1417,7 +1419,7 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ---
 
@@ -1438,7 +1440,7 @@ export async function POST(request: Request) {
   - "Submit as quote request" → POST `/api/checkout/quote-request`; on 200 → `router.push('/quote-requests/' + id)`.
 - Customer-code gate: if `customerCode` null, disable Place Order and show "Your account is pending setup — contact staff".
 
-- [ ] **Step 1: `page.tsx`**
+- [x] **Step 1: `page.tsx`**
 
 ```tsx
 import { redirect } from 'next/navigation'
@@ -1463,9 +1465,9 @@ export default async function CheckoutPage() {
 }
 ```
 
-- [ ] **Step 2: `CheckoutClient.tsx`** — reads `useCart()`, manages ship-to state, submits via fetch. Full handler code per spec §9.4.
+- [x] **Step 2: `CheckoutClient.tsx`** — reads `useCart()`, manages ship-to state, submits via fetch. Full handler code per spec §9.4.
 
-- [ ] **Step 3: `/checkout/confirmation/[orderId]/page.tsx`** — server fetches order + quote; shows `order_ref`, line summary, Monday sync status, "Copy ref" button.
+- [x] **Step 3: `/checkout/confirmation/[orderId]/page.tsx`** — server fetches order + quote; shows `order_ref`, line summary, Monday sync status, "Copy ref" button.
 
 ```tsx
 import { requireB2BCustomer } from '@/lib/checkout/server'
@@ -1493,7 +1495,9 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ o
 
 - [ ] **Step 4: Manual check** — full happy path with a seeded customer.
 
-- [ ] **Step 5: Commit**
+(Deferred. Server can't run a full RPC/Monday round-trip without a real session cookie; smoke happens once Task 19 ships sidebar entries and the dev-server can walk the flow end-to-end.)
+
+- [x] **Step 5: Commit**
 
 ---
 
@@ -1508,7 +1512,7 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ o
 - Detail: read-only summary of lines. If `status='approved'` and `total > 0`, show pricing block: "Staff priced this at $X. Accept?" — Accept/Decline buttons rendered but disabled with tooltip "In-app acceptance arrives in v1.1 — please confirm with your account manager."
 - v1.1 TODO comment marks where the buttons will wire up.
 
-- [ ] **Step 1: `quote-requests/page.tsx`**
+- [x] **Step 1: `quote-requests/page.tsx`**
 
 ```tsx
 import { redirect } from 'next/navigation'
@@ -1551,9 +1555,9 @@ export default async function QuoteRequestsListPage() {
 }
 ```
 
-- [ ] **Step 2: `quote-requests/[id]/page.tsx`** — server fetches the row, renders line summary + pricing block when approved.
+- [x] **Step 2: `quote-requests/[id]/page.tsx`** — server fetches the row, renders line summary + pricing block when approved.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ---
 
