@@ -27,7 +27,9 @@ Reference plans:
 
 ## Current state (from codebase inspection)
 
-**Live schema missing:** `reorder_requests` table, `quote_items.ship_to_store_id`, `staff_quotes.submitted_by_user_id`.
+**Live schema missing:** `variant_reorder_requests` table, `quote_items.ship_to_store_id`, `staff_quotes.submitted_by_user_id`.
+
+> **Amendment 2026-04-24 — table rename.** Task 1's table was originally named `reorder_requests` in this plan. That name is already taken by the **tracker-level** reorder feature (§15.1 amendment — `user_id, tracker_id, monday_item_id, payload, submitted_at`) created by the 2026-04-24 amendments plan. The variant-level OOS escape hatch introduced here is a genuinely different concern (different Monday path, different lifecycle), so it gets its own table `variant_reorder_requests`. All downstream references in Tasks 1, 2, 14, 20 have been updated accordingly.
 
 **Customer-portal routes** under `app/(portal)/`: `account`, `projects`, `order-tracker`, `leavers-quotes`, `my-collections`. No `shop`, `cart`, `checkout`, or `quote-requests` yet — all greenfield in this plan.
 
@@ -60,7 +62,7 @@ Reference plans:
 - `lib/checkout/server.ts` — `requireB2BCustomer()` auth helper (returns context with organization_id + b2b account)
 - `lib/checkout/submit.ts` — wraps `submit_b2b_order` RPC + post-commit Monday push (mirrors staff CSR's `submitB2BOrder`)
 - `lib/checkout/quote-request.ts` — writes a `staff_quotes` row for the customer's cart
-- `lib/checkout/reorder-request.ts` — writes a `reorder_requests` row
+- `lib/checkout/reorder-request.ts` — writes a `variant_reorder_requests` row
 - `lib/shop/catalog.ts` — PostgREST helpers for catalog queries
 - `lib/shop/availability.ts` — reads `variant_availability` for an org
 - `lib/monday/production-job.ts` — duplicate of staff-portal file (per spec §4.3)
@@ -103,17 +105,17 @@ Reference plans:
 
 ### Migrations (via `mcp__supabase__apply_migration`)
 
-- `20260420_customer_checkout_schema` — `reorder_requests` table, `quote_items.ship_to_store_id`, `staff_quotes.submitted_by_user_id`
-- `20260420_customer_checkout_rls` — RLS policies on `reorder_requests`, customer access to own `staff_quotes`
+- `20260420_customer_checkout_schema` — `variant_reorder_requests` table, `quote_items.ship_to_store_id`, `staff_quotes.submitted_by_user_id`
+- `20260420_customer_checkout_rls` — RLS policies on `variant_reorder_requests`, customer access to own `staff_quotes`
 
 ---
 
 # Tasks
 
-## Task 1: Schema — reorder_requests, ship_to_store_id, submitted_by_user_id
+## Task 1: Schema — variant_reorder_requests, ship_to_store_id, submitted_by_user_id
 
 **Acceptance criteria:**
-- `reorder_requests` table exists with the check constraint on `status`.
+- `variant_reorder_requests` table exists with the check constraint on `status`.
 - `quote_items.ship_to_store_id uuid references stores(id)` exists, nullable.
 - `staff_quotes.submitted_by_user_id uuid references auth.users(id)` exists, nullable.
 - Indexes added for expected access paths.
@@ -123,7 +125,7 @@ Reference plans:
 `mcp__supabase__apply_migration` `name = "20260420_customer_checkout_schema"`:
 
 ```sql
-create table reorder_requests (
+create table if not exists variant_reorder_requests (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id),
   variant_id uuid not null references product_variants(id),
@@ -136,21 +138,21 @@ create table reorder_requests (
 );
 
 alter table quote_items
-  add column ship_to_store_id uuid references stores(id);
+  add column if not exists ship_to_store_id uuid references stores(id);
 
 alter table staff_quotes
-  add column submitted_by_user_id uuid references auth.users(id);
+  add column if not exists submitted_by_user_id uuid references auth.users(id);
 
-create index reorder_requests_org_idx on reorder_requests (organization_id, status, created_at desc);
-create index quote_items_ship_to_store_idx on quote_items (ship_to_store_id) where ship_to_store_id is not null;
-create index staff_quotes_submitted_by_idx on staff_quotes (submitted_by_user_id) where submitted_by_user_id is not null;
+create index if not exists variant_reorder_requests_org_idx on variant_reorder_requests (organization_id, status, created_at desc);
+create index if not exists quote_items_ship_to_store_idx on quote_items (ship_to_store_id) where ship_to_store_id is not null;
+create index if not exists staff_quotes_submitted_by_idx on staff_quotes (submitted_by_user_id) where submitted_by_user_id is not null;
 ```
 
 - [ ] **Step 2: Verify**
 
 ```sql
 select table_name from information_schema.tables
- where table_schema='public' and table_name='reorder_requests';
+ where table_schema='public' and table_name='variant_reorder_requests';
 -- expect 1 row
 
 select column_name from information_schema.columns
