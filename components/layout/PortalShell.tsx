@@ -2,6 +2,7 @@
 
 import { Sidebar } from './Sidebar'
 import { useCompany } from '@/contexts/CompanyContext'
+import { CartChip } from '@/components/cart/CartChip'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const { access, loading } = useCompany()
@@ -32,5 +33,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <Sidebar customer={access}>{children}</Sidebar>
+  return (
+    <Sidebar customer={access}>
+      {children}
+      <CartChip />
+    </Sidebar>
+  )
 }

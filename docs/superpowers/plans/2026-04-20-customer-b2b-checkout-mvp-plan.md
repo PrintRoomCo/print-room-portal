@@ -984,7 +984,9 @@ Deferred UI smoke to Task 13 bundle. `npm run build` compiled the page + all fou
 - Rows with `qty > available_qty` highlight red; "Reduce to N" inline button sets qty.
 - Summary panel: subtotal (sum of `qty * unitPrice`), expected deposit ($ + %), "Proceed to checkout" button (disabled if any oversell).
 
-- [ ] **Step 1: `page.tsx`** (`'use client'` + useCart)
+- [x] **Step 1: `page.tsx`** (`'use client'` + useCart)
+
+> **Implementation note 2026-04-24:** shipped as a server/client split — `app/(portal)/cart/page.tsx` is a server component that pulls `defaultDepositPercent`, `paymentTerms`, and `customerCode` from `requireB2BCustomer()` and passes them to `components/cart/CartClient.tsx` (client). Reasons: (a) deposit percent / payment terms come from the b2b_account row which is server-only today (CompanyContext doesn't expose them); (b) customer-code gating is needed on this page to warn users before they reach Task 17 checkout. `CartClient` owns the `useCart()` + checkout-navigation logic from the plan snippet.
 
 ```tsx
 'use client'
@@ -1013,9 +1015,13 @@ export default function CartPage() {
 }
 ```
 
-- [ ] **Step 2: `CartTable.tsx`** — presentational table with qty input + remove button. Availability check is a separate component overlay that fetches once.
+- [x] **Step 2: `CartTable.tsx`** — presentational table with qty input + remove button. Availability check is a separate component overlay that fetches once.
 
-- [ ] **Step 3: Commit**
+Shipped `components/cart/CartTable.tsx`: editable qty input, inline "Reduce to N" button for oversell rows, red-tinted row background on oversell. Availability fetched once on mount via batched `GET /api/shop/products/[id]/availability` per unique product id; reports oversell-present state up to `CartClient` via `onOversellChange` so the Proceed button can be disabled accordingly.
+
+Also added `components/cart/CartChip.tsx` (spec §15.3) — fixed-position floating cart link, visible only on `/shop`, `/shop/[productId]`, `/cart`, `/checkout`, `/order-tracker`, `/inventory` via `usePathname()` prefix check. Mounted inside `PortalShell` next to `{children}`.
+
+- [x] **Step 3: Commit**
 
 ---
 
