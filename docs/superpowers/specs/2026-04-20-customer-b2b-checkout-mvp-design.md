@@ -42,7 +42,7 @@ This is the feature Chris described most directly on 2026-04-20 ("Inventory show
 
 ```
 app/(portal)/shop/
-  page.tsx                          Catalogue: grid of products tagged b2b, filters
+  page.tsx                          Catalogue: grid of products tagged b2b, filters. Sidebar label "Catalog" (route stays /shop)
   [productId]/page.tsx              Product detail: variant picker, stock display, add-to-cart
 app/(portal)/cart/
   page.tsx                          Cart review + proceed-to-checkout
@@ -52,6 +52,10 @@ app/(portal)/checkout/
 app/(portal)/quote-requests/
   page.tsx                          List of quote requests the customer has submitted
   [id]/page.tsx                     Detail view, status, staff response once priced
+app/(portal)/order-tracker/
+  page.tsx                          Past projects list; hosts the Reorder card. See §15.1
+app/(portal)/inventory/
+  page.tsx                          Consolidated inventory view — stocked-inventory customers only. See §15.2
 app/api/
   shop/products/route.ts            GET catalog (tagged b2b, customer's org context)
   shop/products/[id]/route.ts       GET single product with availability overlay
@@ -59,7 +63,8 @@ app/api/
                                     GET {variant_id → available_qty} for current org
   checkout/route.ts                 POST submit order (returns order_ref)
   checkout/quote-request/route.ts   POST submit as quote-request (returns staff_quote id)
-  checkout/reorder-request/route.ts POST "Request reorder" on an oversold variant
+  checkout/reorder-request/route.ts POST "Request reorder" on an oversold variant (modal on PDP)
+  reorder/route.ts                  POST reorder from past order → creates Monday CRM Deal (existing — see §15.1)
 ```
 
 ### 4.2 Client-side cart
@@ -292,3 +297,70 @@ End-to-end happy paths:
 7. **Non-B2B customer (no `organization_id`):** `/shop` redirects to `/account` with "Contact sales" CTA; `/api/shop/products` returns 403.
 8. **Monday push failure:** Stub the helper to throw. Order still created, `monday_item_id = null`, customer sees friendly sync message. Staff reconcile via the orders page.
 9. **Customer code missing:** Org without a `customer_code` hitting the checkout API gets a 400 "Contact staff to set up your account." No partial order is written.
+
+## 15. Amendment — 2026-04-24 (Chris meeting)
+
+The 2026-04-24 planning meeting with Chris reshaped three customer-portal scope items not covered in the 2026-04-20 draft. The additions are locked below; the rest of the spec above remains as originally written (the §4.1 route tree is updated inline so current routes stay authoritative).
+
+### 15.1 Reorder from a past order
+
+Customers can relaunch a past order from the order-tracker page. The feature exists in WIP form; this amendment locks the UX and field presentation per Chris's 2026-04-24 review.
+
+**Pinned routes & files** (existing code — v1 refines rather than rebuilds):
+
+- Page: [app/(portal)/order-tracker/page.tsx](app/(portal)/order-tracker/page.tsx) — lists the customer's past `job_trackers`; each tracker renders through `JobTrackerOrderCard`.
+- Card: [components/orders/JobTrackerOrderCard.tsx](components/orders/JobTrackerOrderCard.tsx) — completed projects show a **Reorder** button that opens a modal hosting `ReorderForm`.
+- Form: [components/orders/ReorderForm.tsx](components/orders/ReorderForm.tsx) — collects delivery address, in-hand date, quantity, notes, artwork uploads.
+- Line-item preview (expanded card body): rendered via [components/orders/ProjectLineItem.tsx](components/orders/ProjectLineItem.tsx) — this is the component that surfaces the past order's items back to the customer and the main refinement target.
+- API: [app/api/reorder/route.ts](app/api/reorder/route.ts) — creates a Monday CRM Deal in the "New Deals" group and persists a `reorder_requests` row.
+- Monday helper: [lib/monday/reorder.ts](lib/monday/reorder.ts) — includes `formatItemBreakdown()` which also needs the same field-set change for the CRM payload text.
+
+**Line-item display rules** (change in `ProjectLineItem.tsx` and `lib/monday/reorder.ts::formatItemBreakdown`):
+
+The past-order items must render only:
+
+- **Design name** (first — primary identifier)
+- **Product name**
+- **Product colour**
+- **Sizes in the order they were originally placed** — preserve original ordering; do NOT alphabetise
+
+Drop from the display:
+
+- Product thumbnail / image — sources aren't consistent across suppliers; no universal product-image API
+- Decoration type / method label (e.g. "Screenprint", "Super Color")
+- Any decoration type badge or tag
+
+**Editability:** the line-item display is **read-only**. Customers cannot edit qty, colour, size, or decoration from the reorder modal. Adjustments happen through the sales team in Monday once the CRM Deal is created. Rationale: live print jobs and editable reorder data don't mix (Chris, 2026-04-24).
+
+**v1.1 follow-ups:**
+- Standardise proof-file linkage so a design thumbnail can render reliably.
+- Store decoration type per quote-item row so the badge can return without inter-supplier inconsistency.
+- Allow customers to select specific items from a consolidated proof sheet when multi-design orders need that granularity.
+
+### 15.2 Consolidated inventory view (stocked-inventory customers only)
+
+Customers whose organization has ≥1 row in `variant_inventory` see an additional sidebar entry **Inventory** that lands on `app/(portal)/inventory/page.tsx`.
+
+- Read-only table of every tracked variant for the customer: product, colour, size, available qty, on-hand qty, last updated.
+- Row click opens the PDP for context.
+- No adjustments from the customer side — staff own intake / counts / write-offs via the staff-portal Inventory sub-app.
+- Customers without tracked inventory never see the sidebar entry — the tab is hidden, not an empty state.
+
+Data source: the `variant_availability` view from the staff-portal Inventory spec, filtered server-side by the customer's `organization_id`. Same RLS as the PDP availability fetch in §7.2.
+
+### 15.3 Navigation label & cart visibility
+
+- Sidebar label for `/shop` is **Catalog** (matches the Shopify vocabulary customers are familiar with). The route itself stays `/shop` — see §4.1.
+- The cart indicator (chip / icon) is only rendered inside the B2B ordering surfaces: `/shop`, `/shop/[productId]`, `/cart`, `/checkout`, `/order-tracker`, and `/inventory`. Other portal pages do not show a cart indicator, avoiding confusion on pages that aren't part of a B2B ordering flow.
+
+### 15.4 Decisions locked (extends §12)
+
+| # | Decision | Locked in |
+|---|---|---|
+| 11 | Reorder line-item display: design name + product name + colour + sizes (as-ordered) | 15.1 |
+| 12 | Reorder line-items drop: thumbnail/image, decoration type label, decoration badge | 15.1 |
+| 13 | Reorder line-items are read-only; sales adjusts in Monday post-Deal | 15.1 |
+| 14 | Customer-facing inventory view is a dedicated page, read-only | 15.2 |
+| 15 | Customer-inventory sidebar entry gated by presence of `variant_inventory` rows | 15.2 |
+| 16 | `/shop` nav label = "Catalog" | 15.3 |
+| 17 | Cart chip scoped to `/shop`, `/shop/[productId]`, `/cart`, `/checkout`, `/order-tracker`, `/inventory` | 15.3 |
