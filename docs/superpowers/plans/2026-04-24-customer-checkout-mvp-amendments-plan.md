@@ -82,7 +82,7 @@ Both `print-room-staff-portal` and `print-room-portal` are on Next.js 16. Consul
 
 **Files:** none (verification only)
 
-- [ ] **Step 0.1: Confirm repo state**
+- [x] **Step 0.1: Confirm repo state**
 
 Run from `print-room-portal/`:
 
@@ -93,7 +93,7 @@ git rev-parse --abbrev-ref HEAD
 
 Expected: clean working tree on a feature branch (create one if on main: `git checkout -b feat/checkout-mvp-2026-04-24-amendments`).
 
-- [ ] **Step 0.2: Baseline compile**
+- [x] **Step 0.2: Baseline compile**
 
 Run:
 
@@ -103,7 +103,7 @@ npx tsc --noEmit
 
 Expected: zero errors. If errors exist before we start, they're pre-existing — note them, but they should not be treated as this plan's problem.
 
-- [ ] **Step 0.3: Baseline dev boot**
+- [x] **Step 0.3: Baseline dev boot**
 
 Run:
 
@@ -113,7 +113,7 @@ npm run dev
 
 Expected: dev server boots, `/order-tracker` renders for an authenticated customer, `JobTrackerOrderCard` expands to show `ProjectLineItem` rows. Screenshot this for before/after comparison. Stop the dev server.
 
-- [ ] **Step 0.4: Commit baseline marker**
+- [x] **Step 0.4: Commit baseline marker**
 
 ```bash
 git commit --allow-empty -m "chore: baseline before 2026-04-24 checkout-mvp amendments"
