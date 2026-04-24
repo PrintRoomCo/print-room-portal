@@ -30,4 +30,11 @@ export interface B2BCustomerAccess {
   canApproveDesigns: boolean
   canManageUsers: boolean
   canUseLeavers: boolean
+
+  /**
+   * True if the organization has any rows in `variant_inventory` (Inventory sub-app).
+   * Gates Sidebar link visibility and /inventory page behaviour.
+   * Tolerant of the table not existing yet — falls back to false.
+   */
+  hasTrackedInventory: boolean
 }

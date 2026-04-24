@@ -59,6 +59,7 @@ export async function getCompanyAccess(
       tier: 'bronze',
       isCompanyUser: false,
       leaversEnabled,
+      hasTrackedInventory: false,
     })
   }
 
@@ -86,6 +87,20 @@ export async function getCompanyAccess(
   const role = (orgMembership.role as 'admin' | 'manager' | 'staff') || 'staff'
   const tier = b2bAccount?.tier_level?.toString() || 'bronze'
 
+  // 6. Check if the organization has any tracked inventory.
+  //    Tolerant of `variant_inventory` not existing yet (Inventory sub-app
+  //    migration may not have shipped) — PostgREST returns an error and we
+  //    fall back to false.
+  let hasTrackedInventory = false
+  const { count, error: inventoryError } = await supabase
+    .from('variant_inventory')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgMembership.organization_id)
+
+  if (!inventoryError && typeof count === 'number' && count > 0) {
+    hasTrackedInventory = true
+  }
+
   return buildAccess({
     userId,
     email: userEmail,
@@ -98,6 +113,7 @@ export async function getCompanyAccess(
     tier,
     isCompanyUser: true,
     leaversEnabled,
+    hasTrackedInventory,
   })
 }
 
@@ -113,10 +129,12 @@ interface AccessInput {
   tier: string
   isCompanyUser: boolean
   leaversEnabled: boolean
+  hasTrackedInventory: boolean
 }
 
 function buildAccess(input: AccessInput): B2BCustomerAccess {
-  const { role, isCompanyUser, leaversEnabled, ...rest } = input
+  const { role, isCompanyUser, leaversEnabled, hasTrackedInventory, ...rest } =
+    input
 
   const isAdmin = role === 'admin'
   const isManager = role === 'manager'
@@ -140,6 +158,8 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     canApproveDesigns: isAdmin || isManager,
     canManageUsers: isAdmin,
     canUseLeavers: leaversEnabled,
+
+    hasTrackedInventory,
   }
 }
 
@@ -159,5 +179,6 @@ async function buildAccessForIndividual(
     tier: 'bronze',
     isCompanyUser: false,
     leaversEnabled: false,
+    hasTrackedInventory: false,
   })
 }
