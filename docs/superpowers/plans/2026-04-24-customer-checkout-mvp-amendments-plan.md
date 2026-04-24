@@ -678,7 +678,7 @@ git commit -m "feat(reorder): align Monday CRM payload text with §15.1 field se
 - Modify: `types/company.ts`
 - Modify: `contexts/CompanyContext.tsx`
 
-- [ ] **Step 4.1: Add `hasTrackedInventory` to the type**
+- [x] **Step 4.1: Add `hasTrackedInventory` to the type**
 
 Locate `B2BCustomerAccess` interface. Add:
 
@@ -691,7 +691,7 @@ export interface B2BCustomerAccess {
 
 (If the interface has optional fields, match that style: `hasTrackedInventory?: boolean`. Prefer required with a default `false` set at context-creation time so consumers don't need to handle `undefined`.)
 
-- [ ] **Step 4.2: Populate from a count query**
+- [x] **Step 4.2: Populate from a count query**
 
 In `CompanyContext.tsx` where the customer access object is built (grep for `isCompanyUser` or similar to find the factory), add a count query against `variant_inventory`:
 
@@ -719,7 +719,7 @@ Use a `head: true` count query (no rows returned, just the count) to keep the co
 
 **If `variant_inventory` does not yet exist** (Inventory sub-app unshipped), the query will return `error` with a "relation does not exist" code. Treat this as `hasTrackedInventory = false` — no sidebar entry, no page link. The page itself (Task 7) also handles the missing-table case gracefully.
 
-- [ ] **Step 4.3: Compile**
+- [x] **Step 4.3: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -727,7 +727,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 4.4: Verify via dev server**
+- [x] **Step 4.4: Verify via dev server**
 
 ```bash
 npm run dev
@@ -739,7 +739,7 @@ If `variant_inventory` table doesn't exist yet, flag should be `false` without a
 
 Stop the dev server.
 
-- [ ] **Step 4.5: Commit**
+- [x] **Step 4.5: Commit**
 
 ```bash
 git add types/company.ts contexts/CompanyContext.tsx
@@ -755,7 +755,7 @@ git commit -m "feat(inventory): expose hasTrackedInventory on B2BCustomerAccess"
 **Files:**
 - Create: `app/api/inventory/route.ts`
 
-- [ ] **Step 5.1: Create the route file**
+- [x] **Step 5.1: Create the route file**
 
 Create `app/api/inventory/route.ts`:
 
@@ -846,7 +846,7 @@ export async function GET() {
 
 **On the PostgREST join shape:** the `!inner` join ensures rows without a matching variant are dropped. If the underlying schema shape differs from what's written here (e.g. the `product_color_swatches` relationship name is different), adjust per the actual migrations — the Inventory sub-app spec at §5.1 defines the canonical shape.
 
-- [ ] **Step 5.2: Compile**
+- [x] **Step 5.2: Compile**
 
 ```bash
 npx tsc --noEmit
