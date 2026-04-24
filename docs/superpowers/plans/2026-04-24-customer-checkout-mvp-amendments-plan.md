@@ -417,7 +417,7 @@ npx tsc --noEmit
 
 Expected: zero errors. If `productImageUrl` is referenced elsewhere on `ProjectLineItemProps`, remove it there too.
 
-- [ ] **Step 2.6: Visual verification**
+- [x] **Step 2.6: Visual verification**
 
 ```bash
 npm run dev
