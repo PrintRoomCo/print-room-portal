@@ -1241,7 +1241,7 @@ git commit --allow-empty -m "chore: verified §15.1 + §15.2 flows end-to-end"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-04-20-customer-b2b-checkout-mvp-plan.md`
 
-- [ ] **Step 10.1: Append a constraint block**
+- [x] **Step 10.1: Append a constraint block**
 
 At the end of `docs/superpowers/plans/2026-04-20-customer-b2b-checkout-mvp-plan.md`, append:
 
@@ -1273,7 +1273,7 @@ On all other portal routes (`/account`, `/my-collections`, `/projects`, `/leaver
 Rationale: Chris's 2026-04-24 call — customers on non-ordering pages shouldn't see a cart indicator, to avoid confusion between browsing contexts.
 ```
 
-- [ ] **Step 10.2: Commit**
+- [x] **Step 10.2: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-04-20-customer-b2b-checkout-mvp-plan.md
