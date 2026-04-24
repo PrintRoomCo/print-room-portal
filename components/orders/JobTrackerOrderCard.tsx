@@ -330,7 +330,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                   <ProjectLineItem
                     key={`${item.productId || item.productName || 'item'}-${index}`}
                     item={item}
-                    productImageUrl={item.productId ? productImages[item.productId] : undefined}
+                    designNamesByInstanceId={tracker.designNamesByInstanceId}
                   />
                 ))}
               </div>
