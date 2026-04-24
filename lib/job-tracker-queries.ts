@@ -53,28 +53,77 @@ async function attachProductImages(trackers: JobTracker[]): Promise<JobTracker[]
   if (trackers.length === 0) return trackers
 
   const productIds = new Set<string>()
+  const designInstanceIds = new Set<string>()
   for (const tracker of trackers) {
     const items = tracker.quote_data?.items ?? []
     for (const item of items) {
       if (item?.productId) productIds.add(item.productId)
+      if (item?.designInstanceId) designInstanceIds.add(item.designInstanceId)
     }
   }
 
-  if (productIds.size === 0) return trackers
+  const imageMap =
+    productIds.size > 0
+      ? await resolveProductFrontImages(Array.from(productIds))
+      : {}
 
-  const imageMap = await resolveProductFrontImages(Array.from(productIds))
+  let designNamesByInstanceId: Record<string, string> = {}
+  if (designInstanceIds.size > 0) {
+    try {
+      const supabase = getSupabaseServer()
+      const { data: designs, error } = await supabase
+        .from('design_submissions')
+        .select('id, design_name')
+        .in('id', Array.from(designInstanceIds))
+
+      if (error) {
+        console.error('[JobTracker] Failed to fetch design names:', error)
+      } else if (designs) {
+        designNamesByInstanceId = Object.fromEntries(
+          designs
+            .filter(
+              (d): d is { id: string; design_name: string } =>
+                typeof d.design_name === 'string' && d.design_name.length > 0
+            )
+            .map((d) => [d.id, d.design_name])
+        )
+      }
+    } catch (err) {
+      console.error('[JobTracker] Error fetching design names:', err)
+    }
+  }
+
+  const hasImages = Object.keys(imageMap).length > 0
+  const hasDesignNames = Object.keys(designNamesByInstanceId).length > 0
+  if (!hasImages && !hasDesignNames) return trackers
 
   return trackers.map((tracker) => {
     const items = tracker.quote_data?.items ?? []
     const trackerImages: Record<string, string> = {}
+    const trackerDesignNames: Record<string, string> = {}
     for (const item of items) {
       if (item?.productId && imageMap[item.productId]) {
         trackerImages[item.productId] = imageMap[item.productId]
       }
+      const designId = item?.designInstanceId
+      if (designId && designNamesByInstanceId[designId]) {
+        trackerDesignNames[designId] = designNamesByInstanceId[designId]
+      }
     }
-    return Object.keys(trackerImages).length > 0
-      ? { ...tracker, productImagesByProductId: trackerImages }
-      : tracker
+
+    const hasTrackerImages = Object.keys(trackerImages).length > 0
+    const hasTrackerDesignNames = Object.keys(trackerDesignNames).length > 0
+    if (!hasTrackerImages && !hasTrackerDesignNames) return tracker
+
+    return {
+      ...tracker,
+      ...(hasTrackerImages
+        ? { productImagesByProductId: trackerImages }
+        : {}),
+      ...(hasTrackerDesignNames
+        ? { designNamesByInstanceId: trackerDesignNames }
+        : {}),
+    }
   })
 }
 

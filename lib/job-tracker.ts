@@ -208,6 +208,7 @@ export interface JobTracker {
   platform: string
   // Populated server-side by job-tracker-queries for the expanded card view.
   productImagesByProductId?: Record<string, string>
+  designNamesByInstanceId?: Record<string, string>
 }
 
 export function getItemTotalQty(item: QuoteDataItem): number {
@@ -236,6 +237,33 @@ export function getItemArtworkUrl(item: QuoteDataItem): string | undefined {
 
 export function getItemPrintMethod(item: QuoteDataItem): string | undefined {
   return item.customizations?.logos?.[0]?.printMethod
+}
+
+/**
+ * Design name for a line item on the Projects / reorder surface.
+ *
+ * Resolution order:
+ *   1. QuoteDataLogo does NOT currently carry a design name field (verified
+ *      against the interface above), so this branch is omitted. If a future
+ *      logo shape adds `designName`, reinstate a check here.
+ *   2. Enriched map from `designNamesByInstanceId` on the tracker (server-side
+ *      join against `design_submissions.design_name`).
+ *   3. Fallback string "Design" so the row still renders.
+ *
+ * Callers on the Projects surface pass `designNamesByInstanceId` from the tracker
+ * row; callers that only have the item (e.g. the CRM Deal text formatter) pass
+ * undefined and rely on the fallback.
+ */
+export function getItemDesignName(
+  item: QuoteDataItem,
+  designNamesByInstanceId?: Record<string, string>
+): string {
+  const instanceId = item.designInstanceId
+  if (instanceId && designNamesByInstanceId?.[instanceId]) {
+    return designNamesByInstanceId[instanceId]
+  }
+
+  return 'Design'
 }
 
 export function getStatusStepIndex(status: string | null | undefined): number {
