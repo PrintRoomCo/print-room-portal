@@ -886,7 +886,7 @@ git commit -m "feat(inventory): GET /api/inventory for customer-facing inventory
 **Files:**
 - Create: `components/inventory/CustomerInventoryTable.tsx`
 
-- [ ] **Step 6.1: Create the component**
+- [x] **Step 6.1: Create the component**
 
 Create `components/inventory/CustomerInventoryTable.tsx`:
 
@@ -983,7 +983,7 @@ export function CustomerInventoryTable({ rows }: CustomerInventoryTableProps) {
 }
 ```
 
-- [ ] **Step 6.2: Compile**
+- [x] **Step 6.2: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -991,7 +991,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 6.3: Commit**
+- [x] **Step 6.3: Commit**
 
 ```bash
 git add components/inventory/CustomerInventoryTable.tsx
@@ -1007,7 +1007,7 @@ git commit -m "feat(inventory): CustomerInventoryTable read-only component"
 **Files:**
 - Create: `app/(portal)/inventory/page.tsx`
 
-- [ ] **Step 7.1: Create the page**
+- [x] **Step 7.1: Create the page**
 
 Create `app/(portal)/inventory/page.tsx`:
 
@@ -1072,7 +1072,7 @@ export default function CustomerInventoryPage() {
 }
 ```
 
-- [ ] **Step 7.2: Compile**
+- [x] **Step 7.2: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -1080,7 +1080,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 7.3: Dev-server smoke test**
+- [x] **Step 7.3: Dev-server smoke test**
 
 ```bash
 npm run dev
@@ -1094,7 +1094,7 @@ Visit `http://localhost:3000/inventory` as a B2B customer. Expected:
 
 Stop the dev server.
 
-- [ ] **Step 7.4: Commit**
+- [x] **Step 7.4: Commit**
 
 ```bash
 git add app/\(portal\)/inventory/page.tsx
