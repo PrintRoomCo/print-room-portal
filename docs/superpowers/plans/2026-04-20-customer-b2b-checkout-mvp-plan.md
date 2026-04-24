@@ -346,7 +346,9 @@ Prepend this comment to the top:
 - 403 if no `user_organizations` row.
 - 400 if the org has no `customer_code` (and the caller is in a submit path — opt via `{ requireCustomerCode: true }`).
 
-- [ ] **Step 1: Write**
+> **Implementation note 2026-04-24:** the repo uses a two-client split — `getSupabaseServerComponent()` (anon, cookie-backed) for `auth.getUser()`, `getSupabaseServer()` (service-role) for admin queries. The plan code below reads from a single client, which would make `auth.getUser()` always return null. The shipped file at [lib/checkout/server.ts](print-room-portal/lib/checkout/server.ts) uses both clients internally; the returned `{ admin, context }` interface is unchanged, so all downstream tasks (6+) keep working.
+
+- [x] **Step 1: Write**
 
 ```ts
 import { NextResponse } from 'next/server'
@@ -417,7 +419,7 @@ export async function requireB2BCustomer(
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ---
 
