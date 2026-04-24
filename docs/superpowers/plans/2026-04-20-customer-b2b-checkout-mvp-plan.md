@@ -317,7 +317,7 @@ git commit -m "fix(company): look up b2b_accounts by organization_id FK"
 
 **Acceptance:** file exists with the same exports and signature as the staff-portal version. Lead comment references the canonical source.
 
-- [ ] **Step 1: Copy**
+- [x] **Step 1: Copy**
 
 Create `print-room-portal/lib/monday/production-job.ts` with the exact code from the staff-portal CSR plan Task 7 (the `createMondayProductionItem`, `createMondayProductionSubitem`, `pushProductionJob` trio). The imports are already correct for this repo — `./client` and `./column-ids` exist here.
 
@@ -331,7 +331,7 @@ Prepend this comment to the top:
  */
 ```
 
-- [ ] **Step 2: Type-check + commit**
+- [x] **Step 2: Type-check + commit**
 
 ---
 
