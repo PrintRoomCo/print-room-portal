@@ -452,7 +452,7 @@ git commit -m "feat(reorder): tone ProjectLineItem to §15.1 field set (drop ima
 **Files:**
 - Modify: `lib/monday/reorder.ts`
 
-- [ ] **Step 3.1: Update `formatItemBreakdown` signature and body**
+- [x] **Step 3.1: Update `formatItemBreakdown` signature and body**
 
 Locate `formatItemBreakdown` (currently `lib/monday/reorder.ts:84-111`). Replace its implementation with:
 
@@ -502,7 +502,7 @@ Key changes:
 - Dropped the `color` → `method` suffixing on the header line.
 - New structure: `Design / Product / Colour / Sizes` per item, with blank lines between items for readability.
 
-- [ ] **Step 3.2: Thread `designNamesByInstanceId` through `buildReorderDataFromTracker`**
+- [x] **Step 3.2: Thread `designNamesByInstanceId` through `buildReorderDataFromTracker`**
 
 `buildReorderDataFromTracker` at `lib/monday/reorder.ts:231-267` produces `ReorderData` which is then passed to `createReorderItem`. Add the design-name map to the pipeline:
 
@@ -535,7 +535,7 @@ lines.push(...formatItemBreakdown(data.originalItems, data.designNamesByInstance
 lines.push('')
 ```
 
-- [ ] **Step 3.3: Update `formatProductsCompact` (the short header line)**
+- [x] **Step 3.3: Update `formatProductsCompact` (the short header line)**
 
 `formatProductsCompact` at `lib/monday/reorder.ts:67-82` produces a compact "products summary" for the Monday item's product column. Chris's rule is design-first; adjust:
 
@@ -566,7 +566,7 @@ And update its caller in `createReorderItem` (around line 188):
 [COL_PRODUCT]: formatProductsCompact(data.originalItems, data.designNamesByInstanceId),
 ```
 
-- [ ] **Step 3.4: Update imports at the top of `lib/monday/reorder.ts`**
+- [x] **Step 3.4: Update imports at the top of `lib/monday/reorder.ts`**
 
 Ensure `getItemDesignName` is imported alongside the existing job-tracker helpers:
 
