@@ -581,7 +581,7 @@ import {
 
 Remove `getItemPrintMethod` from the import list if it was present — no longer used.
 
-- [ ] **Step 3.5: Compile**
+- [x] **Step 3.5: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -589,7 +589,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 3.6: Smoke-test the formatter with a fixture script**
+- [x] **Step 3.6: Smoke-test the formatter with a fixture script**
 
 Create a throwaway script at `scripts/test-reorder-formatter.ts` (don't commit this; delete after):
 
