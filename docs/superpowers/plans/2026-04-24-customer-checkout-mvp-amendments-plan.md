@@ -436,7 +436,7 @@ Cross-check against a project that uses multiple colours across line items — e
 
 Stop the dev server.
 
-- [ ] **Step 2.7: Commit**
+- [x] **Step 2.7: Commit**
 
 ```bash
 git add components/orders/ProjectLineItem.tsx components/orders/JobTrackerOrderCard.tsx
