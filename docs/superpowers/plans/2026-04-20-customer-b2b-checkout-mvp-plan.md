@@ -168,10 +168,10 @@ select column_name from information_schema.columns
 
 ---
 
-## Task 2: RLS — reorder_requests + customer read on own staff_quotes
+## Task 2: RLS — variant_reorder_requests + customer read on own staff_quotes
 
 **Acceptance criteria:**
-- Authenticated users can `insert` and `select` `reorder_requests` only for their own org.
+- Authenticated users can `insert` and `select` `variant_reorder_requests` only for their own org.
 - Staff (with `inventory:write`, `orders:write`, or admin) can `select` all.
 - Authenticated users can `select` their own `staff_quotes` rows (where `submitted_by_user_id = auth.uid()`). Staff see all.
 - Authenticated users can `insert` `staff_quotes` with `submitted_by_user_id = auth.uid()` (the quote-request path). Other inserts require service role.
@@ -181,30 +181,30 @@ select column_name from information_schema.columns
 `mcp__supabase__apply_migration` `name = "20260420_customer_checkout_rls"`:
 
 ```sql
-alter table reorder_requests enable row level security;
+alter table variant_reorder_requests enable row level security;
 
-create policy reorder_requests_insert_own_org
-  on reorder_requests for insert to authenticated
+create policy variant_reorder_requests_insert_own_org
+  on variant_reorder_requests for insert to authenticated
   with check (
     exists (
       select 1 from user_organizations uo
        where uo.user_id = auth.uid()
-         and uo.organization_id = reorder_requests.organization_id
+         and uo.organization_id = variant_reorder_requests.organization_id
     )
   );
 
-create policy reorder_requests_select_own_org
-  on reorder_requests for select to authenticated
+create policy variant_reorder_requests_select_own_org
+  on variant_reorder_requests for select to authenticated
   using (
     exists (
       select 1 from user_organizations uo
        where uo.user_id = auth.uid()
-         and uo.organization_id = reorder_requests.organization_id
+         and uo.organization_id = variant_reorder_requests.organization_id
     )
   );
 
-create policy reorder_requests_select_staff
-  on reorder_requests for select to authenticated
+create policy variant_reorder_requests_select_staff
+  on variant_reorder_requests for select to authenticated
   using (
     exists (
       select 1 from staff_users s
@@ -246,7 +246,7 @@ create policy staff_quotes_select_staff
 
 ```sql
 select polname from pg_policy
- where polrelid in ('reorder_requests'::regclass, 'staff_quotes'::regclass)
+ where polrelid in ('variant_reorder_requests'::regclass, 'staff_quotes'::regclass)
  order by polname;
 -- expect 6 rows (3 per table)
 ```
@@ -1010,7 +1010,7 @@ export default function CartPage() {
 
 **Acceptance criteria:**
 - Body: `{ variant_id, requested_qty, note? }`.
-- Inserts `reorder_requests` row with `organization_id = context.organizationId`, `requested_by = context.userId`.
+- Inserts `variant_reorder_requests` row with `organization_id = context.organizationId`, `requested_by = context.userId`.
 - Calls `notifyStaffReorder(row)` — v1 logs to console.
 - Returns `{ ok: true, id }`.
 
@@ -1026,7 +1026,7 @@ export async function createReorderRequest(
   payload: { variant_id: string; requested_qty: number; note?: string }
 ) {
   const { data, error } = await admin
-    .from('reorder_requests')
+    .from('variant_reorder_requests')
     .insert({
       organization_id: context.organizationId,
       variant_id: payload.variant_id,
@@ -1595,7 +1595,7 @@ Add 3 lines to a fresh cart, set 2 different stores across them. Place order. As
 Cart has Black/M × 15 (only 7 available now after step 3 committed 5 = 12-5 = 7). Cart page highlights red; Proceed disabled. Click "Request reorder", submit.
 
 ```sql
-select count(*) from reorder_requests where organization_id = '<BIK>';
+select count(*) from variant_reorder_requests where organization_id = '<BIK>';
 -- expect ≥1
 ```
 
