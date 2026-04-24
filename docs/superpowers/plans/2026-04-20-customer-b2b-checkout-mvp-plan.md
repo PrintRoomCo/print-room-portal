@@ -264,7 +264,7 @@ Verified 2026-04-24: `variant_reorder_requests` has 3 new policies; `staff_quote
 
 **Why:** current code uses `.eq('id', orgMembership.organization_id)` which matched only by accident when those IDs coincided in old seed data. The CSR plan added a proper FK `b2b_accounts.organization_id`. Switch to that.
 
-- [ ] **Step 1: Edit**
+- [x] **Step 1: Edit**
 
 Change lines 73-77 of [lib/company.ts](print-room-portal/lib/company.ts#L73-L77) from:
 
@@ -288,16 +288,20 @@ To:
 
 (`maybeSingle()` because orgs without a b2b_accounts row should not error — `getCompanyAccess` already guards against null `b2bAccount` downstream.)
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 ```bash
 cd c:/Users/MSI/Documents/Projects/print-room-portal
 npx tsc --noEmit
 ```
 
-- [ ] **Step 3: Manual check** — sign in as a customer user attached to an org with a `b2b_accounts` row and verify the tier surfaces correctly in the existing UI.
+Exit 0, no errors (2026-04-24).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Manual check** — sign in as a customer user attached to an org with a `b2b_accounts` row and verify the tier surfaces correctly in the existing UI.
+
+Verified via Supabase MCP against the seeded `hello@theprint-room.co.nz` account (org `ee155266-…/PRT`, b2b account tier 1, `net30`): the buggy `eq('id', ...)` query returned 0 rows; the fixed `eq('organization_id', ...)` query returns the correct b2b account row. Full dev-server UI smoke deferred until the customer-portal shop/cart pages exist (Tasks 11+).
+
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/company.ts

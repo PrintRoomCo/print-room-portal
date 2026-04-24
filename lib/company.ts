@@ -74,8 +74,8 @@ export async function getCompanyAccess(
   const { data: b2bAccount } = await supabase
     .from('b2b_accounts')
     .select('*')
-    .eq('id', orgMembership.organization_id)
-    .single()
+    .eq('organization_id', orgMembership.organization_id)
+    .maybeSingle()
 
   // 5. Get company locations (stores)
   const { data: locations } = await supabase
