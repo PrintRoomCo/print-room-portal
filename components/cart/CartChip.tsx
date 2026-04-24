@@ -27,7 +27,7 @@ export function CartChip() {
     <Link
       href="/cart"
       aria-label={`Cart (${totalQty} ${totalQty === 1 ? 'item' : 'items'})`}
-      className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-pr-blue px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-200 ease-spring hover:shadow-xl hover:brightness-110 md:bottom-8 md:right-8"
+      className="fixed right-4 top-20 z-40 flex items-center gap-2 rounded-full bg-pr-blue px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-200 ease-spring hover:shadow-xl hover:brightness-110 md:right-6 md:top-6"
     >
       <svg
         viewBox="0 0 24 24"
