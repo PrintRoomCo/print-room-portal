@@ -130,7 +130,7 @@ git commit --allow-empty -m "chore: baseline before 2026-04-24 checkout-mvp amen
 - Modify: `lib/job-tracker-queries.ts`
 - Modify: `types/company.ts` (or wherever `JobTracker` is typed — verify in Step 1.1)
 
-- [ ] **Step 1.1: Locate the design-name source**
+- [x] **Step 1.1: Locate the design-name source**
 
 Two possible sources for a design's human-readable name:
 
@@ -147,7 +147,7 @@ Read the full `QuoteDataLogo` definition. If the logo object already carries `de
 
 If `QuoteDataLogo` does not carry a design name, fall back to the `design_submissions` join strategy below. Either way, document the source decision inline as a comment on `getItemDesignName`.
 
-- [ ] **Step 1.2: Add `getItemDesignName` helper**
+- [x] **Step 1.2: Add `getItemDesignName` helper**
 
 Append to `lib/job-tracker.ts` (after the other `getItem*` helpers, around line 240):
 
@@ -184,7 +184,7 @@ export function getItemDesignName(
 
 (If Step 1.1 showed the logo carries a different field name — e.g. `name` or `title` — substitute that in the first resolution branch.)
 
-- [ ] **Step 1.3: Extend the `JobTracker` type**
+- [x] **Step 1.3: Extend the `JobTracker` type**
 
 Locate the `JobTracker` interface (verify with `grep -n "interface JobTracker\b" lib/job-tracker.ts` or `lib/job-tracker-queries.ts`). Add one optional field alongside the existing `productImagesByProductId`:
 
@@ -193,7 +193,7 @@ Locate the `JobTracker` interface (verify with `grep -n "interface JobTracker\b"
 designNamesByInstanceId?: Record<string, string>
 ```
 
-- [ ] **Step 1.4: Enrich trackers server-side**
+- [x] **Step 1.4: Enrich trackers server-side**
 
 Modify `lib/job-tracker-queries.ts` where `productImagesByProductId` is populated (around lines 55–70 per the earlier grep). Add a parallel design-name enrichment. Example outline (adapt to the exact enrichment function structure in the file):
 
@@ -248,7 +248,7 @@ return trackers.map((tracker) => {
 
 If `design_submissions` is not the right source (e.g. Step 1.1 revealed the logo carries the name inline), skip Step 1.4 entirely and leave `designNamesByInstanceId` unset — the fallback chain in Step 1.2 handles it.
 
-- [ ] **Step 1.5: Compile**
+- [x] **Step 1.5: Compile**
 
 ```bash
 npx tsc --noEmit
@@ -256,7 +256,7 @@ npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
 ```bash
 git add lib/job-tracker.ts lib/job-tracker-queries.ts
