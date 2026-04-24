@@ -120,7 +120,7 @@ Reference plans:
 - `staff_quotes.submitted_by_user_id uuid references auth.users(id)` exists, nullable.
 - Indexes added for expected access paths.
 
-- [ ] **Step 1: Apply the migration**
+- [x] **Step 1: Apply the migration**
 
 `mcp__supabase__apply_migration` `name = "20260420_customer_checkout_schema"`:
 
@@ -148,7 +148,7 @@ create index if not exists quote_items_ship_to_store_idx on quote_items (ship_to
 create index if not exists staff_quotes_submitted_by_idx on staff_quotes (submitted_by_user_id) where submitted_by_user_id is not null;
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 ```sql
 select table_name from information_schema.tables
@@ -164,7 +164,7 @@ select column_name from information_schema.columns
 -- expect 1 row
 ```
 
-- [ ] **Step 3: Commit** plan doc.
+- [x] **Step 3: Commit** plan doc.
 
 ---
 
