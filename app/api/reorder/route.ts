@@ -3,6 +3,14 @@ import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { buildReorderDataFromTracker, createReorderItem } from '@/lib/monday/reorder'
 import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
+import {
+  REORDER_EDITABLE_LINE_ITEMS,
+  type ReorderEditedItem,
+  MAX_PRODUCT_NAME_LENGTH,
+  MAX_COLOR_LENGTH,
+  MAX_SIZE_LABEL_LENGTH,
+  MAX_SIZE_QTY,
+} from '@/lib/config/reorder'
 
 interface ReorderBody {
   trackerId: number | string
@@ -11,6 +19,69 @@ interface ReorderBody {
   quantity?: number
   notes?: string
   artworkUrls?: string[]
+  editedItems?: unknown
+}
+
+function validateEditedItems(
+  raw: unknown,
+  sourceCount: number,
+): { ok: true; items: ReorderEditedItem[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) return { ok: false, error: 'editedItems must be an array' }
+  const items: ReorderEditedItem[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, error: 'Each editedItems entry must be an object' }
+    }
+    const e = entry as Record<string, unknown>
+    const sourceIndex = e.source_index
+    if (
+      typeof sourceIndex !== 'number' ||
+      !Number.isInteger(sourceIndex) ||
+      sourceIndex < 0 ||
+      sourceIndex >= sourceCount
+    ) {
+      return { ok: false, error: 'source_index out of range' }
+    }
+    const productName = e.product_name
+    if (typeof productName !== 'string' || productName.length > MAX_PRODUCT_NAME_LENGTH) {
+      return { ok: false, error: 'product_name invalid' }
+    }
+    const color = e.color
+    if (color !== null && (typeof color !== 'string' || color.length > MAX_COLOR_LENGTH)) {
+      return { ok: false, error: 'color invalid' }
+    }
+    const sizes = e.sizes
+    if (!sizes || typeof sizes !== 'object' || Array.isArray(sizes)) {
+      return { ok: false, error: 'sizes must be an object' }
+    }
+    const cleanSizes: Record<string, number> = {}
+    for (const [k, v] of Object.entries(sizes as Record<string, unknown>)) {
+      if (k.length === 0 || k.length > MAX_SIZE_LABEL_LENGTH) {
+        return { ok: false, error: 'size label invalid' }
+      }
+      if (
+        typeof v !== 'number' ||
+        !Number.isFinite(v) ||
+        v < 0 ||
+        v > MAX_SIZE_QTY
+      ) {
+        return { ok: false, error: 'size quantity invalid' }
+      }
+      cleanSizes[k] = Math.floor(v)
+    }
+    const included = e.included
+    if (typeof included !== 'boolean') {
+      return { ok: false, error: 'included must be boolean' }
+    }
+    items.push({
+      source_index: sourceIndex,
+      product_name: productName,
+      color: color === null ? null : (color as string),
+      sizes: cleanSizes,
+      included,
+    })
+  }
+  return { ok: true, items }
 }
 
 const SUPABASE_PUBLIC_URL_PREFIX = '/storage/v1/object/public/'
@@ -137,6 +208,14 @@ export async function POST(request: Request) {
     )
   }
 
+  let editedItems: ReorderEditedItem[] | undefined
+  if (REORDER_EDITABLE_LINE_ITEMS && body.editedItems !== undefined) {
+    const sourceCount = (tracker.quote_data?.items ?? []).length
+    const validated = validateEditedItems(body.editedItems, sourceCount)
+    if (!validated.ok) return badRequest(validated.error, 'editedItems')
+    editedItems = validated.items
+  }
+
   try {
     const reorderData = buildReorderDataFromTracker(tracker, {
       customerEmail: user.email,
@@ -146,6 +225,7 @@ export async function POST(request: Request) {
       quantity,
       notes,
       artworkUrls,
+      editedItems,
     })
 
     const result = await createReorderItem(reorderData)
@@ -167,6 +247,7 @@ export async function POST(request: Request) {
           customer_name: tracker.customer_name ?? null,
           original_quote_number: tracker.quote_number ?? null,
           original_job_reference: tracker.job_reference ?? null,
+          edited_items: editedItems ?? null,
         },
       })
     if (persistErr) {

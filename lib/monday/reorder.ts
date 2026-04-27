@@ -17,6 +17,7 @@ import {
   getItemDisplayName,
   getItemTotalQty,
 } from '@/lib/job-tracker'
+import type { ReorderEditedItem } from '@/lib/config/reorder'
 
 function getBoardId(): string {
   const id = process.env.MONDAY_REORDERS_BOARD_ID
@@ -63,6 +64,7 @@ export interface ReorderData {
   proofFileUrls: string[]
   originalItems: QuoteDataItem[]
   designNamesByInstanceId?: Record<string, string>
+  editedItems?: ReorderEditedItem[]
 }
 
 function formatProductsCompact(
@@ -122,6 +124,66 @@ function formatItemBreakdown(
   return lines
 }
 
+function formatEditedBreakdown(
+  edited: ReorderEditedItem[],
+  source: QuoteDataItem[],
+  designNamesByInstanceId?: Record<string, string>
+): string[] {
+  const lines: string[] = []
+  const dropped = edited.filter((e) => !e.included).length
+  if (dropped > 0) {
+    lines.push(`Items dropped from reorder: ${dropped}`)
+    lines.push('')
+  }
+  const kept = edited.filter((e) => e.included)
+  if (kept.length === 0) {
+    lines.push('Customer dropped all items from the reorder.')
+    return lines
+  }
+  for (const e of kept) {
+    const sourceItem = source[e.source_index]
+    const sourceProductName = sourceItem ? getItemDisplayName(sourceItem) : ''
+    const sourceColor = sourceItem ? getItemColorName(sourceItem) : ''
+    const sourceSizes = sourceItem?.sizes
+      ? Object.fromEntries(
+          Object.entries(sourceItem.sizes).filter(([, n]) => (n ?? 0) > 0),
+        )
+      : {}
+    const designName = sourceItem
+      ? getItemDesignName(sourceItem, designNamesByInstanceId)
+      : 'Item'
+
+    const productEdited = e.product_name !== sourceProductName
+    const colorEdited = (e.color ?? '') !== (sourceColor ?? '')
+    const sizesEdited =
+      JSON.stringify(e.sizes) !== JSON.stringify(sourceSizes)
+    const anyEdit = productEdited || colorEdited || sizesEdited
+
+    lines.push(`• Design: ${designName}${anyEdit ? '   (edited from original)' : ''}`)
+    lines.push(`  Product: ${e.product_name}${productEdited ? '  *edited*' : ''}`)
+    if (e.color) {
+      lines.push(`  Colour: ${e.color}${colorEdited ? '  *edited*' : ''}`)
+    } else if (sourceColor) {
+      lines.push(`  Colour: (cleared)  *edited*`)
+    }
+    const totalQty = Object.values(e.sizes).reduce(
+      (sum, n) => sum + (Number.isFinite(n) ? n : 0),
+      0,
+    )
+    const sizeText = Object.entries(e.sizes)
+      .map(([k, n]) => `${k}:${n}`)
+      .join(' ')
+    if (sizeText) {
+      lines.push(`  Sizes: ${sizeText} = ${totalQty}${sizesEdited ? '  *edited*' : ''}`)
+    } else {
+      lines.push(`  Sizes: (none)${sizesEdited ? '  *edited*' : ''}`)
+    }
+    lines.push('')
+  }
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
 function buildFullFormResponse(data: ReorderData): string {
   const ref =
     data.originalQuoteNumber ||
@@ -161,6 +223,18 @@ function buildFullFormResponse(data: ReorderData): string {
   lines.push('--- Original Order Items ---')
   lines.push(...formatItemBreakdown(data.originalItems, data.designNamesByInstanceId))
   lines.push('')
+
+  if (data.editedItems && data.editedItems.length > 0) {
+    lines.push('--- Customer-Edited Reorder Items ---')
+    lines.push(
+      ...formatEditedBreakdown(
+        data.editedItems,
+        data.originalItems,
+        data.designNamesByInstanceId,
+      ),
+    )
+    lines.push('')
+  }
 
   if (data.artworkUrls && data.artworkUrls.length > 0) {
     lines.push('--- New Artwork ---')
@@ -250,6 +324,7 @@ export function buildReorderDataFromTracker(
     quantity?: number
     notes?: string
     artworkUrls?: string[]
+    editedItems?: ReorderEditedItem[]
   }
 ): ReorderData {
   const proofFileUrls = (tracker.proof_files || [])
@@ -276,5 +351,6 @@ export function buildReorderDataFromTracker(
     proofFileUrls,
     originalItems: tracker.quote_data?.items ?? [],
     designNamesByInstanceId: tracker.designNamesByInstanceId ?? {},
+    editedItems: input.editedItems,
   }
 }

@@ -1,8 +1,13 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import type { JobTracker } from '@/lib/job-tracker'
+import {
+  REORDER_EDITABLE_LINE_ITEMS,
+  type ReorderEditedItem,
+} from '@/lib/config/reorder'
+import { EditableReorderItems } from './EditableReorderItems'
 
 export interface ReorderFormProps {
   tracker: JobTracker
@@ -50,9 +55,15 @@ export function ReorderForm({
   const [quantity, setQuantity] = useState('')
   const [notes, setNotes] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [editedItems, setEditedItems] = useState<ReorderEditedItem[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const sourceItems = tracker.quote_data?.items ?? []
+  const handleEditedChange = useCallback(
+    (next: ReorderEditedItem[]) => setEditedItems(next),
+    [],
+  )
 
   const minDate = todayIso()
 
@@ -133,6 +144,7 @@ export function ReorderForm({
     setSubmitting(true)
     try {
       const artworkUrls = await uploadFiles()
+      const includeEdits = REORDER_EDITABLE_LINE_ITEMS && editedItems.length > 0
       const res = await fetch('/api/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,6 +155,7 @@ export function ReorderForm({
           quantity: quantityValue,
           notes: notes.trim() || undefined,
           artworkUrls: artworkUrls.length > 0 ? artworkUrls : undefined,
+          editedItems: includeEdits ? editedItems : undefined,
         }),
       })
       if (!res.ok) {
@@ -165,6 +178,23 @@ export function ReorderForm({
         <ReadOnlyField label="Past order reference" value={pastRef} />
         <ReadOnlyField label="Email contact" value={userEmail} />
       </div>
+
+      {/* Original items — editable when feature flag is on, read-only otherwise */}
+      {sourceItems.length > 0 && (
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-1">
+            {REORDER_EDITABLE_LINE_ITEMS
+              ? 'Items in this reorder (edit before submitting)'
+              : 'Items in this reorder'}
+          </p>
+          <EditableReorderItems
+            items={sourceItems}
+            designNamesByInstanceId={tracker.designNamesByInstanceId}
+            disabled={submitting}
+            onChange={handleEditedChange}
+          />
+        </div>
+      )}
 
       {/* Delivery address */}
       <div>
