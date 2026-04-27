@@ -70,6 +70,17 @@ export default async function ProductDetailPage({
         .eq('_channel.is_active', true)
         .single()
 
+  const bracketsQuery = catItem
+    ? admin.from('b2b_catalogue_item_pricing_tiers')
+        .select('min_quantity, max_quantity, unit_price')
+        .eq('catalogue_item_id', catItem.id)
+        .order('min_quantity')
+    : admin.from('product_pricing_tiers')
+        .select('min_quantity, max_quantity, unit_price')
+        .eq('product_id', productId)
+        .eq('is_active', true)
+        .order('min_quantity')
+
   const [{ data: product }, { data: variants }, { data: brackets }, { data: availRows }] =
     await Promise.all([
       productQuery,
@@ -81,11 +92,7 @@ export default async function ProductDetailPage({
         `)
         .eq('product_id', productId)
         .eq('is_active', true),
-      admin.from('product_pricing_tiers')
-        .select('min_quantity, max_quantity, unit_price')
-        .eq('product_id', productId)
-        .eq('is_active', true)
-        .order('min_quantity'),
+      bracketsQuery,
       admin.from('variant_availability')
         .select('variant_id, available_qty')
         .eq('organization_id', context.organizationId),
