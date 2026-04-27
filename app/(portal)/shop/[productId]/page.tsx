@@ -46,18 +46,33 @@ export default async function ProductDetailPage({
   if ('error' in auth) return notFound()
   const { admin, context } = auth
 
-  const [{ data: product }, { data: variants }, { data: brackets }, { data: availRows }] =
-    await Promise.all([
-      admin.from('products')
-        .select(
-          'id, name, description, image_url, moq, lead_time_days, sizing_type, ' +
-          'decoration_eligible, decoration_price, is_active, ' +
-          '_channel:product_type_activations!inner(product_type,is_active)'
-        )
+  const { data: catItem } = await admin
+    .from('b2b_catalogue_items')
+    .select('id, b2b_catalogues!inner(is_active)')
+    .eq('source_product_id', productId)
+    .eq('is_active', true)
+    .eq('b2b_catalogues.organization_id', context.organizationId)
+    .eq('b2b_catalogues.is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  const productSelect = catItem
+    ? 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active'
+    : 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, _channel:product_type_activations!inner(product_type,is_active)'
+
+  const productQuery = catItem
+    ? admin.from('products').select(productSelect).eq('id', productId).single()
+    : admin
+        .from('products')
+        .select(productSelect)
         .eq('id', productId)
         .eq('_channel.product_type', 'b2b')
         .eq('_channel.is_active', true)
-        .single(),
+        .single()
+
+  const [{ data: product }, { data: variants }, { data: brackets }, { data: availRows }] =
+    await Promise.all([
+      productQuery,
       admin.from('product_variants')
         .select(`
           id, color_swatch_id, size_id,
