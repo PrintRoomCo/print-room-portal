@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { effectiveUnitPrice } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
 
 export const dynamic = 'force-dynamic'
@@ -29,17 +30,37 @@ export default async function ShopPage({
   const page = Math.max(1, Number(sp.page ?? 1))
   const offset = (page - 1) * limit
 
-  let q = admin.from('products')
-    .select(
-      'id, name, sku, image_url, brand_id, category_id, moq, ' +
-      '_channel:product_type_activations!inner(product_type,is_active)',
-      { count: 'exact' }
-    )
+  // 1. Collect product ids in this org's active catalogues.
+  const { data: catItems } = await admin
+    .from('b2b_catalogue_items')
+    .select('source_product_id, b2b_catalogues!inner(is_active)')
+    .eq('b2b_catalogues.organization_id', context.organizationId)
+    .eq('b2b_catalogues.is_active', true)
     .eq('is_active', true)
-    .eq('_channel.product_type', 'b2b')
-    .eq('_channel.is_active', true)
-    .order('name')
-    .range(offset, offset + limit - 1)
+
+  const scopedProductIds = Array.from(
+    new Set((catItems ?? []).map((r) => r.source_product_id as string)),
+  )
+  const hasCatalogueScope = scopedProductIds.length > 0
+
+  let q = hasCatalogueScope
+    ? admin.from('products')
+        .select('id, name, sku, image_url, brand_id, category_id, moq', { count: 'exact' })
+        .eq('is_active', true)
+        .in('id', scopedProductIds)
+        .order('name')
+        .range(offset, offset + limit - 1)
+    : admin.from('products')
+        .select(
+          'id, name, sku, image_url, brand_id, category_id, moq, ' +
+          '_channel:product_type_activations!inner(product_type,is_active)',
+          { count: 'exact' }
+        )
+        .eq('is_active', true)
+        .eq('_channel.product_type', 'b2b')
+        .eq('_channel.is_active', true)
+        .order('name')
+        .range(offset, offset + limit - 1)
 
   if (sp.q) q = q.ilike('name', `%${sp.q}%`)
   if (sp.brand_id) q = q.eq('brand_id', sp.brand_id)
@@ -49,11 +70,12 @@ export default async function ShopPage({
 
   const products = await Promise.all(rows.map(async (p) => {
     const moqQty = p.moq ?? 1
-    const { data: price } = await admin.rpc('get_unit_price', {
-      p_product_id: p.id,
-      p_org_id: context.organizationId,
-      p_qty: moqQty || 1,
-    })
+    const price = await effectiveUnitPrice(
+      admin,
+      p.id,
+      context.organizationId,
+      moqQty || 1,
+    )
 
     const { data: variants } = await admin
       .from('product_variants')
@@ -78,7 +100,7 @@ export default async function ShopPage({
       name: p.name,
       sku: p.sku,
       image_url: p.image_url,
-      from_unit_price: Number(price ?? 0),
+      from_unit_price: price,
       has_stock,
     }
   }))
