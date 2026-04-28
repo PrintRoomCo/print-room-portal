@@ -100,9 +100,11 @@ export async function submitCustomerOrder(
   }
 
   // 2. Re-price every line on the server — ignore any client-sent prices.
+  // Uses effective_unit_price so catalogue-scoped orgs get catalogue prices
+  // (consistent with /shop), falling back to get_unit_price for global B2B.
   const repriced = await Promise.all(
     input.lines.map(async (l) => {
-      const { data: unit } = await admin.rpc('get_unit_price', {
+      const { data: unit } = await admin.rpc('effective_unit_price', {
         p_product_id: l.product_id,
         p_org_id: input.context.organizationId,
         p_qty: l.qty,
