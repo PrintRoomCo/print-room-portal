@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import type { CartLine } from '@/lib/cart/types'
+import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -67,9 +68,12 @@ export function CartTable({
 
   if (lines.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">
-        Your cart is empty.
-      </div>
+      <PortalEmptyState
+        title="Your cart is empty"
+        body="Start from your catalogue and add products when you are ready to place an order."
+        actionHref="/shop"
+        actionLabel="Browse catalogue"
+      />
     )
   }
 

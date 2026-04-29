@@ -8,6 +8,7 @@ import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
+import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -171,21 +172,25 @@ export function CheckoutClient({
   if (cart.lines.length === 0) {
     return (
       <div className="p-4 md:p-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Checkout</h1>
-        <p className="mt-4 text-gray-600">
-          Your cart is empty.{' '}
-          <a href="/shop" className="underline">
-            Browse the catalog
-          </a>
-          .
-        </p>
+        <PortalEmptyState
+          title="Checkout is ready when your cart is"
+          body="Add products from your catalogue, then return here to confirm shipping and submit the order."
+          actionHref="/shop"
+          actionLabel="Browse catalogue"
+        />
       </div>
     )
   }
 
   return (
-    <div className="p-4 md:p-8">
-      <h1 className="mb-6 text-2xl font-semibold text-gray-900">Checkout</h1>
+    <div className="space-y-6 p-4 md:p-8">
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Step 3 of 3</p>
+        <h1 className="mt-1 text-2xl font-semibold text-gray-900">Checkout</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Confirm shipping and submit against your account terms.
+        </p>
+      </div>
 
       {banner && (
         <div
@@ -213,20 +218,22 @@ export function CheckoutClient({
         </div>
       )}
 
-      <section className="space-y-2">
+      <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
-        {cart.lines.map((line) => (
-          <ShipToRow
-            key={line.lineId}
-            line={line}
-            stores={stores}
-            value={perLineShipTo[line.lineId] ?? null}
-            onChange={(next) =>
-              setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
-            }
-            disabled={submitting !== false}
-          />
-        ))}
+        <div className="mt-3 space-y-2">
+          {cart.lines.map((line) => (
+            <ShipToRow
+              key={line.lineId}
+              line={line}
+              stores={stores}
+              value={perLineShipTo[line.lineId] ?? null}
+              onChange={(next) =>
+                setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+              }
+              disabled={submitting !== false}
+            />
+          ))}
+        </div>
       </section>
 
       {mixedCustom && (
@@ -279,7 +286,7 @@ export function CheckoutClient({
         </section>
       )}
 
-      <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2">
         <div>
           <label htmlFor="required-by" className="block text-sm font-medium text-gray-700">
             Required by (optional)

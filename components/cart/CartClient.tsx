@@ -46,8 +46,13 @@ export function CartClient({
   const canCheckout = cart.lines.length > 0 && !oversell && !customerCodeMissing
 
   return (
-    <div className="p-4 md:p-8">
-      <h1 className="mb-6 text-2xl font-semibold text-gray-900">Cart</h1>
+    <div className="space-y-6 p-4 md:p-8">
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <h1 className="text-2xl font-semibold text-gray-900">Cart</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Review quantities, decoration charges, and your account pricing before checkout.
+        </p>
+      </div>
 
       {customerCodeMissing && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -65,7 +70,7 @@ export function CartClient({
       />
 
       {cart.lines.length > 0 && (
-        <div className="mt-6 grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-2 text-sm">
             <div className="flex items-center gap-2">
               <span className="text-gray-700">Pricing for</span>

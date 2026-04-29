@@ -5,6 +5,8 @@ import { useCompany } from '@/contexts/CompanyContext'
 import { JobTrackerOrderCard } from '@/components/orders/JobTrackerOrderCard'
 import { TrackerSummaryCards } from '@/components/orders/TrackerSummaryCards'
 import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
+import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 
 type StatusFilter = 'active' | 'completed'
 
@@ -58,19 +60,7 @@ export default function OrderTracker() {
   if (companyLoading || dataLoading) {
     return (
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="grid grid-cols-3 gap-4">
-            <div className="h-20 bg-gray-200 rounded-2xl" />
-            <div className="h-20 bg-gray-200 rounded-2xl" />
-            <div className="h-20 bg-gray-200 rounded-2xl" />
-          </div>
-          <div className="h-12 bg-gray-200 rounded-full" />
-          <div className="space-y-4">
-            <div className="h-40 bg-gray-200 rounded-2xl" />
-            <div className="h-40 bg-gray-200 rounded-2xl" />
-          </div>
-        </div>
+        <PortalSkeleton rows={3} />
       </div>
     )
   }
@@ -80,8 +70,12 @@ export default function OrderTracker() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Order tracker</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900">Projects</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Track active production work and revisit completed orders.
+        </p>
       </div>
 
       {/* Summary Cards */}
@@ -125,34 +119,17 @@ export default function OrderTracker() {
           ))}
         </div>
       ) : trackers.length > 0 ? (
-        <div className="card-elevated p-8 text-center">
-          <p className="text-gray-500">
-            No trackers match your {search ? 'search' : 'filter'}. Try{' '}
-            {search ? 'a different search term' : 'changing the filter'}.
-          </p>
-        </div>
+        <PortalEmptyState
+          title="No matching projects"
+          body={`Try ${search ? 'a different search term' : 'changing the filter'} to widen the list.`}
+        />
       ) : (
-        <div className="card-elevated p-12 text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-              />
-            </svg>
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900">No projects yet</h2>
-          <p className="mt-2 text-gray-600 max-w-sm mx-auto">
-            When your projects enter production, they&apos;ll appear here with live status updates.
-          </p>
-        </div>
+        <PortalEmptyState
+          title="No projects yet"
+          body="When your projects enter production, they will appear here with live status updates."
+          actionHref="/shop"
+          actionLabel="Browse catalogue"
+        />
       )}
     </div>
   )

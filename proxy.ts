@@ -17,13 +17,34 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   // Protected portal routes — redirect to sign-in if no session
-  const portalRoutes = ['/account', '/order-tracker', '/my-collections']
+  const portalRoutes = [
+    '/account',
+    '/cart',
+    '/checkout',
+    '/inventory',
+    '/my-collections',
+    '/order-tracker',
+    '/projects',
+    '/proofs',
+    '/quote-requests',
+    '/shop',
+    '/welcome',
+  ]
   const isPortalRoute = portalRoutes.some((route) => path.startsWith(route))
 
   if (isPortalRoute && !user) {
     const signInUrl = new URL('/sign-in', request.url)
     signInUrl.searchParams.set('returnTo', path)
     return NextResponse.redirect(signInUrl)
+  }
+
+  if (
+    isPortalRoute &&
+    user &&
+    path !== '/welcome' &&
+    request.cookies.get('welcome_seen')?.value !== 'true'
+  ) {
+    return NextResponse.redirect(new URL('/welcome', request.url))
   }
 
   // Auth routes — redirect to account if already signed in
@@ -40,7 +61,15 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     '/account/:path*',
+    '/cart/:path*',
+    '/checkout/:path*',
+    '/inventory/:path*',
     '/order-tracker/:path*',
+    '/projects/:path*',
+    '/proofs/:path*',
+    '/quote-requests/:path*',
+    '/shop/:path*',
+    '/welcome',
     '/my-collections/:path*',
     '/sign-in',
     '/request-access',
