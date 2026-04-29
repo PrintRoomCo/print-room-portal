@@ -1,4 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabase'
+import { getTierLabel } from '@/lib/pricing/tier-labels'
+import type { PricingMode } from '@/lib/pricing/types'
 import type { B2BCustomerAccess } from '@/types/company'
 
 /**
@@ -9,7 +11,9 @@ import type { B2BCustomerAccess } from '@/types/company'
  * 1. profiles → identity (name, email)
  * 2. user_organizations + organizations → company membership + role
  * 3. b2b_accounts → tier, payment terms
- * 4. stores → company locations
+ * 4. price_tiers + b2b_catalogues → WS4 tier discount + pricing mode
+ * 5. stores → company locations
+ * 6. variant_inventory → tracked-inventory presence
  */
 export async function getCompanyAccess(
   userId: string,
@@ -57,6 +61,9 @@ export async function getCompanyAccess(
       locationIds: [],
       role: 'staff',
       tier: 'bronze',
+      tierLabel: null,
+      tierDiscount: 0,
+      pricingMode: 'standard',
       isCompanyUser: false,
       leaversEnabled,
       hasTrackedInventory: false,
@@ -76,6 +83,35 @@ export async function getCompanyAccess(
     .select('*')
     .eq('organization_id', orgMembership.organization_id)
     .maybeSingle()
+
+  // 4b. Tier discount + active catalogue presence (WS4)
+  const tierLevel = b2bAccount?.tier_level ?? null
+  const tierLevelStr = tierLevel != null ? String(tierLevel) : null
+
+  const [{ data: priceTier }, { data: activeCatalogue }] = await Promise.all([
+    tierLevelStr
+      ? supabase
+          .from('price_tiers')
+          .select('discount')
+          .eq('tier_id', tierLevelStr)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { discount: number | null } | null }),
+    supabase
+      .from('b2b_catalogues')
+      .select('id')
+      .eq('organization_id', orgMembership.organization_id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const tierDiscount = Number(priceTier?.discount ?? 0)
+  const tierLabel = getTierLabel(tierLevel)
+  const pricingMode: PricingMode = activeCatalogue
+    ? 'catalogue'
+    : tierLevelStr
+      ? 'tiered'
+      : 'standard'
 
   // 5. Get company locations (stores)
   const { data: locations } = await supabase
@@ -111,6 +147,9 @@ export async function getCompanyAccess(
     locationIds,
     role,
     tier,
+    tierLabel,
+    tierDiscount,
+    pricingMode,
     isCompanyUser: true,
     leaversEnabled,
     hasTrackedInventory,
@@ -127,14 +166,25 @@ interface AccessInput {
   locationIds: string[]
   role: 'admin' | 'manager' | 'staff'
   tier: string
+  tierLabel: string | null
+  tierDiscount: number
+  pricingMode: PricingMode
   isCompanyUser: boolean
   leaversEnabled: boolean
   hasTrackedInventory: boolean
 }
 
 function buildAccess(input: AccessInput): B2BCustomerAccess {
-  const { role, isCompanyUser, leaversEnabled, hasTrackedInventory, ...rest } =
-    input
+  const {
+    role,
+    isCompanyUser,
+    leaversEnabled,
+    hasTrackedInventory,
+    tierLabel,
+    tierDiscount,
+    pricingMode,
+    ...rest
+  } = input
 
   const isAdmin = role === 'admin'
   const isManager = role === 'manager'
@@ -159,6 +209,10 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     canManageUsers: isAdmin,
     canUseLeavers: leaversEnabled,
 
+    tierLabel,
+    tierDiscount,
+    pricingMode,
+
     hasTrackedInventory,
   }
 }
@@ -177,6 +231,9 @@ async function buildAccessForIndividual(
     locationIds: [],
     role: 'staff',
     tier: 'bronze',
+    tierLabel: null,
+    tierDiscount: 0,
+    pricingMode: 'standard',
     isCompanyUser: false,
     leaversEnabled: false,
     hasTrackedInventory: false,

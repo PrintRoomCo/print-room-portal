@@ -25,13 +25,17 @@ export async function POST(request: Request) {
     )
   }
 
+  // Canonical pricing per project_b2b_pricing_canonical.md — never call
+  // get_unit_price directly: it bypasses catalogue scope and returns 0.00 for
+  // catalogue products without master pricing tiers.
   const [{ data: price }, { data: bracket }] = await Promise.all([
-    admin.rpc('get_unit_price', {
+    admin.rpc('effective_unit_price', {
       p_product_id: body.product_id,
       p_org_id: context.organizationId,
       p_qty: body.qty,
     }),
-    admin.from('product_pricing_tiers')
+    admin
+      .from('product_pricing_tiers')
       .select('min_quantity, max_quantity')
       .eq('product_id', body.product_id)
       .eq('is_active', true)

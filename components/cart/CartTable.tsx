@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import type { CartLine } from '@/lib/cart/types'
+import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -67,9 +68,12 @@ export function CartTable({
 
   if (lines.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">
-        Your cart is empty.
-      </div>
+      <PortalEmptyState
+        title="Your cart is empty"
+        body="Start from your catalogue and add products when you are ready to place an order."
+        actionHref="/shop"
+        actionLabel="Browse catalogue"
+      />
     )
   }
 
@@ -111,6 +115,11 @@ export function CartTable({
                     <div className="min-w-0">
                       <div className="truncate font-medium text-gray-900">{line.productName}</div>
                       <div className="truncate text-xs text-gray-500">{line.variantLabel}</div>
+                      {line.decorationPrice && line.decorationPrice > 0 ? (
+                        <div className="text-xs text-gray-500">
+                          + ${line.decorationPrice.toFixed(2)} decoration / unit
+                        </div>
+                      ) : null}
                       {isOversell && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
                           <span>Only {avail} available.</span>
@@ -140,7 +149,7 @@ export function CartTable({
                 </td>
                 <td className="px-4 py-3 text-gray-700">${line.unitPrice.toFixed(2)}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  ${(line.unitPrice * line.qty).toFixed(2)}
+                  ${(line.qty * (line.unitPrice + (line.decorationPrice ?? 0))).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button

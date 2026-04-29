@@ -1,3 +1,5 @@
+import type { PricingMode } from '@/lib/pricing/types'
+
 /**
  * B2B Customer Access — ported from customer-access.server.ts
  *
@@ -30,6 +32,13 @@ export interface B2BCustomerAccess {
   canApproveDesigns: boolean
   canManageUsers: boolean
   canUseLeavers: boolean
+
+  /** WS4 — friendly tier name from TIER_LABELS map. Null when no b2b_account or unknown tier. */
+  tierLabel: string | null
+  /** WS4 — fractional discount (0.10 = 10%). 0 when no b2b_account or no price_tiers row. */
+  tierDiscount: number
+  /** WS4 — pricing mode for the org. See lib/pricing/types.ts. */
+  pricingMode: PricingMode
 
   /**
    * True if the organization has any rows in `variant_inventory` (Inventory sub-app).

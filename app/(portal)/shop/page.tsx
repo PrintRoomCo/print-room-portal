@@ -3,6 +3,10 @@ import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { effectiveUnitPrice } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
+import { getTierLabel } from '@/lib/pricing/tier-labels'
+import { TierBadge } from '@/components/pricing/TierBadge'
+import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +46,14 @@ export default async function ShopPage({
     new Set((catItems ?? []).map((r) => r.source_product_id as string)),
   )
   const hasCatalogueScope = scopedProductIds.length > 0
+
+  // WS4 — derive pricingMode + tier label for the badge on each card.
+  const tierLabel = getTierLabel(context.tierLevel)
+  const pricingMode: PricingMode = hasCatalogueScope
+    ? 'catalogue'
+    : context.tierLevel != null
+      ? 'tiered'
+      : 'standard'
 
   let q = hasCatalogueScope
     ? admin.from('products')
@@ -106,24 +118,41 @@ export default async function ShopPage({
   }))
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="mb-6 flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Catalog</h1>
-        <p className="text-sm text-gray-500">
-          {products.length} product{products.length === 1 ? '' : 's'}
-        </p>
+    <div className="space-y-6 p-4 md:p-8">
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                Customer catalogue
+              </p>
+              <TierBadge label={tierLabel} pricingMode={pricingMode} />
+            </div>
+            <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              {pricingMode === 'catalogue'
+                ? 'Products and prices are scoped to your dedicated catalogue.'
+                : 'Your account pricing is applied as you browse.'}
+            </p>
+          </div>
+          <p className="text-sm text-gray-500">
+            {products.length} product{products.length === 1 ? '' : 's'}
+          </p>
+        </div>
       </div>
 
       {products.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">
-          No products available for your account yet — contact us at{' '}
-          <a className="underline" href="mailto:sales@theprint-room.co.nz">sales@theprint-room.co.nz</a>.
-        </div>
+        <PortalEmptyState
+          title="Your catalogue is being set up"
+          body="Your account manager will let you know when products are ready for ordering."
+          actionHref="mailto:sales@theprint-room.co.nz"
+          actionLabel="Contact sales"
+        />
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => (
             <Link key={p.id} href={`/shop/${p.id}`} className="block">
-              <ProductCard product={p} />
+              <ProductCard product={p} tierLabel={tierLabel} pricingMode={pricingMode} />
             </Link>
           ))}
         </div>

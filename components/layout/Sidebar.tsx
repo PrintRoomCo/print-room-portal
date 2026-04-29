@@ -20,6 +20,7 @@ const allNavItems = [
   { name: 'Catalog', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'My Quotes', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Quote Requests', href: '/quote-requests', icon: QuoteRequestsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
+  { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiresTrackedInventory: false },
   { name: 'Inventory', href: '/inventory', icon: InventoryIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: true },
 ] as const
@@ -341,6 +342,14 @@ function QuoteRequestsIcon({ className }: { className?: string }) {
         strokeWidth={2}
         d="M9 12h6m-6 4h4m2-10H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-4-4z"
       />
+    </svg>
+  )
+}
+
+function ProofsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8M8 11h8M8 15h5M6 3h9l3 3v15H6V3z" />
     </svg>
   )
 }
