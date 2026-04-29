@@ -4,6 +4,10 @@ import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import { usePricingContext } from '@/lib/pricing/usePricingContext'
+import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
+import { TierBadge } from '@/components/pricing/TierBadge'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -65,12 +69,23 @@ export function CheckoutClient({
   const customIncomplete =
     allCustom && (!customAddress.address || !customAddress.city || !customAddress.country)
 
-  const subtotal = useMemo(
-    () => cart.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0),
-    [cart.lines]
+  const pricingCtx = usePricingContext()
+  const breakdown = useMemo(
+    () =>
+      computeOrderBreakdown({
+        lines: cart.lines.map((l) => ({
+          qty: l.qty,
+          unitEffective: l.unitPrice,
+          decorationPerUnit: l.decorationPrice ?? 0,
+        })),
+        tierDiscount: pricingCtx.tierDiscount,
+        pricingMode: pricingCtx.pricingMode,
+        gstRate: 0.15,
+      }),
+    [cart.lines, pricingCtx.tierDiscount, pricingCtx.pricingMode]
   )
   const depositPct = defaultDepositPercent ?? 0
-  const depositAmount = (subtotal * depositPct) / 100
+  const depositAmount = (breakdown.netSubtotal * depositPct) / 100
 
   const customerCodeMissing = !customerCode
   const canSubmitOrder =
@@ -292,10 +307,17 @@ export function CheckoutClient({
       </section>
 
       <section className="mt-6 rounded-xl border border-gray-100 bg-white p-4">
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm text-gray-600">Subtotal</span>
-          <span className="text-lg font-semibold text-gray-900">${subtotal.toFixed(2)}</span>
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm text-gray-700">Pricing for</span>
+          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
         </div>
+        <PriceBreakdown
+          breakdown={breakdown}
+          pricingMode={pricingCtx.pricingMode}
+          tierLabel={pricingCtx.tierLabel}
+          tierDiscount={pricingCtx.tierDiscount}
+          variant="checkout-review"
+        />
       </section>
 
       <div className="mt-6 flex flex-wrap justify-end gap-2">
