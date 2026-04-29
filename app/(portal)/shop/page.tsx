@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { effectiveUnitPrice } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
+import { getTierLabel } from '@/lib/pricing/tier-labels'
+import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +44,14 @@ export default async function ShopPage({
     new Set((catItems ?? []).map((r) => r.source_product_id as string)),
   )
   const hasCatalogueScope = scopedProductIds.length > 0
+
+  // WS4 — derive pricingMode + tier label for the badge on each card.
+  const tierLabel = getTierLabel(context.tierLevel)
+  const pricingMode: PricingMode = hasCatalogueScope
+    ? 'catalogue'
+    : context.tierLevel != null
+      ? 'tiered'
+      : 'standard'
 
   let q = hasCatalogueScope
     ? admin.from('products')
@@ -123,7 +133,7 @@ export default async function ShopPage({
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => (
             <Link key={p.id} href={`/shop/${p.id}`} className="block">
-              <ProductCard product={p} />
+              <ProductCard product={p} tierLabel={tierLabel} pricingMode={pricingMode} />
             </Link>
           ))}
         </div>

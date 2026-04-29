@@ -1,4 +1,6 @@
 import Image from 'next/image'
+import { TierBadge } from '@/components/pricing/TierBadge'
+import type { PricingMode } from '@/lib/pricing/types'
 
 interface ProductCardData {
   id: string
@@ -9,7 +11,17 @@ interface ProductCardData {
   has_stock: boolean
 }
 
-export function ProductCard({ product }: { product: ProductCardData }) {
+interface ProductCardProps {
+  product: ProductCardData
+  tierLabel: string | null
+  pricingMode: PricingMode
+}
+
+export function ProductCard({
+  product,
+  tierLabel,
+  pricingMode,
+}: ProductCardProps) {
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 ease-spring hover:shadow-md">
       <div className="relative aspect-square w-full bg-gray-50">
@@ -27,11 +39,14 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             No image
           </div>
         )}
-        {product.has_stock && (
-          <span className="absolute right-3 top-3 rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
-            In stock
-          </span>
-        )}
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+          <TierBadge label={tierLabel} pricingMode={pricingMode} />
+          {product.has_stock && (
+            <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
+              In stock
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex flex-col gap-1 p-4">
         <p className="text-xs uppercase tracking-wide text-gray-400">{product.sku}</p>
