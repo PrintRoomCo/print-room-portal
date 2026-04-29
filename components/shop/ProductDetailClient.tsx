@@ -6,6 +6,10 @@ import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type VariantRow } from './VariantPicker'
 import { RequestReorderModal } from './RequestReorderModal'
+import { usePricingContext } from '@/lib/pricing/usePricingContext'
+import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
+import { TierBadge } from '@/components/pricing/TierBadge'
 
 interface ProductData {
   id: string
@@ -47,6 +51,7 @@ export function ProductDetailClient({
   availability,
 }: Props) {
   const cart = useCart()
+  const pricingCtx = usePricingContext()
 
   const firstVariant = variants[0] ?? null
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
@@ -123,6 +128,7 @@ export function ProductDetailClient({
       qty,
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
+      decorationPrice: product.decoration_price ?? null,
     })
     showToast('Added to cart')
   }
@@ -163,7 +169,10 @@ export function ProductDetailClient({
         {/* Info + controls */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
+              <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+            </div>
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
             )}
@@ -225,17 +234,24 @@ export function ProductDetailClient({
               {pricingLoading ? (
                 <span className="text-gray-400">Pricing…</span>
               ) : pricing ? (
-                <>
-                  <span className="text-gray-500">Unit</span>{' '}
-                  <span className="font-semibold text-gray-900">
-                    ${pricing.unit_price.toFixed(2)}
-                  </span>
-                  <span className="mx-2 text-gray-300">·</span>
-                  <span className="text-gray-500">Total</span>{' '}
-                  <span className="font-semibold text-gray-900">
-                    ${pricing.total.toFixed(2)}
-                  </span>
-                </>
+                <PriceBreakdown
+                  breakdown={computeOrderBreakdown({
+                    lines: [
+                      {
+                        qty,
+                        unitEffective: pricing.unit_price,
+                        decorationPerUnit: product.decoration_price ?? 0,
+                      },
+                    ],
+                    tierDiscount: pricingCtx.tierDiscount,
+                    pricingMode: pricingCtx.pricingMode,
+                    gstRate: 0.15,
+                  })}
+                  pricingMode={pricingCtx.pricingMode}
+                  tierLabel={pricingCtx.tierLabel}
+                  tierDiscount={pricingCtx.tierDiscount}
+                  variant="pdp"
+                />
               ) : (
                 <span className="text-gray-400">—</span>
               )}
