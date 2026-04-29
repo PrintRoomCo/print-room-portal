@@ -111,6 +111,11 @@ export function CartTable({
                     <div className="min-w-0">
                       <div className="truncate font-medium text-gray-900">{line.productName}</div>
                       <div className="truncate text-xs text-gray-500">{line.variantLabel}</div>
+                      {line.decorationPrice && line.decorationPrice > 0 ? (
+                        <div className="text-xs text-gray-500">
+                          + ${line.decorationPrice.toFixed(2)} decoration / unit
+                        </div>
+                      ) : null}
                       {isOversell && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
                           <span>Only {avail} available.</span>
@@ -140,7 +145,7 @@ export function CartTable({
                 </td>
                 <td className="px-4 py-3 text-gray-700">${line.unitPrice.toFixed(2)}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  ${(line.unitPrice * line.qty).toFixed(2)}
+                  ${(line.qty * (line.unitPrice + (line.decorationPrice ?? 0))).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
