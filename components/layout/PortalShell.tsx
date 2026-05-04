@@ -3,6 +3,7 @@
 import { Sidebar } from './Sidebar'
 import { useCompany } from '@/contexts/CompanyContext'
 import { CartChip } from '@/components/cart/CartChip'
+import { CurrencySelector } from '@/components/currency/CurrencySelector'
 import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <Sidebar customer={access}>
       {children}
       <CartChip />
+      <div className="fixed right-4 top-[136px] z-40 rounded-full bg-white/80 px-2 shadow backdrop-blur md:right-6 md:top-[68px]">
+        <CurrencySelector />
+      </div>
     </Sidebar>
   )
 }
