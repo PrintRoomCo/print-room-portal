@@ -8,6 +8,7 @@ interface ProductCardData {
   sku: string | null
   image_url: string | null
   from_unit_price: number
+  price_status: 'ok' | 'missing'
   has_stock: boolean
 }
 
@@ -51,9 +52,14 @@ export function ProductCard({
       <div className="flex flex-1 flex-col gap-1 p-4">
         <p className="text-xs uppercase tracking-wide text-gray-400">{product.sku}</p>
         <h3 className="text-sm font-medium text-gray-900 line-clamp-2">{product.name}</h3>
-        {product.from_unit_price > 0 && (
+        {product.price_status === 'missing' ? (
+          <p className="mt-auto pt-3 text-sm text-gray-500">Price on request</p>
+        ) : (
           <p className="mt-auto pt-3 text-sm text-gray-600">
-            From <span className="rounded-full bg-[rgb(var(--color-brand-yellow))] px-2 py-0.5 font-semibold text-[rgb(var(--color-brand-blue))]">${product.from_unit_price.toFixed(2)}</span>
+            From{' '}
+            <span className="rounded-full bg-[rgb(var(--color-brand-yellow))] px-2 py-0.5 font-semibold text-[rgb(var(--color-brand-blue))]">
+              ${product.from_unit_price.toFixed(2)}
+            </span>
           </p>
         )}
       </div>
