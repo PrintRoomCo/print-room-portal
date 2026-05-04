@@ -172,6 +172,11 @@ export function ProductDetailClient({
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
               <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+              {product.sizing_type && product.sizing_type !== 'multi_size' && (
+                <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
+                  {product.sizing_type.replace(/_/g, ' ')}
+                </span>
+              )}
             </div>
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
@@ -188,14 +193,25 @@ export function ProductDetailClient({
             }}
           />
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <AvailabilityBadge availableQty={availableQty} />
-            {!tracksThisVariant && product.lead_time_days != null && (
+            {product.lead_time_days != null && (
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
               </span>
             )}
           </div>
+
+          {product.decoration_eligible && (
+            <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              <span>Decoration available</span>
+              {product.decoration_price != null && product.decoration_price > 0 && (
+                <span className="font-medium text-gray-800">
+                  +${Number(product.decoration_price).toFixed(2)} / unit
+                </span>
+              )}
+            </div>
+          )}
 
           {brackets.length > 0 && (
             <div className="rounded-xl border border-gray-100 bg-white p-3 text-xs">
@@ -226,7 +242,7 @@ export function ProductDetailClient({
                 disabled={isOutOfStock}
                 className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
               />
-              {!tracksThisVariant && product.moq ? (
+              {product.moq != null && product.moq > 1 ? (
                 <p className="mt-1 text-xs text-gray-500">Min. order {product.moq}</p>
               ) : null}
             </div>
