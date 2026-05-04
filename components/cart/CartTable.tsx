@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import type { CartLine } from '@/lib/cart/types'
+import { formatPrice } from '@/lib/format/price'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
 interface CartTableProps {
@@ -117,7 +118,7 @@ export function CartTable({
                       <div className="truncate text-xs text-gray-500">{line.variantLabel}</div>
                       {line.decorationPrice && line.decorationPrice > 0 ? (
                         <div className="text-xs text-gray-500">
-                          + ${line.decorationPrice.toFixed(2)} decoration / unit
+                          + {formatPrice(line.decorationPrice)} decoration / unit
                         </div>
                       ) : null}
                       {isOversell && (
@@ -147,9 +148,9 @@ export function CartTable({
                     className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30"
                   />
                 </td>
-                <td className="px-4 py-3 text-gray-700">${line.unitPrice.toFixed(2)}</td>
+                <td className="px-4 py-3 text-gray-700">{formatPrice(line.unitPrice)}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  ${(line.qty * (line.unitPrice + (line.decorationPrice ?? 0))).toFixed(2)}
+                  {formatPrice(line.qty * (line.unitPrice + (line.decorationPrice ?? 0)))}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button

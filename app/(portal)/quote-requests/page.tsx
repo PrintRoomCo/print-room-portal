@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { formatPrice } from '@/lib/format/price'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,7 @@ export default async function QuoteRequestsListPage() {
                   <div className="mt-2 text-xs text-gray-500">
                     {itemCount} line{itemCount === 1 ? '' : 's'}
                     {q.total != null
-                      ? ` · $${Number(q.total).toFixed(2)}`
+                      ? ` · ${formatPrice(q.total)}`
                       : ' · awaiting staff pricing'}
                   </div>
                 </Link>

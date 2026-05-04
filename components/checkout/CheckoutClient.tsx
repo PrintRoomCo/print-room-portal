@@ -9,6 +9,7 @@ import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import { formatPrice } from '@/lib/format/price'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -213,7 +214,7 @@ export function CheckoutClient({
 
       {depositPct > 0 && (
         <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-          A deposit of {depositPct}% (${depositAmount.toFixed(2)}) will be
+          A deposit of {depositPct}% ({formatPrice(depositAmount)}) will be
           invoiced up-front. Balance on {paymentTerms ?? 'net20'}.
         </div>
       )}

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { formatPrice } from '@/lib/format/price'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,9 +57,7 @@ export default async function ConfirmationPage({
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-gray-500">Total</dt>
-            <dd className="text-gray-900">
-              {order.total_price != null ? `$${Number(order.total_price).toFixed(2)}` : '—'}
-            </dd>
+            <dd className="text-gray-900">{formatPrice(order.total_price)}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-gray-500">Production sync</dt>

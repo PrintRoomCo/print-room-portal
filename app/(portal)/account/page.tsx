@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
+import { formatPrice } from '@/lib/format/price'
 
 // New Zealand region codes (ISO 3166-2:NZ)
 const NZ_REGIONS = [
@@ -404,6 +405,11 @@ export default function Account() {
           <div className="divide-y divide-gray-100">
             {recentQuotes.map((quote) => {
               const lineItems = Array.isArray(quote.line_items) ? quote.line_items : []
+              const totalAmount = Number(quote.total_amount)
+              const totalLabel =
+                Number.isFinite(totalAmount) && totalAmount > 0
+                  ? `${quote.currency} ${formatPrice(totalAmount)}`
+                  : formatPrice(quote.total_amount)
               return (
                 <div
                   key={quote.id}
@@ -426,7 +432,7 @@ export default function Account() {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">
-                        {quote.currency} ${Number(quote.total_amount).toFixed(2)}
+                        {totalLabel}
                       </p>
                     </div>
                   </div>

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { formatPrice } from '@/lib/format/price'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +48,7 @@ export default async function QuoteRequestDetailPage({
 
   const items = row.quote_data?.items ?? []
   const isApproved = row.status === 'approved'
-  const hasTotal = typeof row.total === 'number' && Number(row.total) > 0
+  const hasTotal = row.total != null && Number.isFinite(Number(row.total))
 
   return (
     <div className="max-w-3xl p-4 md:p-8">
@@ -98,7 +99,7 @@ export default async function QuoteRequestDetailPage({
                   <div>Qty {it.quantity ?? '—'}</div>
                   {typeof it.unitPrice === 'number' && (
                     <div className="text-gray-500">
-                      Unit ${Number(it.unitPrice).toFixed(2)}
+                      Unit {formatPrice(it.unitPrice)}
                     </div>
                   )}
                 </div>
@@ -111,7 +112,7 @@ export default async function QuoteRequestDetailPage({
       {isApproved && hasTotal ? (
         <section className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
           <h2 className="text-sm font-semibold text-sky-900">
-            Staff priced this at ${Number(row.total).toFixed(2)}
+            Staff priced this at {formatPrice(row.total)}
           </h2>
           <p className="mt-1 text-xs text-sky-900/80">
             Accept or decline via your account manager — in-app acceptance arrives in v1.1.

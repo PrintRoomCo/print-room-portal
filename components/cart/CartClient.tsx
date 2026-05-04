@@ -8,6 +8,7 @@ import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
+import { formatPrice } from '@/lib/format/price'
 
 interface CartClientProps {
   defaultDepositPercent: number | null
@@ -84,7 +85,7 @@ export function CartClient({
             {depositPct > 0 && (
               <div className="text-gray-600">
                 Expected deposit ({depositPct}%):{' '}
-                <span className="font-medium text-gray-900">${depositAmount.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">{formatPrice(depositAmount)}</span>
               </div>
             )}
             {oversell && (
