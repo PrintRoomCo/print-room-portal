@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
+import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { pushProductionJob } from '@/lib/monday/production-job'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 
@@ -73,6 +74,13 @@ interface QuoteItemForMonday {
         sizes: { label: string | null } | { label: string | null }[] | null
       }
     | null
+}
+
+interface OrderConfirmationLine {
+  productName: string
+  variantLabel: string
+  quantity: number
+  unitPrice: number
 }
 
 function pickOne<T>(v: T | T[] | null | undefined): T | null {
@@ -169,6 +177,11 @@ export async function submitCustomerOrder(
   //    confirmation page so the customer knows not to panic.
   let monday_item_id: string | null = null
   let monday_push_error: string | null = null
+  let emailLines: OrderConfirmationLine[] = []
+  let emailTotalAmount: number | null = null
+  let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
+  let emailRequiredBy: string | null = input.required_by ?? null
+  let emailCustomerName = input.context.organizationName
   try {
     const { data: q } = await admin
       .from('quotes')
@@ -179,6 +192,10 @@ export async function submitCustomerOrder(
       .single()
     const quote = q as QuoteRowForMonday | null
     if (!quote) throw new Error('quote row missing after submit_b2b_order')
+    emailTotalAmount = Number(quote.total_amount)
+    emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
+    emailRequiredBy = quote.required_by ?? emailRequiredBy
+    emailCustomerName = quote.customer_name
 
     const { data: lines } = await admin
       .from('quote_items')
@@ -216,6 +233,12 @@ export async function submitCustomerOrder(
         existing_subitem_id: l.monday_subitem_id,
       }
     })
+    emailLines = pLines.map((line) => ({
+      productName: line.product_name,
+      variantLabel: line.variant_label,
+      quantity: line.quantity,
+      unitPrice: line.unit_price,
+    }))
 
     const result = await pushProductionJob(order, pLines)
     monday_item_id = result.itemId
@@ -231,6 +254,44 @@ export async function submitCustomerOrder(
     }
   } catch (e) {
     monday_push_error = (e as Error).message
+  }
+
+  // 6. Order-confirmation email. Failure here must not roll back the order or
+  //    depend on the Monday push result.
+  try {
+    if (input.context.email) {
+      const fallbackLines =
+        emailLines.length > 0
+          ? emailLines
+          : repriced.map((line) => ({
+              productName: line.product_name,
+              variantLabel: '-',
+              quantity: line.qty,
+              unitPrice: line.unit_price,
+            }))
+      const fallbackTotal =
+        emailTotalAmount ??
+        repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
+
+      const result = await sendOrderConfirmation({
+        to: input.context.email,
+        customerName: emailCustomerName,
+        orderRef: order_ref,
+        totalAmount: fallbackTotal,
+        paymentTerms: emailPaymentTerms,
+        requiredBy: emailRequiredBy,
+        lines: fallbackLines,
+      })
+      if (!result.success) {
+        console.error(
+          '[Checkout] Order-confirmation email failed:',
+          result.error ?? 'Unknown error'
+        )
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    console.error('[Checkout] Order-confirmation email failed:', message)
   }
 
   return { order_id, order_ref, monday_item_id, monday_push_error }
