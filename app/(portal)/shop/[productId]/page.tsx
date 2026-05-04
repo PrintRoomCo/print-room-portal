@@ -15,6 +15,14 @@ interface ProductDetail {
   decoration_eligible: boolean | null
   decoration_price: number | null
   is_active: boolean
+  sku: string | null
+  safety_standard: string | null
+  specs: Record<string, unknown> | null
+  supports_labels: boolean | null
+  garment_family: string | null
+  default_sizes: string[] | null
+  brands: { name: string } | { name: string }[] | null
+  categories: { name: string } | { name: string }[] | null
 }
 
 interface RawVariant {
@@ -56,9 +64,10 @@ export default async function ProductDetailPage({
     .limit(1)
     .maybeSingle()
 
+  const baseFields = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
   const productSelect = catItem
-    ? 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active'
-    : 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, _channel:product_type_activations!inner(product_type,is_active)'
+    ? baseFields
+    : `${baseFields}, _channel:product_type_activations!inner(product_type,is_active)`
 
   const productQuery = catItem
     ? admin.from('products').select(productSelect).eq('id', productId).single()
@@ -128,6 +137,13 @@ export default async function ProductDetailPage({
     unit_price: number
   }[]
 
+  const brandName = Array.isArray(productRow.brands)
+    ? (productRow.brands[0]?.name ?? null)
+    : productRow.brands?.name ?? null
+  const categoryName = Array.isArray(productRow.categories)
+    ? (productRow.categories[0]?.name ?? null)
+    : productRow.categories?.name ?? null
+
   return (
     <ProductDetailClient
       product={{
@@ -140,6 +156,14 @@ export default async function ProductDetailPage({
         sizing_type: productRow.sizing_type,
         decoration_eligible: productRow.decoration_eligible,
         decoration_price: productRow.decoration_price,
+        sku: productRow.sku,
+        safety_standard: productRow.safety_standard,
+        specs: productRow.specs,
+        supports_labels: productRow.supports_labels,
+        garment_family: productRow.garment_family,
+        default_sizes: productRow.default_sizes,
+        brand_name: brandName,
+        category_name: categoryName,
       }}
       variants={mappedVariants}
       brackets={bracketRows}
