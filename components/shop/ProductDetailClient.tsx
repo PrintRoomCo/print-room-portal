@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
@@ -10,6 +9,7 @@ import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
+import { ProductImageGallery, type GalleryImage } from './ProductImageGallery'
 
 interface ProductData {
   id: string
@@ -40,6 +40,7 @@ interface Bracket {
 interface PricingResponse {
   unit_price: number
   total: number
+  status: 'ok' | 'missing'
   bracket: { min_quantity: number; max_quantity: number | null } | null
 }
 
@@ -50,6 +51,7 @@ interface Props {
   /** variant_id → available_qty, only populated for variants the org stocks. */
   availability: Record<string, number>
   organizationId: string
+  images: GalleryImage[]
 }
 
 export function ProductDetailClient({
@@ -57,6 +59,7 @@ export function ProductDetailClient({
   variants,
   brackets,
   availability,
+  images,
 }: Props) {
   const cart = useCart()
   const pricingCtx = usePricingContext()
@@ -124,7 +127,7 @@ export function ProductDetailClient({
   }
 
   function handleAddToCart() {
-    if (!selectedVariant || !pricing) return
+    if (!selectedVariant || !pricing || pricing.status !== 'ok') return
     const colorLabel = selectedVariant.color_label ?? ''
     const sizeLabel = selectedVariant.size_label ?? ''
     const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
@@ -141,12 +144,15 @@ export function ProductDetailClient({
     showToast('Added to cart')
   }
 
+  const priceMissing = pricing != null && pricing.status === 'missing'
   const canAddToCart =
     selectedVariant != null &&
     !isOutOfStock &&
+    !priceMissing &&
     Number.isInteger(qty) &&
     qty >= defaultMinQty &&
-    pricing != null
+    pricing != null &&
+    pricing.status === 'ok'
 
   const selectedVariantLabel = selectedVariant
     ? [selectedVariant.color_label, selectedVariant.size_label].filter(Boolean).join(' / ') || '—'
@@ -156,23 +162,11 @@ export function ProductDetailClient({
     <div className="p-4 md:p-8">
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Image */}
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
-          {product.image_url ? (
-            <Image
-              src={product.image_url}
-              alt={product.name}
-              fill
-              sizes="(min-width:1024px) 40vw, 100vw"
-              className="object-contain p-6"
-              unoptimized
-              priority
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-gray-300">
-              No image
-            </div>
-          )}
-        </div>
+        <ProductImageGallery
+          images={images}
+          fallbackUrl={product.image_url}
+          productName={product.name}
+        />
 
         {/* Info + controls */}
         <div className="space-y-6">
@@ -257,7 +251,7 @@ export function ProductDetailClient({
             <div className="flex-1 text-right text-sm">
               {pricingLoading ? (
                 <span className="text-gray-400">Pricing…</span>
-              ) : pricing ? (
+              ) : pricing && pricing.status === 'ok' ? (
                 <PriceBreakdown
                   breakdown={computeOrderBreakdown({
                     lines: [
@@ -276,6 +270,16 @@ export function ProductDetailClient({
                   tierDiscount={pricingCtx.tierDiscount}
                   variant="pdp"
                 />
+              ) : pricing && pricing.status === 'missing' ? (
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-700">Price on request</p>
+                  <a
+                    href="mailto:sales@theprint-room.co.nz"
+                    className="text-xs text-pr-blue underline"
+                  >
+                    Contact sales
+                  </a>
+                </div>
               ) : (
                 <span className="text-gray-400">—</span>
               )}
