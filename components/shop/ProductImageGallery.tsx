@@ -8,6 +8,7 @@ export interface GalleryImage {
   url: string
   view: string | null
   alt?: string | null
+  position?: number | null
 }
 
 interface Props {
@@ -79,14 +80,18 @@ export function ProductImageGallery({ images, fallbackUrl, productName }: Props)
   )
 }
 
-const VIEW_ORDER = ['hero', 'front', 'back', 'left', 'right'] as const
-
 function orderImages(images: GalleryImage[]): GalleryImage[] {
-  const rank = (v: string | null) => {
-    if (!v) return VIEW_ORDER.length
-    const i = (VIEW_ORDER as readonly string[]).indexOf(v)
-    return i === -1 ? VIEW_ORDER.length : i
-  }
+  const heroFirst = (img: GalleryImage) => (img.view === 'hero' ? 0 : 1)
+  return [...images].sort((a, b) => {
+    const h = heroFirst(a) - heroFirst(b)
+    if (h !== 0) return h
+    const ap = a.position ?? Number.MAX_SAFE_INTEGER
+    const bp = b.position ?? Number.MAX_SAFE_INTEGER
+    if (ap !== bp) return ap - bp
+    return naturalCompare(a.view ?? '', b.view ?? '')
+  })
+}
 
-  return [...images].sort((a, b) => rank(a.view) - rank(b.view))
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
 }

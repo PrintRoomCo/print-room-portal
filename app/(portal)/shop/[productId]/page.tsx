@@ -111,9 +111,9 @@ export default async function ProductDetailPage({
       .select('variant_id, available_qty')
       .eq('organization_id', context.organizationId),
     admin.from('product_images')
-      .select('id, file_url, view, alt_text')
+      .select('id, file_url, view, alt_text, position')
       .eq('product_id', productId)
-      .order('view'),
+      .order('position', { ascending: true }),
   ])
 
   const productRow = product as unknown as ProductDetail | null
@@ -145,6 +145,7 @@ export default async function ProductDetailPage({
     file_url: string | null
     view: string | null
     alt_text: string | null
+    position: number | null
   }>)
     .filter((r) => r.file_url)
     .map((r) => ({
@@ -152,6 +153,7 @@ export default async function ProductDetailPage({
       url: r.file_url as string,
       view: r.view,
       alt: r.alt_text,
+      position: r.position,
     }))
 
   const bracketRows = (brackets ?? []) as {
