@@ -15,7 +15,7 @@ export async function createQuoteRequest(
 ): Promise<string> {
   const priced = await Promise.all(
     lines.map(async (l) => {
-      const { data: unit } = await admin.rpc('get_unit_price', {
+      const { data: unit } = await admin.rpc('effective_unit_price', {
         p_product_id: l.product_id,
         p_org_id: context.organizationId,
         p_qty: l.qty,
