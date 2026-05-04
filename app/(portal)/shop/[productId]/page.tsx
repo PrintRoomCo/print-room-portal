@@ -90,22 +90,31 @@ export default async function ProductDetailPage({
         .eq('is_active', true)
         .order('min_quantity')
 
-  const [{ data: product }, { data: variants }, { data: brackets }, { data: availRows }] =
-    await Promise.all([
-      productQuery,
-      admin.from('product_variants')
-        .select(`
-          id, color_swatch_id, size_id,
-          product_color_swatches (label, hex, position),
-          sizes (label, order_index)
-        `)
-        .eq('product_id', productId)
-        .eq('is_active', true),
-      bracketsQuery,
-      admin.from('variant_availability')
-        .select('variant_id, available_qty')
-        .eq('organization_id', context.organizationId),
-    ])
+  const [
+    { data: product },
+    { data: variants },
+    { data: brackets },
+    { data: availRows },
+    { data: imageRows },
+  ] = await Promise.all([
+    productQuery,
+    admin.from('product_variants')
+      .select(`
+        id, color_swatch_id, size_id,
+        product_color_swatches (label, hex, position),
+        sizes (label, order_index)
+      `)
+      .eq('product_id', productId)
+      .eq('is_active', true),
+    bracketsQuery,
+    admin.from('variant_availability')
+      .select('variant_id, available_qty')
+      .eq('organization_id', context.organizationId),
+    admin.from('product_images')
+      .select('id, file_url, view, alt_text')
+      .eq('product_id', productId)
+      .order('view'),
+  ])
 
   const productRow = product as unknown as ProductDetail | null
   if (!productRow || !productRow.is_active) return notFound()
@@ -130,6 +139,20 @@ export default async function ProductDetailPage({
   for (const r of (availRows ?? []) as { variant_id: string; available_qty: number }[]) {
     availability[r.variant_id] = r.available_qty
   }
+
+  const images = ((imageRows ?? []) as Array<{
+    id: string
+    file_url: string | null
+    view: string | null
+    alt_text: string | null
+  }>)
+    .filter((r) => r.file_url)
+    .map((r) => ({
+      id: r.id,
+      url: r.file_url as string,
+      view: r.view,
+      alt: r.alt_text,
+    }))
 
   const bracketRows = (brackets ?? []) as {
     min_quantity: number
@@ -169,6 +192,7 @@ export default async function ProductDetailPage({
       brackets={bracketRows}
       availability={availability}
       organizationId={context.organizationId}
+      images={images}
     />
   )
 }
