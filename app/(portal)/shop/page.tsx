@@ -112,7 +112,8 @@ export default async function ShopPage({
       name: p.name,
       sku: p.sku,
       image_url: p.image_url,
-      from_unit_price: price,
+      from_unit_price: price.unitPrice,
+      price_status: price.status,
       has_stock,
     }
   }))
