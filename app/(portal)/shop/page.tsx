@@ -1,10 +1,16 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
-import { effectiveUnitPrice } from '@/lib/shop/effective-price'
+import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
+import { getTierLabel } from '@/lib/pricing/tier-labels'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import { FilterRail } from '@/components/shop/FilterRail'
+import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
+import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
+import { getShopFacets } from '@/lib/shop/facets'
+import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,24 +21,26 @@ interface ProductRow {
   image_url: string | null
   brand_id: string
   category_id: string
+  garment_family: string | null
   moq: number | null
+  created_at: string | null
 }
 
 export default async function ShopPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; brand_id?: string; page?: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const sp = await searchParams
+  const filters = parseShopFilters(sp)
   const auth = await requireB2BCustomer()
   if ('error' in auth) redirect('/account')
   const { admin, context } = auth
 
   const limit = 24
-  const page = Math.max(1, Number(sp.page ?? 1))
-  const offset = (page - 1) * limit
+  const offset = (filters.page - 1) * limit
 
-  // 1. Collect product ids in this org's active catalogues.
+  // Catalogue-scoped product ids
   const { data: catItems } = await admin
     .from('b2b_catalogue_items')
     .select('source_product_id, b2b_catalogues!inner(organization_id, is_active)')
@@ -43,9 +51,8 @@ export default async function ShopPage({
   const scopedProductIds = Array.from(
     new Set((catItems ?? []).map((r) => r.source_product_id as string)),
   )
-  const hasCatalogueScope = scopedProductIds.length > 0
 
-  if (!hasCatalogueScope) {
+  if (scopedProductIds.length === 0) {
     return (
       <div className="space-y-6 p-4 md:p-8">
         <PortalEmptyState
@@ -58,46 +65,42 @@ export default async function ShopPage({
     )
   }
 
-  let q = admin.from('products')
-    .select('id, name, sku, image_url, brand_id, category_id, moq', { count: 'exact' })
+  const tierLabel = getTierLabel(context.tierLevel)
+  const pricingMode: PricingMode = 'catalogue'
+
+  const orderColumn = filters.sort === 'newest' ? 'created_at' : 'name'
+  const orderAscending = filters.sort !== 'newest'
+
+  let q = admin
+    .from('products')
+    .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at', { count: 'exact' })
     .eq('is_active', true)
     .in('id', scopedProductIds)
-    .order('name')
-    .range(offset, offset + limit - 1)
 
-  if (sp.q) q = q.ilike('name', `%${sp.q}%`)
-  if (sp.brand_id) q = q.eq('brand_id', sp.brand_id)
+  if (filters.q) q = q.ilike('name', `%${filters.q}%`)
+  if (filters.brandId) q = q.eq('brand_id', filters.brandId)
+  if (filters.categoryId) q = q.eq('category_id', filters.categoryId)
+  if (filters.garmentFamily) q = q.eq('garment_family', filters.garmentFamily)
 
-  const { data } = await q
-  const rows = (data ?? []) as unknown as ProductRow[]
+  q = q.order(orderColumn, { ascending: orderAscending }).range(offset, offset + limit - 1)
 
-  const products = await Promise.all(rows.map(async (p) => {
-    const moqQty = p.moq ?? 1
-    const price = await effectiveUnitPrice(
-      admin,
-      p.id,
-      context.organizationId,
-      moqQty || 1,
-    )
+  // Run product query + facets in parallel
+  const [{ data: productData }, facets] = await Promise.all([
+    q,
+    getShopFacets(admin, scopedProductIds),
+  ])
 
-    const { data: variants } = await admin
-      .from('product_variants')
-      .select('id')
-      .eq('product_id', p.id)
-    const variantIds = (variants ?? []).map((v) => v.id)
+  const rows = (productData ?? []) as unknown as ProductRow[]
 
-    let has_stock = false
-    if (variantIds.length) {
-      const { data: stocked } = await admin
-        .from('variant_availability')
-        .select('variant_id')
-        .eq('organization_id', context.organizationId)
-        .gt('available_qty', 0)
-        .in('variant_id', variantIds)
-        .limit(1)
-      has_stock = (stocked?.length ?? 0) > 0
-    }
+  // Bulk price + stock fetch — one RPC instead of N price calls + N×2 variant queries
+  const productIds = rows.map((r) => r.id)
+  const qtyByProduct: Record<string, number> = Object.fromEntries(
+    rows.map((r) => [r.id, r.moq ?? 1]),
+  )
+  const { prices } = await effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct)
 
+  const productsWithStock = rows.map((p) => {
+    const price = prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
     return {
       id: p.id,
       name: p.name,
@@ -105,48 +108,66 @@ export default async function ShopPage({
       image_url: p.image_url,
       from_unit_price: price.unitPrice,
       price_status: price.status,
-      has_stock,
+      has_stock: price.hasStock,
     }
-  }))
+  })
+
+  // In-stock filter applied post-fetch (stock is per-org and comes from the bulk RPC)
+  const products = filters.inStock
+    ? productsWithStock.filter((p) => p.has_stock)
+    : productsWithStock
+
+  const activeCount = activeFilterCount(filters)
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Customer catalogue
-              </p>
-              <TierBadge />
-            </div>
-            <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Products and prices are scoped to your dedicated catalogue.
-            </p>
-          </div>
-          <p className="text-sm text-gray-500">
-            {products.length} product{products.length === 1 ? '' : 's'}
-          </p>
-        </div>
+    <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_1fr] md:gap-6 md:p-8">
+      <div className="md:hidden">
+        <FilterSheetTrigger activeCount={activeCount}>
+          <FilterRail filters={filters} facets={facets} />
+        </FilterSheetTrigger>
+      </div>
+      <div className="hidden md:block">
+        <FilterRail filters={filters} facets={facets} />
       </div>
 
-      {products.length === 0 ? (
-        <PortalEmptyState
-          title="Your catalogue is being set up"
-          body="Your account manager will let you know when products are ready for ordering."
-          actionHref="mailto:sales@theprint-room.co.nz"
-          actionLabel="Contact sales"
-        />
-      ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {products.map((p) => (
-            <Link key={p.id} href={`/shop/${p.id}`} className="block">
-              <ProductCard product={p} />
-            </Link>
-          ))}
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Customer catalogue
+                </p>
+                <TierBadge label={tierLabel} pricingMode={pricingMode} />
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Products and prices are scoped to your dedicated catalogue.
+              </p>
+            </div>
+            <p className="text-sm text-gray-500">
+              {products.length} product{products.length === 1 ? '' : 's'}
+            </p>
+          </div>
         </div>
-      )}
+
+        {products.length === 0 ? (
+          <PortalEmptyState
+            title="No products match your filters"
+            body="Try clearing some filters."
+            actionHref="/shop"
+            actionLabel="Clear filters"
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+            {products.map((p) => (
+              <Link key={p.id} href={`/shop/${p.id}`} className="block">
+                <ProductCard product={p} />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
