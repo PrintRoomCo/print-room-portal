@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { effectiveUnitPrice } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
-import { getTierLabel } from '@/lib/pricing/tier-labels'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
@@ -46,27 +45,25 @@ export default async function ShopPage({
   )
   const hasCatalogueScope = scopedProductIds.length > 0
 
-  // WS4 — derive tier label for the page header.
-  const tierLabel = getTierLabel(context.tierLevel)
+  if (!hasCatalogueScope) {
+    return (
+      <div className="space-y-6 p-4 md:p-8">
+        <PortalEmptyState
+          title="Your catalogue is being set up"
+          body="Your account manager will let you know when products are ready for ordering."
+          actionHref="mailto:sales@theprint-room.co.nz"
+          actionLabel="Contact sales"
+        />
+      </div>
+    )
+  }
 
-  let q = hasCatalogueScope
-    ? admin.from('products')
-        .select('id, name, sku, image_url, brand_id, category_id, moq', { count: 'exact' })
-        .eq('is_active', true)
-        .in('id', scopedProductIds)
-        .order('name')
-        .range(offset, offset + limit - 1)
-    : admin.from('products')
-        .select(
-          'id, name, sku, image_url, brand_id, category_id, moq, ' +
-          '_channel:product_type_activations!inner(product_type,is_active)',
-          { count: 'exact' }
-        )
-        .eq('is_active', true)
-        .eq('_channel.product_type', 'b2b')
-        .eq('_channel.is_active', true)
-        .order('name')
-        .range(offset, offset + limit - 1)
+  let q = admin.from('products')
+    .select('id, name, sku, image_url, brand_id, category_id, moq', { count: 'exact' })
+    .eq('is_active', true)
+    .in('id', scopedProductIds)
+    .order('name')
+    .range(offset, offset + limit - 1)
 
   if (sp.q) q = q.ilike('name', `%${sp.q}%`)
   if (sp.brand_id) q = q.eq('brand_id', sp.brand_id)
