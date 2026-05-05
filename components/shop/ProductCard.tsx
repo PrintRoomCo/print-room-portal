@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { TierBadge } from '@/components/pricing/TierBadge'
+import { Money } from './Money'
 
 interface ProductCardData {
   id: string
@@ -26,7 +27,6 @@ export function ProductCard({ product }: ProductCardProps) {
             fill
             sizes="(min-width:1024px) 25vw, (min-width:768px) 33vw, 50vw"
             className="object-contain p-4 transition-transform duration-500 ease-spring group-hover:scale-105"
-            unoptimized
           />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-300 text-sm">
@@ -51,7 +51,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <p className="mt-auto pt-3 text-sm text-gray-600">
             From{' '}
             <span className="rounded-full bg-[rgb(var(--color-brand-yellow))] px-2 py-0.5 font-semibold text-[rgb(var(--color-brand-blue))]">
-              ${product.from_unit_price.toFixed(2)}
+              <Money nzd={product.from_unit_price} />
             </span>
           </p>
         )}
