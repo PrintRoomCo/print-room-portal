@@ -64,31 +64,21 @@ export default async function ProductDetailPage({
     .limit(1)
     .maybeSingle()
 
-  const baseFields = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
-  const productSelect = catItem
-    ? baseFields
-    : `${baseFields}, _channel:product_type_activations!inner(product_type,is_active)`
+  if (!catItem) return notFound()
 
-  const productQuery = catItem
-    ? admin.from('products').select(productSelect).eq('id', productId).single()
-    : admin
-        .from('products')
-        .select(productSelect)
-        .eq('id', productId)
-        .eq('_channel.product_type', 'b2b')
-        .eq('_channel.is_active', true)
-        .single()
+  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
 
-  const bracketsQuery = catItem
-    ? admin.from('b2b_catalogue_item_pricing_tiers')
-        .select('min_quantity, max_quantity, unit_price')
-        .eq('catalogue_item_id', catItem.id)
-        .order('min_quantity')
-    : admin.from('product_pricing_tiers')
-        .select('min_quantity, max_quantity, unit_price')
-        .eq('product_id', productId)
-        .eq('is_active', true)
-        .order('min_quantity')
+  const productQuery = admin
+    .from('products')
+    .select(productSelect)
+    .eq('id', productId)
+    .single()
+
+  const bracketsQuery = admin
+    .from('b2b_catalogue_item_pricing_tiers')
+    .select('min_quantity, max_quantity, unit_price')
+    .eq('catalogue_item_id', catItem.id)
+    .order('min_quantity')
 
   const [
     { data: product },
