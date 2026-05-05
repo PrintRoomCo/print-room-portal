@@ -40,7 +40,6 @@ export function ProductImageGallery({ images, fallbackUrl, productName }: Props)
           fill
           sizes="(min-width:1024px) 40vw, 100vw"
           className="object-contain p-6"
-          unoptimized
           priority
         />
       </div>
@@ -69,7 +68,6 @@ export function ProductImageGallery({ images, fallbackUrl, productName }: Props)
                   fill
                   sizes="64px"
                   className="object-contain p-1"
-                  unoptimized
                 />
               </button>
             )
