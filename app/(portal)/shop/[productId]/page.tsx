@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
-import { resolveDecorationPrice } from '@/lib/shop/decoration-price'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +56,7 @@ export default async function ProductDetailPage({
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, decoration_price_override, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, image_url, decoration_method, decoration_price, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -159,29 +158,47 @@ export default async function ProductDetailPage({
   const categoryName = Array.isArray(productRow.categories)
     ? (productRow.categories[0]?.name ?? null)
     : productRow.categories?.name ?? null
-  const decorationPrice = resolveDecorationPrice({
-    override: (catItem as { decoration_price_override?: number | string | null }).decoration_price_override,
-    master: productRow.decoration_price,
-  })
+
+  const catItemForked = catItem as {
+    decoration_price: number | string | null
+    decoration_method: string | null
+    name: string
+    description: string | null
+    image_url: string | null
+  } | null
+
+  const decorationPrice =
+    catItemForked?.decoration_price != null
+      ? Number(catItemForked.decoration_price)
+      : (productRow.decoration_price ?? 0)
+
+  const displayProduct = {
+    ...productRow,
+    name: catItemForked?.name ?? productRow.name,
+    description: catItemForked?.description ?? productRow.description,
+    image_url: catItemForked?.image_url ?? productRow.image_url,
+    decoration_method: catItemForked?.decoration_method ?? null,
+    decoration_price: decorationPrice,
+  }
 
   return (
     <ProductDetailClient
       product={{
-        id: productRow.id,
-        name: productRow.name,
-        description: productRow.description,
-        image_url: productRow.image_url,
-        moq: productRow.moq,
-        lead_time_days: productRow.lead_time_days,
-        sizing_type: productRow.sizing_type,
-        decoration_methods: productRow.decoration_methods,
-        decoration_price: decorationPrice,
-        sku: productRow.sku,
-        safety_standard: productRow.safety_standard,
-        specs: productRow.specs,
-        supports_labels: productRow.supports_labels,
-        garment_family: productRow.garment_family,
-        default_sizes: productRow.default_sizes,
+        id: displayProduct.id,
+        name: displayProduct.name,
+        description: displayProduct.description,
+        image_url: displayProduct.image_url,
+        moq: displayProduct.moq,
+        lead_time_days: displayProduct.lead_time_days,
+        sizing_type: displayProduct.sizing_type,
+        decoration_methods: displayProduct.decoration_methods,
+        decoration_price: displayProduct.decoration_price,
+        sku: displayProduct.sku,
+        safety_standard: displayProduct.safety_standard,
+        specs: displayProduct.specs,
+        supports_labels: displayProduct.supports_labels,
+        garment_family: displayProduct.garment_family,
+        default_sizes: displayProduct.default_sizes,
         brand_name: brandName,
         category_name: categoryName,
       }}
