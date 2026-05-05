@@ -35,22 +35,22 @@ function makeAccess(overrides: Partial<B2BCustomerAccess>): B2BCustomerAccess {
     canUseLeavers: false,
     tierLabel: null,
     tierDiscount: 0,
-    pricingMode: 'standard',
+    pricingMode: 'catalogue',
     hasTrackedInventory: false,
     ...overrides,
   }
 }
 
 describe('usePricingContext', () => {
-  it('returns standard mode when no access', () => {
+  it('returns catalogue mode with null label when no access', () => {
     useCompanyMock.mockReturnValue({ access: null, loading: false })
     const { result } = renderHook(() => usePricingContext())
-    expect(result.current.pricingMode).toBe('standard')
+    expect(result.current.pricingMode).toBe('catalogue')
     expect(result.current.tierLabel).toBeNull()
     expect(result.current.tierDiscount).toBe(0)
   })
 
-  it('returns catalogue mode for PRT-like access', () => {
+  it('returns catalogue mode with the tier label from access', () => {
     useCompanyMock.mockReturnValue({
       access: makeAccess({
         tierLabel: 'Wholesale',
@@ -63,20 +63,5 @@ describe('usePricingContext', () => {
     expect(result.current.pricingMode).toBe('catalogue')
     expect(result.current.tierLabel).toBe('Wholesale')
     expect(result.current.tierDiscount).toBe(0.1)
-  })
-
-  it('returns tiered mode for non-catalogue tier-2', () => {
-    useCompanyMock.mockReturnValue({
-      access: makeAccess({
-        tierLabel: 'Trade',
-        tierDiscount: 0.05,
-        pricingMode: 'tiered',
-      }),
-      loading: false,
-    })
-    const { result } = renderHook(() => usePricingContext())
-    expect(result.current.pricingMode).toBe('tiered')
-    expect(result.current.tierLabel).toBe('Trade')
-    expect(result.current.tierDiscount).toBe(0.05)
   })
 })

@@ -58,12 +58,7 @@ export default async function WelcomePage() {
 
   const firstName = access.firstName || user.email?.split('@')[0] || 'there'
   const companyName = access.companyName ?? 'your account'
-  const pricingCopy =
-    access.pricingMode === 'catalogue'
-      ? 'Your dedicated catalogue pricing is ready in the shop.'
-      : access.pricingMode === 'tiered'
-        ? `Your ${access.tierLabel ?? 'account'} pricing is applied automatically.`
-        : 'Your account pricing is applied automatically.'
+  const pricingCopy = 'Your dedicated catalogue pricing is ready in the shop.'
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -71,11 +66,7 @@ export default async function WelcomePage() {
         <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-3">
-              <TierBadge
-                label={access.tierLabel}
-                pricingMode={access.pricingMode}
-                className="border-white/25 bg-white/15 text-white"
-              />
+              <TierBadge className="border-white/25 bg-white/15 text-white" />
             </div>
             <h1 className="text-3xl font-semibold tracking-normal md:text-4xl">
               Welcome, {firstName}

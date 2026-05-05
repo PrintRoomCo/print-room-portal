@@ -36,8 +36,6 @@ export function CartClient({
       unitEffective: l.unitPrice,
       decorationPerUnit: l.decorationPrice ?? 0,
     })),
-    tierDiscount: pricingCtx.tierDiscount,
-    pricingMode: pricingCtx.pricingMode,
     gstRate: 0.15,
   })
 
@@ -96,13 +94,7 @@ export function CartClient({
           </div>
 
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <PriceBreakdown
-              breakdown={breakdown}
-              pricingMode={pricingCtx.pricingMode}
-              tierLabel={pricingCtx.tierLabel}
-              tierDiscount={pricingCtx.tierDiscount}
-              variant="cart-totals"
-            />
+            <PriceBreakdown breakdown={breakdown} variant="cart-totals" />
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"

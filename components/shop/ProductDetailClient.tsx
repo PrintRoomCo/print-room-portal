@@ -261,13 +261,8 @@ export function ProductDetailClient({
                         decorationPerUnit: product.decoration_price ?? 0,
                       },
                     ],
-                    tierDiscount: pricingCtx.tierDiscount,
-                    pricingMode: pricingCtx.pricingMode,
                     gstRate: 0.15,
                   })}
-                  pricingMode={pricingCtx.pricingMode}
-                  tierLabel={pricingCtx.tierLabel}
-                  tierDiscount={pricingCtx.tierDiscount}
                   variant="pdp"
                 />
               ) : pricing && pricing.status === 'missing' ? (

@@ -1,32 +1,19 @@
-import type { PricingMode } from '@/lib/pricing/types'
-
 interface TierBadgeProps {
-  label: string | null
-  pricingMode?: PricingMode
+  /** Kept for caller compatibility; ignored — badge always reads "Catalogue pricing". */
+  label?: string | null
+  /** Kept for caller compatibility; ignored. */
+  pricingMode?: 'catalogue'
   className?: string
 }
 
 /**
- * Branded chip for pricing visibility.
- * - tiered  → "{Label} pricing"      (e.g. "Wholesale pricing")
- * - catalogue → "Catalogue pricing"   (no tier name; catalogue prices are absolute)
- * - standard → null                   (no badge for non-b2b customers)
+ * Branded chip that always reads "Catalogue pricing" — every B2B customer
+ * is on a catalogue after the global fallback removal (2026-05-05).
  *
- * Uses brand tokens (rgb(var(--color-brand-blue))) so WS3 polish is additive.
+ * Props `label` and `pricingMode` are accepted but ignored, so existing
+ * callers compile without churn.
  */
-export function TierBadge({
-  label,
-  pricingMode = 'tiered',
-  className = '',
-}: TierBadgeProps) {
-  if (pricingMode === 'standard') return null
-  const text =
-    pricingMode === 'catalogue'
-      ? 'Catalogue pricing'
-      : label
-        ? `${label} pricing`
-        : null
-  if (!text) return null
+export function TierBadge({ className = '' }: TierBadgeProps) {
   return (
     <span
       className={
@@ -36,7 +23,7 @@ export function TierBadge({
         className
       }
     >
-      {text}
+      Catalogue pricing
     </span>
   )
 }

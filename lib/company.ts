@@ -63,7 +63,7 @@ export async function getCompanyAccess(
       tier: 'bronze',
       tierLabel: null,
       tierDiscount: 0,
-      pricingMode: 'standard',
+      pricingMode: 'catalogue',
       isCompanyUser: false,
       leaversEnabled,
       hasTrackedInventory: false,
@@ -88,30 +88,17 @@ export async function getCompanyAccess(
   const tierLevel = b2bAccount?.tier_level ?? null
   const tierLevelStr = tierLevel != null ? String(tierLevel) : null
 
-  const [{ data: priceTier }, { data: activeCatalogue }] = await Promise.all([
-    tierLevelStr
-      ? supabase
-          .from('price_tiers')
-          .select('discount')
-          .eq('tier_id', tierLevelStr)
-          .maybeSingle()
-      : Promise.resolve({ data: null as { discount: number | null } | null }),
-    supabase
-      .from('b2b_catalogues')
-      .select('id')
-      .eq('organization_id', orgMembership.organization_id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle(),
-  ])
+  const { data: priceTier } = tierLevelStr
+    ? await supabase
+        .from('price_tiers')
+        .select('discount')
+        .eq('tier_id', tierLevelStr)
+        .maybeSingle()
+    : { data: null as { discount: number | null } | null }
 
   const tierDiscount = Number(priceTier?.discount ?? 0)
   const tierLabel = getTierLabel(tierLevel)
-  const pricingMode: PricingMode = activeCatalogue
-    ? 'catalogue'
-    : tierLevelStr
-      ? 'tiered'
-      : 'standard'
+  const pricingMode: PricingMode = 'catalogue'
 
   // 5. Get company locations (stores)
   const { data: locations } = await supabase
@@ -233,7 +220,7 @@ async function buildAccessForIndividual(
     tier: 'bronze',
     tierLabel: null,
     tierDiscount: 0,
-    pricingMode: 'standard',
+    pricingMode: 'catalogue',
     isCompanyUser: false,
     leaversEnabled: false,
     hasTrackedInventory: false,

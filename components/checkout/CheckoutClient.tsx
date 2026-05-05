@@ -80,11 +80,9 @@ export function CheckoutClient({
           unitEffective: l.unitPrice,
           decorationPerUnit: l.decorationPrice ?? 0,
         })),
-        tierDiscount: pricingCtx.tierDiscount,
-        pricingMode: pricingCtx.pricingMode,
         gstRate: 0.15,
       }),
-    [cart.lines, pricingCtx.tierDiscount, pricingCtx.pricingMode]
+    [cart.lines]
   )
   const depositPct = defaultDepositPercent ?? 0
   const depositAmount = (breakdown.netSubtotal * depositPct) / 100
@@ -319,13 +317,7 @@ export function CheckoutClient({
           <span className="text-sm text-gray-700">Pricing for</span>
           <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
         </div>
-        <PriceBreakdown
-          breakdown={breakdown}
-          pricingMode={pricingCtx.pricingMode}
-          tierLabel={pricingCtx.tierLabel}
-          tierDiscount={pricingCtx.tierDiscount}
-          variant="checkout-review"
-        />
+        <PriceBreakdown breakdown={breakdown} variant="checkout-review" />
       </section>
 
       <div className="mt-6 flex flex-wrap justify-end gap-2">

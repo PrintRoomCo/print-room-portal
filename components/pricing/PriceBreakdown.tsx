@@ -1,11 +1,7 @@
-import type { OrderBreakdown, PricingMode } from '@/lib/pricing/types'
-import { DiscountLine } from './DiscountLine'
+import type { OrderBreakdown } from '@/lib/pricing/types'
 
 interface PriceBreakdownProps {
   breakdown: OrderBreakdown
-  pricingMode: PricingMode
-  tierLabel: string | null
-  tierDiscount: number
   /**
    * Layout/density tweak. All variants render the same data; the difference is
    * in spacing + typographic weight so it slots into PDP, cart totals,
@@ -15,19 +11,10 @@ interface PriceBreakdownProps {
 }
 
 /**
- * Full-order breakdown: gross subtotal → decoration (if any) → tier discount
- * (if any) → GST → total. Catalogue mode skips the tier-discount line.
+ * Full-order breakdown: gross subtotal → decoration (if any) → GST → total.
+ * Catalogue prices are absolute — no tier-discount line.
  */
-export function PriceBreakdown({
-  breakdown,
-  pricingMode,
-  tierLabel,
-  tierDiscount,
-}: PriceBreakdownProps) {
-  const showDiscount =
-    pricingMode === 'tiered' &&
-    breakdown.discountAmount > 0 &&
-    tierLabel != null
+export function PriceBreakdown({ breakdown }: PriceBreakdownProps) {
   const showDecoration = breakdown.decorationTotal > 0
 
   return (
@@ -35,13 +22,6 @@ export function PriceBreakdown({
       <Row label="Subtotal" value={breakdown.grossSubtotal} />
       {showDecoration && (
         <Row label="Decoration" value={breakdown.decorationTotal} />
-      )}
-      {showDiscount && (
-        <DiscountLine
-          label={tierLabel as string}
-          amount={breakdown.discountAmount}
-          discountFraction={tierDiscount}
-        />
       )}
       <Row
         label={`GST (${Math.round(breakdown.gstRate * 100)}%)`}

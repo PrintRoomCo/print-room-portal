@@ -6,7 +6,6 @@ import { ProductCard } from '@/components/shop/ProductCard'
 import { getTierLabel } from '@/lib/pricing/tier-labels'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
-import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,13 +46,8 @@ export default async function ShopPage({
   )
   const hasCatalogueScope = scopedProductIds.length > 0
 
-  // WS4 — derive pricingMode + tier label for the badge on each card.
+  // WS4 — derive tier label for the page header.
   const tierLabel = getTierLabel(context.tierLevel)
-  const pricingMode: PricingMode = hasCatalogueScope
-    ? 'catalogue'
-    : context.tierLevel != null
-      ? 'tiered'
-      : 'standard'
 
   let q = hasCatalogueScope
     ? admin.from('products')
@@ -127,13 +121,11 @@ export default async function ShopPage({
               <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
                 Customer catalogue
               </p>
-              <TierBadge label={tierLabel} pricingMode={pricingMode} />
+              <TierBadge />
             </div>
             <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
             <p className="mt-1 text-sm text-gray-600">
-              {pricingMode === 'catalogue'
-                ? 'Products and prices are scoped to your dedicated catalogue.'
-                : 'Your account pricing is applied as you browse.'}
+              Products and prices are scoped to your dedicated catalogue.
             </p>
           </div>
           <p className="text-sm text-gray-500">
@@ -153,7 +145,7 @@ export default async function ShopPage({
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => (
             <Link key={p.id} href={`/shop/${p.id}`} className="block">
-              <ProductCard product={p} tierLabel={tierLabel} pricingMode={pricingMode} />
+              <ProductCard product={p} />
             </Link>
           ))}
         </div>

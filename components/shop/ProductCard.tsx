@@ -1,6 +1,5 @@
 import Image from 'next/image'
 import { TierBadge } from '@/components/pricing/TierBadge'
-import type { PricingMode } from '@/lib/pricing/types'
 
 interface ProductCardData {
   id: string
@@ -14,15 +13,9 @@ interface ProductCardData {
 
 interface ProductCardProps {
   product: ProductCardData
-  tierLabel: string | null
-  pricingMode: PricingMode
 }
 
-export function ProductCard({
-  product,
-  tierLabel,
-  pricingMode,
-}: ProductCardProps) {
+export function ProductCard({ product }: ProductCardProps) {
   return (
     <div className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 ease-spring hover:-translate-y-0.5 hover:border-[rgb(var(--color-brand-blue))]/20 hover:shadow-md">
       <div className="relative aspect-square w-full bg-gray-50">
@@ -41,7 +34,7 @@ export function ProductCard({
           </div>
         )}
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
-          <TierBadge label={tierLabel} pricingMode={pricingMode} />
+          <TierBadge />
           {product.has_stock && (
             <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
               In stock
