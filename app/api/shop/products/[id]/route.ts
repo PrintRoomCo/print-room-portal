@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { resolveDecorationPrice } from '@/lib/shop/decoration-price'
 
 export async function GET(
   _request: Request,
@@ -7,14 +8,22 @@ export async function GET(
 ) {
   const auth = await requireB2BCustomer()
   if ('error' in auth) return auth.error
-  const { admin } = auth
+  const { admin, context } = auth
   const { id } = await params
 
-  const [{ data: product, error: pErr }, { data: variants }, { data: brackets }] = await Promise.all([
+  const [{ data: catalogueItem }, { data: product, error: pErr }, { data: variants }, { data: brackets }] = await Promise.all([
+    admin.from('b2b_catalogue_items')
+      .select('id, decoration_price_override, b2b_catalogues!inner(is_active)')
+      .eq('source_product_id', id)
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', context.organizationId)
+      .eq('b2b_catalogues.is_active', true)
+      .limit(1)
+      .maybeSingle(),
     admin.from('products')
       .select(
         'id, name, description, brand_id, category_id, moq, lead_time_days, sizing_type, ' +
-        'decoration_eligible, decoration_price, image_url, specs, is_active, ' +
+        'decoration_methods, decoration_price, image_url, specs, is_active, ' +
         '_channel:product_type_activations!inner(product_type,is_active)'
       )
       .eq('id', id)
@@ -45,14 +54,14 @@ export async function GET(
     moq: number | null
     lead_time_days: number | null
     sizing_type: string | null
-    decoration_eligible: boolean | null
+    decoration_methods: string[] | null
     decoration_price: number | null
     image_url: string | null
     specs: unknown
     is_active: boolean
   }
   const productRow = product as unknown as ProductDetail | null
-  if (pErr || !productRow || !productRow.is_active) {
+  if (!catalogueItem || pErr || !productRow || !productRow.is_active) {
     return NextResponse.json({ error: 'Product not found' }, { status: 404 })
   }
 
@@ -90,5 +99,17 @@ export async function GET(
     }
   })
 
-  return NextResponse.json({ product: productRow, variants: mappedVariants, brackets: brackets ?? [] })
+  const decorationPrice = resolveDecorationPrice({
+    override: (catalogueItem as { decoration_price_override?: number | string | null }).decoration_price_override,
+    master: productRow.decoration_price,
+  })
+
+  return NextResponse.json({
+    product: {
+      ...productRow,
+      decoration_price: decorationPrice,
+    },
+    variants: mappedVariants,
+    brackets: brackets ?? [],
+  })
 }

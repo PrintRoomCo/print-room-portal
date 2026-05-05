@@ -19,7 +19,7 @@ interface ProductData {
   moq: number | null
   lead_time_days: number | null
   sizing_type: string | null
-  decoration_eligible: boolean | null
+  decoration_methods: string[] | null
   decoration_price: number | null
   sku: string | null
   safety_standard: string | null
@@ -121,6 +121,7 @@ export function ProductDetailClient({
 
   const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const decorationEligible = (product.decoration_methods?.length ?? 0) > 0
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
@@ -139,7 +140,7 @@ export function ProductDetailClient({
       qty,
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
-      decorationPrice: product.decoration_price ?? null,
+      decorationPrice: decorationEligible ? product.decoration_price : null,
     })
     showToast('Added to cart')
   }
@@ -204,7 +205,7 @@ export function ProductDetailClient({
             )}
           </div>
 
-          {product.decoration_eligible && (
+          {decorationEligible && (
             <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
               <span>Decoration available</span>
               {product.decoration_price != null && product.decoration_price > 0 && (
@@ -258,7 +259,7 @@ export function ProductDetailClient({
                       {
                         qty,
                         unitEffective: pricing.unit_price,
-                        decorationPerUnit: product.decoration_price ?? 0,
+                        decorationPerUnit: decorationEligible ? product.decoration_price ?? 0 : 0,
                       },
                     ],
                     gstRate: 0.15,

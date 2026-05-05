@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
+import { resolveDecorationPrice } from '@/lib/shop/decoration-price'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +13,7 @@ interface ProductDetail {
   moq: number | null
   lead_time_days: number | null
   sizing_type: string | null
-  decoration_eligible: boolean | null
+  decoration_methods: string[] | null
   decoration_price: number | null
   is_active: boolean
   sku: string | null
@@ -56,7 +57,7 @@ export default async function ProductDetailPage({
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, b2b_catalogues!inner(is_active)')
+    .select('id, decoration_price_override, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -66,7 +67,7 @@ export default async function ProductDetailPage({
 
   if (!catItem) return notFound()
 
-  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_eligible, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
+  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
 
   const productQuery = admin
     .from('products')
@@ -158,6 +159,10 @@ export default async function ProductDetailPage({
   const categoryName = Array.isArray(productRow.categories)
     ? (productRow.categories[0]?.name ?? null)
     : productRow.categories?.name ?? null
+  const decorationPrice = resolveDecorationPrice({
+    override: (catItem as { decoration_price_override?: number | string | null }).decoration_price_override,
+    master: productRow.decoration_price,
+  })
 
   return (
     <ProductDetailClient
@@ -169,8 +174,8 @@ export default async function ProductDetailPage({
         moq: productRow.moq,
         lead_time_days: productRow.lead_time_days,
         sizing_type: productRow.sizing_type,
-        decoration_eligible: productRow.decoration_eligible,
-        decoration_price: productRow.decoration_price,
+        decoration_methods: productRow.decoration_methods,
+        decoration_price: decorationPrice,
         sku: productRow.sku,
         safety_standard: productRow.safety_standard,
         specs: productRow.specs,
