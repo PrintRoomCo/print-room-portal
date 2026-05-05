@@ -35,7 +35,7 @@ export default async function ShopPage({
   // 1. Collect product ids in this org's active catalogues.
   const { data: catItems } = await admin
     .from('b2b_catalogue_items')
-    .select('source_product_id, b2b_catalogues!inner(is_active)')
+    .select('source_product_id, b2b_catalogues!inner(organization_id, is_active)')
     .eq('b2b_catalogues.organization_id', context.organizationId)
     .eq('b2b_catalogues.is_active', true)
     .eq('is_active', true)
