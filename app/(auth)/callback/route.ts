@@ -11,7 +11,18 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
+  const upstreamError = searchParams.get('error') ?? searchParams.get('error_code')
+  const upstreamErrorDescription = searchParams.get('error_description')
   const next = searchParams.get('next') ?? '/account'
+
+  if (upstreamError) {
+    return NextResponse.redirect(
+      new URL(
+        `/sign-in?error=${encodeURIComponent(upstreamError)}&error_description=${encodeURIComponent(upstreamErrorDescription ?? 'Invite or sign-in link is invalid or has already been used. Request a fresh one.')}`,
+        request.url,
+      ),
+    )
+  }
 
   const response = NextResponse.redirect(new URL(next, request.url))
 
@@ -38,19 +49,24 @@ export async function GET(request: NextRequest) {
       )
     }
   } else if (token_hash && type) {
-    const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as 'recovery' | 'email' })
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: type as 'recovery' | 'email' | 'invite' | 'magiclink' | 'signup' | 'email_change',
+    })
     if (error) {
       return NextResponse.redirect(
         new URL(`/sign-in?error=verification_error&error_description=${encodeURIComponent(error.message)}`, request.url)
       )
     }
-    // For recovery, redirect to set-password page
     if (type === 'recovery') {
       return NextResponse.redirect(new URL('/set-password', request.url))
     }
+    if (type === 'invite') {
+      return NextResponse.redirect(new URL('/set-password?invite=1', request.url))
+    }
   } else {
     return NextResponse.redirect(
-      new URL('/sign-in?error=no_code', request.url)
+      new URL('/sign-in?error=no_code&error_description=Invite or sign-in link is missing its token. Request a fresh one.', request.url)
     )
   }
 
