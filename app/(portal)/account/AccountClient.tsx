@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
 import { formatPrice } from '@/lib/format/price'
+import { formatCurrency } from '@/lib/currency/format'
+import type { SupportedCurrency } from '@/lib/currency/types'
 
 // New Zealand region codes (ISO 3166-2:NZ)
 const NZ_REGIONS = [
@@ -408,7 +410,7 @@ export function AccountClient() {
               const totalAmount = Number(quote.total_amount)
               const totalLabel =
                 Number.isFinite(totalAmount) && totalAmount > 0
-                  ? `${quote.currency} ${formatPrice(totalAmount)}`
+                  ? formatCurrency(totalAmount, (quote.currency || 'NZD') as SupportedCurrency)
                   : formatPrice(quote.total_amount)
               return (
                 <div
