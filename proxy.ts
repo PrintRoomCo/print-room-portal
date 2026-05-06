@@ -8,7 +8,13 @@ import { createSupabaseMiddlewareClient } from '@/lib/supabase-middleware'
  * 3. Redirects authenticated users away from auth routes to /account
  */
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({ request })
+  // Forward the pathname as `x-pathname` so server components can read it
+  // (Next doesn't expose request URL to RSCs except via headers set here).
+  // Used by `handleAuthFailure` to build /sign-in?returnTo=<currentPath> for
+  // any route the proxy matcher doesn't already cover.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', request.nextUrl.pathname)
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
   const supabase = createSupabaseMiddlewareClient(request, response)
 
   // getUser() refreshes the session and returns the current user
