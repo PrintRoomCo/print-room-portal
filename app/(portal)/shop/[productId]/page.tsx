@@ -58,7 +58,7 @@ export default async function ProductDetailPage({
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, image_url, decoration_method, decoration_price, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, image_url, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -164,25 +164,16 @@ export default async function ProductDetailPage({
     : productRow.categories?.name ?? null
 
   const catItemForked = catItem as {
-    decoration_price: number | string | null
-    decoration_method: string | null
     name: string
     description: string | null
     image_url: string | null
   } | null
-
-  const decorationPrice =
-    catItemForked?.decoration_price != null
-      ? Number(catItemForked.decoration_price)
-      : (productRow.decoration_price ?? 0)
 
   const displayProduct = {
     ...productRow,
     name: catItemForked?.name ?? productRow.name,
     description: catItemForked?.description ?? productRow.description,
     image_url: catItemForked?.image_url ?? productRow.image_url,
-    decoration_method: catItemForked?.decoration_method ?? null,
-    decoration_price: decorationPrice,
   }
 
   return (
