@@ -10,6 +10,7 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { formatPrice } from '@/lib/format/price'
+import { decorationPerUnit } from '@/lib/cart/types'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -78,7 +79,7 @@ export function CheckoutClient({
         lines: cart.lines.map((l) => ({
           qty: l.qty,
           unitEffective: l.unitPrice,
-          decorationPerUnit: l.decorationPrice ?? 0,
+          decorationPerUnit: decorationPerUnit(l),
         })),
         gstRate: 0.15,
       }),

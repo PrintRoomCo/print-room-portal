@@ -4,12 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type VariantRow } from './VariantPicker'
+import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { RequestReorderModal } from './RequestReorderModal'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { ProductImageGallery, type GalleryImage } from './ProductImageGallery'
+import type { DecorationOption } from '@/lib/shop/decorations'
+import type { CartLineDecoration } from '@/lib/cart/types'
 
 interface ProductData {
   id: string
@@ -52,6 +55,7 @@ interface Props {
   availability: Record<string, number>
   organizationId: string
   images: GalleryImage[]
+  decorations: DecorationOption[]
 }
 
 export function ProductDetailClient({
@@ -60,6 +64,7 @@ export function ProductDetailClient({
   brackets,
   availability,
   images,
+  decorations,
 }: Props) {
   const cart = useCart()
   const pricingCtx = usePricingContext()
@@ -121,7 +126,19 @@ export function ProductDetailClient({
 
   const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const decorationEligible = (product.decoration_methods?.length ?? 0) > 0
+  const [selectedLinkIds, setSelectedLinkIds] = useState<ReadonlySet<string>>(
+    () => new Set(decorations.filter((d) => d.isDefault).map((d) => d.linkId)),
+  )
+
+  const selectedDecorations = useMemo(
+    () => decorations.filter((d) => selectedLinkIds.has(d.linkId)),
+    [decorations, selectedLinkIds],
+  )
+  const decorationPerUnit = useMemo(
+    () => selectedDecorations.reduce((s, d) => s + d.unitPrice, 0),
+    [selectedDecorations],
+  )
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
@@ -132,6 +149,16 @@ export function ProductDetailClient({
     const colorLabel = selectedVariant.color_label ?? ''
     const sizeLabel = selectedVariant.size_label ?? ''
     const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
+    const cartLineDecorations: CartLineDecoration[] = selectedDecorations.map((d) => ({
+      linkId: d.linkId,
+      decorationId: d.decorationId,
+      name: d.name,
+      method: d.method,
+      positionLabel: d.positionLabel,
+      unitPrice: d.unitPrice,
+      artworkUrl: d.artworkUrl,
+      snapshotUrl: d.snapshotUrl,
+    }))
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -140,7 +167,7 @@ export function ProductDetailClient({
       qty,
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
-      decorationPrice: decorationEligible ? product.decoration_price : null,
+      decorations: cartLineDecorations,
     })
     showToast('Added to cart')
   }
@@ -205,15 +232,12 @@ export function ProductDetailClient({
             )}
           </div>
 
-          {decorationEligible && (
-            <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              <span>Decoration available</span>
-              {product.decoration_price != null && product.decoration_price > 0 && (
-                <span className="font-medium text-gray-800">
-                  +${Number(product.decoration_price).toFixed(2)} / unit
-                </span>
-              )}
-            </div>
+          {decorations.length > 0 && (
+            <DecorationSwatchPicker
+              decorations={decorations}
+              selectedLinkIds={selectedLinkIds}
+              onChange={setSelectedLinkIds}
+            />
           )}
 
           {brackets.length > 0 && (
@@ -259,7 +283,7 @@ export function ProductDetailClient({
                       {
                         qty,
                         unitEffective: pricing.unit_price,
-                        decorationPerUnit: decorationEligible ? product.decoration_price ?? 0 : 0,
+                        decorationPerUnit,
                       },
                     ],
                     gstRate: 0.15,
