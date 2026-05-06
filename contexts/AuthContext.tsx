@@ -19,6 +19,14 @@ interface AuthContextType {
     password: string,
     captchaToken?: string
   ) => Promise<{ error: string | null }>
+  requestEmailCode: (
+    email: string,
+    captchaToken?: string
+  ) => Promise<{ error: string | null }>
+  verifyEmailCode: (
+    email: string,
+    token: string
+  ) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -64,13 +72,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const requestEmailCode = useCallback(
+    async (email: string, captchaToken?: string) => {
+      const supabase = getSupabaseBrowser()
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+          ...(captchaToken ? { captchaToken } : {}),
+        },
+      })
+      if (error) return { error: error.message }
+      return { error: null }
+    },
+    []
+  )
+
+  const verifyEmailCode = useCallback(
+    async (email: string, token: string) => {
+      const supabase = getSupabaseBrowser()
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'email',
+      })
+      if (error) return { error: error.message }
+      return { error: null }
+    },
+    []
+  )
+
   const signOut = useCallback(async () => {
     const supabase = getSupabaseBrowser()
     await supabase.auth.signOut()
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ user, loading, signIn, requestEmailCode, verifyEmailCode, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   )

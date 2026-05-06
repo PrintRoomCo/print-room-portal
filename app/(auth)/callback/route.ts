@@ -65,9 +65,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/set-password?invite=1', request.url))
     }
   } else {
-    return NextResponse.redirect(
-      new URL('/sign-in?error=no_code&error_description=Invite or sign-in link is missing its token. Request a fresh one.', request.url)
-    )
+    // No query-param tokens. Tokens may live in the URL fragment (implicit flow)
+    // which the server cannot read. Forward to a client page that reads the
+    // fragment and finishes the session.
+    const resolveUrl = new URL('/auth-resolve', request.url)
+    resolveUrl.searchParams.set('next', next)
+    return NextResponse.redirect(resolveUrl)
   }
 
   return response
