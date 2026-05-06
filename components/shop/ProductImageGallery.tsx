@@ -1,26 +1,41 @@
 'use client'
 
 import Image from 'next/image'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  resolveGalleryImagesForColour,
+  type CatalogueAwareGalleryImage,
+} from '@/lib/shop/catalogue-images'
 
-export interface GalleryImage {
-  id: string
-  url: string
-  view: string | null
-  alt?: string | null
-  position?: number | null
-}
+export type GalleryImage = CatalogueAwareGalleryImage
 
 interface Props {
   images: GalleryImage[]
   fallbackUrl: string | null
   productName: string
+  selectedColorSwatchId: string | null
 }
 
-export function ProductImageGallery({ images, fallbackUrl, productName }: Props) {
-  const ordered = orderImages(images)
+export function ProductImageGallery({
+  images,
+  fallbackUrl,
+  productName,
+  selectedColorSwatchId,
+}: Props) {
+  const ordered = useMemo(
+    () => resolveGalleryImagesForColour(images, selectedColorSwatchId),
+    [images, selectedColorSwatchId],
+  )
   const initial = ordered[0]?.url ?? fallbackUrl ?? null
   const [activeUrl, setActiveUrl] = useState<string | null>(initial)
+
+  useEffect(() => {
+    const urls = new Set(ordered.map((img) => img.url))
+    setActiveUrl((current) => {
+      if (current && urls.has(current)) return current
+      return ordered[0]?.url ?? fallbackUrl ?? null
+    })
+  }, [fallbackUrl, ordered])
 
   if (!activeUrl) {
     return (
@@ -76,20 +91,4 @@ export function ProductImageGallery({ images, fallbackUrl, productName }: Props)
       )}
     </div>
   )
-}
-
-function orderImages(images: GalleryImage[]): GalleryImage[] {
-  const heroFirst = (img: GalleryImage) => (img.view === 'hero' ? 0 : 1)
-  return [...images].sort((a, b) => {
-    const h = heroFirst(a) - heroFirst(b)
-    if (h !== 0) return h
-    const ap = a.position ?? Number.MAX_SAFE_INTEGER
-    const bp = b.position ?? Number.MAX_SAFE_INTEGER
-    if (ap !== bp) return ap - bp
-    return naturalCompare(a.view ?? '', b.view ?? '')
-  })
-}
-
-function naturalCompare(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
 }

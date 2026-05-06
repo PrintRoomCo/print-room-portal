@@ -88,6 +88,8 @@ export default async function ProductDetailPage({
     { data: brackets },
     { data: availRows },
     { data: imageRows },
+    { data: catalogueColorRows },
+    { data: catalogueImageRows },
     decorations,
   ] = await Promise.all([
     productQuery,
@@ -104,8 +106,16 @@ export default async function ProductDetailPage({
       .select('variant_id, available_qty')
       .eq('organization_id', context.organizationId),
     admin.from('product_images')
-      .select('id, file_url, view, alt_text, position')
+      .select('id, file_url, view, alt_text, position, color_swatch_id')
       .eq('product_id', productId)
+      .order('position', { ascending: true }),
+    admin.from('b2b_catalogue_item_colors')
+      .select('color_swatch_id, sort_order, is_default')
+      .eq('catalogue_item_id', catItem.id)
+      .order('sort_order', { ascending: true, nullsFirst: false }),
+    admin.from('b2b_catalogue_item_images')
+      .select('id, image_url, view, alt_text, position, color_swatch_id')
+      .eq('catalogue_item_id', catItem.id)
       .order('position', { ascending: true }),
     loadCatalogueItemDecorations(admin, catItem.id),
   ])
@@ -113,42 +123,89 @@ export default async function ProductDetailPage({
   const productRow = product as unknown as ProductDetail | null
   if (!productRow || !productRow.is_active) return notFound()
 
+  const catalogueColors = (catalogueColorRows ?? []) as Array<{
+    color_swatch_id: string
+    sort_order: number | null
+    is_default: boolean | null
+  }>
+  const configuredColorIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
+  const colorConfigById = new Map(catalogueColors.map((row) => [row.color_swatch_id, row]))
+
   const variantRows = (variants ?? []) as unknown as RawVariant[]
   const mappedVariants = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
     const size = pickOne(v.sizes)
+    const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
     return {
       variant_id: v.id,
       color_swatch_id: v.color_swatch_id,
       color_label: swatch?.label ?? null,
       color_hex: swatch?.hex ?? null,
       color_position: swatch?.position ?? 0,
+      catalogue_color_sort_order: colorConfig?.sort_order ?? null,
+      catalogue_color_is_default: colorConfig?.is_default === true,
       size_id: v.size_id,
       size_label: size?.label ?? null,
       size_order: size?.order_index ?? 0,
     }
   })
+    .filter((v) => {
+      if (configuredColorIds.size === 0) return true
+      return v.color_swatch_id != null && configuredColorIds.has(v.color_swatch_id)
+    })
+    .sort((a, b) => {
+      if (a.catalogue_color_is_default !== b.catalogue_color_is_default) {
+        return a.catalogue_color_is_default ? -1 : 1
+      }
+      const aColor = a.catalogue_color_sort_order ?? a.color_position
+      const bColor = b.catalogue_color_sort_order ?? b.color_position
+      if (aColor !== bColor) return aColor - bColor
+      return a.size_order - b.size_order
+    })
 
   const availability: Record<string, number> = {}
   for (const r of (availRows ?? []) as { variant_id: string; available_qty: number }[]) {
     availability[r.variant_id] = r.available_qty
   }
 
-  const images = ((imageRows ?? []) as Array<{
+  const catalogueImages = ((catalogueImageRows ?? []) as Array<{
+    id: string
+    image_url: string | null
+    view: string | null
+    alt_text: string | null
+    position: number | null
+    color_swatch_id: string | null
+  }>)
+    .filter((r) => r.image_url)
+    .map((r) => ({
+      id: `catalogue:${r.id}`,
+      url: r.image_url as string,
+      view: r.view,
+      alt: r.alt_text,
+      position: r.position,
+      color_swatch_id: r.color_swatch_id,
+      scope: 'catalogue' as const,
+    }))
+
+  const masterImages = ((imageRows ?? []) as Array<{
     id: string
     file_url: string | null
     view: string | null
     alt_text: string | null
     position: number | null
+    color_swatch_id: string | null
   }>)
     .filter((r) => r.file_url)
     .map((r) => ({
-      id: r.id,
+      id: `master:${r.id}`,
       url: r.file_url as string,
       view: r.view,
       alt: r.alt_text,
       position: r.position,
+      color_swatch_id: r.color_swatch_id,
+      scope: 'master' as const,
     }))
+  const images = [...catalogueImages, ...masterImages]
 
   const bracketRows = (brackets ?? []) as {
     min_quantity: number

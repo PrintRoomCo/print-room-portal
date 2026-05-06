@@ -6,6 +6,8 @@ export interface VariantRow {
   color_label: string | null
   color_hex: string | null
   color_position: number
+  catalogue_color_sort_order?: number | null
+  catalogue_color_is_default?: boolean
   size_id: number | null
   size_label: string | null
   size_order: number
@@ -26,7 +28,14 @@ export function VariantPicker({
 }: VariantPickerProps) {
   const colorMap = new Map<
     string,
-    { id: string; label: string | null; hex: string | null; position: number }
+    {
+      id: string
+      label: string | null
+      hex: string | null
+      position: number
+      catalogueSortOrder: number | null
+      isDefault: boolean
+    }
   >()
   for (const v of variants) {
     if (!v.color_swatch_id) continue
@@ -36,10 +45,17 @@ export function VariantPicker({
         label: v.color_label,
         hex: v.color_hex,
         position: v.color_position,
+        catalogueSortOrder: v.catalogue_color_sort_order ?? null,
+        isDefault: v.catalogue_color_is_default === true,
       })
     }
   }
-  const colors = Array.from(colorMap.values()).sort((a, b) => a.position - b.position)
+  const colors = Array.from(colorMap.values()).sort((a, b) => {
+    if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
+    const as = a.catalogueSortOrder ?? a.position
+    const bs = b.catalogueSortOrder ?? b.position
+    return as - bs
+  })
 
   const sizeMap = new Map<number, { id: number; label: string | null; order: number }>()
   for (const v of variants) {

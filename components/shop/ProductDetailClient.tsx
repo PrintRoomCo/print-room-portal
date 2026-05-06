@@ -194,6 +194,7 @@ export function ProductDetailClient({
           images={images}
           fallbackUrl={product.image_url}
           productName={product.name}
+          selectedColorSwatchId={colorSwatchId}
         />
 
         {/* Info + controls */}

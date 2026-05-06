@@ -64,6 +64,26 @@ export async function GET(
     return NextResponse.json({ error: 'Product not found' }, { status: 404 })
   }
 
+  const catItem = catalogueItem as {
+    id: string
+    name: string
+    description: string | null
+    image_url: string | null
+  }
+
+  const { data: catalogueColorRows } = await admin
+    .from('b2b_catalogue_item_colors')
+    .select('color_swatch_id, sort_order, is_default')
+    .eq('catalogue_item_id', catItem.id)
+
+  const catalogueColors = (catalogueColorRows ?? []) as Array<{
+    color_swatch_id: string
+    sort_order: number | null
+    is_default: boolean | null
+  }>
+  const configuredColorIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
+  const colorConfigById = new Map(catalogueColors.map((row) => [row.color_swatch_id, row]))
+
   interface VariantRow {
     id: string
     color_swatch_id: string | null
@@ -86,30 +106,40 @@ export async function GET(
   const mappedVariants = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
     const size = pickOne(v.sizes)
+    const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
     return {
       variant_id: v.id,
       color_swatch_id: v.color_swatch_id,
       color_label: swatch?.label ?? null,
       color_hex: swatch?.hex ?? null,
       color_position: swatch?.position ?? 0,
+      catalogue_color_sort_order: colorConfig?.sort_order ?? null,
+      catalogue_color_is_default: colorConfig?.is_default === true,
       size_id: v.size_id,
       size_label: size?.label ?? null,
       size_order: size?.order_index ?? 0,
     }
   })
-
-  const catItem = catalogueItem as {
-    name: string
-    description: string | null
-    image_url: string | null
-  } | null
+    .filter((v) => {
+      if (configuredColorIds.size === 0) return true
+      return v.color_swatch_id != null && configuredColorIds.has(v.color_swatch_id)
+    })
+    .sort((a, b) => {
+      if (a.catalogue_color_is_default !== b.catalogue_color_is_default) {
+        return a.catalogue_color_is_default ? -1 : 1
+      }
+      const aColor = a.catalogue_color_sort_order ?? a.color_position
+      const bColor = b.catalogue_color_sort_order ?? b.color_position
+      if (aColor !== bColor) return aColor - bColor
+      return a.size_order - b.size_order
+    })
 
   return NextResponse.json({
     product: {
       ...productRow,
-      name: catItem?.name ?? productRow.name,
-      description: catItem?.description ?? productRow.description,
-      image_url: catItem?.image_url ?? productRow.image_url,
+      name: catItem.name ?? productRow.name,
+      description: catItem.description ?? productRow.description,
+      image_url: catItem.image_url ?? productRow.image_url,
     },
     variants: mappedVariants,
     brackets: brackets ?? [],
