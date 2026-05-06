@@ -12,7 +12,7 @@ export async function GET(
 
   const [{ data: catalogueItem }, { data: product, error: pErr }, { data: variants }, { data: brackets }] = await Promise.all([
     admin.from('b2b_catalogue_items')
-      .select('id, name, description, image_url, decoration_method, decoration_price, b2b_catalogues!inner(is_active)')
+      .select('id, name, description, image_url, b2b_catalogues!inner(is_active)')
       .eq('source_product_id', id)
       .eq('is_active', true)
       .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -99,17 +99,10 @@ export async function GET(
   })
 
   const catItem = catalogueItem as {
-    decoration_price: number | string | null
-    decoration_method: string | null
     name: string
     description: string | null
     image_url: string | null
   } | null
-
-  const decorationPrice =
-    catItem?.decoration_price != null
-      ? Number(catItem.decoration_price)
-      : (productRow.decoration_price ?? 0)
 
   return NextResponse.json({
     product: {
@@ -117,8 +110,6 @@ export async function GET(
       name: catItem?.name ?? productRow.name,
       description: catItem?.description ?? productRow.description,
       image_url: catItem?.image_url ?? productRow.image_url,
-      decoration_method: catItem?.decoration_method ?? null,
-      decoration_price: decorationPrice,
     },
     variants: mappedVariants,
     brackets: brackets ?? [],
