@@ -47,6 +47,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/welcome', request.url))
   }
 
+  if (path === '/welcome' && user && request.cookies.get('welcome_seen')?.value !== 'true') {
+    response.cookies.set('welcome_seen', 'true', {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    })
+  }
+
   // Auth routes — redirect to account if already signed in
   const authRoutes = ['/sign-in', '/request-access']
   const isAuthRoute = authRoutes.some((route) => path === route)
