@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import type { CartLine } from '@/lib/cart/types'
+import { decorationPerUnit, type CartLine } from '@/lib/cart/types'
 import { formatPrice } from '@/lib/format/price'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 
@@ -116,11 +116,28 @@ export function CartTable({
                     <div className="min-w-0">
                       <div className="truncate font-medium text-gray-900">{line.productName}</div>
                       <div className="truncate text-xs text-gray-500">{line.variantLabel}</div>
-                      {line.decorationPrice && line.decorationPrice > 0 ? (
-                        <div className="text-xs text-gray-500">
-                          + {formatPrice(line.decorationPrice)} decoration / unit
+                      {line.decorations.length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {line.decorations.map((d) => (
+                            <span
+                              key={d.linkId}
+                              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-700"
+                              title={`${d.name} · +${formatPrice(d.unitPrice)} / unit`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={d.snapshotUrl ?? d.artworkUrl}
+                                alt=""
+                                className="h-4 w-4 rounded-sm object-contain bg-white"
+                              />
+                              <span className="font-medium">{d.name}</span>
+                              <span className="tabular-nums text-gray-500">
+                                +{formatPrice(d.unitPrice)}
+                              </span>
+                            </span>
+                          ))}
                         </div>
-                      ) : null}
+                      )}
                       {isOversell && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
                           <span>Only {avail} available.</span>
@@ -150,7 +167,7 @@ export function CartTable({
                 </td>
                 <td className="px-4 py-3 text-gray-700">{formatPrice(line.unitPrice)}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  {formatPrice(line.qty * (line.unitPrice + (line.decorationPrice ?? 0)))}
+                  {formatPrice(line.qty * (line.unitPrice + decorationPerUnit(line)))}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button

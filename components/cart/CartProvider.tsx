@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useCompany } from '@/contexts/CompanyContext'
-import type { CartLine, CartState } from '@/lib/cart/types'
+import { decorationSignature, type CartLine, type CartState } from '@/lib/cart/types'
 
 export interface CartApi {
   lines: CartLine[]
@@ -19,6 +19,34 @@ export interface CartApi {
 }
 
 export const CartContext = createContext<CartApi | null>(null)
+
+function normalizePersisted(raw: unknown): CartState {
+  if (!raw || typeof raw !== 'object') return { lines: [] }
+  const lines = (raw as { lines?: unknown }).lines
+  if (!Array.isArray(lines)) return { lines: [] }
+  const normalized: CartLine[] = []
+  for (const line of lines) {
+    if (!line || typeof line !== 'object') continue
+    const l = line as Partial<CartLine> & Record<string, unknown>
+    if (typeof l.lineId !== 'string' || typeof l.productId !== 'string') continue
+    normalized.push({
+      lineId: l.lineId,
+      productId: l.productId,
+      productName: typeof l.productName === 'string' ? l.productName : '',
+      variantId: typeof l.variantId === 'string' ? l.variantId : '',
+      variantLabel: typeof l.variantLabel === 'string' ? l.variantLabel : '—',
+      qty: typeof l.qty === 'number' && l.qty > 0 ? l.qty : 1,
+      unitPrice: typeof l.unitPrice === 'number' ? l.unitPrice : 0,
+      imageUrl: typeof l.imageUrl === 'string' ? l.imageUrl : null,
+      shipToStoreId:
+        typeof l.shipToStoreId === 'string' || l.shipToStoreId === null
+          ? (l.shipToStoreId ?? null)
+          : null,
+      decorations: Array.isArray(l.decorations) ? l.decorations : [],
+    })
+  }
+  return { lines: normalized }
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { access } = useCompany()
@@ -35,7 +63,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     try {
       const raw = localStorage.getItem(storageKey)
-      setState(raw ? (JSON.parse(raw) as CartState) : { lines: [] })
+      setState(raw ? normalizePersisted(JSON.parse(raw)) : { lines: [] })
     } catch {
       setState({ lines: [] })
     }
@@ -55,8 +83,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     lines: state.lines,
     addLine: (line) =>
       setState((s) => {
+        const incomingSig = decorationSignature(line.decorations ?? [])
         const existing = s.lines.find(
-          (l) => l.productId === line.productId && l.variantId === line.variantId
+          (l) =>
+            l.productId === line.productId &&
+            l.variantId === line.variantId &&
+            decorationSignature(l.decorations) === incomingSig,
         )
         if (existing) {
           return {
@@ -66,7 +98,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
         }
         return {
-          lines: [...s.lines, { ...line, lineId: crypto.randomUUID() }],
+          lines: [
+            ...s.lines,
+            {
+              ...line,
+              decorations: line.decorations ?? [],
+              lineId: crypto.randomUUID(),
+            },
+          ],
         }
       }),
     updateLine: (lineId, patch) =>
