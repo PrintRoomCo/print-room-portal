@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
-import { submitCustomerOrder, type CheckoutLineInput } from '@/lib/checkout/submit'
+import {
+  DecorationDriftError,
+  submitCustomerOrder,
+  type CheckoutLineInput,
+} from '@/lib/checkout/submit'
 
 interface CheckoutRequestBody {
   idempotency_key?: string
@@ -75,6 +79,12 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(result)
   } catch (e) {
+    if (e instanceof DecorationDriftError) {
+      return NextResponse.json(
+        { error: 'decoration_price_drift', drift: e.drift },
+        { status: 409 },
+      )
+    }
     const msg = (e as Error).message ?? ''
     if (msg.includes('OUT_OF_STOCK')) {
       return NextResponse.json({ error: 'OUT_OF_STOCK' }, { status: 409 })

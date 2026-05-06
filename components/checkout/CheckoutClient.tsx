@@ -113,11 +113,34 @@ export function CheckoutClient({
             variant_id: l.variantId,
             qty: l.qty,
             ship_to_store_id: allCustom ? null : perLineShipTo[l.lineId] ?? null,
+            cart_line_id: l.lineId,
+            decorations: l.decorations,
           })),
           custom_shipping_address: allCustom ? customAddress : null,
         }),
       })
       if (res.status === 409) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          drift?: Array<{
+            cartLineId: string | null
+            decorationName: string
+            was: number
+            now: number
+            reason: string
+          }>
+        }
+        if (data.error === 'decoration_price_drift' && data.drift) {
+          const summary = data.drift
+            .map((d) => `${d.decorationName}: was $${d.was.toFixed(2)} → now $${d.now.toFixed(2)} (${d.reason})`)
+            .join('; ')
+          setBanner({
+            kind: 'error',
+            msg: `Decoration pricing has changed — review your cart. ${summary}`,
+          })
+          router.push('/cart')
+          return
+        }
         setBanner({
           kind: 'error',
           msg: 'Stock changed while you were checking out — please review your cart and try again.',

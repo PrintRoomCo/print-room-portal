@@ -4,12 +4,26 @@ import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { pushProductionJob } from '@/lib/monday/production-job'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 
+export interface CheckoutLineDecorationInput {
+  linkId: string
+  decorationId: string
+  name: string
+  method: string
+  positionLabel: string | null
+  unitPrice: number
+  artworkUrl: string
+  snapshotUrl: string | null
+}
+
 export interface CheckoutLineInput {
   product_id: string
   product_name: string
   variant_id?: string | null
   qty: number
   ship_to_store_id?: string | null
+  decorations?: CheckoutLineDecorationInput[]
+  /** Stable per-line id from the cart, used in error responses to point at the offending line. */
+  cart_line_id?: string
 }
 
 export interface CheckoutInput {
@@ -27,6 +41,25 @@ export interface CheckoutResult {
   order_ref: string
   monday_item_id: string | null
   monday_push_error: string | null
+}
+
+export interface DecorationDrift {
+  cartLineId: string | null
+  productId: string
+  linkId: string
+  decorationName: string
+  was: number
+  now: number
+  reason: 'price_drift' | 'detached' | 'cross_org' | 'inactive' | 'wrong_item'
+}
+
+export class DecorationDriftError extends Error {
+  readonly drift: DecorationDrift[]
+  constructor(drift: DecorationDrift[]) {
+    super('decoration_price_drift')
+    this.name = 'DecorationDriftError'
+    this.drift = drift
+  }
 }
 
 interface SubmitB2BOrderRow {
@@ -88,6 +121,10 @@ function pickOne<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? v[0] ?? null : v
 }
 
+function makeLineKey(productId: string, variantId: string | null): string {
+  return `${productId}::${variantId ?? ''}`
+}
+
 // b2b_accounts.payment_terms CHECK constraint allows only 'prepay' | 'net20' | 'net30'.
 // Plan default was 'net_20' which fails; use 'net20' instead.
 const PAYMENT_TERMS_FALLBACK = 'net20'
@@ -121,6 +158,157 @@ export async function submitCustomerOrder(
     })
   )
 
+  // 2b. Re-validate every selected decoration on every line. Server-side
+  //     read of the link table + org_decoration; reject on cross-org reuse,
+  //     unattached link, inactive decoration, mismatched catalogue item, or
+  //     price drift greater than zero (per Decision #3 — no tolerance, AM
+  //     edits are explicit). Validated decorations get persisted onto the
+  //     order line as a jsonb snapshot below in step 4.
+  const validatedByLineKey = new Map<string, CheckoutLineDecorationInput[]>()
+  const drift: DecorationDrift[] = []
+
+  for (const line of input.lines) {
+    const decs = line.decorations ?? []
+    if (decs.length === 0) {
+      validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), [])
+      continue
+    }
+    const linkIds = decs.map((d) => d.linkId)
+    const { data: rows, error: linkErr } = await admin
+      .from('b2b_catalogue_item_decorations')
+      .select(`
+        id,
+        catalogue_item_id,
+        unit_price_override,
+        snapshot_url,
+        b2b_catalogue_items!inner(id, source_product_id),
+        org_decorations!inner(
+          id,
+          organization_id,
+          name,
+          decoration_method,
+          unit_price,
+          is_active,
+          organization_artworks!org_decorations_artwork_id_fkey(public_url),
+          decoration_locations!org_decorations_decoration_location_id_fkey(location)
+        )
+      `)
+      .in('id', linkIds)
+    if (linkErr) {
+      throw new Error(`decoration lookup failed: ${linkErr.message}`)
+    }
+
+    type LinkRow = {
+      id: string
+      catalogue_item_id: string
+      unit_price_override: number | string | null
+      snapshot_url: string | null
+      b2b_catalogue_items: { id: string; source_product_id: string }
+      org_decorations: {
+        id: string
+        organization_id: string
+        name: string
+        decoration_method: string
+        unit_price: number | string
+        is_active: boolean
+        organization_artworks: { public_url: string } | { public_url: string }[] | null
+        decoration_locations:
+          | { location: string }
+          | { location: string }[]
+          | null
+      }
+    }
+
+    const byId = new Map((rows as unknown as LinkRow[] ?? []).map((r) => [r.id, r]))
+    const validated: CheckoutLineDecorationInput[] = []
+
+    for (const dec of decs) {
+      const row = byId.get(dec.linkId)
+      if (!row) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: dec.linkId,
+          decorationName: dec.name,
+          was: dec.unitPrice,
+          now: 0,
+          reason: 'detached',
+        })
+        continue
+      }
+      const od = row.org_decorations
+      if (od.organization_id !== input.context.organizationId) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: dec.linkId,
+          decorationName: od.name,
+          was: dec.unitPrice,
+          now: Number(od.unit_price),
+          reason: 'cross_org',
+        })
+        continue
+      }
+      if (!od.is_active) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: dec.linkId,
+          decorationName: od.name,
+          was: dec.unitPrice,
+          now: Number(od.unit_price),
+          reason: 'inactive',
+        })
+        continue
+      }
+      if (row.b2b_catalogue_items.source_product_id !== line.product_id) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: dec.linkId,
+          decorationName: od.name,
+          was: dec.unitPrice,
+          now: Number(od.unit_price),
+          reason: 'wrong_item',
+        })
+        continue
+      }
+      const effective =
+        row.unit_price_override != null
+          ? Number(row.unit_price_override)
+          : Number(od.unit_price)
+      if (effective !== dec.unitPrice) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: dec.linkId,
+          decorationName: od.name,
+          was: dec.unitPrice,
+          now: effective,
+          reason: 'price_drift',
+        })
+        continue
+      }
+      const art = pickOne(od.organization_artworks)
+      const loc = pickOne(od.decoration_locations)
+      validated.push({
+        linkId: row.id,
+        decorationId: od.id,
+        name: od.name,
+        method: od.decoration_method,
+        positionLabel: loc?.location ?? null,
+        unitPrice: effective,
+        artworkUrl: art?.public_url ?? dec.artworkUrl,
+        snapshotUrl: row.snapshot_url,
+      })
+    }
+    validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), validated)
+  }
+
+  if (drift.length > 0) {
+    throw new DecorationDriftError(drift)
+  }
+
   // 3. Call the shared submit_b2b_order RPC.
   const { data, error } = await admin.rpc('submit_b2b_order', {
     p_idempotency_key: input.idempotency_key,
@@ -149,8 +337,8 @@ export async function submitCustomerOrder(
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
 
-  // 4. Apply per-line ship_to_store_id. The RPC creates quote_items without
-  //    ship-to; we set it here so split-ship orders record the right store per line.
+  // 4. Apply per-line ship_to_store_id and the decorations snapshot. The RPC
+  //    creates quote_items without ship-to or decorations; we set both here.
   const { data: newLines } = await admin
     .from('quote_items')
     .select('id, product_id, variant_id')
@@ -163,11 +351,16 @@ export async function submitCustomerOrder(
           x.product_id === inLine.product_id &&
           (x.variant_id ?? null) === (inLine.variant_id ?? null)
       )
-      if (match && inLine.ship_to_store_id !== undefined) {
-        await admin
-          .from('quote_items')
-          .update({ ship_to_store_id: inLine.ship_to_store_id ?? null })
-          .eq('id', match.id)
+      if (!match) continue
+      const update: Record<string, unknown> = {}
+      if (inLine.ship_to_store_id !== undefined) {
+        update.ship_to_store_id = inLine.ship_to_store_id ?? null
+      }
+      const validated =
+        validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null)) ?? []
+      update.decorations = validated
+      if (Object.keys(update).length > 0) {
+        await admin.from('quote_items').update(update).eq('id', match.id)
       }
     }
   }
