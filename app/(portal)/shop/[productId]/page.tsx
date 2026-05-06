@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
+import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +88,7 @@ export default async function ProductDetailPage({
     { data: brackets },
     { data: availRows },
     { data: imageRows },
+    decorations,
   ] = await Promise.all([
     productQuery,
     admin.from('product_variants')
@@ -105,6 +107,7 @@ export default async function ProductDetailPage({
       .select('id, file_url, view, alt_text, position')
       .eq('product_id', productId)
       .order('position', { ascending: true }),
+    loadCatalogueItemDecorations(admin, catItem.id),
   ])
 
   const productRow = product as unknown as ProductDetail | null
@@ -208,6 +211,7 @@ export default async function ProductDetailPage({
       availability={availability}
       organizationId={context.organizationId}
       images={images}
+      decorations={decorations}
     />
   )
 }
