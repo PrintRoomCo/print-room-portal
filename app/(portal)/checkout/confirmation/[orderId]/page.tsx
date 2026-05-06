@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { formatPrice } from '@/lib/format/price'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +24,7 @@ export default async function ConfirmationPage({
 }) {
   const { orderId } = await params
   const auth = await requireB2BCustomer()
-  if ('error' in auth) redirect('/account')
+  if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
   const { data } = await admin

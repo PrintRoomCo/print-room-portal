@@ -1,12 +1,12 @@
-import { redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CartClient } from '@/components/cart/CartClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CartPage() {
   const auth = await requireB2BCustomer()
-  if ('error' in auth) redirect('/account')
+  if ('kind' in auth) return handleAuthFailure(auth)
   const { context } = auth
 
   return (

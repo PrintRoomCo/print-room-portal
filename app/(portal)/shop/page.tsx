@@ -1,6 +1,6 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
 import { getTierLabel } from '@/lib/pricing/tier-labels'
@@ -34,7 +34,7 @@ export default async function ShopPage({
   const sp = await searchParams
   const filters = parseShopFilters(sp)
   const auth = await requireB2BCustomer()
-  if ('error' in auth) redirect('/account')
+  if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
   const limit = 24

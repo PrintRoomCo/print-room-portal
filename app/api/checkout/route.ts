@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { submitCustomerOrder, type CheckoutLineInput } from '@/lib/checkout/submit'
 
 interface CheckoutRequestBody {
@@ -11,7 +11,7 @@ interface CheckoutRequestBody {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireB2BCustomer({ requireCustomerCode: true })
+  const auth = await requireB2BCustomerApi({ requireCustomerCode: true })
   if ('error' in auth) return auth.error
 
   let body: CheckoutRequestBody

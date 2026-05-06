@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { formatPrice } from '@/lib/format/price'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +15,7 @@ interface StaffQuoteRow {
 
 export default async function QuoteRequestsListPage() {
   const auth = await requireB2BCustomer()
-  if ('error' in auth) redirect('/account')
+  if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
   const { data } = await admin

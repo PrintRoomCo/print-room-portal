@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { createQuoteRequest, type QuoteRequestLineInput } from '@/lib/checkout/quote-request'
 
 interface QuoteRequestBody {
@@ -7,7 +7,7 @@ interface QuoteRequestBody {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
 
   let body: QuoteRequestBody

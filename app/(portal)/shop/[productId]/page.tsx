@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
+import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +52,7 @@ export default async function ProductDetailPage({
 }) {
   const { productId } = await params
   const auth = await requireB2BCustomer()
-  if ('error' in auth) return notFound()
+  if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
   const { data: catItem } = await admin
@@ -66,7 +67,7 @@ export default async function ProductDetailPage({
 
   if (!catItem) return notFound()
 
-  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands(name), categories(name)'
+  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
 
   const productQuery = admin
     .from('products')

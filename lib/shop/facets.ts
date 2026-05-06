@@ -17,11 +17,11 @@ export async function getShopFacets(
   const [brandsRes, categoriesRes, familyRes] = await Promise.all([
     admin
       .from('products')
-      .select('brand_id, brands!inner(id, name)')
+      .select('brand_id, brands!products_brand_id_fkey!inner(id, name)')
       .in('id', scopedProductIds),
     admin
       .from('products')
-      .select('category_id, categories!inner(id, name)')
+      .select('category_id, categories!products_category_id_fkey!inner(id, name)')
       .in('id', scopedProductIds),
     admin
       .from('products')

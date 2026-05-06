@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { effectiveUnitPrice } from '@/lib/shop/effective-price'
 
 export async function POST(request: Request) {
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
   const { admin, context } = auth
 

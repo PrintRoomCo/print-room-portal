@@ -17,6 +17,13 @@ export default function SignInPage() {
 type Mode = 'code' | 'password'
 type CodeStage = 'request' | 'verify'
 
+// Same-origin pathname only — block protocol-relative or absolute URLs to prevent open redirect.
+function safeReturnTo(rt: string | null): string {
+  if (!rt) return '/account'
+  if (!rt.startsWith('/') || rt.startsWith('//')) return '/account'
+  return rt
+}
+
 function SignIn() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,7 +41,7 @@ function SignIn() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const captchaRef = useRef<HCaptcha>(null)
 
-  const returnTo = searchParams.get('returnTo') || '/account'
+  const returnTo = safeReturnTo(searchParams.get('returnTo'))
   const hcaptchaSitekey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || null
 
   const urlError = searchParams.get('error')

@@ -17,8 +17,18 @@ export interface B2BCustomerContext {
   storeIds: string[]
 }
 
+export type AuthFailureKind =
+  | 'unauthenticated'
+  | 'no_org'
+  | 'org_not_found'
+  | 'missing_customer_code'
+
+export interface AuthFailure {
+  kind: AuthFailureKind
+}
+
 export type RequireB2BCustomerResult =
-  | { error: NextResponse }
+  | AuthFailure
   | { admin: SupabaseClient; context: B2BCustomerContext }
 
 export async function requireB2BCustomer(
@@ -26,9 +36,7 @@ export async function requireB2BCustomer(
 ): Promise<RequireB2BCustomerResult> {
   const authed = await getSupabaseServerComponent()
   const { data: { user } } = await authed.auth.getUser()
-  if (!user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  }
+  if (!user) return { kind: 'unauthenticated' }
 
   const admin = getSupabaseServer()
 
@@ -37,9 +45,7 @@ export async function requireB2BCustomer(
     .select('organization_id')
     .eq('user_id', user.id)
     .maybeSingle()
-  if (!membership) {
-    return { error: NextResponse.json({ error: 'No organization on this account' }, { status: 403 }) }
-  }
+  if (!membership) return { kind: 'no_org' }
 
   const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
     admin.from('organizations')
@@ -55,17 +61,10 @@ export async function requireB2BCustomer(
       .select('email, full_name')
       .eq('id', user.id).maybeSingle(),
   ])
-  if (!org) {
-    return { error: NextResponse.json({ error: 'Organization not found' }, { status: 404 }) }
-  }
+  if (!org) return { kind: 'org_not_found' }
 
   if (opts.requireCustomerCode && !org.customer_code) {
-    return {
-      error: NextResponse.json(
-        { error: 'Your account has no customer_code set. Contact staff to set up your account.' },
-        { status: 400 }
-      ),
-    }
+    return { kind: 'missing_customer_code' }
   }
 
   return {
@@ -84,4 +83,29 @@ export async function requireB2BCustomer(
       storeIds: (stores ?? []).map((s) => s.id),
     } satisfies B2BCustomerContext,
   }
+}
+
+const AUTH_FAILURE_RESPONSE: Record<AuthFailureKind, { status: number; message: string }> = {
+  unauthenticated: { status: 401, message: 'Unauthorized' },
+  no_org: { status: 403, message: 'No organization on this account' },
+  org_not_found: { status: 404, message: 'Organization not found' },
+  missing_customer_code: {
+    status: 400,
+    message: 'Your account has no customer_code set. Contact staff to set up your account.',
+  },
+}
+
+export type RequireB2BCustomerApiResult =
+  | { error: NextResponse }
+  | { admin: SupabaseClient; context: B2BCustomerContext }
+
+export async function requireB2BCustomerApi(
+  opts: { requireCustomerCode?: boolean } = {}
+): Promise<RequireB2BCustomerApiResult> {
+  const result = await requireB2BCustomer(opts)
+  if ('kind' in result) {
+    const mapped = AUTH_FAILURE_RESPONSE[result.kind]
+    return { error: NextResponse.json({ error: mapped.message }, { status: mapped.status }) }
+  }
+  return result
 }

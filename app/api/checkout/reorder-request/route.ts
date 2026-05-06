@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { createReorderRequest } from '@/lib/checkout/reorder-request'
 
 export async function POST(request: Request) {
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
 
   let body: { variant_id?: string; requested_qty?: number; note?: string }

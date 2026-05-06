@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerApi } from '@/lib/checkout/server'
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
   const { admin, context } = auth
   const { id: productId } = await params
