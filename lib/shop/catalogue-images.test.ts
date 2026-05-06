@@ -93,4 +93,57 @@ describe('resolveGalleryImagesForColour', () => {
       '/master-back.png',
     ])
   })
+
+  it('drops master+null images whose view is not a primary view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'master-detail-1',
+          url: '/master-detail-1.png',
+          view: 'detail-1',
+          position: 2,
+          color_swatch_id: null,
+          scope: 'master',
+        },
+        {
+          id: 'master-detail-99',
+          url: '/master-detail-99.png',
+          view: 'detail-99',
+          position: 99,
+          color_swatch_id: null,
+          scope: 'master',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual([
+      '/master-front.png',
+      '/master-back.png',
+    ])
+  })
+
+  it('keeps master+match detail images even when view is not a primary view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'master-detail-blue',
+          url: '/master-detail-blue.png',
+          view: 'detail-3',
+          position: 3,
+          color_swatch_id: 'blue',
+          scope: 'master',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual([
+      '/master-front.png',
+      '/master-back.png',
+      '/master-detail-blue.png',
+    ])
+  })
 })

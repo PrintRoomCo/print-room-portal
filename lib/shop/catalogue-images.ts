@@ -33,6 +33,17 @@ export function resolveGalleryImagesForColour(
     .sort(compareImages)
 }
 
+const PRIMARY_VIEWS = new Set([
+  'hero',
+  'front',
+  'back',
+  'left',
+  'right',
+  'side',
+  'top',
+  'bottom',
+])
+
 function imagePriority(
   image: CatalogueAwareGalleryImage,
   selectedColorSwatchId: string | null,
@@ -43,7 +54,11 @@ function imagePriority(
   if (scope === 'catalogue' && imageColor && imageColor === selectedColorSwatchId) return 1
   if (scope === 'catalogue' && imageColor == null) return 2
   if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 3
-  if (scope === 'master' && imageColor == null) return 4
+  if (scope === 'master' && imageColor == null) {
+    const view = (image.view ?? '').toLowerCase()
+    if (PRIMARY_VIEWS.has(view)) return 4
+    return null
+  }
 
   return null
 }
