@@ -12,6 +12,7 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import type { DecorationOption } from '@/lib/shop/decorations'
+import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
 import type { CartLineDecoration } from '@/lib/cart/types'
 
 interface ProductData {
@@ -218,9 +219,14 @@ export function ProductDetailClient({
     [decorations],
   )
 
+  const swatchVisibleDecorations = useMemo(
+    () => filterDecorationsBySwatch(decorations, colorSwatchId),
+    [decorations, colorSwatchId],
+  )
+
   const selectedDecorations = useMemo(
-    () => decorations.filter((d) => selectedLinkIds.has(d.linkId)),
-    [decorations, selectedLinkIds],
+    () => swatchVisibleDecorations.filter((d) => selectedLinkIds.has(d.linkId)),
+    [swatchVisibleDecorations, selectedLinkIds],
   )
 
   const galleryOverlays = useMemo<GalleryOverlay[]>(
