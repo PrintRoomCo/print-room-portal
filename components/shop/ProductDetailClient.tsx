@@ -74,6 +74,8 @@ export function ProductDetailClient({
     firstVariant?.color_swatch_id ?? null
   )
   const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
+  const [multiSize, setMultiSize] = useState(false)
+  const [sizeQuantities, setSizeQuantities] = useState<Record<number, number>>({})
 
   const selectedVariant = useMemo(
     () =>
@@ -90,11 +92,33 @@ export function ProductDetailClient({
     : undefined
   const isOutOfStock = tracksThisVariant && (availableQty ?? 0) === 0
 
+  const sizeRowsForColour = useMemo(() => {
+    return variants
+      .filter((v) => v.color_swatch_id === colorSwatchId && v.size_id != null)
+      .map((v) => {
+        const tracked = availability[v.variant_id] !== undefined
+        return {
+          variantId: v.variant_id,
+          sizeId: v.size_id as number,
+          sizeLabel: v.size_label ?? '',
+          sizeOrder: v.size_order,
+          available: tracked ? availability[v.variant_id] : null,
+        }
+      })
+      .sort((a, b) => a.sizeOrder - b.sizeOrder)
+  }, [variants, colorSwatchId, availability])
+
+  const multiSizeTotalQty = useMemo(() => {
+    return sizeRowsForColour.reduce((sum, row) => sum + (sizeQuantities[row.sizeId] ?? 0), 0)
+  }, [sizeRowsForColour, sizeQuantities])
+
   const defaultMinQty = tracksThisVariant ? 1 : product.moq ?? 1
-  const [qty, setQty] = useState<number>(defaultMinQty)
+  const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
+  const qty = multiSize ? multiSizeTotalQty : singleQty
+  const setQty = setSingleQty
 
   useEffect(() => {
-    setQty((q) => Math.max(defaultMinQty, q))
+    setSingleQty((q) => Math.max(defaultMinQty, q))
   }, [defaultMinQty])
 
   const [pricing, setPricing] = useState<PricingResponse | null>(null)
@@ -230,10 +254,7 @@ export function ProductDetailClient({
   }
 
   function handleAddToCart() {
-    if (!selectedVariant || !pricing || pricing.status !== 'ok') return
-    const colorLabel = selectedVariant.color_label ?? ''
-    const sizeLabel = selectedVariant.size_label ?? ''
-    const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
+    if (!pricing || pricing.status !== 'ok') return
     const cartLineDecorations: CartLineDecoration[] = selectedDecorations.map((d) => ({
       linkId: d.linkId,
       decorationId: d.decorationId,
@@ -244,6 +265,40 @@ export function ProductDetailClient({
       artworkUrl: d.artworkUrl,
       snapshotUrl: d.snapshotUrl,
     }))
+
+    if (multiSize) {
+      const colorLabel =
+        sizeRowsForColour[0] != null
+          ? variants.find((v) => v.color_swatch_id === colorSwatchId)?.color_label ?? ''
+          : ''
+      let added = 0
+      for (const row of sizeRowsForColour) {
+        const lineQty = sizeQuantities[row.sizeId] ?? 0
+        if (lineQty <= 0) continue
+        const variantLabel = [colorLabel, row.sizeLabel].filter(Boolean).join(' / ') || '—'
+        cart.addLine({
+          productId: product.id,
+          productName: product.name,
+          variantId: row.variantId,
+          variantLabel,
+          qty: lineQty,
+          unitPrice: pricing.unit_price,
+          imageUrl: product.image_url,
+          decorations: cartLineDecorations,
+        })
+        added += lineQty
+      }
+      if (added > 0) {
+        setSizeQuantities({})
+        showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
+      }
+      return
+    }
+
+    if (!selectedVariant) return
+    const colorLabel = selectedVariant.color_label ?? ''
+    const sizeLabel = selectedVariant.size_label ?? ''
+    const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -258,14 +313,19 @@ export function ProductDetailClient({
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'
-  const canAddToCart =
-    selectedVariant != null &&
-    !isOutOfStock &&
-    !priceMissing &&
-    Number.isInteger(qty) &&
-    qty >= defaultMinQty &&
-    pricing != null &&
-    pricing.status === 'ok'
+  const multiSizeOk = multiSize && multiSizeTotalQty > 0
+  const canAddToCart = multiSize
+    ? multiSizeOk &&
+      !priceMissing &&
+      pricing != null &&
+      pricing.status === 'ok'
+    : selectedVariant != null &&
+      !isOutOfStock &&
+      !priceMissing &&
+      Number.isInteger(qty) &&
+      qty >= defaultMinQty &&
+      pricing != null &&
+      pricing.status === 'ok'
 
   const selectedVariantLabel = selectedVariant
     ? [selectedVariant.color_label, selectedVariant.size_label].filter(Boolean).join(' / ') || '—'
@@ -285,14 +345,40 @@ export function ProductDetailClient({
         {/* Info + controls */}
         <div className="space-y-6">
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
-              <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-              {product.sizing_type && product.sizing_type !== 'multi_size' && (
-                <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
-                  {product.sizing_type.replace(/_/g, ' ')}
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
+                <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+                {product.sizing_type && product.sizing_type !== 'multi_size' && (
+                  <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
+                    {product.sizing_type.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMultiSize((v) => !v)}
+                aria-pressed={multiSize ? 'true' : 'false'}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  multiSize
+                    ? 'border-pr-blue bg-pr-blue/10 text-pr-blue'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+                title="Switch between single-size and multi-size order"
+              >
+                <span
+                  className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
+                    multiSize ? 'bg-pr-blue' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
+                      multiSize ? 'translate-x-3.5' : 'translate-x-0.5'
+                    }`}
+                  />
                 </span>
-              )}
+                {multiSize ? 'Order multiple sizes' : 'Order single size'}
+              </button>
             </div>
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
@@ -303,6 +389,8 @@ export function ProductDetailClient({
             variants={variants}
             selectedColorSwatchId={colorSwatchId}
             selectedSizeId={sizeId}
+            availability={availability}
+            showSizePicker={!multiSize}
             onChange={({ colorSwatchId: c, sizeId: s }) => {
               setColorSwatchId(c)
               setSizeId(s)
@@ -345,25 +433,97 @@ export function ProductDetailClient({
             </div>
           )}
 
-          <div className="flex items-end gap-3">
-            <div>
-              <label htmlFor="qty" className="block text-sm font-medium text-gray-700">
-                Quantity
-              </label>
-              <input
-                id="qty"
-                type="number"
-                min={defaultMinQty}
-                step={1}
-                value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
-                disabled={isOutOfStock}
-                className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
-              />
-              {product.moq != null && product.moq > 1 ? (
-                <p className="mt-1 text-xs text-gray-500">Min. order {product.moq}</p>
-              ) : null}
+          {multiSize && sizeRowsForColour.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Size</th>
+                    <th className="px-3 py-2 font-medium">Available</th>
+                    <th className="px-3 py-2 text-right font-medium">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sizeRowsForColour.map((row) => {
+                    const trackedRow = row.available !== null
+                    const out = trackedRow && row.available === 0
+                    const cap = trackedRow ? (row.available ?? 0) : undefined
+                    const value = sizeQuantities[row.sizeId] ?? 0
+                    return (
+                      <tr key={row.sizeId} className="border-t border-gray-100">
+                        <td className="px-3 py-2 font-medium text-gray-800">{row.sizeLabel}</td>
+                        <td
+                          className={`px-3 py-2 text-xs ${
+                            out ? 'text-gray-400' : trackedRow ? 'text-gray-600' : 'text-gray-400'
+                          }`}
+                        >
+                          {!trackedRow ? '—' : out ? '0 in stock' : `${row.available}`}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            max={cap}
+                            step={1}
+                            value={value || ''}
+                            placeholder="0"
+                            disabled={out}
+                            onChange={(e) => {
+                              const n = Number(e.target.value)
+                              setSizeQuantities((prev) => {
+                                const next = { ...prev }
+                                if (!Number.isFinite(n) || n <= 0) {
+                                  delete next[row.sizeId]
+                                } else {
+                                  next[row.sizeId] =
+                                    cap !== undefined ? Math.min(n, cap) : n
+                                }
+                                return next
+                              })
+                            }}
+                            aria-label={`Quantity for size ${row.sizeLabel}`}
+                            className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-right text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200 bg-gray-50">
+                    <td className="px-3 py-2 text-xs font-medium text-gray-500" colSpan={2}>
+                      Total
+                    </td>
+                    <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                      {multiSizeTotalQty}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
+          )}
+
+          <div className="flex items-end gap-3">
+            {!multiSize && (
+              <div>
+                <label htmlFor="qty" className="block text-sm font-medium text-gray-700">
+                  Quantity
+                </label>
+                <input
+                  id="qty"
+                  type="number"
+                  min={defaultMinQty}
+                  step={1}
+                  value={qty}
+                  onChange={(e) => setQty(Number(e.target.value))}
+                  disabled={isOutOfStock}
+                  className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
+                />
+                {product.moq != null && product.moq > 1 ? (
+                  <p className="mt-1 text-xs text-gray-500">Min. order {product.moq}</p>
+                ) : null}
+              </div>
+            )}
             <div className="flex-1 text-right text-sm">
               {pricingLoading ? (
                 <span className="text-gray-400">Pricing…</span>

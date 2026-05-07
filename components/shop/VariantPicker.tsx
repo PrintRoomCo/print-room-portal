@@ -18,6 +18,8 @@ interface VariantPickerProps {
   selectedColorSwatchId: string | null
   selectedSizeId: number | null
   onChange: (next: { colorSwatchId: string | null; sizeId: number | null }) => void
+  availability?: Record<string, number>
+  showSizePicker?: boolean
 }
 
 export function VariantPicker({
@@ -25,6 +27,8 @@ export function VariantPicker({
   selectedColorSwatchId,
   selectedSizeId,
   onChange,
+  availability,
+  showSizePicker = true,
 }: VariantPickerProps) {
   const colorMap = new Map<
     string,
@@ -106,25 +110,52 @@ export function VariantPicker({
         </div>
       )}
 
-      {sizes.length > 0 && (
+      {showSizePicker && sizes.length > 0 && (
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-900">Size</label>
           <div className="flex flex-wrap gap-2">
             {sizes.map((s) => {
               const isSelected = s.id === selectedSizeId
+              const variantForSize = variants.find(
+                (v) =>
+                  v.color_swatch_id === selectedColorSwatchId && v.size_id === s.id,
+              )
+              const tracked =
+                variantForSize != null &&
+                availability != null &&
+                availability[variantForSize.variant_id] !== undefined
+              const qty = tracked ? availability![variantForSize!.variant_id] : null
+              const outOfStock = tracked && (qty ?? 0) === 0
               return (
                 <button
                   key={s.id}
                   type="button"
                   onClick={() => onChange({ colorSwatchId: selectedColorSwatchId, sizeId: s.id })}
                   aria-pressed={isSelected}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-spring ${
+                  className={`flex flex-col items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-spring ${
                     isSelected
                       ? 'border-pr-blue bg-pr-blue text-white'
-                      : 'border-gray-200 bg-white text-gray-800 hover:border-gray-400'
+                      : outOfStock
+                        ? 'border-gray-200 bg-gray-50 text-gray-400'
+                        : 'border-gray-200 bg-white text-gray-800 hover:border-gray-400'
                   }`}
                 >
-                  {s.label}
+                  <span>{s.label}</span>
+                  {tracked && (
+                    <span
+                      className={`mt-0.5 text-[10px] font-normal ${
+                        isSelected
+                          ? 'text-white/80'
+                          : outOfStock
+                            ? 'text-gray-400'
+                            : (qty ?? 0) <= 5
+                              ? 'text-amber-600'
+                              : 'text-gray-500'
+                      }`}
+                    >
+                      {outOfStock ? '0 in stock' : `${qty} in stock`}
+                    </span>
+                  )}
                 </button>
               )
             })}
