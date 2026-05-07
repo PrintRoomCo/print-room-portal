@@ -6,6 +6,46 @@ export interface CatalogueAwareGalleryImage {
   position?: number | null
   color_swatch_id?: string | null
   scope?: 'catalogue' | 'master'
+  source?: 'designer_snapshot' | 'staff_upload' | null
+}
+
+export interface CatalogueItemImageRow {
+  catalogue_item_id: string
+  view: string | null
+  source: string | null
+  position: number | null
+  image_url: string | null
+  color_swatch_id: string | null
+}
+
+const THUMBNAIL_VIEW_PREFERENCE = ['hero', 'front']
+
+function thumbnailViewRank(view: string | null): number {
+  if (!view) return 99
+  const idx = THUMBNAIL_VIEW_PREFERENCE.indexOf(view.toLowerCase())
+  return idx === -1 ? 50 : idx
+}
+
+function thumbnailSourceRank(source: string | null): number {
+  if (source === 'designer_snapshot') return 0
+  if (source === 'staff_upload') return 1
+  return 9
+}
+
+export function pickCatalogueItemThumbnail(
+  fallbackUrl: string | null,
+  rows: CatalogueItemImageRow[],
+): string | null {
+  const candidate = rows
+    .filter((r) => r.image_url && r.color_swatch_id == null)
+    .sort((a, b) => {
+      const sd = thumbnailSourceRank(a.source) - thumbnailSourceRank(b.source)
+      if (sd !== 0) return sd
+      const vd = thumbnailViewRank(a.view) - thumbnailViewRank(b.view)
+      if (vd !== 0) return vd
+      return (a.position ?? 0) - (b.position ?? 0)
+    })[0]
+  return candidate?.image_url ?? fallbackUrl
 }
 
 export function resolveGalleryImagesForColour(

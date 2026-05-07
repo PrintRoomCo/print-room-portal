@@ -10,6 +10,7 @@ import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
+import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
 import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
@@ -43,14 +44,14 @@ export default async function ShopPage({
   // Catalogue-scoped product ids
   const { data: catItems } = await admin
     .from('b2b_catalogue_items')
-    .select('source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+    .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
     .eq('b2b_catalogues.organization_id', context.organizationId)
     .eq('b2b_catalogues.is_active', true)
     .eq('is_active', true)
 
-  const scopedProductIds = Array.from(
-    new Set((catItems ?? []).map((r) => r.source_product_id as string)),
-  )
+  const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
+  const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
+  const scopedProductIds = Array.from(new Set(catItemRows.map((r) => r.source_product_id)))
 
   if (scopedProductIds.length === 0) {
     return (
@@ -97,7 +98,27 @@ export default async function ShopPage({
   const qtyByProduct: Record<string, number> = Object.fromEntries(
     rows.map((r) => [r.id, r.moq ?? 1]),
   )
-  const { prices } = await effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct)
+  const scopedItemIds = catItemRows
+    .filter((r) => productIds.includes(r.source_product_id))
+    .map((r) => r.id)
+  const [{ prices }, { data: catalogueImageRows }] = await Promise.all([
+    effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
+    scopedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_images')
+          .select('catalogue_item_id, view, source, position, image_url, color_swatch_id')
+          .in('catalogue_item_id', scopedItemIds)
+      : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
+  ])
+
+  const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
+  for (const row of (catalogueImageRows ?? []) as CatalogueItemImageRow[]) {
+    const productId = productIdByItemId.get(row.catalogue_item_id)
+    if (!productId) continue
+    const list = imagesByProduct.get(productId) ?? []
+    list.push(row)
+    imagesByProduct.set(productId, list)
+  }
 
   const productsWithStock = rows.map((p) => {
     const price = prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
@@ -105,7 +126,7 @@ export default async function ShopPage({
       id: p.id,
       name: p.name,
       sku: p.sku,
-      image_url: p.image_url,
+      image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
       from_unit_price: price.unitPrice,
       price_status: price.status,
       has_stock: price.hasStock,
