@@ -101,6 +101,9 @@ export function ProductDetailClient({
   const [pricingLoading, setPricingLoading] = useState(false)
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [decorationPrices, setDecorationPrices] = useState<Record<string, number>>({})
+  const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     if (!Number.isInteger(qty) || qty <= 0) return
     if (priceTimer.current) clearTimeout(priceTimer.current)
@@ -124,6 +127,43 @@ export function ProductDetailClient({
     }
   }, [qty, product.id])
 
+  useEffect(() => {
+    const recalcItems = decorations
+      .filter((d) => d.recalcInputs != null)
+      .map((d) => ({
+        linkId: d.linkId,
+        placementKey: d.recalcInputs!.placementKey,
+        colourCount: d.recalcInputs!.colourCount,
+      }))
+    if (recalcItems.length === 0) return
+    if (!Number.isInteger(qty) || qty <= 0) return
+    if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
+    let cancelled = false
+    decorationPriceTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/shop/decoration-pricing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qty, items: recalcItems }),
+        })
+        if (res.ok && !cancelled) {
+          const json = (await res.json()) as { prices: Record<string, number | null> }
+          const resolved: Record<string, number> = {}
+          for (const [linkId, price] of Object.entries(json.prices)) {
+            if (price != null) resolved[linkId] = price
+          }
+          setDecorationPrices(resolved)
+        }
+      } catch {
+        // network error — keep existing prices
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
+    }
+  }, [qty, decorations])
+
   const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [selectedLinkIds, setSelectedLinkIds] = useState<ReadonlySet<string>>(
@@ -135,8 +175,8 @@ export function ProductDetailClient({
     [decorations, selectedLinkIds],
   )
   const decorationPerUnit = useMemo(
-    () => selectedDecorations.reduce((s, d) => s + d.unitPrice, 0),
-    [selectedDecorations],
+    () => selectedDecorations.reduce((s, d) => s + (decorationPrices[d.linkId] ?? d.unitPrice), 0),
+    [selectedDecorations, decorationPrices],
   )
 
   function showToast(msg: string) {
@@ -155,7 +195,7 @@ export function ProductDetailClient({
       name: d.name,
       method: d.method,
       positionLabel: d.positionLabel,
-      unitPrice: d.unitPrice,
+      unitPrice: decorationPrices[d.linkId] ?? d.unitPrice,
       artworkUrl: d.artworkUrl,
       snapshotUrl: d.snapshotUrl,
     }))
