@@ -101,7 +101,13 @@ export function ProductDetailClient({
   const [pricingLoading, setPricingLoading] = useState(false)
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [decorationPrices, setDecorationPrices] = useState<Record<string, number>>({})
+  // Decoration prices keyed by qty bucket: { [qty]: { [linkId]: unitPrice } }
+  // Populated for: every bracket's min_quantity + the current qty.
+  // For decorations without recalcInputs (embroidery + legacy), the static
+  // d.unitPrice is used as a fallback.
+  const [decorationPricesByQty, setDecorationPricesByQty] = useState<
+    Record<number, Record<string, number>>
+  >({})
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -137,6 +143,12 @@ export function ProductDetailClient({
       }))
     if (recalcItems.length === 0) return
     if (!Number.isInteger(qty) || qty <= 0) return
+
+    // Probe each bracket's representative qty + the current qty.
+    const probeQtys = Array.from(
+      new Set([...brackets.map((b) => b.min_quantity), qty].filter((q) => q >= 1)),
+    )
+
     if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
     let cancelled = false
     decorationPriceTimer.current = setTimeout(async () => {
@@ -144,15 +156,22 @@ export function ProductDetailClient({
         const res = await fetch('/api/shop/decoration-pricing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ qty, items: recalcItems }),
+          body: JSON.stringify({ qtys: probeQtys, items: recalcItems }),
         })
         if (res.ok && !cancelled) {
-          const json = (await res.json()) as { prices: Record<string, number | null> }
-          const resolved: Record<string, number> = {}
-          for (const [linkId, price] of Object.entries(json.prices)) {
-            if (price != null) resolved[linkId] = price
+          const json = (await res.json()) as {
+            pricesByQty: Record<string, Record<string, number | null>>
           }
-          setDecorationPrices(resolved)
+          const resolved: Record<number, Record<string, number>> = {}
+          for (const [qStr, links] of Object.entries(json.pricesByQty ?? {})) {
+            const q = Number(qStr)
+            const inner: Record<string, number> = {}
+            for (const [linkId, price] of Object.entries(links)) {
+              if (price != null) inner[linkId] = price
+            }
+            resolved[q] = inner
+          }
+          setDecorationPricesByQty(resolved)
         }
       } catch {
         // network error — keep existing prices
@@ -162,7 +181,7 @@ export function ProductDetailClient({
       cancelled = true
       if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
     }
-  }, [qty, decorations])
+  }, [qty, decorations, brackets])
 
   const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -174,9 +193,34 @@ export function ProductDetailClient({
     () => decorations.filter((d) => selectedLinkIds.has(d.linkId)),
     [decorations, selectedLinkIds],
   )
+
+  // Resolve decoration unit price for a specific qty (falls back to static unitPrice
+  // for embroidery / legacy rows / cache miss).
+  const decorationPriceAt = useMemo(
+    () => (linkId: string, atQty: number, fallback: number) =>
+      decorationPricesByQty[atQty]?.[linkId] ?? fallback,
+    [decorationPricesByQty],
+  )
+
   const decorationPerUnit = useMemo(
-    () => selectedDecorations.reduce((s, d) => s + (decorationPrices[d.linkId] ?? d.unitPrice), 0),
-    [selectedDecorations, decorationPrices],
+    () =>
+      selectedDecorations.reduce(
+        (s, d) => s + decorationPriceAt(d.linkId, qty, d.unitPrice),
+        0,
+      ),
+    [selectedDecorations, decorationPriceAt, qty],
+  )
+
+  // For rendering volume bracket rows: sum of selected decorations at that bracket's qty.
+  const decorationPerUnitAtBracket = useMemo(
+    () =>
+      brackets.map((b) =>
+        selectedDecorations.reduce(
+          (s, d) => s + decorationPriceAt(d.linkId, b.min_quantity, d.unitPrice),
+          0,
+        ),
+      ),
+    [brackets, selectedDecorations, decorationPriceAt],
   )
 
   function showToast(msg: string) {
@@ -195,7 +239,7 @@ export function ProductDetailClient({
       name: d.name,
       method: d.method,
       positionLabel: d.positionLabel,
-      unitPrice: decorationPrices[d.linkId] ?? d.unitPrice,
+      unitPrice: decorationPriceAt(d.linkId, qty, d.unitPrice),
       artworkUrl: d.artworkUrl,
       snapshotUrl: d.snapshotUrl,
     }))
@@ -285,13 +329,22 @@ export function ProductDetailClient({
             <div className="rounded-xl border border-gray-100 bg-white p-3 text-xs">
               <p className="mb-2 font-medium text-gray-700">Volume pricing</p>
               <ul className="grid grid-cols-2 gap-y-1 text-gray-600 md:grid-cols-3">
-                {brackets.map((b, i) => (
-                  <li key={i}>
-                    {b.min_quantity}
-                    {b.max_quantity ? `–${b.max_quantity}` : '+'} @ ${Number(b.unit_price).toFixed(2)}
-                  </li>
-                ))}
+                {brackets.map((b, i) => {
+                  const allInUnit = Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0)
+                  return (
+                    <li key={i}>
+                      {b.min_quantity}
+                      {b.max_quantity ? `–${b.max_quantity}` : '+'} @ ${allInUnit.toFixed(2)}
+                    </li>
+                  )
+                })}
               </ul>
+              {selectedDecorations.length > 0 && (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  Includes {selectedDecorations.length} decoration
+                  {selectedDecorations.length === 1 ? '' : 's'}.
+                </p>
+              )}
             </div>
           )}
 
@@ -323,8 +376,11 @@ export function ProductDetailClient({
                     lines: [
                       {
                         qty,
-                        unitEffective: pricing.unit_price,
-                        decorationPerUnit,
+                        // Roll decoration into the per-unit price so the
+                        // standalone "Decoration" line hides — decoration
+                        // cost is already shown inside each volume bracket.
+                        unitEffective: pricing.unit_price + decorationPerUnit,
+                        decorationPerUnit: 0,
                       },
                     ],
                     gstRate: 0.15,
