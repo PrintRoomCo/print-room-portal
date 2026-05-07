@@ -47,17 +47,21 @@ export function ProductImageGallery({
     })
   }, [fallbackUrl, ordered])
 
-  const activeView = useMemo(() => {
-    const match = ordered.find((img) => img.url === activeUrl)
-    return match?.view?.toLowerCase() ?? null
-  }, [ordered, activeUrl])
+  const activeImage = useMemo(
+    () => ordered.find((img) => img.url === activeUrl) ?? null,
+    [ordered, activeUrl],
+  )
+  const activeView = activeImage?.view?.toLowerCase() ?? null
 
+  // A designer_snapshot already has decorations baked in by staff — overlaying
+  // live artwork on top would double-render (and any CDN/browser cache lag on
+  // the snapshot URL would offset the two copies). Trust the snapshot as-is.
   const activeOverlays = useMemo(
     () =>
-      activeView
+      activeView && activeImage?.source !== 'designer_snapshot'
         ? overlays.filter((o) => o.printAreaView.toLowerCase() === activeView)
         : [],
-    [overlays, activeView],
+    [overlays, activeView, activeImage],
   )
 
   if (!activeUrl) {
