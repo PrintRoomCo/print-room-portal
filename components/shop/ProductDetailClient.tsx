@@ -74,8 +74,12 @@ export function ProductDetailClient({
     firstVariant?.color_swatch_id ?? null
   )
   const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
-  const [multiSize, setMultiSize] = useState(false)
   const [sizeQuantities, setSizeQuantities] = useState<Record<number, number>>({})
+
+  const multiSize = useMemo(
+    () => new Set(variants.filter((v) => v.size_id != null).map((v) => v.size_id)).size > 1,
+    [variants],
+  )
 
   const selectedVariant = useMemo(
     () =>
@@ -364,40 +368,14 @@ export function ProductDetailClient({
         {/* Info + controls */}
         <div className="space-y-6">
           <div>
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
-                <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-                {product.sizing_type && product.sizing_type !== 'multi_size' && (
-                  <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
-                    {product.sizing_type.replace(/_/g, ' ')}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setMultiSize((v) => !v)}
-                aria-pressed={multiSize ? 'true' : 'false'}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  multiSize
-                    ? 'border-pr-blue bg-pr-blue/10 text-pr-blue'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
-                title="Switch between single-size and multi-size order"
-              >
-                <span
-                  className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                    multiSize ? 'bg-pr-blue' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
-                      multiSize ? 'translate-x-3.5' : 'translate-x-0.5'
-                    }`}
-                  />
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
+              <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+              {product.sizing_type && product.sizing_type !== 'multi_size' && (
+                <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
+                  {product.sizing_type.replace(/_/g, ' ')}
                 </span>
-                {multiSize ? 'Order multiple sizes' : 'Order single size'}
-              </button>
+              )}
             </div>
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
