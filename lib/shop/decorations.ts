@@ -1,5 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+const ARTWORK_BUCKET = 'org-artworks'
+
+export interface DecorationOverlay {
+  printAreaView: string
+  rect: { x: number; y: number; w: number; h: number }
+  placement: { x: number; y: number; w: number; h: number; rotation_deg: number }
+  artworkUrl: string
+}
+
 export interface DecorationOption {
   /** b2b_catalogue_item_decorations.id */
   linkId: string
@@ -33,6 +42,11 @@ export interface DecorationOption {
     colourCount: number
     placementKey: string
   } | null
+  /**
+   * Live PDP overlay payload — null when staff hasn't assigned a print area
+   * or any required placement coord is missing.
+   */
+  overlay: DecorationOverlay | null
 }
 
 interface RawLinkRow {
@@ -42,10 +56,35 @@ interface RawLinkRow {
   unit_price_override: number | string | null
   snapshot_url: string | null
   snapshot_color_swatch_id: string | null
+  print_area_id: string | null
+  placement_x: number | string | null
+  placement_y: number | string | null
+  placement_w: number | string | null
+  placement_h: number | string | null
+  placement_rotation_deg: number | string | null
   decoration:
     | RawDecoration
     | RawDecoration[]
     | null
+  print_area:
+    | RawPrintArea
+    | RawPrintArea[]
+    | null
+}
+
+interface RawPrintArea {
+  id: string
+  view: string | null
+  rect_x: number | string | null
+  rect_y: number | string | null
+  rect_w: number | string | null
+  rect_h: number | string | null
+}
+
+interface RawArtworkVariant {
+  variant_type: string
+  status: string
+  storage_path: string | null
 }
 
 interface RawDecoration {
@@ -59,13 +98,20 @@ interface RawDecoration {
   height_mm: number | null
   colour_count: number | null
   artwork:
-    | { id: string; name: string; public_url: string }
-    | { id: string; name: string; public_url: string }[]
+    | RawArtwork
+    | RawArtwork[]
     | null
   location:
     | { id: string; location: string; placement_key: string | null }
     | { id: string; location: string; placement_key: string | null }[]
     | null
+}
+
+interface RawArtwork {
+  id: string
+  name: string
+  public_url: string
+  variants: RawArtworkVariant[] | null
 }
 
 const LINK_SELECT = `
@@ -75,6 +121,12 @@ const LINK_SELECT = `
   unit_price_override,
   snapshot_url,
   snapshot_color_swatch_id,
+  print_area_id,
+  placement_x,
+  placement_y,
+  placement_w,
+  placement_h,
+  placement_rotation_deg,
   decoration:org_decorations!b2b_catalogue_item_decorations_org_decoration_id_fkey(
     id,
     organization_id,
@@ -88,13 +140,26 @@ const LINK_SELECT = `
     artwork:organization_artworks!org_decorations_artwork_id_fkey(
       id,
       name,
-      public_url
+      public_url,
+      variants:organization_artwork_variants!organization_artwork_variants_artwork_id_fkey(
+        variant_type,
+        status,
+        storage_path
+      )
     ),
     location:decoration_locations!org_decorations_decoration_location_id_fkey(
       id,
       location,
       placement_key
     )
+  ),
+  print_area:product_print_areas!b2b_catalogue_item_decorations_print_area_id_fkey(
+    id,
+    view,
+    rect_x,
+    rect_y,
+    rect_w,
+    rect_h
   )
 `
 
@@ -127,6 +192,7 @@ export async function loadCatalogueItemDecorations(
     const art = pickOne(dec.artwork)
     if (!art) continue
     const loc = pickOne(dec.location)
+    const printArea = pickOne(row.print_area)
     const baseUnitPrice = Number(dec.unit_price)
     const overridePrice =
       row.unit_price_override != null ? Number(row.unit_price_override) : null
@@ -147,6 +213,9 @@ export async function loadCatalogueItemDecorations(
             placementKey: loc.placement_key,
           }
         : null
+
+    const overlay = buildOverlay(admin, row, printArea, art)
+
     out.push({
       linkId: row.id,
       decorationId: dec.id,
@@ -161,7 +230,59 @@ export async function loadCatalogueItemDecorations(
       isDefault: row.is_default === true,
       sortOrder: row.sort_order ?? 0,
       recalcInputs,
+      overlay,
     })
   }
   return out
+}
+
+function buildOverlay(
+  admin: SupabaseClient,
+  row: RawLinkRow,
+  printArea: RawPrintArea | null,
+  artwork: RawArtwork,
+): DecorationOverlay | null {
+  if (!printArea || !printArea.view) return null
+  const rectX = toNum(printArea.rect_x)
+  const rectY = toNum(printArea.rect_y)
+  const rectW = toNum(printArea.rect_w)
+  const rectH = toNum(printArea.rect_h)
+  const placeX = toNum(row.placement_x)
+  const placeY = toNum(row.placement_y)
+  const placeW = toNum(row.placement_w)
+  const placeH = toNum(row.placement_h)
+  if (
+    rectX == null ||
+    rectY == null ||
+    rectW == null ||
+    rectH == null ||
+    placeX == null ||
+    placeY == null ||
+    placeW == null ||
+    placeH == null
+  ) {
+    return null
+  }
+  const rotation = toNum(row.placement_rotation_deg) ?? 0
+
+  const transparentVariant = (artwork.variants ?? []).find(
+    (v) => v.variant_type === 'transparent_png' && v.status === 'ready' && v.storage_path,
+  )
+  const variantUrl = transparentVariant?.storage_path
+    ? admin.storage.from(ARTWORK_BUCKET).getPublicUrl(transparentVariant.storage_path).data
+        .publicUrl
+    : null
+
+  return {
+    printAreaView: printArea.view,
+    rect: { x: rectX, y: rectY, w: rectW, h: rectH },
+    placement: { x: placeX, y: placeY, w: placeW, h: placeH, rotation_deg: rotation },
+    artworkUrl: variantUrl ?? artwork.public_url,
+  }
+}
+
+function toNum(v: number | string | null | undefined): number | null {
+  if (v == null) return null
+  const n = typeof v === 'string' ? Number(v) : v
+  return Number.isFinite(n) ? n : null
 }

@@ -9,11 +9,20 @@ import {
 
 export type GalleryImage = CatalogueAwareGalleryImage
 
+export interface GalleryOverlay {
+  linkId: string
+  printAreaView: string
+  rect: { x: number; y: number; w: number; h: number }
+  placement: { x: number; y: number; w: number; h: number; rotation_deg: number }
+  artworkUrl: string
+}
+
 interface Props {
   images: GalleryImage[]
   fallbackUrl: string | null
   productName: string
   selectedColorSwatchId: string | null
+  overlays?: GalleryOverlay[]
 }
 
 export function ProductImageGallery({
@@ -21,6 +30,7 @@ export function ProductImageGallery({
   fallbackUrl,
   productName,
   selectedColorSwatchId,
+  overlays = [],
 }: Props) {
   const ordered = useMemo(
     () => resolveGalleryImagesForColour(images, selectedColorSwatchId),
@@ -36,6 +46,19 @@ export function ProductImageGallery({
       return ordered[0]?.url ?? fallbackUrl ?? null
     })
   }, [fallbackUrl, ordered])
+
+  const activeView = useMemo(() => {
+    const match = ordered.find((img) => img.url === activeUrl)
+    return match?.view?.toLowerCase() ?? null
+  }, [ordered, activeUrl])
+
+  const activeOverlays = useMemo(
+    () =>
+      activeView
+        ? overlays.filter((o) => o.printAreaView.toLowerCase() === activeView)
+        : [],
+    [overlays, activeView],
+  )
 
   if (!activeUrl) {
     return (
@@ -57,6 +80,32 @@ export function ProductImageGallery({
           className="object-contain p-6"
           priority
         />
+        {activeOverlays.map((o) => {
+          const left = (o.rect.x + o.placement.x * o.rect.w) * 100
+          const top = (o.rect.y + o.placement.y * o.rect.h) * 100
+          const width = o.placement.w * o.rect.w * 100
+          const height = o.placement.h * o.rect.h * 100
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={o.linkId}
+              src={o.artworkUrl}
+              alt=""
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: `${left}%`,
+                top: `${top}%`,
+                width: `${width}%`,
+                height: `${height}%`,
+                transform: `rotate(${o.placement.rotation_deg}deg)`,
+                transformOrigin: 'top left',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+              }}
+            />
+          )
+        })}
       </div>
       {ordered.length > 1 && (
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Product views">

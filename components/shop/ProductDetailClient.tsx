@@ -10,7 +10,7 @@ import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
-import { ProductImageGallery, type GalleryImage } from './ProductImageGallery'
+import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import type { CartLineDecoration } from '@/lib/cart/types'
 
@@ -219,6 +219,24 @@ export function ProductDetailClient({
     [decorations, selectedLinkIds],
   )
 
+  const galleryOverlays = useMemo<GalleryOverlay[]>(
+    () =>
+      selectedDecorations.flatMap((d) =>
+        d.overlay
+          ? [
+              {
+                linkId: d.linkId,
+                printAreaView: d.overlay.printAreaView,
+                rect: d.overlay.rect,
+                placement: d.overlay.placement,
+                artworkUrl: d.overlay.artworkUrl,
+              },
+            ]
+          : [],
+      ),
+    [selectedDecorations],
+  )
+
   // Resolve decoration unit price for a specific qty (falls back to static unitPrice
   // for embroidery / legacy rows / cache miss).
   const decorationPriceAt = useMemo(
@@ -340,6 +358,7 @@ export function ProductDetailClient({
           fallbackUrl={product.image_url}
           productName={product.name}
           selectedColorSwatchId={colorSwatchId}
+          overlays={galleryOverlays}
         />
 
         {/* Info + controls */}
