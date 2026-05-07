@@ -185,8 +185,9 @@ export function ProductDetailClient({
 
   const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [selectedLinkIds, setSelectedLinkIds] = useState<ReadonlySet<string>>(
-    () => new Set(decorations.filter((d) => d.isDefault).map((d) => d.linkId)),
+  const selectedLinkIds = useMemo<ReadonlySet<string>>(
+    () => new Set(decorations.map((d) => d.linkId)),
+    [decorations],
   )
 
   const selectedDecorations = useMemo(
@@ -318,11 +319,7 @@ export function ProductDetailClient({
           </div>
 
           {decorations.length > 0 && (
-            <DecorationSwatchPicker
-              decorations={decorations}
-              selectedLinkIds={selectedLinkIds}
-              onChange={setSelectedLinkIds}
-            />
+            <DecorationSwatchPicker decorations={decorations} />
           )}
 
           {brackets.length > 0 && (
