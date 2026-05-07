@@ -113,10 +113,17 @@ function compareCandidates(
   return compareImages(a, b)
 }
 
+const VIEW_ORDER = ['hero', 'front', 'back', 'left_sleeve', 'right_sleeve', 'left', 'right', 'top', 'bottom', 'side']
+
+function viewOrderRank(view: string | null | undefined) {
+  if (!view) return VIEW_ORDER.length
+  const idx = VIEW_ORDER.indexOf(view.toLowerCase())
+  return idx === -1 ? VIEW_ORDER.length : idx
+}
+
 function compareImages(a: CatalogueAwareGalleryImage, b: CatalogueAwareGalleryImage) {
-  const heroFirst = (img: CatalogueAwareGalleryImage) => (img.view === 'hero' ? 0 : 1)
-  const heroDelta = heroFirst(a) - heroFirst(b)
-  if (heroDelta !== 0) return heroDelta
+  const viewRankDelta = viewOrderRank(a.view) - viewOrderRank(b.view)
+  if (viewRankDelta !== 0) return viewRankDelta
 
   const positionDelta =
     (a.position ?? Number.MAX_SAFE_INTEGER) -
