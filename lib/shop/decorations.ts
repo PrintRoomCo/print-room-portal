@@ -21,6 +21,18 @@ export interface DecorationOption {
   snapshotColorSwatchId: string | null
   isDefault: boolean
   sortOrder: number
+  /**
+   * Inputs needed to recompute the unit price at customer qty for screen-print.
+   * Only populated when method = 'screenprint' AND all required inputs are present.
+   * Null for embroidery and any decoration created before the autofill flow.
+   */
+  recalcInputs: {
+    method: 'screenprint'
+    widthMm: number
+    heightMm: number
+    colourCount: number
+    placementKey: string
+  } | null
 }
 
 interface RawLinkRow {
@@ -43,6 +55,9 @@ interface RawDecoration {
   decoration_method: string
   unit_price: number | string
   is_active: boolean
+  width_mm: number | null
+  height_mm: number | null
+  colour_count: number | null
   artwork:
     | { id: string; name: string; public_url: string }
     | { id: string; name: string; public_url: string }[]
@@ -67,6 +82,9 @@ const LINK_SELECT = `
     decoration_method,
     unit_price,
     is_active,
+    width_mm,
+    height_mm,
+    colour_count,
     artwork:organization_artworks!org_decorations_artwork_id_fkey(
       id,
       name,
@@ -115,6 +133,20 @@ export async function loadCatalogueItemDecorations(
     const unitPrice = Number.isFinite(overridePrice as number)
       ? (overridePrice as number)
       : baseUnitPrice
+    const recalcInputs =
+      dec.decoration_method === 'screenprint' &&
+      dec.width_mm != null &&
+      dec.height_mm != null &&
+      dec.colour_count != null &&
+      loc?.placement_key != null
+        ? {
+            method: 'screenprint' as const,
+            widthMm: dec.width_mm,
+            heightMm: dec.height_mm,
+            colourCount: dec.colour_count,
+            placementKey: loc.placement_key,
+          }
+        : null
     out.push({
       linkId: row.id,
       decorationId: dec.id,
@@ -128,6 +160,7 @@ export async function loadCatalogueItemDecorations(
       snapshotColorSwatchId: row.snapshot_color_swatch_id,
       isDefault: row.is_default === true,
       sortOrder: row.sort_order ?? 0,
+      recalcInputs,
     })
   }
   return out
