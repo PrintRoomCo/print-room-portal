@@ -114,7 +114,7 @@ export default async function ProductDetailPage({
       .eq('catalogue_item_id', catItem.id)
       .order('sort_order', { ascending: true, nullsFirst: false }),
     admin.from('b2b_catalogue_item_images')
-      .select('id, image_url, view, alt_text, position, color_swatch_id')
+      .select('id, image_url, view, alt_text, position, color_swatch_id, source')
       .eq('catalogue_item_id', catItem.id)
       .order('position', { ascending: true }),
     loadCatalogueItemDecorations(admin, catItem.id),
@@ -175,6 +175,7 @@ export default async function ProductDetailPage({
     alt_text: string | null
     position: number | null
     color_swatch_id: string | null
+    source: 'designer_snapshot' | 'staff_upload' | null
   }>)
     .filter((r) => r.image_url)
     .map((r) => ({
@@ -185,6 +186,7 @@ export default async function ProductDetailPage({
       position: r.position,
       color_swatch_id: r.color_swatch_id,
       scope: 'catalogue' as const,
+      source: r.source,
     }))
 
   const masterImages = ((imageRows ?? []) as Array<{
