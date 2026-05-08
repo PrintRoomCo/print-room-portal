@@ -17,6 +17,13 @@ interface CheckoutClientProps {
   customerCode: string | null
   paymentTerms: string | null
   defaultDepositPercent: number | null
+  /**
+   * Per-buyer default ship-to. When set AND the store is in `stores`, every
+   * line is locked to it (staff intent: this buyer always ships to this store).
+   * When null, the parent falls back to `stores[0]` so the dropdown is still
+   * pre-populated but editable.
+   */
+  defaultStoreId: string | null
 }
 
 interface CheckoutResponse {
@@ -47,16 +54,22 @@ export function CheckoutClient({
   customerCode,
   paymentTerms,
   defaultDepositPercent,
+  defaultStoreId: buyerDefaultStoreId,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
 
   const idempotencyKey = useRef<string>(crypto.randomUUID())
 
-  const defaultStoreId = stores[0]?.id ?? null
+  const buyerDefaultIsAvailable =
+    buyerDefaultStoreId != null && stores.some((s) => s.id === buyerDefaultStoreId)
+  const initialStoreId = buyerDefaultIsAvailable
+    ? buyerDefaultStoreId
+    : stores[0]?.id ?? null
+  const lockToBuyerDefault = buyerDefaultIsAvailable
   const [perLineShipTo, setPerLineShipTo] = useState<Record<string, string | null>>(() => {
     const m: Record<string, string | null> = {}
-    for (const l of cart.lines) m[l.lineId] = defaultStoreId
+    for (const l of cart.lines) m[l.lineId] = initialStoreId
     return m
   })
 
@@ -253,7 +266,7 @@ export function CheckoutClient({
               onChange={(next) =>
                 setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
               }
-              disabled={submitting !== false}
+              disabled={submitting !== false || lockToBuyerDefault}
             />
           ))}
         </div>

@@ -43,7 +43,7 @@ export async function getCompanyAccess(
   // 2. Get organization membership
   const { data: orgMembership } = await supabase
     .from('user_organizations')
-    .select('organization_id, role')
+    .select('organization_id, role, default_store_id')
     .eq('user_id', userId)
     .single()
 
@@ -67,6 +67,7 @@ export async function getCompanyAccess(
       isCompanyUser: false,
       leaversEnabled,
       hasTrackedInventory: false,
+      defaultStoreId: null,
     })
   }
 
@@ -140,6 +141,7 @@ export async function getCompanyAccess(
     isCompanyUser: true,
     leaversEnabled,
     hasTrackedInventory,
+    defaultStoreId: orgMembership.default_store_id ?? null,
   })
 }
 
@@ -159,6 +161,7 @@ interface AccessInput {
   isCompanyUser: boolean
   leaversEnabled: boolean
   hasTrackedInventory: boolean
+  defaultStoreId: string | null
 }
 
 function buildAccess(input: AccessInput): B2BCustomerAccess {
@@ -224,5 +227,6 @@ async function buildAccessForIndividual(
     isCompanyUser: false,
     leaversEnabled: false,
     hasTrackedInventory: false,
+    defaultStoreId: null,
   })
 }

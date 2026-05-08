@@ -37,6 +37,7 @@ function makeAccess(overrides: Partial<B2BCustomerAccess>): B2BCustomerAccess {
     tierDiscount: 0,
     pricingMode: 'catalogue',
     hasTrackedInventory: false,
+    defaultStoreId: null,
     ...overrides,
   }
 }
