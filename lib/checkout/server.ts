@@ -15,6 +15,8 @@ export interface B2BCustomerContext {
   paymentTerms: string | null
   defaultDepositPercent: number | null
   storeIds: string[]
+  /** Per-buyer default ship-to store, set by staff in the b2b-accounts members panel. Null = no default. */
+  defaultStoreId: string | null
 }
 
 export type AuthFailureKind =
@@ -42,7 +44,7 @@ export async function requireB2BCustomer(
 
   const { data: membership } = await admin
     .from('user_organizations')
-    .select('organization_id')
+    .select('organization_id, default_store_id')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) return { kind: 'no_org' }
@@ -81,6 +83,7 @@ export async function requireB2BCustomer(
       paymentTerms: b2b?.payment_terms ?? null,
       defaultDepositPercent: b2b?.default_deposit_percent ?? null,
       storeIds: (stores ?? []).map((s) => s.id),
+      defaultStoreId: membership.default_store_id ?? null,
     } satisfies B2BCustomerContext,
   }
 }

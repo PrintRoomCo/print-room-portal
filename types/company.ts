@@ -46,4 +46,7 @@ export interface B2BCustomerAccess {
    * Tolerant of the table not existing yet — falls back to false.
    */
   hasTrackedInventory: boolean
+
+  /** Per-buyer default ship-to store, set by staff. Null = no default. */
+  defaultStoreId: string | null
 }
