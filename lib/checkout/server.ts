@@ -13,6 +13,8 @@ export interface B2BCustomerContext {
   b2bAccountId: string | null
   tierLevel: number | null
   paymentTerms: string | null
+  /** Free-text contract terms; surfaced in checkout + email when paymentTerms='contract'. */
+  contractNotes: string | null
   defaultDepositPercent: number | null
   storeIds: string[]
 }
@@ -52,7 +54,7 @@ export async function requireB2BCustomer(
       .select('id, name, customer_code')
       .eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
-      .select('id, tier_level, payment_terms, default_deposit_percent')
+      .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes')
       .eq('organization_id', membership.organization_id).maybeSingle(),
     admin.from('stores')
       .select('id')
@@ -79,6 +81,7 @@ export async function requireB2BCustomer(
       b2bAccountId: b2b?.id ?? null,
       tierLevel: b2b?.tier_level ?? null,
       paymentTerms: b2b?.payment_terms ?? null,
+      contractNotes: (b2b as { contract_notes?: string | null } | null)?.contract_notes ?? null,
       defaultDepositPercent: b2b?.default_deposit_percent ?? null,
       storeIds: (stores ?? []).map((s) => s.id),
     } satisfies B2BCustomerContext,

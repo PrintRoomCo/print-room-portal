@@ -6,6 +6,11 @@ export interface OrderConfirmationParams {
   orderRef: string
   totalAmount: number
   paymentTerms: string | null
+  /**
+   * Plain-text contract notes from b2b_accounts.contract_notes. Surfaced under
+   * the payment-terms line when paymentTerms === 'contract'. Null otherwise.
+   */
+  contractNotes?: string | null
   requiredBy: string | null
   lines: Array<{
     productName: string
@@ -13,6 +18,21 @@ export interface OrderConfirmationParams {
     quantity: number
     unitPrice: number
   }>
+}
+
+function formatPaymentTerms(terms: string | null | undefined): string {
+  switch (terms) {
+    case 'prepay':
+      return 'Prepaid (100% upfront)'
+    case 'net20':
+      return 'Net 20 days'
+    case 'net30':
+      return 'Net 30 days'
+    case 'contract':
+      return 'Contract terms'
+    default:
+      return terms ?? 'as per agreement'
+  }
 }
 
 function formatMoney(n: number): string {
@@ -31,7 +51,11 @@ function escapeHtml(value: string): string {
 export async function sendOrderConfirmation(
   params: OrderConfirmationParams
 ): Promise<SendEmailResult> {
-  const paymentTerms = params.paymentTerms ?? 'as per agreement'
+  const paymentTerms = formatPaymentTerms(params.paymentTerms)
+  const contractNotes =
+    params.paymentTerms === 'contract' && params.contractNotes
+      ? params.contractNotes
+      : null
   const requiredBy = params.requiredBy ?? null
   const lineRowsHtml = params.lines
     .map((line) => {
@@ -86,7 +110,8 @@ export async function sendOrderConfirmation(
           </table>
           <div style="margin:18px 0 0;padding:14px 16px;border-radius:10px;background-color:#f3f4f6;font-size:13px;color:#374151;">
             <div>Payment terms: <strong>${escapeHtml(paymentTerms)}</strong></div>
-            ${requiredBy ? `<div>Required by: <strong>${escapeHtml(requiredBy)}</strong></div>` : ''}
+            ${contractNotes ? `<div style="margin-top:6px;color:#4b5563;">${escapeHtml(contractNotes)}</div>` : ''}
+            ${requiredBy ? `<div style="margin-top:6px;">Required by: <strong>${escapeHtml(requiredBy)}</strong></div>` : ''}
           </div>
           <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#4b5563;">Questions? Reply to this email or contact hello@theprint-room.co.nz.</p>
           <p style="margin:16px 0 0;font-size:13px;color:#111827;">Thanks,<br/><strong>The Print Room Team</strong></p>
@@ -110,6 +135,7 @@ export async function sendOrderConfirmation(
     `${textLines}\n\n` +
     `Total: ${formatMoney(params.totalAmount)}\n` +
     `Payment terms: ${paymentTerms}\n` +
+    (contractNotes ? `${contractNotes}\n` : '') +
     (requiredBy ? `Required by: ${requiredBy}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room Team`

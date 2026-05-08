@@ -472,6 +472,7 @@ export async function submitCustomerOrder(
         orderRef: order_ref,
         totalAmount: fallbackTotal,
         paymentTerms: emailPaymentTerms,
+        contractNotes: input.context.contractNotes,
         requiredBy: emailRequiredBy,
         lines: fallbackLines,
       })
