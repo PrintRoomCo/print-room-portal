@@ -72,7 +72,7 @@ export default function OrderTracker() {
       {/* Header */}
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
         <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Order tracker</p>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Projects</h1>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900">Tracking</h1>
         <p className="mt-1 text-sm text-gray-600">
           Track active production work and revisit completed orders.
         </p>
@@ -120,13 +120,13 @@ export default function OrderTracker() {
         </div>
       ) : trackers.length > 0 ? (
         <PortalEmptyState
-          title="No matching projects"
+          title="No matches"
           body={`Try ${search ? 'a different search term' : 'changing the filter'} to widen the list.`}
         />
       ) : (
         <PortalEmptyState
-          title="No projects yet"
-          body="When your projects enter production, they will appear here with live status updates."
+          title="Nothing tracked yet"
+          body="When your orders enter production, they will appear here with live status updates."
           actionHref="/shop"
           actionLabel="Browse catalogue"
         />

@@ -490,7 +490,7 @@ export function AccountClient() {
                 )}
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <Link
-                    href={`/projects?location=${encodeURIComponent(store.id)}`}
+                    href={`/tracking?location=${encodeURIComponent(store.id)}`}
                     className="text-sm text-[rgb(var(--color-primary))] hover:underline"
                   >
                     View orders for this location

@@ -30,7 +30,8 @@ export async function proxy(request: NextRequest) {
     '/inventory',
     '/my-collections',
     '/order-tracker',
-    '/projects',
+    '/projects', // legacy alias; redirected to /tracking via next.config.ts
+    '/tracking',
     '/proofs',
     '/quote-requests',
     '/shop',
@@ -80,6 +81,7 @@ export const config = {
     '/inventory/:path*',
     '/order-tracker/:path*',
     '/projects/:path*',
+    '/tracking/:path*',
     '/proofs/:path*',
     '/quote-requests/:path*',
     '/shop/:path*',

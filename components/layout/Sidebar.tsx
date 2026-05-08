@@ -16,9 +16,9 @@ interface SidebarProps {
 // Cart is intentionally NOT a sidebar entry — it's a floating top-right chip (see CartChip).
 const allNavItems = [
   { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Projects', href: '/projects', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
+  { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Catalog', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'My Quotes', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
+  { name: 'Orders', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Quote Requests', href: '/quote-requests', icon: QuoteRequestsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
   { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiresTrackedInventory: false },
