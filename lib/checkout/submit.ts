@@ -3,6 +3,8 @@ import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { pushProductionJob } from '@/lib/monday/production-job'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
+import { recordAuditEvent } from '@/lib/audit/recordEvent'
+import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -336,6 +338,24 @@ export async function submitCustomerOrder(
   const row = rowRaw as SubmitB2BOrderRow | null
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
+
+  await recordAuditEvent(
+    {
+      orgId: input.context.organizationId,
+      actorUserId: input.context.userId,
+      action: AUDIT_ACTIONS.ORDER_SUBMIT,
+      targetType: 'order',
+      targetId: order_id,
+      metadata: {
+        order_ref,
+        quote_id,
+        line_count: input.lines.length,
+        total_qty: input.lines.reduce((acc, l) => acc + l.qty, 0),
+        idempotency_key: input.idempotency_key,
+      },
+    },
+    admin,
+  )
 
   // 4. Apply per-line ship_to_store_id and the decorations snapshot. The RPC
   //    creates quote_items without ship-to or decorations; we set both here.
