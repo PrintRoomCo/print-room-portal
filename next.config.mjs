@@ -14,6 +14,13 @@ const nextConfig = {
       { protocol: 'https', hostname: 'www.dropbox.com' },
     ],
   },
+  async redirects() {
+    return [
+      // 2026-05-08 sidebar rename — keep /projects bookmarks alive for one cycle.
+      { source: '/projects', destination: '/tracking', permanent: true },
+      { source: '/projects/:path*', destination: '/tracking/:path*', permanent: true },
+    ]
+  },
 }
 
 export default nextConfig
