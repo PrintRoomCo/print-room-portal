@@ -97,6 +97,24 @@ export function ProductDetailClient({
     : undefined
   const isOutOfStock = tracksThisVariant && (availableQty ?? 0) === 0
 
+  // Total in-stock across every size for the currently selected colour.
+  // Drives the AvailabilityBadge in multi-size mode so customers see "240
+  // available" for Black, not "8 available" because S happens to be the
+  // selected size.
+  const colourTotalAvailable = useMemo<number | undefined>(() => {
+    if (!colorSwatchId) return undefined
+    let total = 0
+    let tracked = false
+    for (const v of variants) {
+      if (v.color_swatch_id !== colorSwatchId) continue
+      const qty = availability[v.variant_id]
+      if (qty === undefined) continue
+      tracked = true
+      total += qty
+    }
+    return tracked ? total : undefined
+  }, [variants, colorSwatchId, availability])
+
   const sizeRowsForColour = useMemo(() => {
     return variants
       .filter((v) => v.color_swatch_id === colorSwatchId && v.size_id != null)
@@ -401,7 +419,9 @@ export function ProductDetailClient({
           />
 
           <div className="flex items-center gap-3 flex-wrap">
-            <AvailabilityBadge availableQty={availableQty} />
+            <AvailabilityBadge
+              availableQty={multiSize ? colourTotalAvailable : availableQty}
+            />
             {product.lead_time_days != null && (
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
