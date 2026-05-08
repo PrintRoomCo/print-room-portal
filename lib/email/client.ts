@@ -23,6 +23,8 @@ export interface SendEmailParams {
 export interface SendEmailResult {
   success: boolean
   error?: string
+  /** Resend message id, present on successful sends; null when send failed. */
+  messageId?: string | null
 }
 
 /**
@@ -55,12 +57,13 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     }
 
     const result = (await response.json()) as Record<string, unknown>
+    const messageId = typeof result.id === 'string' ? result.id : null
     console.log('[Email] Sent successfully:', {
-      id: result.id,
+      id: messageId,
       to: params.to,
       subject: params.subject,
     })
-    return { success: true }
+    return { success: true, messageId }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error'
     console.error('[Email] Exception:', msg)
