@@ -1,8 +1,11 @@
 import { sendEmail, type SendEmailResult } from '@/lib/email/client'
+import { getSupabaseServer } from '@/lib/supabase'
 
 export interface OrderConfirmationParams {
   to: string
   customerName: string
+  /** orders.id — used by the email log writer. */
+  orderId: string
   orderRef: string
   totalAmount: number
   paymentTerms: string | null
@@ -114,10 +117,35 @@ export async function sendOrderConfirmation(
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room Team`
 
-  return sendEmail({
-    to: params.to,
-    subject: `Order received - ${params.orderRef}`,
-    html,
-    text,
-  })
+  let result: SendEmailResult
+  try {
+    result = await sendEmail({
+      to: params.to,
+      subject: `Order received - ${params.orderRef}`,
+      html,
+      text,
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    result = { success: false, error: message, messageId: null }
+  }
+
+  // Audit-log the send. Failure here must not bubble up.
+  try {
+    const admin = getSupabaseServer()
+    await admin.from('order_email_log').insert({
+      order_id: params.orderId,
+      email_type: 'order_confirmation',
+      recipient_email: params.to,
+      resend_message_id: result.messageId ?? null,
+      status: result.success ? 'sent' : 'failed',
+      error_message: result.success ? null : result.error ?? null,
+      payload_meta: { orderRef: params.orderRef },
+    })
+  } catch (logErr) {
+    const message = logErr instanceof Error ? logErr.message : 'Unknown error'
+    console.error('[Email] order_email_log write failed:', message)
+  }
+
+  return result
 }

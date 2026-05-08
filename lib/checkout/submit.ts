@@ -469,6 +469,7 @@ export async function submitCustomerOrder(
       const result = await sendOrderConfirmation({
         to: input.context.email,
         customerName: emailCustomerName,
+        orderId: order_id,
         orderRef: order_ref,
         totalAmount: fallbackTotal,
         paymentTerms: emailPaymentTerms,
