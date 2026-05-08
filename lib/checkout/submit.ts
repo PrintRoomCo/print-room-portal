@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
+import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { pushProductionJob } from '@/lib/monday/production-job'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
@@ -191,8 +192,11 @@ export async function submitCustomerOrder(
           decoration_method,
           unit_price,
           is_active,
+          width_mm,
+          height_mm,
+          colour_count,
           organization_artworks!org_decorations_artwork_id_fkey(public_url),
-          decoration_locations!org_decorations_decoration_location_id_fkey(location)
+          decoration_locations!org_decorations_decoration_location_id_fkey(location, placement_key)
         )
       `)
       .in('id', linkIds)
@@ -213,10 +217,13 @@ export async function submitCustomerOrder(
         decoration_method: string
         unit_price: number | string
         is_active: boolean
+        width_mm: number | null
+        height_mm: number | null
+        colour_count: number | null
         organization_artworks: { public_url: string } | { public_url: string }[] | null
         decoration_locations:
-          | { location: string }
-          | { location: string }[]
+          | { location: string; placement_key: string | null }
+          | { location: string; placement_key: string | null }[]
           | null
       }
     }
@@ -275,10 +282,20 @@ export async function submitCustomerOrder(
         })
         continue
       }
-      const effective =
-        row.unit_price_override != null
-          ? Number(row.unit_price_override)
-          : Number(od.unit_price)
+      const loc = pickOne(od.decoration_locations)
+      const effective = await effectiveDecorationPrice(
+        admin,
+        {
+          decorationMethod: od.decoration_method,
+          unitPriceOverride: row.unit_price_override,
+          baseUnitPrice: od.unit_price,
+          widthMm: od.width_mm,
+          heightMm: od.height_mm,
+          colourCount: od.colour_count,
+          placementKey: loc?.placement_key ?? null,
+        },
+        line.qty,
+      )
       if (effective !== dec.unitPrice) {
         drift.push({
           cartLineId: line.cart_line_id ?? null,
@@ -292,7 +309,6 @@ export async function submitCustomerOrder(
         continue
       }
       const art = pickOne(od.organization_artworks)
-      const loc = pickOne(od.decoration_locations)
       validated.push({
         linkId: row.id,
         decorationId: od.id,
