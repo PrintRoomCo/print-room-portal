@@ -21,6 +21,16 @@ export interface B2BCustomerContext {
   storeIds: string[]
   /** Per-buyer default ship-to store, set by staff in the b2b-accounts members panel. Null = no default. */
   defaultStoreId: string | null
+  /**
+   * Customer-shape discriminator from b2b_accounts.tenant_type.
+   * Null when no b2b_account row. See lib/company.ts for the full Access shape.
+   */
+  tenantType: 'franchise' | 'all_store_org' | 'studio' | null
+  /**
+   * Derived from tenantType. True only for all_store_org (All Blacks shape).
+   * Mirrors B2BCustomerAccess so checkout code branches without re-deriving.
+   */
+  allowsMultiStoreOrdering: boolean
 }
 
 export type AuthFailureKind =
@@ -58,7 +68,7 @@ export async function requireB2BCustomer(
       .select('id, name, customer_code')
       .eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
-      .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes')
+      .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type')
       .eq('organization_id', membership.organization_id).maybeSingle(),
     admin.from('stores')
       .select('id')
@@ -90,6 +100,9 @@ export async function requireB2BCustomer(
       defaultDepositPercent: b2b?.default_deposit_percent ?? null,
       storeIds: (stores ?? []).map((s) => s.id),
       defaultStoreId: membership.default_store_id ?? null,
+      tenantType: (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type ?? null,
+      allowsMultiStoreOrdering:
+        (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'all_store_org',
     } satisfies B2BCustomerContext,
   }
 }

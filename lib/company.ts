@@ -68,6 +68,7 @@ export async function getCompanyAccess(
       leaversEnabled,
       hasTrackedInventory: false,
       defaultStoreId: null,
+      tenantType: null,
     })
   }
 
@@ -142,6 +143,7 @@ export async function getCompanyAccess(
     leaversEnabled,
     hasTrackedInventory,
     defaultStoreId: orgMembership.default_store_id ?? null,
+    tenantType: (b2bAccount?.tenant_type as B2BCustomerAccess['tenantType']) ?? null,
   })
 }
 
@@ -162,6 +164,7 @@ interface AccessInput {
   leaversEnabled: boolean
   hasTrackedInventory: boolean
   defaultStoreId: string | null
+  tenantType: B2BCustomerAccess['tenantType']
 }
 
 function buildAccess(input: AccessInput): B2BCustomerAccess {
@@ -173,6 +176,7 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     tierLabel,
     tierDiscount,
     pricingMode,
+    tenantType,
     ...rest
   } = input
 
@@ -204,6 +208,9 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     pricingMode,
 
     hasTrackedInventory,
+
+    tenantType,
+    allowsMultiStoreOrdering: tenantType === 'all_store_org',
   }
 }
 
@@ -228,5 +235,6 @@ async function buildAccessForIndividual(
     leaversEnabled: false,
     hasTrackedInventory: false,
     defaultStoreId: null,
+    tenantType: null,
   })
 }

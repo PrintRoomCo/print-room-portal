@@ -49,4 +49,17 @@ export interface B2BCustomerAccess {
 
   /** Per-buyer default ship-to store, set by staff. Null = no default. */
   defaultStoreId: string | null
+
+  /**
+   * Customer-shape discriminator from b2b_accounts.tenant_type.
+   * Null when isIndividual (no b2b_account row).
+   * Consumers should prefer the named permission flags below over raw enum reads.
+   */
+  tenantType: 'franchise' | 'all_store_org' | 'studio' | null
+
+  /**
+   * Derived from tenantType. True only for all_store_org (All Blacks shape:
+   * players sign in and order to custom addresses, no fixed store binding).
+   */
+  allowsMultiStoreOrdering: boolean
 }
