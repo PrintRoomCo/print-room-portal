@@ -140,6 +140,13 @@ export function CheckoutClient({
             now: number
             reason: string
           }>
+          detail?: {
+            code?: 'insufficient_stock' | 'no_inventory'
+            product_id?: string | null
+            variant_id?: string | null
+            available?: number
+            requested?: number
+          }
         }
         if (data.error === 'decoration_price_drift' && data.drift) {
           const summary = data.drift
@@ -149,6 +156,25 @@ export function CheckoutClient({
             kind: 'error',
             msg: `Decoration pricing has changed — review your cart. ${summary}`,
           })
+          router.push('/cart')
+          return
+        }
+        if (data.error === 'insufficient_stock' || data.error === 'no_inventory') {
+          const offendingLine = cart.lines.find(
+            (l) =>
+              (l.variantId ?? null) === (data.detail?.variant_id ?? null) ||
+              l.productId === data.detail?.product_id,
+          )
+          const lineLabel = offendingLine?.productName ?? 'A product in your cart'
+          const msg =
+            data.error === 'insufficient_stock'
+              ? `Sorry, ${lineLabel} went out of stock` +
+                (data.detail?.available != null && data.detail?.requested != null
+                  ? ` — you asked for ${data.detail.requested}, only ${data.detail.available} available.`
+                  : '.') +
+                ' Please reduce the quantity or remove it.'
+              : `Sorry, ${lineLabel} is not stocked for your account — please contact staff or remove it from your cart.`
+          setBanner({ kind: 'error', msg })
           router.push('/cart')
           return
         }

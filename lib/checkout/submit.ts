@@ -77,6 +77,23 @@ export class MemberAccessDriftError extends Error {
   }
 }
 
+export interface StockShortfallDetail {
+  code: 'insufficient_stock' | 'no_inventory'
+  product_id: string | null
+  variant_id: string | null
+  available?: number
+  requested?: number
+}
+
+export class StockShortfallError extends Error {
+  readonly detail: StockShortfallDetail
+  constructor(detail: StockShortfallDetail) {
+    super(detail.code)
+    this.name = 'StockShortfallError'
+    this.detail = detail
+  }
+}
+
 interface SubmitB2BOrderRow {
   quote_id: string
   order_id: string
@@ -437,7 +454,24 @@ export async function submitCustomerOrder(
       }
     }),
   })
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {
+      let parsed: Partial<StockShortfallDetail> = {}
+      try {
+        parsed = JSON.parse((error as { details?: string | null }).details ?? '{}')
+      } catch {
+        // fall through with empty detail
+      }
+      throw new StockShortfallError({
+        code: error.message === 'INSUFFICIENT_STOCK' ? 'insufficient_stock' : 'no_inventory',
+        product_id: parsed.product_id ?? null,
+        variant_id: parsed.variant_id ?? null,
+        available: parsed.available,
+        requested: parsed.requested,
+      })
+    }
+    throw new Error(error.message)
+  }
 
   const rowRaw = Array.isArray(data) ? data[0] : data
   const row = rowRaw as SubmitB2BOrderRow | null

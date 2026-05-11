@@ -3,6 +3,7 @@ import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import {
   DecorationDriftError,
   MemberAccessDriftError,
+  StockShortfallError,
   submitCustomerOrder,
   type CheckoutLineInput,
 } from '@/lib/checkout/submit'
@@ -89,6 +90,12 @@ export async function POST(request: Request) {
     if (e instanceof MemberAccessDriftError) {
       return NextResponse.json(
         { error: 'member_access_drift', drift: e.drift },
+        { status: 409 },
+      )
+    }
+    if (e instanceof StockShortfallError) {
+      return NextResponse.json(
+        { error: e.detail.code, detail: e.detail },
         { status: 409 },
       )
     }

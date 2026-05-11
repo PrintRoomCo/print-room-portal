@@ -7,6 +7,8 @@ import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 
 export const dynamic = 'force-dynamic'
 
+type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
+
 interface ProductDetail {
   id: string
   name: string
@@ -24,6 +26,7 @@ interface ProductDetail {
   supports_labels: boolean | null
   garment_family: string | null
   default_sizes: string[] | null
+  fulfilment_type: FulfilmentType | null
   brands: { name: string } | { name: string }[] | null
   categories: { name: string } | { name: string }[] | null
 }
@@ -78,7 +81,7 @@ export default async function ProductDetailPage({
 
   if (!catItem) return notFound()
 
-  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
+  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
 
   const productQuery = admin
     .from('products')
@@ -263,6 +266,7 @@ export default async function ProductDetailPage({
         supports_labels: displayProduct.supports_labels,
         garment_family: displayProduct.garment_family,
         default_sizes: displayProduct.default_sizes,
+        fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
         brand_name: brandName,
         category_name: categoryName,
       }}
