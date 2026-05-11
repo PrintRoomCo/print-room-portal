@@ -3,6 +3,7 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
+import { ShopTypeTabs } from '@/components/shop/ShopTypeTabs'
 import { getTierLabel } from '@/lib/pricing/tier-labels'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
@@ -42,34 +43,62 @@ export default async function ShopPage({
   const limit = 24
   const offset = (filters.page - 1) * limit
 
-  // Per-member access filter — resolves to the set of catalogue items this member can see.
-  const grantedItemIds = await getGrantedCatalogueItemIds(
-    admin,
-    context.membershipId,
-    context.organizationId,
-  )
+  // Resolve scoped product ids per view mode. Catalogue mode uses per-member grants
+  // against b2b_catalogue_items; inventory mode uses org-wide variant_inventory rows.
+  let scopedProductIds: string[] = []
+  let catItemRows: Array<{ id: string; source_product_id: string }> = []
 
-  // Catalogue-scoped product ids, narrowed to granted items.
-  const { data: catItems } = grantedItemIds.length === 0
-    ? { data: [] as Array<{ id: string; source_product_id: string }> }
-    : await admin
-        .from('b2b_catalogue_items')
-        .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
-        .eq('b2b_catalogues.organization_id', context.organizationId)
-        .eq('b2b_catalogues.is_active', true)
-        .eq('is_active', true)
-        .in('id', grantedItemIds)
+  if (filters.type === 'catalogue') {
+    const grantedItemIds = await getGrantedCatalogueItemIds(
+      admin,
+      context.membershipId,
+      context.organizationId,
+    )
+    const { data: catItems } = grantedItemIds.length === 0
+      ? { data: [] as Array<{ id: string; source_product_id: string }> }
+      : await admin
+          .from('b2b_catalogue_items')
+          .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+          .eq('b2b_catalogues.organization_id', context.organizationId)
+          .eq('b2b_catalogues.is_active', true)
+          .eq('is_active', true)
+          .in('id', grantedItemIds)
+    catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
+    scopedProductIds = Array.from(new Set(catItemRows.map((r) => r.source_product_id)))
+  } else {
+    // Inventory mode: every product the org tracks stock for. Zero-stock variants
+    // are included so reorderable made-to-order items remain browseable.
+    const { data: invRows } = await admin
+      .from('variant_inventory')
+      .select('product_variants!inner(product_id)')
+      .eq('organization_id', context.organizationId)
+    type InvRow = { product_variants: { product_id: string } | { product_id: string }[] | null }
+    const ids = new Set<string>()
+    for (const r of (invRows ?? []) as InvRow[]) {
+      const pv = Array.isArray(r.product_variants) ? r.product_variants[0] : r.product_variants
+      if (pv?.product_id) ids.add(pv.product_id)
+    }
+    scopedProductIds = Array.from(ids)
+  }
 
-  const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
-  const scopedProductIds = Array.from(new Set(catItemRows.map((r) => r.source_product_id)))
 
   if (scopedProductIds.length === 0) {
+    const emptyCopy = filters.type === 'inventory'
+      ? {
+          title: 'No tracked stock yet',
+          body: 'Your account manager will let you know when stocked items are ready to reorder.',
+        }
+      : {
+          title: 'Your catalogue is being set up',
+          body: 'Your account manager will let you know when products are ready for ordering.',
+        }
     return (
       <div className="space-y-6 p-4 md:p-8">
+        <ShopTypeTabs active={filters.type} />
         <PortalEmptyState
-          title="Your catalogue is being set up"
-          body="Your account manager will let you know when products are ready for ordering."
+          title={emptyCopy.title}
+          body={emptyCopy.body}
           actionHref="mailto:sales@theprint-room.co.nz"
           actionLabel="Contact sales"
         />
@@ -168,18 +197,25 @@ export default async function ShopPage({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Customer catalogue
+                  {filters.type === 'inventory' ? 'Your stocked items' : 'Customer catalogue'}
                 </p>
-                <TierBadge label={tierLabel} pricingMode={pricingMode} />
+                {filters.type === 'catalogue' && (
+                  <TierBadge label={tierLabel} pricingMode={pricingMode} />
+                )}
               </div>
               <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
               <p className="mt-1 text-sm text-gray-600">
-                Products and prices are scoped to your dedicated catalogue.
+                {filters.type === 'inventory'
+                  ? 'Stocked products tracked at your location, ready to reorder.'
+                  : 'Products and prices are scoped to your dedicated catalogue.'}
               </p>
             </div>
             <p className="text-sm text-gray-500">
               {products.length} product{products.length === 1 ? '' : 's'}
             </p>
+          </div>
+          <div className="mt-4">
+            <ShopTypeTabs active={filters.type} />
           </div>
         </div>
 
@@ -187,7 +223,7 @@ export default async function ShopPage({
           <PortalEmptyState
             title="No products match your filters"
             body="Try clearing some filters."
-            actionHref="/shop"
+            actionHref={filters.type === 'catalogue' ? '/shop' : `/shop?type=${filters.type}`}
             actionLabel="Clear filters"
           />
         ) : (

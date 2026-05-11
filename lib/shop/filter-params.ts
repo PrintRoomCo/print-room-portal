@@ -1,4 +1,5 @@
 export type ShopSort = 'name' | 'newest'
+export type ShopType = 'catalogue' | 'inventory'
 
 export interface ShopFilters {
   q: string
@@ -8,6 +9,7 @@ export interface ShopFilters {
   sort: ShopSort
   inStock: boolean
   page: number
+  type: ShopType
 }
 
 export const DEFAULT_SHOP_FILTERS: ShopFilters = {
@@ -18,9 +20,11 @@ export const DEFAULT_SHOP_FILTERS: ShopFilters = {
   sort: 'name',
   inStock: false,
   page: 1,
+  type: 'catalogue',
 }
 
 const SORT_VALUES: ShopSort[] = ['name', 'newest']
+const TYPE_VALUES: ShopType[] = ['catalogue', 'inventory']
 
 function pickFirst(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0]
@@ -33,6 +37,9 @@ export function parseShopFilters(
   const sortRaw = pickFirst(sp.sort) as ShopSort | undefined
   const sort = sortRaw && SORT_VALUES.includes(sortRaw) ? sortRaw : 'name'
 
+  const typeRaw = pickFirst(sp.type) as ShopType | undefined
+  const type = typeRaw && TYPE_VALUES.includes(typeRaw) ? typeRaw : 'catalogue'
+
   const pageRaw = Number(pickFirst(sp.page) ?? '1')
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
 
@@ -44,6 +51,7 @@ export function parseShopFilters(
     sort,
     inStock: pickFirst(sp.in_stock) === '1',
     page,
+    type,
   }
 }
 

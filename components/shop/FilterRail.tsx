@@ -13,9 +13,12 @@ interface Props {
 export function FilterRail({ filters, facets }: Props) {
   const hasActive = activeFilterCount(filters) > 0
 
+  const clearHref = filters.type === 'catalogue' ? '/shop' : `/shop?type=${filters.type}`
+
   return (
     <aside className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <form method="GET" action="/shop" className="space-y-4">
+        <input type="hidden" name="type" value={filters.type} />
         <Section label="Search">
           <input
             type="search"
@@ -94,7 +97,7 @@ export function FilterRail({ filters, facets }: Props) {
 
       {hasActive && (
         <Link
-          href="/shop"
+          href={clearHref}
           className="mt-3 inline-block text-xs font-medium text-gray-600 underline"
         >
           Clear all
