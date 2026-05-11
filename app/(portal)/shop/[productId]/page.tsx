@@ -3,6 +3,7 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
+import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,14 @@ export default async function ProductDetailPage({
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
+  // Per-member access filter — gate before we even reach the product table.
+  const grantedItemIds = await getGrantedCatalogueItemIds(
+    admin,
+    context.membershipId,
+    context.organizationId,
+  )
+  if (grantedItemIds.length === 0) return notFound()
+
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
     .select('id, name, description, image_url, b2b_catalogues!inner(is_active)')
@@ -63,6 +72,7 @@ export default async function ProductDetailPage({
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
     .eq('b2b_catalogues.is_active', true)
+    .in('id', grantedItemIds)
     .limit(1)
     .maybeSingle()
 

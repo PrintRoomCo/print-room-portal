@@ -11,6 +11,7 @@ import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
+import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
@@ -41,13 +42,23 @@ export default async function ShopPage({
   const limit = 24
   const offset = (filters.page - 1) * limit
 
-  // Catalogue-scoped product ids
-  const { data: catItems } = await admin
-    .from('b2b_catalogue_items')
-    .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
-    .eq('b2b_catalogues.organization_id', context.organizationId)
-    .eq('b2b_catalogues.is_active', true)
-    .eq('is_active', true)
+  // Per-member access filter — resolves to the set of catalogue items this member can see.
+  const grantedItemIds = await getGrantedCatalogueItemIds(
+    admin,
+    context.membershipId,
+    context.organizationId,
+  )
+
+  // Catalogue-scoped product ids, narrowed to granted items.
+  const { data: catItems } = grantedItemIds.length === 0
+    ? { data: [] as Array<{ id: string; source_product_id: string }> }
+    : await admin
+        .from('b2b_catalogue_items')
+        .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+        .eq('b2b_catalogues.organization_id', context.organizationId)
+        .eq('b2b_catalogues.is_active', true)
+        .eq('is_active', true)
+        .in('id', grantedItemIds)
 
   const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))

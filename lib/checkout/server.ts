@@ -5,6 +5,8 @@ import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 
 export interface B2BCustomerContext {
   userId: string
+  /** user_organizations.id — the (user, org) membership row id. Used for per-member access grants. */
+  membershipId: string
   email: string
   fullName: string
   organizationId: string
@@ -46,7 +48,7 @@ export async function requireB2BCustomer(
 
   const { data: membership } = await admin
     .from('user_organizations')
-    .select('organization_id, default_store_id')
+    .select('id, organization_id, default_store_id')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) return { kind: 'no_org' }
@@ -75,6 +77,7 @@ export async function requireB2BCustomer(
     admin,
     context: {
       userId: user.id,
+      membershipId: membership.id,
       email: profile?.email ?? user.email ?? '',
       fullName: profile?.full_name ?? '',
       organizationId: org.id,

@@ -6,6 +6,7 @@ import { pushProductionJob } from '@/lib/monday/production-job'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
+import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -61,6 +62,21 @@ export class DecorationDriftError extends Error {
   constructor(drift: DecorationDrift[]) {
     super('decoration_price_drift')
     this.name = 'DecorationDriftError'
+    this.drift = drift
+  }
+}
+
+export interface AccessDrift {
+  cartLineId: string | null
+  productId: string
+  productName: string
+}
+
+export class MemberAccessDriftError extends Error {
+  readonly drift: AccessDrift[]
+  constructor(drift: AccessDrift[]) {
+    super('member_access_drift')
+    this.name = 'MemberAccessDriftError'
     this.drift = drift
   }
 }
@@ -145,6 +161,53 @@ export async function submitCustomerOrder(
       .eq('id', input.lines[0].ship_to_store_id)
       .single()
     if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
+  }
+
+  // 1b. Per-member access re-verify. Mid-flight: if staff revoked a catalogue
+  //     or item grant between cart load and checkout, we MUST reject before
+  //     submit_b2b_order touches anything.
+  const grantedItemIds = new Set(
+    await getGrantedCatalogueItemIds(
+      admin,
+      input.context.membershipId,
+      input.context.organizationId,
+    ),
+  )
+  if (grantedItemIds.size > 0) {
+    // Map each line.product_id to a catalogue_item the member can still see.
+    // submit_b2b_order keys on product_id (matching /shop/[productId]), so it's
+    // enough to confirm at least one granted catalogue item exists for the product.
+    const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
+    const { data: visibleItems } = await admin
+      .from('b2b_catalogue_items')
+      .select('source_product_id')
+      .in('source_product_id', productIds)
+      .in('id', Array.from(grantedItemIds))
+    const visibleProductIds = new Set(
+      ((visibleItems ?? []) as Array<{ source_product_id: string }>).map(
+        (r) => r.source_product_id,
+      ),
+    )
+    const accessDrift: AccessDrift[] = []
+    for (const line of input.lines) {
+      if (!visibleProductIds.has(line.product_id)) {
+        accessDrift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          productName: line.product_name,
+        })
+      }
+    }
+    if (accessDrift.length > 0) throw new MemberAccessDriftError(accessDrift)
+  } else {
+    // No grants at all — every line is unavailable.
+    throw new MemberAccessDriftError(
+      input.lines.map((line) => ({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        productName: line.product_name,
+      })),
+    )
   }
 
   // 2. Re-price every line on the server — ignore any client-sent prices.

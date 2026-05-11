@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import {
   DecorationDriftError,
+  MemberAccessDriftError,
   submitCustomerOrder,
   type CheckoutLineInput,
 } from '@/lib/checkout/submit'
@@ -82,6 +83,12 @@ export async function POST(request: Request) {
     if (e instanceof DecorationDriftError) {
       return NextResponse.json(
         { error: 'decoration_price_drift', drift: e.drift },
+        { status: 409 },
+      )
+    }
+    if (e instanceof MemberAccessDriftError) {
+      return NextResponse.json(
+        { error: 'member_access_drift', drift: e.drift },
         { status: 409 },
       )
     }
