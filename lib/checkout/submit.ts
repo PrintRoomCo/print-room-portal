@@ -344,7 +344,22 @@ export async function submitCustomerOrder(
     throw new DecorationDriftError(drift)
   }
 
-  // 3. Call the shared submit_b2b_order RPC.
+  // 3. Call the shared submit_b2b_order RPC. We fold the per-unit decoration
+  //    cost into unit_price so the stored subtotal / total_amount / Monday
+  //    subitems / order-confirmation email all match what the cart UI showed
+  //    (cart's PriceBreakdown rolls decoration into the per-unit line).
+  //    Without this, the quote would store garment-only and we'd under-bill
+  //    the customer for the decoration they ordered.
+  const decorationCostByLineKey = new Map<string, number>()
+  let totalDecorationRevenue = 0
+  for (const l of repriced) {
+    const validated =
+      validatedByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? []
+    const perUnit = validated.reduce((s, d) => s + d.unitPrice, 0)
+    decorationCostByLineKey.set(makeLineKey(l.product_id, l.variant_id ?? null), perUnit)
+    totalDecorationRevenue += perUnit * l.qty
+  }
+
   const { data, error } = await admin.rpc('submit_b2b_order', {
     p_idempotency_key: input.idempotency_key,
     p_organization_id: input.context.organizationId,
@@ -357,13 +372,17 @@ export async function submitCustomerOrder(
     p_required_by: input.required_by ?? null,
     p_notes: input.notes ?? null,
     p_internal_notes: input.internal_notes ?? null,
-    p_lines: repriced.map((l) => ({
-      product_id: l.product_id,
-      product_name: l.product_name,
-      quantity: l.qty,
-      unit_price: l.unit_price,
-      variant_id: l.variant_id ?? null,
-    })),
+    p_lines: repriced.map((l) => {
+      const perUnitDeco =
+        decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? 0
+      return {
+        product_id: l.product_id,
+        product_name: l.product_name,
+        quantity: l.qty,
+        unit_price: l.unit_price + perUnitDeco,
+        variant_id: l.variant_id ?? null,
+      }
+    }),
   })
   if (error) throw new Error(error.message)
 
@@ -371,6 +390,16 @@ export async function submitCustomerOrder(
   const row = rowRaw as SubmitB2BOrderRow | null
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
+
+  // Record decoration revenue separately on the quote so finance can split
+  // garment vs decoration without parsing quote_items.decorations jsonb.
+  // total_amount already includes decoration via the folded unit_price above.
+  if (totalDecorationRevenue > 0) {
+    await admin
+      .from('quotes')
+      .update({ decoration_cost: totalDecorationRevenue })
+      .eq('id', quote_id)
+  }
 
   await recordAuditEvent(
     {
