@@ -33,8 +33,22 @@ export default async function ConfirmationPage({
     .eq('id', orderId)
     .single()
   const order = data as unknown as OrderRow | null
-  if (!order) return notFound()
-  if (order.quotes?.organization_id !== context.organizationId) return notFound()
+  if (!order) {
+    console.error('[confirmation] order_not_found', { orderId, userId: context.userId })
+    return notFound()
+  }
+  if (!order.quotes) {
+    console.error('[confirmation] missing_quote_join', { orderId })
+    return notFound()
+  }
+  if (order.quotes.organization_id !== context.organizationId) {
+    console.error('[confirmation] org_mismatch', {
+      orderId,
+      userId: context.userId,
+      userOrgId: context.organizationId,
+    })
+    return notFound()
+  }
 
   const orderRef = order.quotes?.order_ref ?? '—'
   const mondaySynced = Boolean(order.quotes?.monday_item_id)
