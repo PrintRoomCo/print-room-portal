@@ -29,8 +29,6 @@ interface CheckoutClientProps {
 interface CheckoutResponse {
   order_id: string
   order_ref: string
-  monday_item_id: string | null
-  monday_push_error: string | null
 }
 
 interface CustomAddress {
@@ -76,7 +74,7 @@ export function CheckoutClient({
   const [customAddress, setCustomAddress] = useState<CustomAddress>(EMPTY_CUSTOM)
   const [requiredBy, setRequiredBy] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
-  const [submitting, setSubmitting] = useState<false | 'order' | 'quote'>(false)
+  const [submitting, setSubmitting] = useState<false | 'order'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
 
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
@@ -175,36 +173,6 @@ export function CheckoutClient({
     }
   }
 
-  async function submitAsQuoteRequest() {
-    setSubmitting('quote')
-    setBanner(null)
-    try {
-      const res = await fetch('/api/checkout/quote-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lines: cart.lines.map((l) => ({
-            product_id: l.productId,
-            product_name: l.productName,
-            variant_id: l.variantId,
-            qty: l.qty,
-          })),
-        }),
-      })
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error ?? `Request failed (${res.status})`)
-      }
-      const { staff_quote_id } = (await res.json()) as { staff_quote_id: string }
-      cart.clear()
-      router.push(`/quote-requests/${staff_quote_id}`)
-    } catch (e) {
-      setBanner({ kind: 'error', msg: (e as Error).message })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   if (cart.lines.length === 0) {
     return (
       <div className="p-4 md:p-8">
@@ -242,8 +210,8 @@ export function CheckoutClient({
 
       {customerCodeMissing && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Your account is pending setup — contact staff to assign your customer code.
-          You can still "Submit as quote request" in the meantime.
+          Your account is pending setup — contact staff to assign your customer code before
+          submitting an order.
         </div>
       )}
 
@@ -360,19 +328,11 @@ export function CheckoutClient({
       <div className="mt-6 flex flex-wrap justify-end gap-2">
         <button
           type="button"
-          onClick={submitAsQuoteRequest}
-          disabled={submitting !== false}
-          className="rounded-full border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {submitting === 'quote' ? 'Submitting…' : 'Submit as quote request'}
-        </button>
-        <button
-          type="button"
           onClick={submitOrder}
           disabled={!canSubmitOrder}
           className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting === 'order' ? 'Placing order…' : 'Place order'}
+          {submitting === 'order' ? 'Placing order…' : 'Submit order'}
         </button>
       </div>
     </div>

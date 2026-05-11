@@ -59,6 +59,7 @@ export default async function ConfirmationPage({
   }
 
   const orderRef = order.quotes.order_ref ?? '—'
+  const awaitingApproval = order.status === 'awaiting-approval'
   const mondaySynced = Boolean(order.quotes.monday_item_id)
 
   // Stored total_amount / total_price is ex-GST (matches Xero invoice convention).
@@ -74,7 +75,9 @@ export default async function ConfirmationPage({
     <div className="max-w-2xl p-4 md:p-8">
       <h1 className="text-2xl font-semibold text-gray-900">Order received</h1>
       <p className="mt-2 text-sm text-gray-600">
-        Thanks — your order is in our system and we'll be in touch shortly.
+        {awaitingApproval
+          ? "Thanks — your order is awaiting approval from our team. We'll notify you once it moves into production."
+          : "Thanks — your order is in our system and we'll be in touch shortly."}
       </p>
 
       <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-4">
@@ -90,7 +93,11 @@ export default async function ConfirmationPage({
           <div>
             <dt className="text-xs uppercase tracking-wide text-gray-500">Production sync</dt>
             <dd className="text-gray-900">
-              {mondaySynced ? 'Synced to production' : 'Syncing to production…'}
+              {mondaySynced
+                ? 'Synced to production'
+                : awaitingApproval
+                  ? 'Will sync once approved'
+                  : 'Syncing to production…'}
             </dd>
           </div>
         </dl>
@@ -120,7 +127,7 @@ export default async function ConfirmationPage({
         </dl>
       </div>
 
-      {!mondaySynced && (
+      {!mondaySynced && !awaitingApproval && (
         <p className="mt-3 text-xs text-gray-500">
           If this takes more than a few minutes our staff will reconcile it from their side —
           your order is safe.

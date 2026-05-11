@@ -2,8 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
-import { pushProductionJob } from '@/lib/monday/production-job'
-import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
@@ -43,8 +41,6 @@ export interface CheckoutInput {
 export interface CheckoutResult {
   order_id: string
   order_ref: string
-  monday_item_id: string | null
-  monday_push_error: string | null
 }
 
 export interface DecorationDrift {
@@ -103,23 +99,17 @@ interface QuoteItemRow {
   variant_id: string | null
 }
 
-interface QuoteRowForMonday {
-  order_ref: string
+interface QuoteRowForEmail {
   customer_name: string
-  customer_email: string | null
   total_amount: number
   required_by: string | null
   payment_terms: string | null
-  notes: string | null
-  monday_item_id: string | null
 }
 
-interface QuoteItemForMonday {
-  id: string
+interface QuoteItemForEmail {
   product_name: string
   quantity: number
   unit_price: number
-  monday_subitem_id: string | null
   product_variants:
     | {
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
@@ -510,11 +500,17 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5. Monday push. Failure here doesn't roll back the order — staff can
-  //    reconcile via the staff portal. monday_push_error surfaces on the
-  //    confirmation page so the customer knows not to panic.
-  let monday_item_id: string | null = null
-  let monday_push_error: string | null = null
+  // 5. Hold the order for AM approval. Monday push is no longer fired here —
+  //    moved to the staff approve route so an account manager confirms pricing
+  //    + decoration before production starts. RPC hardcodes 'awaiting-production'
+  //    in its insert (shared with legacy callers); we flip it to 'awaiting-approval'
+  //    immediately after.
+  await admin
+    .from('orders')
+    .update({ status: 'awaiting-approval' })
+    .eq('id', order_id)
+
+  // Fetch the email payload from quotes/quote_items for the confirmation email below.
   let emailLines: OrderConfirmationLine[] = []
   let emailTotalAmount: number | null = null
   let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
@@ -523,75 +519,42 @@ export async function submitCustomerOrder(
   try {
     const { data: q } = await admin
       .from('quotes')
-      .select(
-        'order_ref, customer_name, customer_email, total_amount, required_by, payment_terms, notes, monday_item_id'
-      )
+      .select('customer_name, total_amount, required_by, payment_terms')
       .eq('id', quote_id)
       .single()
-    const quote = q as QuoteRowForMonday | null
-    if (!quote) throw new Error('quote row missing after submit_b2b_order')
-    emailTotalAmount = Number(quote.total_amount)
-    emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
-    emailRequiredBy = quote.required_by ?? emailRequiredBy
-    emailCustomerName = quote.customer_name
+    const quote = q as QuoteRowForEmail | null
+    if (quote) {
+      emailTotalAmount = Number(quote.total_amount)
+      emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
+      emailRequiredBy = quote.required_by ?? emailRequiredBy
+      emailCustomerName = quote.customer_name
+    }
 
     const { data: lines } = await admin
       .from('quote_items')
       .select(
-        `id, product_name, quantity, unit_price, monday_subitem_id,
+        `product_name, quantity, unit_price,
          product_variants (
            product_color_swatches (label),
            sizes (label)
          )`
       )
       .eq('quote_id', quote_id)
-    const lineRows = (lines ?? []) as unknown as QuoteItemForMonday[]
-
-    const order = {
-      order_ref: quote.order_ref,
-      customer_name: quote.customer_name,
-      customer_email: quote.customer_email,
-      total_price: Number(quote.total_amount),
-      required_by: quote.required_by,
-      payment_terms: quote.payment_terms,
-      notes: quote.notes,
-      monday_item_id: quote.monday_item_id,
-    }
-    const pLines = lineRows.map((l) => {
+    const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
+    emailLines = lineRows.map((l) => {
       const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
       const size = pickOne(l.product_variants?.sizes ?? null)
       const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
       return {
-        quote_item_id: l.id,
-        product_name: l.product_name,
-        variant_label: variantLabel,
+        productName: l.product_name,
+        variantLabel,
         quantity: l.quantity,
-        unit_price: Number(l.unit_price),
-        decoration_summary: null,
-        existing_subitem_id: l.monday_subitem_id,
+        unitPrice: Number(l.unit_price),
       }
     })
-    emailLines = pLines.map((line) => ({
-      productName: line.product_name,
-      variantLabel: line.variant_label,
-      quantity: line.quantity,
-      unitPrice: line.unit_price,
-    }))
-
-    const result = await pushProductionJob(order, pLines)
-    monday_item_id = result.itemId
-    await admin
-      .from('quotes')
-      .update({
-        monday_item_id: result.itemId,
-        monday_board_id: String(PRODUCTION_BOARD_ID),
-      })
-      .eq('id', quote_id)
-    for (const [qItemId, subitemId] of Object.entries(result.subitemIds)) {
-      await admin.from('quote_items').update({ monday_subitem_id: subitemId }).eq('id', qItemId)
-    }
-  } catch (e) {
-    monday_push_error = (e as Error).message
+  } catch {
+    // Email payload fetch failure shouldn't block the order; fall through to
+    // the fallback shape built from `repriced` in step 6.
   }
 
   // 6. Order-confirmation email. Failure here must not roll back the order or
@@ -634,5 +597,5 @@ export async function submitCustomerOrder(
     console.error('[Checkout] Order-confirmation email failed:', message)
   }
 
-  return { order_id, order_ref, monday_item_id, monday_push_error }
+  return { order_id, order_ref }
 }

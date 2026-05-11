@@ -1,39 +1,10 @@
 import { NextResponse } from 'next/server'
-import { requireB2BCustomerApi } from '@/lib/checkout/server'
-import { createQuoteRequest, type QuoteRequestLineInput } from '@/lib/checkout/quote-request'
 
-interface QuoteRequestBody {
-  lines?: QuoteRequestLineInput[]
-}
-
-export async function POST(request: Request) {
-  const auth = await requireB2BCustomerApi()
-  if ('error' in auth) return auth.error
-
-  let body: QuoteRequestBody
-  try {
-    body = (await request.json()) as QuoteRequestBody
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  if (!Array.isArray(body.lines) || body.lines.length === 0) {
-    return NextResponse.json({ error: 'lines required' }, { status: 400 })
-  }
-
-  for (const l of body.lines) {
-    if (!l.product_id || !l.product_name || !l.qty || !Number.isInteger(l.qty) || l.qty <= 0) {
-      return NextResponse.json(
-        { error: 'each line needs product_id, product_name, positive integer qty' },
-        { status: 400 }
-      )
-    }
-  }
-
-  try {
-    const id = await createQuoteRequest(auth.admin, auth.context, body.lines)
-    return NextResponse.json({ staff_quote_id: id })
-  } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
-  }
+// MF-6 Quote retirement (2026-05-13): the customer "Submit as quote request"
+// flow is gone — every catalogue submit now lands directly in `orders` with
+// status `awaiting-approval` and waits for staff approval. This route is kept
+// as a 410 gate so any stale clients (cached PWAs, old bookmarks, scripts)
+// get a clean signal instead of a 404.
+export async function POST() {
+  return NextResponse.json({ error: 'retired' }, { status: 410 })
 }
