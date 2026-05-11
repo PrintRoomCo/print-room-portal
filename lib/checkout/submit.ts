@@ -167,6 +167,22 @@ export async function submitCustomerOrder(
   //     price drift greater than zero (per Decision #3 — no tolerance, AM
   //     edits are explicit). Validated decorations get persisted onto the
   //     order line as a jsonb snapshot below in step 4.
+  //
+  //     Multi-size parity: screenprint setup is amortised across the whole
+  //     print run, so the PDP prices a decoration at the SUM of qtys across
+  //     every size that selected it (multiSizeTotalQty). We mirror that here
+  //     by pricing each decoration at the total qty across all lines that
+  //     share its linkId — pricing per-line.qty would drift on multi-size.
+  const totalQtyByLinkId = new Map<string, number>()
+  for (const line of input.lines) {
+    for (const dec of line.decorations ?? []) {
+      totalQtyByLinkId.set(
+        dec.linkId,
+        (totalQtyByLinkId.get(dec.linkId) ?? 0) + line.qty,
+      )
+    }
+  }
+
   const validatedByLineKey = new Map<string, CheckoutLineDecorationInput[]>()
   const drift: DecorationDrift[] = []
 
@@ -283,6 +299,7 @@ export async function submitCustomerOrder(
         continue
       }
       const loc = pickOne(od.decoration_locations)
+      const decorationQty = totalQtyByLinkId.get(dec.linkId) ?? line.qty
       const effective = await effectiveDecorationPrice(
         admin,
         {
@@ -294,7 +311,7 @@ export async function submitCustomerOrder(
           colourCount: od.colour_count,
           placementKey: loc?.placement_key ?? null,
         },
-        line.qty,
+        decorationQty,
       )
       if (effective !== dec.unitPrice) {
         drift.push({
