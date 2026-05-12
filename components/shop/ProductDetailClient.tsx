@@ -72,6 +72,12 @@ interface Props {
   organizationId: string
   images: GalleryImage[]
   decorations: DecorationOption[]
+  /**
+   * Customer-effective MOQ: `b2b_catalogue_items.moq_override ?? products.moq ?? 1`.
+   * Applies uniformly across stocked / MTO / mixed and across single / multi-size —
+   * "stocked = no MOQ" was an unintentional collapse pre-2026-05-22.
+   */
+  effectiveMoq: number
 }
 
 export function ProductDetailClient({
@@ -81,6 +87,7 @@ export function ProductDetailClient({
   availability,
   images,
   decorations,
+  effectiveMoq,
 }: Props) {
   const cart = useCart()
   const pricingCtx = usePricingContext()
@@ -150,7 +157,7 @@ export function ProductDetailClient({
     return sizeRowsForColour.reduce((sum, row) => sum + (sizeQuantities[row.sizeId] ?? 0), 0)
   }, [sizeRowsForColour, sizeQuantities])
 
-  const defaultMinQty = tracksThisVariant ? 1 : product.moq ?? 1
+  const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
   const qty = multiSize ? multiSizeTotalQty : singleQty
   const setQty = setSingleQty
@@ -374,9 +381,11 @@ export function ProductDetailClient({
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'
+  const meetsMoq = qty >= effectiveMoq
   const multiSizeOk = multiSize && multiSizeTotalQty > 0
   const canAddToCart = multiSize
     ? multiSizeOk &&
+      meetsMoq &&
       !priceMissing &&
       pricing != null &&
       pricing.status === 'ok'
@@ -384,7 +393,7 @@ export function ProductDetailClient({
       !isOutOfStock &&
       !priceMissing &&
       Number.isInteger(qty) &&
-      qty >= defaultMinQty &&
+      meetsMoq &&
       pricing != null &&
       pricing.status === 'ok'
 
@@ -546,6 +555,17 @@ export function ProductDetailClient({
             </div>
           )}
 
+          {effectiveMoq > 1 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Minimum order: <span className="font-semibold">{effectiveMoq} units</span>
+              {multiSize ? ' across all sizes' : ''}.
+              {multiSize && multiSizeTotalQty > 0 && multiSizeTotalQty < effectiveMoq ? (
+                <span className="ml-2 font-medium">
+                  Currently {multiSizeTotalQty} — add {effectiveMoq - multiSizeTotalQty} more.
+                </span>
+              ) : null}
+            </div>
+          )}
           <div className="flex items-end gap-3">
             {!multiSize && (
               <div>
@@ -562,9 +582,6 @@ export function ProductDetailClient({
                   disabled={isOutOfStock}
                   className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
                 />
-                {product.moq != null && product.moq > 1 ? (
-                  <p className="mt-1 text-xs text-gray-500">Min. order {product.moq}</p>
-                ) : null}
               </div>
             )}
             <div className="flex-1 text-right text-sm">
@@ -665,7 +682,6 @@ function ProductDetailsSection({ product }: { product: ProductData }) {
   if (product.default_sizes && product.default_sizes.length > 0) rows.push({ label: 'Available sizes', value: product.default_sizes.join(', ') })
   if (product.supports_labels) rows.push({ label: 'Label support', value: 'Yes' })
   if (product.safety_standard) rows.push({ label: 'Safety standard', value: product.safety_standard })
-  if (product.moq != null && product.moq > 1) rows.push({ label: 'Min. order qty', value: product.moq })
   if (product.lead_time_days != null) rows.push({ label: 'Lead time', value: `~${product.lead_time_days} days` })
 
   // Flatten specs JSONB — skip keys already covered above, skip arrays/objects

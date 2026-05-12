@@ -12,23 +12,30 @@ interface CartTableProps {
   onRemove: (lineId: string) => void
   /** Reports to parent so it can disable "Proceed to checkout" when any line oversells. */
   onOversellChange?: (anyOversell: boolean) => void
+  /** Reports to parent so it can disable "Proceed to checkout" when any line is below MOQ. */
+  onMoqViolationChange?: (anyShort: boolean) => void
 }
 
 type AvailabilityMap = Record<string, number | undefined>
+type MoqMap = Record<string, number | undefined>
 
 export function CartTable({
   lines,
   onUpdateQty,
   onRemove,
   onOversellChange,
+  onMoqViolationChange,
 }: CartTableProps) {
   const [availability, setAvailability] = useState<AvailabilityMap>({})
+  const [moqByProduct, setMoqByProduct] = useState<MoqMap>({})
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (lines.length === 0) {
       setAvailability({})
+      setMoqByProduct({})
       onOversellChange?.(false)
+      onMoqViolationChange?.(false)
       return
     }
     const productIds = Array.from(new Set(lines.map((l) => l.productId)))
@@ -38,26 +45,32 @@ export function CartTable({
       productIds.map(async (id) => {
         try {
           const res = await fetch(`/api/shop/products/${id}/availability`)
-          if (!res.ok) return {} as Record<string, number>
-          const { availability: a } = (await res.json()) as {
+          if (!res.ok) return { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
+          const { availability: a, effectiveMoq } = (await res.json()) as {
             availability: Record<string, number>
+            effectiveMoq?: number
           }
-          return a
+          return { productId: id, availability: a, effectiveMoq }
         } catch {
-          return {} as Record<string, number>
+          return { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
         }
       })
-    ).then((maps) => {
+    ).then((results) => {
       if (cancelled) return
-      const merged: AvailabilityMap = {}
-      for (const m of maps) for (const k of Object.keys(m)) merged[k] = m[k]
-      setAvailability(merged)
+      const mergedAvail: AvailabilityMap = {}
+      const mergedMoq: MoqMap = {}
+      for (const r of results) {
+        for (const k of Object.keys(r.availability)) mergedAvail[k] = r.availability[k]
+        if (typeof r.effectiveMoq === 'number') mergedMoq[r.productId] = r.effectiveMoq
+      }
+      setAvailability(mergedAvail)
+      setMoqByProduct(mergedMoq)
       setLoading(false)
     })
     return () => {
       cancelled = true
     }
-  }, [lines, onOversellChange])
+  }, [lines, onOversellChange, onMoqViolationChange])
 
   useEffect(() => {
     const oversells = lines.some((l) => {
@@ -66,6 +79,27 @@ export function CartTable({
     })
     onOversellChange?.(oversells)
   }, [lines, availability, onOversellChange])
+
+  // MOQ on B2B is per-product (across all sizes/variants of the same product),
+  // matching the PDP rule for multi-size: the qty floor is summed across every
+  // line that shares productId. Mirroring it here keeps cart and PDP consistent.
+  const qtyByProduct = new Map<string, number>()
+  for (const l of lines) {
+    qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.qty)
+  }
+
+  useEffect(() => {
+    const shortByProduct = new Map<string, boolean>()
+    for (const [pid, totalQty] of qtyByProduct) {
+      const moq = moqByProduct[pid]
+      if (moq !== undefined && moq > 1 && totalQty < moq) {
+        shortByProduct.set(pid, true)
+      }
+    }
+    onMoqViolationChange?.(shortByProduct.size > 0)
+    // qtyByProduct is rebuilt every render — depend on the inputs that drive it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, moqByProduct, onMoqViolationChange])
 
   if (lines.length === 0) {
     return (
@@ -94,10 +128,13 @@ export function CartTable({
           {lines.map((line) => {
             const avail = availability[line.variantId]
             const isOversell = avail !== undefined && line.qty > avail
+            const moq = moqByProduct[line.productId]
+            const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
+            const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
             return (
               <tr
                 key={line.lineId}
-                className={isOversell ? 'bg-red-50' : undefined}
+                className={isOversell || isMoqShort ? 'bg-red-50' : undefined}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -148,6 +185,14 @@ export function CartTable({
                           >
                             Reduce to {avail}
                           </button>
+                        </div>
+                      )}
+                      {isMoqShort && moq !== undefined && (
+                        <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
+                          <span>
+                            Below minimum order ({moq} units) — currently {totalForProduct}{' '}
+                            across this product.
+                          </span>
                         </div>
                       )}
                     </div>

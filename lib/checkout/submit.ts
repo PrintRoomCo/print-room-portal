@@ -5,6 +5,7 @@ import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -91,6 +92,23 @@ export class StockShortfallError extends Error {
     super(detail.code)
     this.name = 'StockShortfallError'
     this.detail = detail
+  }
+}
+
+export interface MoqViolation {
+  cartLineId: string | null
+  productId: string
+  productName: string
+  effectiveMoq: number
+  totalQty: number
+}
+
+export class MoqViolationError extends Error {
+  readonly violations: MoqViolation[]
+  constructor(violations: MoqViolation[]) {
+    super('moq_violation')
+    this.name = 'MoqViolationError'
+    this.violations = violations
   }
 }
 
@@ -243,6 +261,64 @@ export async function submitCustomerOrder(
       })),
     )
   }
+
+  // 1c. MOQ guard. Resolves effective MOQ server-side from a fresh join of
+  //     products + b2b_catalogue_items (within the customer's granted item
+  //     set) — the client's payload doesn't carry MOQ and is not trusted
+  //     here either. MOQ is per-product, summed across every line that
+  //     shares productId (mirrors the PDP multi-size rule).
+  const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
+  const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
+    admin
+      .from('products')
+      .select('id, moq')
+      .in('id', productIds),
+    admin
+      .from('b2b_catalogue_items')
+      .select('source_product_id, moq_override')
+      .in('source_product_id', productIds)
+      .in('id', Array.from(grantedItemIds)),
+  ])
+  const productMoqById = new Map(
+    ((productMoqRows ?? []) as Array<{ id: string; moq: number | null }>).map(
+      (r) => [r.id, r.moq],
+    ),
+  )
+  const overrideByProductId = new Map(
+    ((catItemMoqRows ?? []) as Array<{
+      source_product_id: string
+      moq_override: number | null
+    }>).map((r) => [r.source_product_id, r.moq_override]),
+  )
+  const totalQtyByProductId = new Map<string, number>()
+  for (const line of input.lines) {
+    totalQtyByProductId.set(
+      line.product_id,
+      (totalQtyByProductId.get(line.product_id) ?? 0) + line.qty,
+    )
+  }
+  const moqViolations: MoqViolation[] = []
+  // Report a violation per offending line (not per product) so the cart UI
+  // can highlight every row affected, consistent with DecorationDriftError.
+  for (const line of input.lines) {
+    const effectiveMoq = getEffectiveMoq(
+      { moq: productMoqById.get(line.product_id) ?? null },
+      overrideByProductId.has(line.product_id)
+        ? { moq_override: overrideByProductId.get(line.product_id) ?? null }
+        : null,
+    )
+    const totalQty = totalQtyByProductId.get(line.product_id) ?? line.qty
+    if (effectiveMoq > 1 && totalQty < effectiveMoq) {
+      moqViolations.push({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        productName: line.product_name,
+        effectiveMoq,
+        totalQty,
+      })
+    }
+  }
+  if (moqViolations.length > 0) throw new MoqViolationError(moqViolations)
 
   // 2. Re-price every line on the server — ignore any client-sent prices.
   // Uses effective_unit_price so catalogue-scoped orgs get catalogue prices

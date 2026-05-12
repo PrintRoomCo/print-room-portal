@@ -25,10 +25,15 @@ export function CartClient({
   const cart = useCart()
   const router = useRouter()
   const [oversell, setOversell] = useState(false)
+  const [moqShort, setMoqShort] = useState(false)
   const pricingCtx = usePricingContext()
 
   const handleOversellChange = useCallback((next: boolean) => {
     setOversell(next)
+  }, [])
+
+  const handleMoqViolationChange = useCallback((next: boolean) => {
+    setMoqShort(next)
   }, [])
 
   const breakdown = computeOrderBreakdown({
@@ -43,7 +48,8 @@ export function CartClient({
   const depositPct = defaultDepositPercent ?? 0
   const depositAmount = (breakdown.netSubtotal * depositPct) / 100
 
-  const canCheckout = cart.lines.length > 0 && !oversell && !customerCodeMissing
+  const canCheckout =
+    cart.lines.length > 0 && !oversell && !moqShort && !customerCodeMissing
 
   return (
     <div className="space-y-6 p-4 md:p-8">
@@ -67,6 +73,7 @@ export function CartClient({
         onUpdateQty={(id, qty) => cart.updateLine(id, { qty })}
         onRemove={cart.removeLine}
         onOversellChange={handleOversellChange}
+        onMoqViolationChange={handleMoqViolationChange}
       />
 
       {cart.lines.length > 0 && (
@@ -90,6 +97,12 @@ export function CartClient({
             {oversell && (
               <div className="text-red-600">
                 One or more lines exceed available stock. Reduce quantities to proceed.
+              </div>
+            )}
+            {moqShort && (
+              <div className="text-red-600">
+                One or more products are below their minimum order quantity. Increase
+                quantities to proceed.
               </div>
             )}
           </div>

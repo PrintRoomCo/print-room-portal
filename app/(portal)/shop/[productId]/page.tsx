@@ -4,6 +4,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,7 +71,7 @@ export default async function ProductDetailPage({
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, image_url, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, image_url, moq_override, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -239,6 +240,7 @@ export default async function ProductDetailPage({
     name: string
     description: string | null
     image_url: string | null
+    moq_override: number | null
   } | null
 
   const displayProduct = {
@@ -247,6 +249,11 @@ export default async function ProductDetailPage({
     description: catItemForked?.description ?? productRow.description,
     image_url: catItemForked?.image_url ?? productRow.image_url,
   }
+
+  const effectiveMoq = getEffectiveMoq(
+    { moq: productRow.moq },
+    catItemForked ? { moq_override: catItemForked.moq_override } : null,
+  )
 
   return (
     <ProductDetailClient
@@ -276,6 +283,7 @@ export default async function ProductDetailPage({
       organizationId={context.organizationId}
       images={images}
       decorations={decorations}
+      effectiveMoq={effectiveMoq}
     />
   )
 }

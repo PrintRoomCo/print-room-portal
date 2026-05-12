@@ -151,6 +151,13 @@ export function CheckoutClient({
             now: number
             reason: string
           }>
+          violations?: Array<{
+            cartLineId: string | null
+            productId: string
+            productName: string
+            effectiveMoq: number
+            totalQty: number
+          }>
           detail?: {
             code?: 'insufficient_stock' | 'no_inventory'
             product_id?: string | null
@@ -158,6 +165,17 @@ export function CheckoutClient({
             available?: number
             requested?: number
           }
+        }
+        if (data.error === 'moq_violation' && data.violations) {
+          const summary = data.violations
+            .map((v) => `${v.productName}: ${v.totalQty} ordered, min ${v.effectiveMoq}`)
+            .join('; ')
+          setBanner({
+            kind: 'error',
+            msg: `Minimum order quantity not met — review your cart. ${summary}`,
+          })
+          router.push('/cart')
+          return
         }
         if (data.error === 'decoration_price_drift' && data.drift) {
           const summary = data.drift
