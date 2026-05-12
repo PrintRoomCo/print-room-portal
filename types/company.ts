@@ -14,15 +14,14 @@ export interface B2BCustomerAccess {
   companyId: string | null
   companyName: string | null
   locationIds: string[]
-  role: 'admin' | 'manager' | 'staff'
+  role: 'org_admin' | 'buyer'
   tier: string
 
   isCompanyUser: boolean
   isIndividual: boolean
 
-  isAdmin: boolean
-  isManager: boolean
-  isStaff: boolean
+  isOrgAdmin: boolean
+  isBuyer: boolean
   isCreative: boolean
 
   canViewLocations: boolean
@@ -32,6 +31,12 @@ export interface B2BCustomerAccess {
   canApproveDesigns: boolean
   canManageUsers: boolean
   canUseLeavers: boolean
+
+  /** Buyer is locked to defaultStoreId for ship-to. org_admin can pick any org store. */
+  canPlaceOrderForOtherStores: boolean
+
+  /** org_admin sees the full org order list; buyer sees only own orders. */
+  canSeeAllOrgOrders: boolean
 
   /** WS4 — friendly tier name from TIER_LABELS map. Null when no b2b_account or unknown tier. */
   tierLabel: string | null

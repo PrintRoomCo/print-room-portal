@@ -59,7 +59,7 @@ export async function getCompanyAccess(
       companyId: null,
       companyName: profile.company_name || null,
       locationIds: [],
-      role: 'staff',
+      role: 'org_admin',
       tier: 'bronze',
       tierLabel: null,
       tierDiscount: 0,
@@ -109,7 +109,7 @@ export async function getCompanyAccess(
     .eq('organization_id', orgMembership.organization_id)
 
   const locationIds = (locations || []).map((loc) => loc.id)
-  const role = (orgMembership.role as 'admin' | 'manager' | 'staff') || 'staff'
+  const role = (orgMembership.role as 'org_admin' | 'buyer') || 'org_admin'
   const tier = b2bAccount?.tier_level?.toString() || 'bronze'
 
   // 6. Check if the organization has any tracked inventory.
@@ -155,7 +155,7 @@ interface AccessInput {
   companyId: string | null
   companyName: string | null
   locationIds: string[]
-  role: 'admin' | 'manager' | 'staff'
+  role: 'org_admin' | 'buyer'
   tier: string
   tierLabel: string | null
   tierDiscount: number
@@ -180,28 +180,28 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     ...rest
   } = input
 
-  const isAdmin = role === 'admin'
-  const isManager = role === 'manager'
-  const isStaff = role === 'staff'
+  const isOrgAdmin = role === 'org_admin'
+  const isBuyer = role === 'buyer'
 
   return {
     ...rest,
     role,
     isCompanyUser,
     isIndividual: !isCompanyUser,
-    isAdmin,
-    isManager,
-    isStaff,
-    isCreative: !isCompanyUser || isStaff,
+    isOrgAdmin,
+    isBuyer,
+    isCreative: !isCompanyUser,
 
-    // Permission flags — same logic as original customer-access.server.ts
-    canViewLocations: isCompanyUser && (isAdmin || isManager),
-    canViewReports: isCompanyUser && isAdmin,
-    canViewAccountRequests: isAdmin,
-    canViewAllLocations: isAdmin,
-    canApproveDesigns: isAdmin || isManager,
-    canManageUsers: isAdmin,
+    canViewLocations: isCompanyUser && isOrgAdmin,
+    canViewReports: isCompanyUser && isOrgAdmin,
+    canViewAccountRequests: isOrgAdmin,
+    canViewAllLocations: isOrgAdmin,
+    canApproveDesigns: isOrgAdmin,
+    canManageUsers: isOrgAdmin,
     canUseLeavers: leaversEnabled,
+
+    canPlaceOrderForOtherStores: isOrgAdmin,
+    canSeeAllOrgOrders: isOrgAdmin,
 
     tierLabel,
     tierDiscount,
@@ -226,7 +226,7 @@ async function buildAccessForIndividual(
     companyId: null,
     companyName: null,
     locationIds: [],
-    role: 'staff',
+    role: 'org_admin',
     tier: 'bronze',
     tierLabel: null,
     tierDiscount: 0,

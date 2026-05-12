@@ -17,9 +17,11 @@ interface ShipToRowProps {
   value: string | null
   onChange: (nextStoreId: string | null) => void
   disabled?: boolean
+  /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
+  allowCustom?: boolean
 }
 
-export function ShipToRow({ line, stores, value, onChange, disabled }: ShipToRowProps) {
+export function ShipToRow({ line, stores, value, onChange, disabled, allowCustom = true }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
 
   return (
@@ -44,7 +46,7 @@ export function ShipToRow({ line, stores, value, onChange, disabled }: ShipToRow
               {s.city ? ` — ${s.city}` : ''}
             </option>
           ))}
-          <option value={CUSTOM_SHIP_TO}>Custom address…</option>
+          {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
         </select>
       </label>
     </div>

@@ -24,6 +24,12 @@ interface CheckoutClientProps {
    * pre-populated but editable.
    */
   defaultStoreId: string | null
+  /**
+   * Buyer Roles step 6 — when true, ship-to is hard-locked to defaultStoreId
+   * and the custom-address path is hidden. The DB CHECK guarantees defaultStoreId
+   * is set for buyers, but we defend against drift by surfacing a banner.
+   */
+  isBuyer: boolean
 }
 
 interface CheckoutResponse {
@@ -53,6 +59,7 @@ export function CheckoutClient({
   paymentTerms,
   defaultDepositPercent,
   defaultStoreId: buyerDefaultStoreId,
+  isBuyer,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -64,7 +71,10 @@ export function CheckoutClient({
   const initialStoreId = buyerDefaultIsAvailable
     ? buyerDefaultStoreId
     : stores[0]?.id ?? null
-  const lockToBuyerDefault = buyerDefaultIsAvailable
+  // Buyers: hard lock regardless of `buyerDefaultIsAvailable` (CHECK enforces it,
+  // but we'd rather fail loud via the banner below if drift occurs).
+  const lockToBuyerDefault = isBuyer || buyerDefaultIsAvailable
+  const buyerMisconfigured = isBuyer && !buyerDefaultIsAvailable
   const [perLineShipTo, setPerLineShipTo] = useState<Record<string, string | null>>(() => {
     const m: Record<string, string | null> = {}
     for (const l of cart.lines) m[l.lineId] = initialStoreId
@@ -105,7 +115,8 @@ export function CheckoutClient({
     cart.lines.length > 0 &&
     !customerCodeMissing &&
     !mixedCustom &&
-    !customIncomplete
+    !customIncomplete &&
+    !buyerMisconfigured
 
   async function submitOrder() {
     setSubmitting('order')
@@ -241,6 +252,13 @@ export function CheckoutClient({
         </div>
       )}
 
+      {buyerMisconfigured && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          Your default shipping store is missing or no longer assigned to your account — please
+          contact staff before submitting an order.
+        </div>
+      )}
+
       {depositPct > 0 && (
         <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
           A deposit of {depositPct}% ({formatPrice(depositAmount)}) will be
@@ -261,6 +279,7 @@ export function CheckoutClient({
                 setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
               }
               disabled={submitting !== false || lockToBuyerDefault}
+              allowCustom={!isBuyer}
             />
           ))}
         </div>

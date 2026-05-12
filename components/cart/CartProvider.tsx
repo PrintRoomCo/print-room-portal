@@ -52,6 +52,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const { access } = useCompany()
   const organizationId = access?.companyId ?? null
   const storageKey = organizationId ? `pr-cart:${organizationId}` : null
+  const roleKey = organizationId ? `pr-cart-role:${organizationId}` : null
+  const role = access?.role ?? null
 
   const [state, setState] = useState<CartState>({ lines: [] })
   const [hydrated, setHydrated] = useState(false)
@@ -62,13 +64,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
+      // Buyer Roles step 6: if role changed since last visit (e.g. staff
+      // flipped org_admin → buyer mid-session), the persisted ship-to ids
+      // may now be unreachable. Clear the cart and notify the shell.
+      if (roleKey && role) {
+        const lastRole = localStorage.getItem(roleKey)
+        if (lastRole && lastRole !== role) {
+          localStorage.removeItem(storageKey)
+          sessionStorage.setItem('pr-cart-role-change-toast', '1')
+          window.dispatchEvent(new CustomEvent('pr:cart-role-cleared'))
+        }
+        localStorage.setItem(roleKey, role)
+      }
       const raw = localStorage.getItem(storageKey)
       setState(raw ? normalizePersisted(JSON.parse(raw)) : { lines: [] })
     } catch {
       setState({ lines: [] })
     }
     setHydrated(true)
-  }, [storageKey])
+  }, [storageKey, roleKey, role])
 
   useEffect(() => {
     if (!hydrated || !storageKey) return

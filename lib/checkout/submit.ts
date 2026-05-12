@@ -94,6 +94,17 @@ export class StockShortfallError extends Error {
   }
 }
 
+export class BuyerScopeError extends Error {
+  readonly mismatchedStoreIds: Array<string | null>
+  readonly defaultStoreId: string | null
+  constructor(mismatchedStoreIds: Array<string | null>, defaultStoreId: string | null) {
+    super('buyer_ship_to_mismatch')
+    this.name = 'BuyerScopeError'
+    this.mismatchedStoreIds = mismatchedStoreIds
+    this.defaultStoreId = defaultStoreId
+  }
+}
+
 interface SubmitB2BOrderRow {
   quote_id: string
   order_id: string
@@ -159,6 +170,22 @@ export async function submitCustomerOrder(
   admin: SupabaseClient,
   input: CheckoutInput
 ): Promise<CheckoutResult> {
+  // 0. Buyer-scope guard: a buyer (Buyer Roles step 6) is locked to their
+  //    defaultStoreId. Reject any line that ships elsewhere AND any custom-
+  //    shipping path. Server-side mirror of CheckoutClient's ShipToRow lock.
+  if (input.context.role === 'buyer') {
+    const expected = input.context.defaultStoreId
+    if (input.custom_shipping_address) {
+      throw new BuyerScopeError([null], expected)
+    }
+    const mismatched = input.lines
+      .map((l) => l.ship_to_store_id ?? null)
+      .filter((sid) => sid !== expected)
+    if (mismatched.length > 0) {
+      throw new BuyerScopeError(mismatched, expected)
+    }
+  }
+
   // 1. Resolve shipping_address — either the custom JSON or the first line's store.
   let shippingAddress: Record<string, unknown> = input.custom_shipping_address ?? {}
   if (!input.custom_shipping_address && input.lines[0]?.ship_to_store_id) {

@@ -499,8 +499,8 @@ export function AccountClient() {
               </div>
             ))}
 
-            {/* Add Location Card - Only for admins */}
-            {access.isAdmin && (
+            {/* Add Location Card - Only for org admins */}
+            {access.isOrgAdmin && (
               <button
                 onClick={() => setShowAddStore(true)}
                 className="card-elevated p-6 border-2 border-dashed border-gray-200 hover:border-[rgb(var(--color-primary))]/30 flex flex-col items-center justify-center text-center min-h-[200px] cursor-pointer group transition-all duration-300"

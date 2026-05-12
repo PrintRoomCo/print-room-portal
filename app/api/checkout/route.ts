@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import {
+  BuyerScopeError,
   DecorationDriftError,
   MemberAccessDriftError,
   StockShortfallError,
@@ -90,6 +91,18 @@ export async function POST(request: Request) {
     if (e instanceof MemberAccessDriftError) {
       return NextResponse.json(
         { error: 'member_access_drift', drift: e.drift },
+        { status: 409 },
+      )
+    }
+    if (e instanceof BuyerScopeError) {
+      return NextResponse.json(
+        {
+          error: 'buyer_ship_to_mismatch',
+          detail: {
+            mismatched_store_ids: e.mismatchedStoreIds,
+            default_store_id: e.defaultStoreId,
+          },
+        },
         { status: 409 },
       )
     }

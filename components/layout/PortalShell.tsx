@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { useCompany } from '@/contexts/CompanyContext'
 import { CartChip } from '@/components/cart/CartChip'
 import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
+import { RoleChangeNotice } from './RoleChangeNotice'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const { access, loading } = useCompany()
@@ -33,6 +34,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <Sidebar customer={access}>
       {children}
       <CartChip />
+      <RoleChangeNotice />
     </Sidebar>
   )
 }

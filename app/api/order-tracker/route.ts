@@ -26,9 +26,11 @@ export async function GET() {
   let isCompanyWide = false
 
   try {
-    const isAdmin = membership?.role === 'admin' || membership?.role === 'manager'
+    // Buyer Roles step 6: org_admin sees the full company order list; buyer
+    // falls through to the user-only lookup below (own orders, per Jon).
+    const canSeeAllOrgOrders = membership?.role === 'org_admin'
 
-    if (isAdmin && membership?.organization_id) {
+    if (canSeeAllOrgOrders && membership?.organization_id) {
       // Get company's B2B account to find company_id
       const { data: b2bAccount } = await adminClient
         .from('b2b_accounts')
