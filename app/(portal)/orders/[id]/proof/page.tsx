@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProofNotReady } from '@/components/proofs/ProofNotReady'
@@ -5,6 +6,8 @@ import { ProofViewer } from '@/components/proofs/ProofViewer'
 import { coerceProofDocument } from '@/lib/proofs/types'
 
 export const dynamic = 'force-dynamic'
+
+const ALLOWED_EDIT_ROLES = new Set(['org_admin', 'buyer'])
 
 interface OrderRow {
   id: string
@@ -47,10 +50,14 @@ interface VersionRow {
  */
 export default async function OrderProofPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ amendment?: string }>
 }) {
   const { id: orderId } = await params
+  const search = (await searchParams) ?? {}
+  const amendmentSubmitted = search.amendment === 'submitted'
 
   // Gate 1 — auth. Anonymous / no-org users are redirected per handleAuthFailure.
   const auth = await requireB2BCustomer()
@@ -124,16 +131,36 @@ export default async function OrderProofPage({
   if (!version) return <ProofNotReady />
 
   const document = coerceProofDocument(version.snapshot_data)
+  const canEdit = ALLOWED_EDIT_ROLES.has(context.role)
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <div className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Proof</p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">{proof.name || 'Proof'}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
-          Read-only view of the proof prepared by our team for this order.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Proof</p>
+          <h1 className="mt-1 text-2xl font-semibold text-gray-900">{proof.name || 'Proof'}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+            Read-only view of the proof prepared by our team for this order.
+          </p>
+        </div>
+        {canEdit && (
+          <Link
+            href={`/orders/${orderId}/proof/edit`}
+            className="inline-flex items-center rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90"
+          >
+            Edit proof
+          </Link>
+        )}
       </div>
+
+      {amendmentSubmitted && (
+        <div
+          className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm leading-6 text-green-900"
+          role="status"
+        >
+          Your edits have been submitted — we&apos;ll email you when the proof updates.
+        </div>
+      )}
 
       <ProofViewer document={document} proofName={proof.name || 'Proof'} />
     </div>
