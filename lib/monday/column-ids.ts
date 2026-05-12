@@ -9,6 +9,13 @@ export const PRODUCTION_SUBITEMS_BOARD_ID = 1992701983
 export const SUPPLIERS_INVENTORY_BOARD_ID = 2037468738
 export const CHATBOT_INQUIRIES_BOARD_ID = 5026071982
 
+// Monday's canonical account slug for The Print Room. The display name renders
+// "The Print Room Group", but the account slug is `theprint-room-group` (no
+// hyphen between "the" and "print") — confirmed against `account.slug` via the
+// Monday GraphQL API. Using the wrong slug sends users to a tenant where their
+// Monday user does not exist (user_not_found redirect).
+export const MONDAY_ACCOUNT_SLUG = 'theprint-room-group'
+
 export const PRODUCTION_COLUMNS = {
   customerEmail: 'email_mkqjpxt3',
   poRef: 'text_mkqxcmvz',

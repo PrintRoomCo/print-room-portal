@@ -1,6 +1,7 @@
 'use client'
 
 import { StatusBadge } from './StatusBadge'
+import { MONDAY_ACCOUNT_SLUG } from '@/lib/monday/column-ids'
 
 interface Props {
   quote: any
@@ -44,7 +45,7 @@ export function QuoteDetail({ quote }: Props) {
             )}
             {quote.monday_item_id && (
               <a
-                href={`https://theprint-room.monday.com/boards/${quote.monday_board_id}/pulses/${quote.monday_item_id}`}
+                href={`https://${MONDAY_ACCOUNT_SLUG}.monday.com/boards/${quote.monday_board_id}/pulses/${quote.monday_item_id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[rgb(var(--color-brand-blue))] text-xs underline mt-1 inline-block"
