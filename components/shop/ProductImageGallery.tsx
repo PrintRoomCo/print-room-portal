@@ -11,7 +11,11 @@ export type GalleryImage = CatalogueAwareGalleryImage
 
 export interface GalleryOverlay {
   linkId: string
-  printAreaView: string
+  // product_images.id this rect is anchored to. Matched against the
+  // currently-displayed gallery image's id. Catalogue-item images live in
+  // a different id space, so they never match — which is correct, since
+  // those are already-baked snapshots that shouldn't be overlaid.
+  imageId: string
   rect: { x: number; y: number; w: number; h: number }
   placement: { x: number; y: number; w: number; h: number; rotation_deg: number }
   artworkUrl: string
@@ -51,17 +55,15 @@ export function ProductImageGallery({
     () => ordered.find((img) => img.url === activeUrl) ?? null,
     [ordered, activeUrl],
   )
-  const activeView = activeImage?.view?.toLowerCase() ?? null
-
   // A designer_snapshot already has decorations baked in by staff — overlaying
   // live artwork on top would double-render (and any CDN/browser cache lag on
   // the snapshot URL would offset the two copies). Trust the snapshot as-is.
   const activeOverlays = useMemo(
     () =>
-      activeView && activeImage?.source !== 'designer_snapshot'
-        ? overlays.filter((o) => o.printAreaView.toLowerCase() === activeView)
+      activeImage && activeImage.source !== 'designer_snapshot'
+        ? overlays.filter((o) => o.imageId === activeImage.id)
         : [],
-    [overlays, activeView, activeImage],
+    [overlays, activeImage],
   )
 
   if (!activeUrl) {

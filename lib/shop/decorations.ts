@@ -3,7 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const ARTWORK_BUCKET = 'org-artworks'
 
 export interface DecorationOverlay {
-  printAreaView: string
+  // product_images.id this rect is anchored to — PDP gallery filters
+  // overlays where imageId === currently-displayed-image.id
+  imageId: string
   rect: { x: number; y: number; w: number; h: number }
   placement: { x: number; y: number; w: number; h: number; rotation_deg: number }
   artworkUrl: string
@@ -74,7 +76,7 @@ interface RawLinkRow {
 
 interface RawPrintArea {
   id: string
-  view: string | null
+  image_id: string
   rect_x: number | string | null
   rect_y: number | string | null
   rect_w: number | string | null
@@ -155,7 +157,7 @@ const LINK_SELECT = `
   ),
   print_area:product_print_areas!b2b_catalogue_item_decorations_print_area_id_fkey(
     id,
-    view,
+    image_id,
     rect_x,
     rect_y,
     rect_w,
@@ -242,7 +244,7 @@ function buildOverlay(
   printArea: RawPrintArea | null,
   artwork: RawArtwork,
 ): DecorationOverlay | null {
-  if (!printArea || !printArea.view) return null
+  if (!printArea || !printArea.image_id) return null
   const rectX = toNum(printArea.rect_x)
   const rectY = toNum(printArea.rect_y)
   const rectW = toNum(printArea.rect_w)
@@ -274,7 +276,7 @@ function buildOverlay(
     : null
 
   return {
-    printAreaView: printArea.view,
+    imageId: printArea.image_id,
     rect: { x: rectX, y: rectY, w: rectW, h: rectH },
     placement: { x: placeX, y: placeY, w: placeW, h: placeH, rotation_deg: rotation },
     artworkUrl: variantUrl ?? artwork.public_url,

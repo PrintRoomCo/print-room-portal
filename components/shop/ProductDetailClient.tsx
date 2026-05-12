@@ -269,7 +269,7 @@ export function ProductDetailClient({
           ? [
               {
                 linkId: d.linkId,
-                printAreaView: d.overlay.printAreaView,
+                imageId: d.overlay.imageId,
                 rect: d.overlay.rect,
                 placement: d.overlay.placement,
                 artworkUrl: d.overlay.artworkUrl,
