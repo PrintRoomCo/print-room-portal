@@ -4,6 +4,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProofNotReady } from '@/components/proofs/ProofNotReady'
 import { ProofViewer } from '@/components/proofs/ProofViewer'
 import { coerceProofDocument } from '@/lib/proofs/types'
+import { isProofVisibleToCustomer } from '@/lib/proofs/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,8 @@ interface VersionRow {
  *   2. order.quotes.organization_id     - org gate
  *   3. proof.order_id non-null          - order-linked gate
  *   4. order.order_proof_approval_gate  - deliberate customer visibility gate
- *      + proof_quality_status visible     (per stabilisation spec §G.5)
+ *      + proof_quality_status visible     (per stabilisation spec §G.5;
+ *      predicate lives in lib/proofs/visibility.ts, shared with /proofs)
  *
  * Slice G adds the "Edit proof" entry point. This page intentionally renders
  * read-only.
@@ -113,9 +115,15 @@ export default async function OrderProofPage({
   // (written by `POST /api/proofs/[id]/approve`) AND the proof being in
   // `sent_to_customer`. Production-approval (`orders.status='approved'`) is
   // a downstream operation that no longer affects customer visibility.
-  const gateApproved = order.order_proof_approval_gate === 'approved'
-  const proofSentToCustomer = proof.proof_quality_status === 'sent_to_customer'
-  if (!gateApproved || !proofSentToCustomer) return <ProofNotReady />
+  // Predicate shared with /proofs archive via lib/proofs/visibility.ts.
+  if (
+    !isProofVisibleToCustomer({
+      approvalGate: order.order_proof_approval_gate,
+      proofQualityStatus: proof.proof_quality_status,
+    })
+  ) {
+    return <ProofNotReady />
+  }
 
   // Happy path — load the snapshot for the current version and render.
   if (!proof.current_version_id) return <ProofNotReady />
