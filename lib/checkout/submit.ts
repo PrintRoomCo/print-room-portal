@@ -6,6 +6,7 @@ import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
+import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -646,6 +647,55 @@ export async function submitCustomerOrder(
     .from('orders')
     .update({ status: 'awaiting-approval' })
     .eq('id', order_id)
+
+  // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards
+  //     populate with customer-originated drafts the same way they do for staff-
+  //     originated B2B submits. Pulls org/customer/order_ref from the quote
+  //     because `orders` itself carries none of those signals (schema reality
+  //     check — see §F.1). The helper never throws; failure paths collapse to
+  //     an audit_events row so the order submit always succeeds.
+  try {
+    const { data: quote } = await admin
+      .from('quotes')
+      .select('id, organization_id, customer_name, customer_email, order_ref')
+      .eq('id', quote_id)
+      .single<{
+        id: string
+        organization_id: string | null
+        customer_name: string | null
+        customer_email: string | null
+        order_ref: string | null
+      }>()
+    const { data: lineRows } = await admin
+      .from('quote_items')
+      .select('product_id')
+      .eq('quote_id', quote_id)
+    const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
+      .map((r) => r.product_id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+    if (quote?.organization_id && quote.order_ref) {
+      await autofillProofForOrder(
+        {
+          orderId: order_id,
+          quoteId: quote_id,
+          organizationId: quote.organization_id,
+          customerName: quote.customer_name ?? input.context.organizationName,
+          customerEmail: quote.customer_email ?? input.context.email ?? '',
+          orderRef: quote.order_ref,
+          productIds,
+        },
+        admin,
+      )
+    }
+  } catch (e) {
+    // Defence-in-depth — the helper is contracted never to throw, but a
+    // failure here must NEVER bubble out of submit and break the order.
+    console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
+      orderId: order_id,
+      err: e instanceof Error ? e.message : String(e),
+    })
+  }
 
   // Fetch the email payload from quotes/quote_items for the confirmation email below.
   let emailLines: OrderConfirmationLine[] = []
