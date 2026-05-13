@@ -14,21 +14,23 @@ interface AccountManager {
   phone: string
 }
 
+const DEFAULT_ACCOUNT_MANAGER: AccountManager = {
+  name: 'The Print Room team',
+  email: 'sales@theprint-room.co.nz',
+  phone: '+64 9 600 1234',
+}
+
 function accountManagerFromSettings(settings: Record<string, unknown> | null): AccountManager {
   const manager = settings?.account_manager
   if (manager && typeof manager === 'object') {
     const row = manager as Record<string, unknown>
     return {
-      name: String(row.name ?? 'The Print Room team'),
-      email: String(row.email ?? 'sales@theprint-room.co.nz'),
-      phone: String(row.phone ?? '+64 9 600 1234'),
+      name: String(row.name ?? DEFAULT_ACCOUNT_MANAGER.name),
+      email: String(row.email ?? DEFAULT_ACCOUNT_MANAGER.email),
+      phone: String(row.phone ?? DEFAULT_ACCOUNT_MANAGER.phone),
     }
   }
-  return {
-    name: 'The Print Room team',
-    email: 'sales@theprint-room.co.nz',
-    phone: '+64 9 600 1234',
-  }
+  return DEFAULT_ACCOUNT_MANAGER
 }
 
 export default async function WelcomePage() {
@@ -46,14 +48,37 @@ export default async function WelcomePage() {
   const access = await getCompanyAccess(user.id, user.email ?? undefined)
   if (!access) redirect('/account')
 
-  let accountManager = accountManagerFromSettings(null)
+  let accountManager: AccountManager = DEFAULT_ACCOUNT_MANAGER
   if (access.companyId) {
-    const { data: org } = await getSupabaseServer()
-      .from('organizations')
-      .select('settings')
-      .eq('id', access.companyId)
-      .maybeSingle()
-    accountManager = accountManagerFromSettings((org?.settings as Record<string, unknown> | null) ?? null)
+    const admin = getSupabaseServer()
+    const [{ data: b2bRow }, { data: org }] = await Promise.all([
+      admin
+        .from('b2b_accounts')
+        .select('account_manager_id, staff_users:account_manager_id (email, display_name)')
+        .eq('organization_id', access.companyId)
+        .maybeSingle(),
+      admin
+        .from('organizations')
+        .select('settings')
+        .eq('id', access.companyId)
+        .maybeSingle(),
+    ])
+    // Phone is not on staff_users; pull it from the legacy jsonb settings as a
+    // fallback. Name + email prefer the real linkage; if no AM is set yet, fall
+    // back to the jsonb shape so unconfigured orgs keep showing the team.
+    const settingsFallback = accountManagerFromSettings(
+      (org?.settings as Record<string, unknown> | null) ?? null,
+    )
+    const linked = (b2bRow as
+      | { staff_users?: { email: string | null; display_name: string | null } | null }
+      | null)?.staff_users
+    accountManager = linked
+      ? {
+          name: linked.display_name ?? linked.email ?? settingsFallback.name,
+          email: linked.email ?? settingsFallback.email,
+          phone: settingsFallback.phone,
+        }
+      : settingsFallback
   }
 
   const firstName = access.firstName || user.email?.split('@')[0] || 'there'
