@@ -24,6 +24,20 @@ export const SIZE_COLUMNS = [
 
 export type ProofSizeColumn = (typeof SIZE_COLUMNS)[number]
 
+export type ProofSourceMode = 'manual' | 'catalogue_product' | 'customer_order_catalogue_product'
+
+export interface ProofCatalogueSource {
+  mode: ProofSourceMode
+  catalogueItemId?: string | null
+  sourceProductId?: string | null
+  productId?: string | null
+  productVariantId?: string | null
+  swatchId?: string | null
+  swatchLabel?: string | null
+  unitPrice?: number | null
+  sourceLabel?: string
+}
+
 export interface ProofPrintArea {
   id: string
   label: string
@@ -51,6 +65,8 @@ export interface ProofDesign {
   printHeightsNote: string
   productionNote: string
   printAreas: ProofPrintArea[]
+  sourceMode?: ProofSourceMode
+  catalogueSource?: ProofCatalogueSource | null
 }
 
 export interface ProofOrderLine {
@@ -62,7 +78,12 @@ export interface ProofOrderLine {
   garment: string
   sku: string
   colour: string
+  productId?: string
+  productVariantId?: string | null
+  sourceCatalogueItemId?: string | null
   quantities: Record<string, string>
+  sourceMode?: ProofSourceMode
+  catalogueSource?: ProofCatalogueSource | null
 }
 
 export interface ProofDocument {
@@ -92,6 +113,47 @@ export function coerceProofDocument(raw: unknown): ProofDocument {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const str = (v: unknown, fb = ''): string =>
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : fb
+  const nullableStr = (v: unknown): string | null => {
+    const value = str(v).trim()
+    return value || null
+  }
+  const nullableNum = (v: unknown): number | null => {
+    if (v === undefined || v === null || v === '') return null
+    const n = typeof v === 'number' ? v : Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  const sourceMode = (v: unknown): ProofSourceMode => {
+    const mode = str(v).trim()
+    return mode === 'catalogue_product' || mode === 'customer_order_catalogue_product'
+      ? mode
+      : 'manual'
+  }
+  const source = (v: unknown, fallbackMode: ProofSourceMode): ProofCatalogueSource | null => {
+    const s = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+    const mode = sourceMode(s.mode || fallbackMode)
+    const out: ProofCatalogueSource = {
+      mode,
+      catalogueItemId: nullableStr(s.catalogueItemId ?? s.catalogue_item_id),
+      sourceProductId: nullableStr(s.sourceProductId ?? s.source_product_id),
+      productId: nullableStr(s.productId ?? s.product_id),
+      productVariantId: nullableStr(s.productVariantId ?? s.product_variant_id),
+      swatchId: nullableStr(s.swatchId ?? s.swatch_id),
+      swatchLabel: nullableStr(s.swatchLabel ?? s.swatch_label),
+      unitPrice: nullableNum(s.unitPrice ?? s.unit_price),
+      sourceLabel: nullableStr(s.sourceLabel ?? s.source_label) ?? undefined,
+    }
+    const hasSource = [
+      out.catalogueItemId,
+      out.sourceProductId,
+      out.productId,
+      out.productVariantId,
+      out.swatchId,
+      out.swatchLabel,
+      out.unitPrice,
+      out.sourceLabel,
+    ].some((entry) => entry !== null && entry !== undefined && entry !== '')
+    return hasSource || mode !== 'manual' ? out : null
+  }
   const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 
   const coercePrintArea = (v: unknown, i: number): ProofPrintArea => {
@@ -111,6 +173,7 @@ export function coerceProofDocument(raw: unknown): ProofDocument {
 
   const coerceDesign = (v: unknown, i: number): ProofDesign => {
     const d = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+    const mode = sourceMode(d.sourceMode || d.source_mode || ((d.catalogueSource || d.catalogue_source) as Record<string, unknown> | null)?.mode)
     return {
       id: str(d.id, `design-${i}`),
       index: typeof d.index === 'number' ? d.index : i + 1,
@@ -126,16 +189,20 @@ export function coerceProofDocument(raw: unknown): ProofDocument {
       printHeightsNote: str(d.printHeightsNote, 'IF GARMENTS DIFFER'),
       productionNote: str(d.productionNote, 'N/A'),
       printAreas: arr(d.printAreas).map(coercePrintArea),
+      sourceMode: mode,
+      catalogueSource: source(d.catalogueSource || d.catalogue_source, mode),
     }
   }
 
   const coerceOrderLine = (v: unknown, i: number): ProofOrderLine => {
     const l = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+    const mode = sourceMode(l.sourceMode || l.source_mode || ((l.catalogueSource || l.catalogue_source) as Record<string, unknown> | null)?.mode)
     const qtyRaw = (l.quantities && typeof l.quantities === 'object'
       ? l.quantities
       : {}) as Record<string, unknown>
     const quantities: Record<string, string> = {}
     for (const [k, val] of Object.entries(qtyRaw)) quantities[k] = str(val)
+    const catalogueSource = source(l.catalogueSource || l.catalogue_source, mode)
     return {
       id: str(l.id, `line-${i}`),
       designIndex: typeof l.designIndex === 'number' ? l.designIndex : 1,
@@ -145,7 +212,15 @@ export function coerceProofDocument(raw: unknown): ProofDocument {
       garment: str(l.garment),
       sku: str(l.sku),
       colour: str(l.colour),
+      productId: str(l.productId || l.product_id) || undefined,
+      productVariantId: nullableStr(l.productVariantId || l.product_variant_id),
+      sourceCatalogueItemId:
+        nullableStr(l.sourceCatalogueItemId || l.source_catalogue_item_id) ||
+        catalogueSource?.catalogueItemId ||
+        null,
       quantities,
+      sourceMode: mode,
+      catalogueSource,
     }
   }
 
@@ -206,7 +281,11 @@ export interface CatalogueProofProductDecoration {
 export interface CatalogueProofProduct {
   catalogueItemId: string
   sourceProductId: string
+  sourceProductName?: string | null
   name: string
+  brand?: string | null
+  sku?: string | null
+  unitPrice?: number | null
   imageUrl: string | null
   colours: CatalogueProofProductColour[]
   decorations: CatalogueProofProductDecoration[]

@@ -192,9 +192,16 @@ export function ProofStagingForm({
           className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 md:p-6"
         >
           <header className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-gray-900">
-              Design {design.index || dIndex + 1}
-            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-gray-900">
+                Design {design.index || dIndex + 1}
+              </h2>
+              {isSourceLocked(design.sourceMode) && (
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800">
+                  Product from catalogue
+                </span>
+              )}
+            </div>
             <span className="text-xs text-gray-500">
               Garment: {design.garmentLabel || '-'}
             </span>
@@ -208,8 +215,10 @@ export function ProofStagingForm({
               <input
                 type="text"
                 className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                readOnly={isSourceLocked(design.sourceMode)}
                 value={design.name}
                 onChange={(event) => {
+                  if (isSourceLocked(design.sourceMode)) return
                   const next = [...doc.designs]
                   next[dIndex] = { ...design, name: event.target.value }
                   setDoc({ ...doc, designs: next })
@@ -223,8 +232,10 @@ export function ProofStagingForm({
               <input
                 type="text"
                 className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                readOnly={isSourceLocked(design.sourceMode)}
                 value={design.subtitle}
                 onChange={(event) => {
+                  if (isSourceLocked(design.sourceMode)) return
                   const next = [...doc.designs]
                   next[dIndex] = { ...design, subtitle: event.target.value }
                   setDoc({ ...doc, designs: next })
@@ -238,8 +249,10 @@ export function ProofStagingForm({
               <input
                 type="text"
                 className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                readOnly={isSourceLocked(design.sourceMode)}
                 value={design.colourName}
                 onChange={(event) => {
+                  if (isSourceLocked(design.sourceMode)) return
                   const next = [...doc.designs]
                   next[dIndex] = { ...design, colourName: event.target.value }
                   setDoc({ ...doc, designs: next })
@@ -266,8 +279,10 @@ export function ProofStagingForm({
                       <input
                         type="text"
                         className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                        readOnly={isSourceLocked(design.sourceMode)}
                         value={area.label}
                         onChange={(event) => {
+                          if (isSourceLocked(design.sourceMode)) return
                           const nextDesigns = [...doc.designs]
                           const nextAreas = [...design.printAreas]
                           nextAreas[aIndex] = { ...area, label: event.target.value }
@@ -284,8 +299,10 @@ export function ProofStagingForm({
                         type="text"
                         inputMode="decimal"
                         className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                        readOnly={isSourceLocked(design.sourceMode)}
                         value={area.widthMm}
                         onChange={(event) => {
+                          if (isSourceLocked(design.sourceMode)) return
                           const nextDesigns = [...doc.designs]
                           const nextAreas = [...design.printAreas]
                           nextAreas[aIndex] = { ...area, widthMm: event.target.value }
@@ -302,8 +319,10 @@ export function ProofStagingForm({
                         type="text"
                         inputMode="decimal"
                         className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-pr-blue focus:ring-pr-blue"
+                        readOnly={isSourceLocked(design.sourceMode)}
                         value={area.heightMm}
                         onChange={(event) => {
+                          if (isSourceLocked(design.sourceMode)) return
                           const nextDesigns = [...doc.designs]
                           const nextAreas = [...design.printAreas]
                           nextAreas[aIndex] = { ...area, heightMm: event.target.value }
@@ -352,8 +371,10 @@ export function ProofStagingForm({
                     <input
                       type="text"
                       className="w-full rounded border border-gray-300 px-1 py-0.5 text-xs"
+                      readOnly={isSourceLocked(line.sourceMode)}
                       value={line.name}
                       onChange={(event) => {
+                        if (isSourceLocked(line.sourceMode)) return
                         const next = [...doc.orderLines]
                         next[lIndex] = { ...line, name: event.target.value }
                         setDoc({ ...doc, orderLines: next })
@@ -364,8 +385,10 @@ export function ProofStagingForm({
                     <input
                       type="text"
                       className="w-full rounded border border-gray-300 px-1 py-0.5 text-xs"
+                      readOnly={isSourceLocked(line.sourceMode)}
                       value={line.colour}
                       onChange={(event) => {
+                        if (isSourceLocked(line.sourceMode)) return
                         const next = [...doc.orderLines]
                         next[lIndex] = { ...line, colour: event.target.value }
                         setDoc({ ...doc, orderLines: next })
@@ -436,6 +459,10 @@ export function ProofStagingForm({
       </div>
     </form>
   )
+}
+
+function isSourceLocked(sourceMode: string | undefined): boolean {
+  return sourceMode === 'catalogue_product' || sourceMode === 'customer_order_catalogue_product'
 }
 
 /** Count of surface-level edits — purely for the button label. Server is

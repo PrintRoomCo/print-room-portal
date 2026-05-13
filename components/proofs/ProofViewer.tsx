@@ -19,8 +19,12 @@ const NAVY = '#25358b'
 const ARTWORK_PAPER = '#f0eddf'
 const PAGE_W = 841.89
 const PAGE_H = 595.28
-const ORDER_FIRST_PAGE_ROWS = 4
+const ORDER_FIRST_PAGE_ROWS = 3
 const ORDER_CONTINUATION_ROWS = 10
+const FIRST_ORDER_TABLE_TOP = 350
+const FIRST_ORDER_LABEL_TOP = 326
+const WARNING_TOP = 284
+const WARNING_HEIGHT = 32
 
 const monoFont: CSSProperties = { fontFamily: '"Courier New", Courier, monospace' }
 const titleFont: CSSProperties = { fontFamily: '"Arial Black", Impact, sans-serif' }
@@ -129,9 +133,12 @@ function OrderApprovalPage({
   pageIndex: number
   totalOrderPages: number
 }) {
-  const tableTop = pageIndex === 0 ? 328 : 20
+  const tableTop = pageIndex === 0 ? FIRST_ORDER_TABLE_TOP : 20
   const tableHeight = (pageIndex === 0 ? 48 : 0) + Math.max(lines.length, 1) * 54
-  const notesTop = Math.min(tableTop + tableHeight + 20, 520)
+  const notesTop = pageIndex === 0
+    ? Math.min(tableTop + tableHeight + 10, 562)
+    : Math.min(tableTop + tableHeight + 20, 520)
+  const notesHeight = pageIndex === 0 ? 24 : 44
 
   return (
     <div className="relative h-full bg-white text-black" style={monoFont}>
@@ -141,11 +148,11 @@ function OrderApprovalPage({
           <TermsPanel terms={document.terms} />
           <ApprovalPanel document={document} />
           {document.warning && (
-            <div style={rect(32, 263, 778, 32)} className="overflow-hidden text-[10px] leading-[1.55] text-[#e11d25]">
+            <div style={rect(32, WARNING_TOP, 778, WARNING_HEIGHT)} className="overflow-hidden break-words text-[10px] leading-[1.45] text-[#e11d25]">
               {document.warning}
             </div>
           )}
-          <div style={rect(32, 304, 240, 18)} className="text-[13px] font-bold">
+          <div style={rect(32, FIRST_ORDER_LABEL_TOP, 240, 18)} className="text-[13px] font-bold">
             Garment/order details
           </div>
         </>
@@ -158,9 +165,9 @@ function OrderApprovalPage({
       />
 
       {pageIndex === totalOrderPages - 1 && (
-        <div style={rect(32, notesTop, 778, 44)} className="overflow-hidden text-[13px] leading-5">
+        <div style={rect(32, notesTop, 778, notesHeight)} className="overflow-hidden text-[13px] leading-5">
           <p>Additional job notes:</p>
-          {document.notes && <p className="mt-2 max-h-5 overflow-hidden text-[8px] leading-[1.35]">{document.notes}</p>}
+          {document.notes && <p className="mt-1 max-h-4 overflow-hidden text-[8px] leading-[1.25]">{document.notes}</p>}
         </div>
       )}
     </div>
@@ -257,21 +264,21 @@ function TermsPanel({ terms }: { terms: string }) {
 
 function ApprovalPanel({ document }: { document: ProofDocument }) {
   return (
-    <div style={rect(32, 168, 778, 92)} className="border-[1.5px] border-black text-[10px]">
+    <div style={rect(32, 168, 778, 108)} className="border-[1.5px] border-black text-[10px]">
       <div className="grid h-[23px] grid-cols-2 bg-[#1458c8] text-white">
         <div className="border-r-[1.5px] border-black px-2 pt-[6px]">CUSTOMER APPROVAL</div>
         <div />
       </div>
-      <div className="grid h-[42px] grid-cols-2 border-t-[1.5px] border-black">
+      <div className="grid h-[52px] grid-cols-2 border-t-[1.5px] border-black">
         <div className="border-r-[1.5px] border-black px-2 py-2">
-          <p className="truncate text-[13px]">Delivery date with customer: {document.deliveryDateLabel}</p>
-          <p className="mt-1 max-h-[22px] overflow-hidden leading-[1.25]">{document.approvalCopy || 'Subject to approval within 1 working day of receiving this proof.'}</p>
+          <p className="truncate text-[12px]">Delivery date with customer: {document.deliveryDateLabel || '-'}</p>
+          <p className="mt-1 max-h-[26px] overflow-hidden break-words text-[9px] leading-[1.25]">{document.approvalCopy || 'Subject to approval within 1 working day of receiving this proof.'}</p>
         </div>
         <div />
       </div>
-      <div className="grid h-[27px] grid-cols-2 border-t-[1.5px] border-black text-[14px]">
-        <div className="border-r-[1.5px] border-black px-2 pt-2">Signature: ____________________________</div>
-        <div className="px-2 pt-2">Name: ____________________________</div>
+      <div className="grid h-[33px] grid-cols-2 border-t-[1.5px] border-black text-[13px]">
+        <div className="border-r-[1.5px] border-black px-2 pt-[10px]">Signature: ____________________________</div>
+        <div className="px-2 pt-[10px]">Name: ____________________________</div>
       </div>
     </div>
   )
@@ -429,8 +436,9 @@ function ArtworkFooter({ document }: { document: ProofDocument }) {
       </div>
       <div className="h-10 border-l border-white" />
       <div className="max-h-[54px] flex-1 overflow-hidden px-5 text-[6px] leading-[1.35]">{document.terms}</div>
-      <div className="mr-7 flex h-12 w-16 items-center justify-center rounded-lg border-2 border-white text-center text-[17px] font-black leading-none">
-        PRINT<br />ROOM
+      <div className="mr-6 flex h-[58px] w-[96px] items-center justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/print-room-logo.png" alt="The Print Room" className="max-h-full max-w-full object-contain" />
       </div>
     </div>
   )
