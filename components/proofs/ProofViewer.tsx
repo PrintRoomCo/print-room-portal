@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   calculateLineTotal,
   SIZE_COLUMNS,
   type ProofDesign,
   type ProofDocument,
   type ProofOrderLine,
+  type ProofPrintArea,
 } from '@/lib/proofs/types'
 
 interface ProofViewerProps {
@@ -12,19 +13,24 @@ interface ProofViewerProps {
   proofName: string
 }
 
-const NAVY = '#23336f'
-const BLUE = '#2a3d91'
-const PAGE_BG = '#f8f8f4'
+const NAVY = '#25358b'
+const ARTWORK_PAPER = '#f0eddf'
+const PAGE_W = 841.89
+const PAGE_H = 595.28
+const ORDER_FIRST_PAGE_ROWS = 4
+const ORDER_CONTINUATION_ROWS = 10
+
+const monoFont: CSSProperties = { fontFamily: '"Courier New", Courier, monospace' }
+const titleFont: CSSProperties = { fontFamily: '"Arial Black", Impact, sans-serif' }
 
 /**
  * Read-only proof renderer for the customer portal.
  *
  * Mirrors `print-room-staff-portal/src/components/proofs/proof-preview.tsx`
- * but drops Card/Badge primitives (not present in this repo) for plain Tailwind.
- * No editing affordances — Slice G adds the "Edit proof" entry-point.
+ * so the customer browser proof matches the staff preview and PDF export.
  */
 export function ProofViewer({ document, proofName }: ProofViewerProps) {
-  const orderChunks = chunkArray(document.orderLines, 10)
+  const orderChunks = chunkOrderLines(document.orderLines)
   const pages = [
     ...orderChunks.map((lines, index) => ({
       key: `order-${index}`,
@@ -34,7 +40,7 @@ export function ProofViewer({ document, proofName }: ProofViewerProps) {
           document={document}
           lines={lines}
           pageIndex={index}
-          totalOrderPages={Math.max(orderChunks.length, 1)}
+          totalOrderPages={orderChunks.length}
         />
       ),
     })),
@@ -57,18 +63,14 @@ export function ProofViewer({ document, proofName }: ProofViewerProps) {
       {pages.map((page, index) => (
         <div key={page.key} className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-900">
-                Page {index + 1}
-              </span>
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-                {page.label}
-              </span>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="border border-gray-300 px-2 py-0.5 font-medium text-gray-900">Page {index + 1}</span>
+              <span className="border border-gray-300 px-2 py-0.5 text-gray-700">{page.label}</span>
             </div>
             <span className="text-xs text-gray-500">{proofName}</span>
           </div>
 
-          <div className="overflow-hidden rounded-[18px] border border-gray-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+          <div className="overflow-hidden border border-gray-300 bg-white">
             <div className="aspect-[297/210] bg-white">{page.node}</div>
           </div>
         </div>
@@ -88,73 +90,38 @@ function OrderApprovalPage({
   pageIndex: number
   totalOrderPages: number
 }) {
+  const tableTop = pageIndex === 0 ? 328 : 20
+  const tableHeight = (pageIndex === 0 ? 48 : 0) + Math.max(lines.length, 1) * 54
+  const notesTop = Math.min(tableTop + tableHeight + 20, 520)
+
   return (
-    <div className="flex h-full flex-col bg-white p-[3.5%] text-[#111827]">
-      <div className="grid grid-cols-[1fr_1fr] gap-4 text-[10px] leading-4">
-        <MetaTable
-          title="Prepared by"
-          rows={[
-            ['Name', document.preparedByName],
-            ['Phone', document.preparedByPhone],
-            ['Email', document.preparedByEmail],
-            ['Website', document.website],
-          ]}
-        />
-        <MetaTable
-          title="Customer"
-          rows={[
-            ['Customer', document.customerName],
-            ['Email', document.customerEmail],
-            ['Job name', document.jobName],
-            ['Job reference', document.jobReference],
-          ]}
-        />
-      </div>
-
+    <div className="relative h-full bg-white text-black" style={monoFont}>
       {pageIndex === 0 && (
-        <div className="mt-4 grid grid-cols-[1.15fr_0.85fr] gap-4 text-[10px] leading-4">
-          <InfoBlock title="Terms & Conditions" body={document.terms} />
-          <InfoBlock
-            title="Customer Approval"
-            body={document.approvalCopy}
-            footer={
-              <div className="mt-3 grid grid-cols-3 gap-3">
-                <SignatureLine label="Delivery date" value={document.deliveryDateLabel} />
-                <SignatureLine label="Signed by" value="" />
-                <SignatureLine label="Date" value="" />
-              </div>
-            }
-          />
-        </div>
+        <>
+          <ContactTable document={document} />
+          <TermsPanel terms={document.terms} />
+          <ApprovalPanel document={document} />
+          {document.warning && (
+            <div style={rect(32, 263, 778, 32)} className="text-[10px] leading-[1.55] text-[#e11d25]">
+              {document.warning}
+            </div>
+          )}
+          <div style={rect(32, 304, 240, 18)} className="text-[13px] font-bold">
+            Garment/order details
+          </div>
+        </>
       )}
 
-      {document.warning && pageIndex === 0 && (
-        <div className="mt-3 rounded-sm border border-red-300 bg-red-50 px-3 py-2 text-[10px] leading-4 text-red-800">
-          {document.warning}
-        </div>
-      )}
-
-      <div className="mt-4 flex items-center justify-between">
-        <h2 className="text-sm font-bold uppercase tracking-[0.14em]" style={{ color: NAVY }}>
-          Garment/order details
-        </h2>
-        {totalOrderPages > 1 && (
-          <span className="text-[10px] text-gray-500">
-            Sheet {pageIndex + 1} of {totalOrderPages}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2 overflow-hidden border border-gray-300">
-        <OrderTable lines={lines} />
-      </div>
+      <OrderTable
+        lines={lines}
+        showHeader={pageIndex === 0}
+        style={rect(32, tableTop, 778, tableHeight)}
+      />
 
       {pageIndex === totalOrderPages - 1 && (
-        <div className="mt-auto pt-4 text-[10px] leading-4">
-          <p className="font-semibold" style={{ color: NAVY }}>
-            Additional job notes:
-          </p>
-          <p className="mt-1 min-h-8 whitespace-pre-wrap text-gray-700">{document.notes}</p>
+        <div style={rect(32, notesTop, 778, 44)} className="text-[13px] leading-5">
+          <p>Additional job notes:</p>
+          {document.notes && <p className="mt-2 text-[8px] leading-4">{document.notes}</p>}
         </div>
       )}
     </div>
@@ -163,209 +130,266 @@ function OrderApprovalPage({
 
 function FinalProofPage({ document, design }: { document: ProofDocument; design: ProofDesign }) {
   return (
-    <div className="flex h-full flex-col bg-white p-[3.5%] text-[#111827]">
-      <ProofPageHeader
-        title={`FINAL PROOF - DESIGN ${design.index}`}
-        client={document.customerName}
-        job={document.jobName}
-      />
-
-      <div className="mt-4 grid flex-1 grid-cols-[1fr_1fr_0.48fr] gap-4">
-        <MockupPanel label="Front" imageUrl={design.frontMockupUrl} designName={design.name} />
-        <MockupPanel label="Back" imageUrl={design.backMockupUrl} designName={design.name} />
-        <div className="border border-gray-300 bg-gray-50 p-3 text-[11px] leading-5">
-          <p className="font-bold uppercase" style={{ color: NAVY }}>
-            Print heights
-          </p>
-          <p className="mt-2 whitespace-pre-wrap">{design.printHeightsNote}</p>
-          {design.productionNote && (
-            <>
-              <p className="mt-5 font-bold uppercase" style={{ color: NAVY }}>
-                Production note
-              </p>
-              <p className="mt-2 whitespace-pre-wrap">{design.productionNote}</p>
-            </>
-          )}
-        </div>
+    <div className="relative h-full bg-white" style={monoFont}>
+      <ProofHeader kind="FINAL PROOF" document={document} design={design} showSubtitle />
+      <div style={rect(54, 110, 90, 16)} className="text-[10px] font-bold uppercase text-[#25358b]">
+        FRONT:
+      </div>
+      <div style={rect(350, 110, 90, 16)} className="text-[10px] font-bold uppercase text-[#25358b]">
+        BACK:
       </div>
 
-      <div
-        className="mt-4 grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${Math.max(design.printAreas.length, 1)}, minmax(0, 1fr))` }}
-      >
-        {design.printAreas.map((area) => (
-          <div key={area.id} className="border border-gray-300 bg-white text-[10px] leading-4">
-            <div
-              className="px-3 py-1.5 text-[11px] font-bold uppercase text-white"
-              style={{ backgroundColor: NAVY }}
-            >
-              {area.label}
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 p-3">
-              <Spec label="Method" value={methodLabel(area.method)} />
-              <Spec label="Dimensions" value={`${area.widthMm || '-'}mm x ${area.heightMm || '-'}mm`} />
-              <Spec
-                label="Colour"
-                value={
-                  <span className="inline-flex items-center gap-1">
-                    <span
-                      className="h-3 w-3 border border-gray-300"
-                      style={{ backgroundColor: area.pantoneHex }}
-                    />
-                    {area.pantone || '-'}
-                  </span>
-                }
-              />
-              <Spec label="Artwork" value={area.artworkStatus || 'NEW'} />
-              <Spec label="Production note" value={area.productionNote || 'N/A'} wide />
-            </div>
-          </div>
-        ))}
-      </div>
+      <ImageSlot imageUrl={design.frontMockupUrl} alt={`${design.name} front mockup`} style={rect(54, 146, 280, 255)} />
+      <ImageSlot imageUrl={design.backMockupUrl} alt={`${design.name} back mockup`} style={rect(350, 146, 280, 255)} />
+
+      <PrintHeightsColumn design={design} />
+      <FinalSpecBand design={design} />
     </div>
   )
 }
 
 function ArtworkPage({ document, design }: { document: ProofDocument; design: ProofDesign }) {
   return (
-    <div className="flex h-full flex-col bg-white p-[3.5%] text-[#111827]">
-      <ProofPageHeader
-        title={`ARTWORK - DESIGN ${design.index}`}
-        client={document.customerName}
-        job={document.jobName}
-      />
-
+    <div className="relative h-full bg-white" style={monoFont}>
+      <ProofHeader kind="ARTWORK" document={document} design={design} />
       <div
-        className="mt-4 flex flex-1 items-center justify-center overflow-hidden border border-gray-300"
-        style={{ backgroundColor: design.artworkBackground || PAGE_BG }}
+        style={{ ...rect(32, 100, 778, 384), backgroundColor: design.artworkBackground || ARTWORK_PAPER }}
+        className="flex items-center justify-center overflow-hidden"
       >
         {design.artworkUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={design.artworkUrl}
-            alt={`${design.name} artwork`}
-            className="max-h-[78%] max-w-[78%] object-contain"
-          />
+          <img src={design.artworkUrl} alt={`${design.name} artwork`} className="max-h-[82%] max-w-[82%] object-contain" />
         ) : (
-          <div className="px-8 text-center text-white/80">
-            <p className="text-4xl font-semibold">{design.name}</p>
-            {design.artworkNotes && <p className="mt-3 text-sm">{design.artworkNotes}</p>}
-          </div>
+          <div className="px-8 text-center text-5xl text-[#2f281f]">{design.name}</div>
         )}
       </div>
+      <ArtworkFooter document={document} />
+    </div>
+  )
+}
 
-      <div
-        className="mt-4 flex items-center justify-between px-4 py-3 text-[10px] text-white"
-        style={{ backgroundColor: NAVY }}
-      >
-        <span>{document.preparedByPhone}</span>
-        <span>{document.preparedByEmail}</span>
-        <span>{document.website}</span>
-        <span className="text-sm font-bold tracking-[-0.02em]">Print Room</span>
+function ContactTable({ document }: { document: ProofDocument }) {
+  return (
+    <div style={rect(32, 21, 778, 59)} className="grid grid-cols-2 border-[1.5px] border-black text-[10px] leading-[1.35]">
+      <KeyValueRows
+        className="border-r-[1.5px] border-black px-2 py-2"
+        rows={[
+          ['Prepared by:', document.preparedByName || document.preparedByEmail],
+          ['Phone:', document.preparedByPhone],
+          ['Email:', document.preparedByEmail],
+          ['Website:', document.website],
+        ]}
+      />
+      <KeyValueRows
+        className="px-2 py-2"
+        rows={[
+          ['Customer:', document.customerName],
+          ['Job name:', document.jobName],
+          ['Job Reference:', document.jobReference],
+        ]}
+      />
+    </div>
+  )
+}
+
+function KeyValueRows({ rows, className }: { rows: Array<[string, string]>; className?: string }) {
+  return (
+    <div className={className}>
+      {rows.map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[120px_1fr]">
+          <span>{label}</span>
+          <span>{value || '-'}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TermsPanel({ terms }: { terms: string }) {
+  return (
+    <div style={rect(32, 94, 778, 66)} className="border-[1.5px] border-black">
+      <div className="h-[23px] bg-[#1458c8] px-2 pt-[6px] text-[10px] text-white">TERMS & CONDITIONS</div>
+      <div className="px-2 py-2 text-[8px] leading-[1.35]">{terms || '-'}</div>
+    </div>
+  )
+}
+
+function ApprovalPanel({ document }: { document: ProofDocument }) {
+  return (
+    <div style={rect(32, 168, 778, 92)} className="border-[1.5px] border-black text-[10px]">
+      <div className="grid h-[23px] grid-cols-2 bg-[#1458c8] text-white">
+        <div className="border-r-[1.5px] border-black px-2 pt-[6px]">CUSTOMER APPROVAL</div>
+        <div />
+      </div>
+      <div className="grid h-[42px] grid-cols-2 border-t-[1.5px] border-black">
+        <div className="border-r-[1.5px] border-black px-2 py-2">
+          <p className="text-[13px]">Delivery date with customer: {document.deliveryDateLabel}</p>
+          <p className="mt-1">{document.approvalCopy || 'Subject to approval within 1 working day of receiving this proof.'}</p>
+        </div>
+        <div />
+      </div>
+      <div className="grid h-[27px] grid-cols-2 border-t-[1.5px] border-black text-[14px]">
+        <div className="border-r-[1.5px] border-black px-2 pt-2">Signature: ____________________________</div>
+        <div className="px-2 pt-2">Name: ____________________________</div>
       </div>
     </div>
   )
 }
 
-function ProofPageHeader({ title, client, job }: { title: string; client: string; job: string }) {
+function ProofHeader({
+  kind,
+  document,
+  design,
+  showSubtitle = false,
+}: {
+  kind: 'FINAL PROOF' | 'ARTWORK'
+  document: ProofDocument
+  design: ProofDesign
+  showSubtitle?: boolean
+}) {
   return (
-    <div className="grid grid-cols-[1fr_0.42fr] gap-4">
-      <div className="px-4 py-3 text-white" style={{ backgroundColor: NAVY }}>
-        <h1 className="text-xl font-bold tracking-[0.04em]">{title}</h1>
+    <>
+      <div
+        style={{ ...rect(54, 39, 540, 60), ...titleFont, color: NAVY, fontSize: 'clamp(24px, 4.2vw, 48px)' }}
+        className="whitespace-nowrap font-black uppercase leading-none"
+      >
+        {kind} - DESIGN {design.index}
       </div>
-      <div className="px-4 py-3 text-right text-white" style={{ backgroundColor: BLUE }}>
-        <p className="text-xs uppercase tracking-[0.18em]">{client}</p>
-        <p className="mt-1 text-sm font-semibold">{job}</p>
+      {showSubtitle && (
+        <div
+          style={{ ...rect(360, 80, 196, 18), color: NAVY }}
+          className="truncate text-right text-[15px] font-black uppercase leading-none"
+        >
+          {design.subtitle || design.name}
+        </div>
+      )}
+      <div style={{ ...rect(560, 20, 250, 78), backgroundColor: NAVY }} className="px-6 pt-6 text-[10px] text-white">
+        <span className="font-bold">Client:</span>
+        <span className="ml-8 font-bold">{clientLabel(document.customerName)}</span>
+      </div>
+      <div style={rect(32, 98, 528, 2)} className="bg-[#25358b]" />
+    </>
+  )
+}
+
+function PrintHeightsColumn({ design }: { design: ProofDesign }) {
+  return (
+    <div style={rect(650, 108, 150, 444)} className="border-l-2 border-[#25358b] pl-3 text-[#25358b]">
+      <p className="mt-1 text-[10px] font-bold">PRINT HEIGHTS:</p>
+      <p className="text-[7px] leading-tight">{design.printHeightsNote || 'IF GARMENTS DIFFER'}</p>
+    </div>
+  )
+}
+
+function FinalSpecBand({ design }: { design: ProofDesign }) {
+  const areas = design.printAreas.length > 0 ? design.printAreas : []
+  return (
+    <>
+      <div style={rect(40, 438, 740, 2)} className="bg-[#25358b]" />
+      <div style={rect(40, 446, 598, 106)} className="flex text-[#25358b]">
+        {areas.length === 0 ? (
+          <div className="p-2 text-[9px] font-bold">PRINT AREAS: <span className="font-normal text-black">No print areas supplied.</span></div>
+        ) : (
+          areas.map((area, index) => (
+            <PrintAreaSpec
+              key={area.id}
+              area={area}
+              index={index + 1}
+              className={index > 0 ? 'border-l-2 border-[#25358b]' : undefined}
+            />
+          ))
+        )}
+      </div>
+      <div style={rect(662, 451, 132, 100)} className="text-[9px] font-bold text-[#25358b]">
+        <p>PRODUCTION NOTE:</p>
+        <p className="mt-2 text-[#e11d25]">{(design.productionNote || 'N/A').toUpperCase()}</p>
+        <p className="mt-12 text-[8px]">IMPORTANT!!!</p>
+        <p className="mt-1 text-[5px] leading-tight">PLEASE CHECK THAT YOUR ORDER HAS BEEN DELIVERED IN FULL. IF THERE IS AN ERROR, PLEASE CONTACT US WITHIN 7 DAYS.</p>
+      </div>
+    </>
+  )
+}
+
+function PrintAreaSpec({ area, index, className }: { area: ProofPrintArea; index: number; className?: string }) {
+  return (
+    <div className={`flex-1 px-3 text-[9px] font-bold leading-[1.45] ${className || ''}`}>
+      <p>PRINT AREA {index}: <span className="ml-3">{area.label.toUpperCase()}</span></p>
+      <p>
+        METHOD:
+        <span className="ml-3 rounded-sm bg-[#1599d5] px-1.5 py-0.5 text-[7px] text-white">{methodLabel(area.method)}</span>
+      </p>
+      <p>DIMENSIONS: <span className="font-normal">{area.widthMm || '-'}MM W X {area.heightMm || '-'}MM H</span></p>
+      <p>COLOURS:</p>
+      <p className="mt-2 flex items-center gap-3 font-normal">
+        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: area.pantoneHex || '#2f2118' }} />
+        <span>-PANTONE {(area.pantone || '-').toUpperCase()}</span>
+      </p>
+      <p className="mt-8">ARTWORK:<span className="text-[#e11d25]">{(area.artworkStatus || 'NEW').toUpperCase()}</span></p>
+    </div>
+  )
+}
+
+function ArtworkFooter({ document }: { document: ProofDocument }) {
+  return (
+    <div style={{ ...rect(32, 484, 778, 74), backgroundColor: NAVY }} className="flex items-center text-white">
+      <div className="w-[180px] pl-6 text-[10px] font-bold leading-[1.6]">
+        <p>{document.preparedByPhone}</p>
+        <p>{document.preparedByEmail}</p>
+        <p>{document.website}</p>
+      </div>
+      <div className="h-10 border-l border-white" />
+      <div className="flex-1 px-5 text-[6px] leading-[1.35]">{document.terms}</div>
+      <div className="mr-7 flex h-12 w-16 items-center justify-center rounded-lg border-2 border-white text-center text-[17px] font-black leading-none">
+        PRINT<br />ROOM
       </div>
     </div>
   )
 }
 
-function MetaTable({ title, rows }: { title: string; rows: Array<[string, string]> }) {
+function OrderTable({
+  lines,
+  showHeader,
+  style,
+}: {
+  lines: ProofOrderLine[]
+  showHeader: boolean
+  style: CSSProperties
+}) {
+  const columns = orderColumns()
+  const tableHeight = (showHeader ? 48 : 0) + Math.max(lines.length, 1) * 54
   return (
-    <div className="border border-gray-300">
-      <div
-        className="px-3 py-1.5 text-[10px] font-bold uppercase text-white"
-        style={{ backgroundColor: NAVY }}
-      >
-        {title}
-      </div>
-      <div>
-        {rows.map(([label, value]) => (
-          <div key={label} className="grid grid-cols-[0.34fr_1fr] border-t border-gray-200">
-            <span className="bg-gray-50 px-3 py-1.5 font-semibold">{label}</span>
-            <span className="px-3 py-1.5">{value || '-'}</span>
-          </div>
+    <table className="border-collapse table-fixed text-[8px] leading-[1.45]" style={{ ...style, height: pct(tableHeight, PAGE_H) }}>
+      <colgroup>
+        {columns.map((column) => (
+          <col key={column.key} style={{ width: `${(column.width / 778) * 100}%` }} />
         ))}
-      </div>
-    </div>
-  )
-}
-
-function InfoBlock({ title, body, footer }: { title: string; body: string; footer?: ReactNode }) {
-  return (
-    <div className="border border-gray-300">
-      <div
-        className="px-3 py-1.5 text-[10px] font-bold uppercase text-white"
-        style={{ backgroundColor: NAVY }}
-      >
-        {title}
-      </div>
-      <div className="p-3">
-        <p>{body}</p>
-        {footer}
-      </div>
-    </div>
-  )
-}
-
-function SignatureLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[9px] uppercase tracking-[0.12em] text-gray-500">{label}</p>
-      <div className="mt-3 border-b border-gray-500 pb-1">{value}</div>
-    </div>
-  )
-}
-
-function OrderTable({ lines }: { lines: ProofOrderLine[] }) {
-  return (
-    <table className="w-full border-collapse text-[8px] leading-3">
-      <thead>
-        <tr className="text-white" style={{ backgroundColor: NAVY }}>
-          {['Name', 'Brand', 'Garment', 'SKU', 'Colour', ...SIZE_COLUMNS, 'Total'].map((column) => (
-            <th key={column} className="border border-white/25 px-1 py-1 text-left font-semibold">
-              {column}
-            </th>
-          ))}
-        </tr>
-      </thead>
+      </colgroup>
+      {showHeader && (
+        <thead>
+          <tr style={{ height: `${(48 / tableHeight) * 100}%` }}>
+            {columns.map((column) => (
+              <th key={column.key} className="whitespace-pre-line border-[1.5px] border-black px-1.5 py-2 text-left align-top font-bold">
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+      )}
       <tbody>
         {lines.length === 0 ? (
-          <tr>
-            <td
-              className="border border-gray-200 px-2 py-5 text-center text-gray-500"
-              colSpan={SIZE_COLUMNS.length + 6}
-            >
+          <tr style={{ height: `${(54 / tableHeight) * 100}%` }}>
+            <td className="border-[1.5px] border-black px-2 py-5 text-center" colSpan={columns.length}>
               No order lines
             </td>
           </tr>
         ) : (
           lines.map((line) => (
-            <tr key={line.id}>
-              <td className="border border-gray-200 px-1 py-1">{line.name || '-'}</td>
-              <td className="border border-gray-200 px-1 py-1">{line.brand || '-'}</td>
-              <td className="border border-gray-200 px-1 py-1">{line.garment || '-'}</td>
-              <td className="border border-gray-200 px-1 py-1">{line.sku || '-'}</td>
-              <td className="border border-gray-200 px-1 py-1">{line.colour || '-'}</td>
-              {SIZE_COLUMNS.map((column) => (
-                <td key={column} className="border border-gray-200 px-1 py-1 text-center">
-                  {line.quantities[column] || '-'}
+            <tr key={line.id} style={{ height: `${(54 / tableHeight) * 100}%` }}>
+              {columns.map((column) => (
+                <td key={column.key} className={`border-[1.5px] border-black px-1.5 py-2 align-top ${column.center ? 'text-center' : ''}`}>
+                  {orderCellValue(line, column.key)}
                 </td>
               ))}
-              <td className="border border-gray-200 px-1 py-1 text-center font-semibold">
-                {calculateLineTotal(line)}
-              </td>
             </tr>
           ))
         )}
@@ -374,65 +398,74 @@ function OrderTable({ lines }: { lines: ProofOrderLine[] }) {
   )
 }
 
-function MockupPanel({
-  label,
-  imageUrl,
-  designName,
-}: {
-  label: string
-  imageUrl: string
-  designName: string
-}) {
+function ImageSlot({ imageUrl, alt, style }: { imageUrl: string; alt: string; style: CSSProperties }) {
   return (
-    <div className="flex h-full flex-col border border-gray-300 bg-gray-50">
-      <div
-        className="px-3 py-1.5 text-[10px] font-bold uppercase text-white"
-        style={{ backgroundColor: NAVY }}
-      >
-        {label}
-      </div>
-      <div className="flex flex-1 items-center justify-center p-4">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt={`${designName} ${label.toLowerCase()} mockup`}
-            className="max-h-full max-w-full object-contain"
-          />
-        ) : (
-          <div className="text-center text-xs text-gray-400">{designName}</div>
-        )}
-      </div>
+    <div style={style} className="flex items-center justify-center overflow-hidden">
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt={alt} className="max-h-full max-w-full object-contain" />
+      ) : (
+        <div className="text-center text-xs text-gray-400">{alt}</div>
+      )}
     </div>
   )
 }
 
-function Spec({
-  label,
-  value,
-  wide = false,
-}: {
-  label: string
-  value: ReactNode
-  wide?: boolean
-}) {
-  return (
-    <div className={wide ? 'col-span-2' : undefined}>
-      <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-500">{label}</p>
-      <p className="mt-0.5 font-semibold text-gray-900">{value}</p>
-    </div>
-  )
+function orderColumns() {
+  return [
+    { key: 'name', label: 'Name', width: 64 },
+    { key: 'brand', label: 'Brand', width: 54 },
+    { key: 'garment', label: 'Garment', width: 79 },
+    { key: 'sku', label: 'SKU', width: 50 },
+    { key: 'colour', label: 'Colour', width: 44 },
+    ...SIZE_COLUMNS.map((label) => ({ key: label, label: formatSizeColumn(label), width: 34.7, center: true })),
+    { key: 'total', label: 'Total', width: 35.9, center: true },
+  ]
 }
 
-function methodLabel(method: string): string {
+function orderCellValue(line: ProofOrderLine, key: string): ReactNode {
+  if (key === 'name') return line.name || `Design ${line.designIndex}`
+  if (key === 'brand') return line.brand || ''
+  if (key === 'garment') return line.garment || ''
+  if (key === 'sku') return line.sku || ''
+  if (key === 'colour') return line.colour || ''
+  if (key === 'total') return calculateLineTotal(line)
+  return line.quantities[key] || ''
+}
+
+function chunkOrderLines(items: ProofOrderLine[]) {
+  if (items.length === 0) return [[] as ProofOrderLine[]]
+  const chunks: ProofOrderLine[][] = [items.slice(0, ORDER_FIRST_PAGE_ROWS)]
+  for (let index = ORDER_FIRST_PAGE_ROWS; index < items.length; index += ORDER_CONTINUATION_ROWS) {
+    chunks.push(items.slice(index, index + ORDER_CONTINUATION_ROWS))
+  }
+  return chunks
+}
+
+function rect(x: number, y: number, width: number, height: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left: pct(x, PAGE_W),
+    top: pct(y, PAGE_H),
+    width: pct(width, PAGE_W),
+    height: pct(height, PAGE_H),
+  }
+}
+
+function pct(value: number, total: number) {
+  return `${(value / total) * 100}%`
+}
+
+function formatSizeColumn(label: string) {
+  if (label === 'One Size') return 'One\nSize'
+  return label.replace('/', ' /\n')
+}
+
+function methodLabel(method: string) {
   return method.replace('_', ' ').toUpperCase()
 }
 
-function chunkArray<T>(items: T[], size: number): T[][] {
-  if (items.length === 0) return [[] as T[]]
-  const chunks: T[][] = []
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size))
-  }
-  return chunks
+function clientLabel(customerName: string) {
+  const firstWord = customerName.trim().split(/\s+/)[0]
+  return (firstWord || customerName || 'CLIENT').toUpperCase()
 }
