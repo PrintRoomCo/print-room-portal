@@ -97,10 +97,11 @@ export function ProductDetailClient({
     firstVariant?.color_swatch_id ?? null
   )
   const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
-  // Qty per variant_id for the current colour selection. Resets on colour
-  // switch (cross-colour batching retired 2026-05-14 — too confusing when
-  // paired with the make-to-stock auto-route, and the price block kept
-  // surfacing a unit price computed against the cross-colour total).
+  // Qty per variant_id. Survives colour-switches so the user can build a
+  // multi-variant order (e.g. 50 of Black M + 30 of White L) in a single PDP
+  // session without losing entries when they flip swatches. Cross-colour
+  // composition is intentional 2026-05-14 — the order-summary panel below
+  // surfaces everything that's been touched.
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
 
   const multiSize = useMemo(
@@ -157,14 +158,49 @@ export function ProductDetailClient({
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
   }, [variants, colorSwatchId, availability])
 
-  // Total qty for the currently-displayed colour. Drives pricing tier +
-  // Add to cart. Cross-colour batching retired 2026-05-14, so this is also
-  // the order total — qtys reset when the colour swatch changes.
+  // Grand total across every colour the user has touched in this session,
+  // not just the currently-displayed colour. Drives pricing tier + Add to cart.
   const multiSizeTotalQty = useMemo(() => {
     let sum = 0
     for (const n of Object.values(variantQuantities)) sum += n
     return sum
   }, [variantQuantities])
+
+  // Total for the currently-displayed colour only — used for the grid's per-
+  // colour subtotal so the user can see what's queued under the active swatch.
+  const currentColourTotalQty = useMemo(() => {
+    return sizeRowsForColour.reduce(
+      (sum, row) => sum + (variantQuantities[row.variantId] ?? 0),
+      0,
+    )
+  }, [sizeRowsForColour, variantQuantities])
+
+  // Are there qtys queued under colours other than the currently-displayed one?
+  const otherColoursTotalQty = multiSizeTotalQty - currentColourTotalQty
+
+  // Resolved per-variant lines for every variant the user has touched in this
+  // session, across all colours. Drives the order-summary panel between the
+  // size grid and the price block.
+  const orderLines = useMemo(() => {
+    return variants
+      .filter((v) => (variantQuantities[v.variant_id] ?? 0) > 0)
+      .map((v) => {
+        const qtyLine = variantQuantities[v.variant_id] ?? 0
+        const tracked = availability[v.variant_id] !== undefined
+        const stocked = tracked ? (availability[v.variant_id] ?? 0) : 0
+        const inStock = tracked ? Math.min(qtyLine, stocked) : 0
+        const toBeMade = tracked ? Math.max(0, qtyLine - stocked) : qtyLine
+        return {
+          variantId: v.variant_id,
+          colourLabel: v.color_label ?? '',
+          sizeLabel: v.size_label ?? '',
+          qty: qtyLine,
+          inStock,
+          toBeMade,
+          tracked,
+        }
+      })
+  }, [variants, variantQuantities, availability])
 
   const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
@@ -345,9 +381,9 @@ export function ProductDetailClient({
 
     if (multiSize) {
       let added = 0
-      // Iterate all variants — variantQuantities only carries the current
-      // colour's entries (cross-colour batching retired 2026-05-14), so the
-      // other rows naturally fall through with qty 0.
+      // Iterate every variant the user has touched across all colours — not
+      // just the currently-displayed swatch — so cross-variant qtys all flow
+      // into one cart submission.
       for (const variant of variants) {
         const lineQty = variantQuantities[variant.variant_id] ?? 0
         if (lineQty <= 0) continue
@@ -460,10 +496,6 @@ export function ProductDetailClient({
             availability={availability}
             showSizePicker={!multiSize}
             onChange={({ colorSwatchId: c, sizeId: s }) => {
-              if (c !== colorSwatchId) {
-                setVariantQuantities({})
-                setSingleQty(defaultMinQty)
-              }
               setColorSwatchId(c)
               setSizeId(s)
             }}
@@ -568,12 +600,25 @@ export function ProductDetailClient({
                 <tfoot>
                   <tr className="border-t border-gray-200 bg-gray-50">
                     <td className="px-3 py-2 text-xs font-medium text-gray-500" colSpan={2}>
-                      Total
+                      Total this colour
                     </td>
                     <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
-                      {multiSizeTotalQty}
+                      {currentColourTotalQty}
                     </td>
                   </tr>
+                  {otherColoursTotalQty > 0 && (
+                    <tr className="border-t border-gray-100 bg-gray-50/60">
+                      <td className="px-3 py-2 text-xs text-gray-500" colSpan={2}>
+                        Order total (across all variants)
+                      </td>
+                      <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                        {multiSizeTotalQty}
+                        <span className="ml-1 text-xs font-normal text-gray-500">
+                          (incl. {otherColoursTotalQty} from other colours)
+                        </span>
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               </table>
             </div>
@@ -588,6 +633,47 @@ export function ProductDetailClient({
                   Currently {multiSizeTotalQty} — add {effectiveMoq - multiSizeTotalQty} more.
                 </span>
               ) : null}
+            </div>
+          )}
+          {multiSize && orderLines.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <p className="mb-2 text-xs font-medium text-gray-700">Your order</p>
+              <ul className="divide-y divide-gray-100 text-sm">
+                {orderLines.map((line) => {
+                  const label =
+                    [line.colourLabel, line.sizeLabel].filter(Boolean).join(' / ') || '—'
+                  return (
+                    <li
+                      key={line.variantId}
+                      className="flex items-baseline justify-between py-1.5"
+                    >
+                      <span className="text-gray-800">{label}</span>
+                      <span className="text-right text-gray-700">
+                        <span className="font-medium tabular-nums">{line.qty}</span>
+                        {line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
+                          <span className="ml-1 text-xs text-gray-500">
+                            ({line.inStock} in stock,{' '}
+                            <span className="text-amber-700">
+                              {line.toBeMade} to be made
+                            </span>
+                            )
+                          </span>
+                        )}
+                        {line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
+                          <span className="ml-1 text-xs text-amber-700">
+                            ({line.toBeMade} to be made)
+                          </span>
+                        )}
+                        {!line.tracked && (
+                          <span className="ml-1 text-xs text-amber-700">
+                            ({line.toBeMade} to be made)
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
           )}
           <div className="flex items-end gap-3">

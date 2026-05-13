@@ -23,22 +23,17 @@ export function DecorationSwatchPicker({
     [decorations],
   )
 
-  const total = useMemo(
-    () => sorted.reduce((s, d) => s + d.unitPrice, 0),
-    [sorted],
-  )
-
   if (sorted.length === 0) return null
 
+  // Per-decoration unit prices are intentionally hidden — decoration cost is
+  // rolled into the all-in unit price in the price block + each volume bracket
+  // row. Surfacing it twice was confusing customers.
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2">
         <label className="text-sm font-medium text-gray-900">
           Decoration{sorted.length > 1 ? 's' : ''} included
         </label>
-        <span className="text-sm text-gray-600">
-          +${total.toFixed(2)} / unit
-        </span>
       </div>
       <div className="flex flex-wrap gap-3">
         {sorted.map((d) => {
@@ -48,7 +43,7 @@ export function DecorationSwatchPicker({
           return (
             <div
               key={d.linkId}
-              title={`${d.name} · +$${d.unitPrice.toFixed(2)} / unit`}
+              title={d.name}
               className="flex flex-col items-center gap-1.5"
             >
               <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border-2 border-pr-blue bg-white ring-2 ring-pr-blue/30">
@@ -64,9 +59,6 @@ export function DecorationSwatchPicker({
               </span>
               <span className="text-[10px] font-medium leading-tight text-gray-700">
                 {caption || d.name}
-              </span>
-              <span className="text-[10px] tabular-nums text-gray-500">
-                +${d.unitPrice.toFixed(2)}
               </span>
             </div>
           )
