@@ -1,4 +1,6 @@
-import type { CSSProperties, ReactNode } from 'react'
+'use client'
+
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   calculateLineTotal,
   SIZE_COLUMNS,
@@ -22,6 +24,7 @@ const ORDER_CONTINUATION_ROWS = 10
 
 const monoFont: CSSProperties = { fontFamily: '"Courier New", Courier, monospace' }
 const titleFont: CSSProperties = { fontFamily: '"Arial Black", Impact, sans-serif' }
+const titleTextStyle: CSSProperties = { ...titleFont, color: NAVY, fontSize: 40, letterSpacing: 0 }
 
 /**
  * Read-only proof renderer for the customer portal.
@@ -70,11 +73,47 @@ export function ProofViewer({ document, proofName }: ProofViewerProps) {
             <span className="text-xs text-gray-500">{proofName}</span>
           </div>
 
-          <div className="overflow-hidden border border-gray-300 bg-white">
-            <div className="aspect-[297/210] bg-white">{page.node}</div>
-          </div>
+          <ScaledProofSheet>{page.node}</ScaledProofSheet>
         </div>
       ))}
+    </div>
+  )
+}
+
+function ScaledProofSheet({ children }: { children: ReactNode }) {
+  const frameRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const node = frameRef.current
+    if (!node) return
+
+    const updateScale = () => {
+      setScale(Math.min(1, Math.max(0.2, node.clientWidth / PAGE_W)))
+    }
+
+    updateScale()
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(node)
+
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div ref={frameRef} className="overflow-hidden border border-gray-300 bg-white">
+      <div className="mx-auto bg-white" style={{ width: PAGE_W * scale, height: PAGE_H * scale }}>
+        <div
+          className="relative bg-white"
+          style={{
+            width: PAGE_W,
+            height: PAGE_H,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {children}
+        </div>
+      </div>
     </div>
   )
 }
@@ -102,7 +141,7 @@ function OrderApprovalPage({
           <TermsPanel terms={document.terms} />
           <ApprovalPanel document={document} />
           {document.warning && (
-            <div style={rect(32, 263, 778, 32)} className="text-[10px] leading-[1.55] text-[#e11d25]">
+            <div style={rect(32, 263, 778, 32)} className="overflow-hidden text-[10px] leading-[1.55] text-[#e11d25]">
               {document.warning}
             </div>
           )}
@@ -119,9 +158,9 @@ function OrderApprovalPage({
       />
 
       {pageIndex === totalOrderPages - 1 && (
-        <div style={rect(32, notesTop, 778, 44)} className="text-[13px] leading-5">
+        <div style={rect(32, notesTop, 778, 44)} className="overflow-hidden text-[13px] leading-5">
           <p>Additional job notes:</p>
-          {document.notes && <p className="mt-2 text-[8px] leading-4">{document.notes}</p>}
+          {document.notes && <p className="mt-2 max-h-5 overflow-hidden text-[8px] leading-[1.35]">{document.notes}</p>}
         </div>
       )}
     </div>
@@ -160,7 +199,9 @@ function ArtworkPage({ document, design }: { document: ProofDocument; design: Pr
           // eslint-disable-next-line @next/next/no-img-element
           <img src={design.artworkUrl} alt={`${design.name} artwork`} className="max-h-[82%] max-w-[82%] object-contain" />
         ) : (
-          <div className="px-8 text-center text-5xl text-[#2f281f]">{design.name}</div>
+          <div className="max-h-[70%] max-w-[80%] overflow-hidden px-8 text-center text-[42px] leading-tight text-[#2f281f]">
+            {design.name}
+          </div>
         )}
       </div>
       <ArtworkFooter document={document} />
@@ -198,7 +239,7 @@ function KeyValueRows({ rows, className }: { rows: Array<[string, string]>; clas
       {rows.map(([label, value]) => (
         <div key={label} className="grid grid-cols-[120px_1fr]">
           <span>{label}</span>
-          <span>{value || '-'}</span>
+          <span className="min-w-0 truncate">{value || '-'}</span>
         </div>
       ))}
     </div>
@@ -209,7 +250,7 @@ function TermsPanel({ terms }: { terms: string }) {
   return (
     <div style={rect(32, 94, 778, 66)} className="border-[1.5px] border-black">
       <div className="h-[23px] bg-[#1458c8] px-2 pt-[6px] text-[10px] text-white">TERMS & CONDITIONS</div>
-      <div className="px-2 py-2 text-[8px] leading-[1.35]">{terms || '-'}</div>
+      <div className="max-h-[42px] overflow-hidden px-2 py-2 text-[8px] leading-[1.35]">{terms || '-'}</div>
     </div>
   )
 }
@@ -223,8 +264,8 @@ function ApprovalPanel({ document }: { document: ProofDocument }) {
       </div>
       <div className="grid h-[42px] grid-cols-2 border-t-[1.5px] border-black">
         <div className="border-r-[1.5px] border-black px-2 py-2">
-          <p className="text-[13px]">Delivery date with customer: {document.deliveryDateLabel}</p>
-          <p className="mt-1">{document.approvalCopy || 'Subject to approval within 1 working day of receiving this proof.'}</p>
+          <p className="truncate text-[13px]">Delivery date with customer: {document.deliveryDateLabel}</p>
+          <p className="mt-1 max-h-[22px] overflow-hidden leading-[1.25]">{document.approvalCopy || 'Subject to approval within 1 working day of receiving this proof.'}</p>
         </div>
         <div />
       </div>
@@ -250,22 +291,22 @@ function ProofHeader({
   return (
     <>
       <div
-        style={{ ...rect(54, 39, 540, 60), ...titleFont, color: NAVY, fontSize: 'clamp(24px, 4.2vw, 48px)' }}
-        className="whitespace-nowrap font-black uppercase leading-none"
+        style={{ ...rect(54, 38, 492, 44), ...titleTextStyle }}
+        className="truncate font-black uppercase leading-none"
       >
         {kind} - DESIGN {design.index}
       </div>
       {showSubtitle && (
         <div
-          style={{ ...rect(360, 80, 196, 18), color: NAVY }}
+          style={{ ...rect(54, 81, 492, 18), color: NAVY }}
           className="truncate text-right text-[15px] font-black uppercase leading-none"
         >
           {design.subtitle || design.name}
         </div>
       )}
-      <div style={{ ...rect(560, 20, 250, 78), backgroundColor: NAVY }} className="px-6 pt-6 text-[10px] text-white">
+      <div style={{ ...rect(560, 20, 250, 78), backgroundColor: NAVY }} className="overflow-hidden px-6 pt-6 text-[10px] text-white">
         <span className="font-bold">Client:</span>
-        <span className="ml-8 font-bold">{clientLabel(document.customerName)}</span>
+        <span className="ml-8 inline-block max-w-[138px] truncate align-bottom font-bold">{clientLabel(document.customerName)}</span>
       </div>
       <div style={rect(32, 98, 528, 2)} className="bg-[#25358b]" />
     </>
@@ -283,28 +324,51 @@ function PrintHeightsColumn({ design }: { design: ProofDesign }) {
 
 function FinalSpecBand({ design }: { design: ProofDesign }) {
   const areas = design.printAreas.length > 0 ? design.printAreas : []
+  const visibleAreas = areas.length > 4 ? areas.slice(0, 3) : areas
   return (
     <>
       <div style={rect(40, 438, 740, 2)} className="bg-[#25358b]" />
-      <div style={rect(40, 446, 598, 106)} className="flex text-[#25358b]">
+      <div style={rect(40, 446, 598, 106)} className="overflow-hidden text-[#25358b]">
         {areas.length === 0 ? (
           <div className="p-2 text-[9px] font-bold">PRINT AREAS: <span className="font-normal text-black">No print areas supplied.</span></div>
+        ) : areas.length <= 2 ? (
+          <div className="grid h-full grid-cols-2">
+            {areas.map((area, index) => (
+              <PrintAreaSpec
+                key={area.id}
+                area={area}
+                index={index + 1}
+                className={index > 0 ? 'border-l-2 border-[#25358b]' : undefined}
+              />
+            ))}
+          </div>
         ) : (
-          areas.map((area, index) => (
-            <PrintAreaSpec
-              key={area.id}
-              area={area}
-              index={index + 1}
-              className={index > 0 ? 'border-l-2 border-[#25358b]' : undefined}
-            />
-          ))
+          <div className="grid h-full grid-cols-2 grid-rows-2">
+            {visibleAreas.map((area, index) => (
+              <CompactPrintAreaSpec
+                key={area.id}
+                area={area}
+                index={index + 1}
+                className={`${index % 2 === 1 ? 'border-l-2 border-[#25358b]' : ''} ${index > 1 ? 'border-t-2 border-[#25358b]' : ''}`}
+              />
+            ))}
+            {areas.length > visibleAreas.length && (
+              <OverflowPrintAreaSpec
+                count={areas.length - visibleAreas.length}
+                labels={areas.slice(visibleAreas.length).map((area) => area.label)}
+                className="border-l-2 border-t-2 border-[#25358b]"
+              />
+            )}
+          </div>
         )}
       </div>
-      <div style={rect(662, 451, 132, 100)} className="text-[9px] font-bold text-[#25358b]">
+      <div style={rect(662, 451, 132, 100)} className="overflow-hidden text-[9px] font-bold text-[#25358b]">
         <p>PRODUCTION NOTE:</p>
-        <p className="mt-2 text-[#e11d25]">{(design.productionNote || 'N/A').toUpperCase()}</p>
-        <p className="mt-12 text-[8px]">IMPORTANT!!!</p>
-        <p className="mt-1 text-[5px] leading-tight">PLEASE CHECK THAT YOUR ORDER HAS BEEN DELIVERED IN FULL. IF THERE IS AN ERROR, PLEASE CONTACT US WITHIN 7 DAYS.</p>
+        <p className="mt-2 max-h-[38px] overflow-hidden break-words text-[8px] leading-[1.2] text-[#e11d25]">
+          {(design.productionNote || 'N/A').toUpperCase()}
+        </p>
+        <p className="mt-3 text-[8px]">IMPORTANT!!!</p>
+        <p className="mt-1 max-h-[24px] overflow-hidden text-[5px] leading-tight">PLEASE CHECK THAT YOUR ORDER HAS BEEN DELIVERED IN FULL. IF THERE IS AN ERROR, PLEASE CONTACT US WITHIN 7 DAYS.</p>
       </div>
     </>
   )
@@ -312,33 +376,59 @@ function FinalSpecBand({ design }: { design: ProofDesign }) {
 
 function PrintAreaSpec({ area, index, className }: { area: ProofPrintArea; index: number; className?: string }) {
   return (
-    <div className={`flex-1 px-3 text-[9px] font-bold leading-[1.45] ${className || ''}`}>
-      <p>PRINT AREA {index}: <span className="ml-3">{area.label.toUpperCase()}</span></p>
+    <div className={`min-w-0 overflow-hidden px-3 py-1 text-[9px] font-bold leading-[1.3] ${className || ''}`}>
+      <p className="flex min-w-0 gap-3">
+        <span className="shrink-0">PRINT AREA {index}:</span>
+        <span className="min-w-0 truncate">{area.label.toUpperCase()}</span>
+      </p>
       <p>
         METHOD:
-        <span className="ml-3 rounded-sm bg-[#1599d5] px-1.5 py-0.5 text-[7px] text-white">{methodLabel(area.method)}</span>
+        <span className="ml-3 inline-block max-w-[136px] truncate rounded-sm bg-[#1599d5] px-1.5 py-0.5 align-bottom text-[7px] text-white">{methodLabel(area.method)}</span>
       </p>
-      <p>DIMENSIONS: <span className="font-normal">{area.widthMm || '-'}MM W X {area.heightMm || '-'}MM H</span></p>
+      <p className="truncate">DIMENSIONS: <span className="font-normal">{area.widthMm || '-'}MM W X {area.heightMm || '-'}MM H</span></p>
       <p>COLOURS:</p>
-      <p className="mt-2 flex items-center gap-3 font-normal">
-        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: area.pantoneHex || '#2f2118' }} />
-        <span>-PANTONE {(area.pantone || '-').toUpperCase()}</span>
+      <p className="mt-1 flex min-w-0 items-center gap-3 font-normal">
+        <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: area.pantoneHex || '#2f2118' }} />
+        <span className="min-w-0 truncate">-PANTONE {(area.pantone || '-').toUpperCase()}</span>
       </p>
-      <p className="mt-8">ARTWORK:<span className="text-[#e11d25]">{(area.artworkStatus || 'NEW').toUpperCase()}</span></p>
+      <p className="mt-2 truncate">ARTWORK:<span className="text-[#e11d25]">{(area.artworkStatus || 'NEW').toUpperCase()}</span></p>
+    </div>
+  )
+}
+
+function CompactPrintAreaSpec({ area, index, className }: { area: ProofPrintArea; index: number; className?: string }) {
+  return (
+    <div className={`min-w-0 overflow-hidden px-2 py-1 text-[7px] font-bold leading-[1.25] ${className || ''}`}>
+      <p className="truncate">AREA {index}: {area.label.toUpperCase()}</p>
+      <p className="truncate">METHOD: {methodLabel(area.method)}</p>
+      <p className="truncate">DIM: {area.widthMm || '-'}MM W X {area.heightMm || '-'}MM H</p>
+      <p className="truncate">PANTONE: {(area.pantone || '-').toUpperCase()}</p>
+      <p className="truncate">ARTWORK: <span className="text-[#e11d25]">{(area.artworkStatus || 'NEW').toUpperCase()}</span></p>
+    </div>
+  )
+}
+
+function OverflowPrintAreaSpec({ count, labels, className }: { count: number; labels: string[]; className?: string }) {
+  return (
+    <div className={`min-w-0 overflow-hidden px-2 py-1 text-[7px] font-bold leading-[1.25] ${className || ''}`}>
+      <p className="truncate">+{count} MORE PRINT {count === 1 ? 'AREA' : 'AREAS'}</p>
+      <p className="mt-1 max-h-[32px] overflow-hidden break-words font-normal">
+        {labels.map((label) => label.toUpperCase()).join(', ')}
+      </p>
     </div>
   )
 }
 
 function ArtworkFooter({ document }: { document: ProofDocument }) {
   return (
-    <div style={{ ...rect(32, 484, 778, 74), backgroundColor: NAVY }} className="flex items-center text-white">
-      <div className="w-[180px] pl-6 text-[10px] font-bold leading-[1.6]">
-        <p>{document.preparedByPhone}</p>
-        <p>{document.preparedByEmail}</p>
-        <p>{document.website}</p>
+    <div style={{ ...rect(32, 484, 778, 74), backgroundColor: NAVY }} className="flex items-center overflow-hidden text-white">
+      <div className="w-[180px] min-w-0 pl-6 text-[10px] font-bold leading-[1.6]">
+        <p className="truncate">{document.preparedByPhone}</p>
+        <p className="truncate">{document.preparedByEmail}</p>
+        <p className="truncate">{document.website}</p>
       </div>
       <div className="h-10 border-l border-white" />
-      <div className="flex-1 px-5 text-[6px] leading-[1.35]">{document.terms}</div>
+      <div className="max-h-[54px] flex-1 overflow-hidden px-5 text-[6px] leading-[1.35]">{document.terms}</div>
       <div className="mr-7 flex h-12 w-16 items-center justify-center rounded-lg border-2 border-white text-center text-[17px] font-black leading-none">
         PRINT<br />ROOM
       </div>
@@ -358,7 +448,7 @@ function OrderTable({
   const columns = orderColumns()
   const tableHeight = (showHeader ? 48 : 0) + Math.max(lines.length, 1) * 54
   return (
-    <table className="border-collapse table-fixed text-[8px] leading-[1.45]" style={{ ...style, height: pct(tableHeight, PAGE_H) }}>
+    <table className="border-collapse table-fixed text-[8px] leading-[1.35]" style={{ ...style, height: tableHeight }}>
       <colgroup>
         {columns.map((column) => (
           <col key={column.key} style={{ width: `${(column.width / 778) * 100}%` }} />
@@ -368,7 +458,7 @@ function OrderTable({
         <thead>
           <tr style={{ height: `${(48 / tableHeight) * 100}%` }}>
             {columns.map((column) => (
-              <th key={column.key} className="whitespace-pre-line border-[1.5px] border-black px-1.5 py-2 text-left align-top font-bold">
+              <th key={column.key} className="overflow-hidden whitespace-pre-line border-[1.5px] border-black px-1.5 py-2 text-left align-top font-bold">
                 {column.label}
               </th>
             ))}
@@ -386,8 +476,10 @@ function OrderTable({
           lines.map((line) => (
             <tr key={line.id} style={{ height: `${(54 / tableHeight) * 100}%` }}>
               {columns.map((column) => (
-                <td key={column.key} className={`border-[1.5px] border-black px-1.5 py-2 align-top ${column.center ? 'text-center' : ''}`}>
-                  {orderCellValue(line, column.key)}
+                <td key={column.key} className={`overflow-hidden border-[1.5px] border-black px-1.5 py-2 align-top ${column.center ? 'text-center' : ''}`}>
+                  <span className={`block max-h-full overflow-hidden ${column.center ? 'break-normal' : 'break-words'}`}>
+                    {orderCellValue(line, column.key)}
+                  </span>
                 </td>
               ))}
             </tr>
@@ -445,15 +537,11 @@ function chunkOrderLines(items: ProofOrderLine[]) {
 function rect(x: number, y: number, width: number, height: number): CSSProperties {
   return {
     position: 'absolute',
-    left: pct(x, PAGE_W),
-    top: pct(y, PAGE_H),
-    width: pct(width, PAGE_W),
-    height: pct(height, PAGE_H),
+    left: x,
+    top: y,
+    width,
+    height,
   }
-}
-
-function pct(value: number, total: number) {
-  return `${(value / total) * 100}%`
 }
 
 function formatSizeColumn(label: string) {
