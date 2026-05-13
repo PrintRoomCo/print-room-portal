@@ -176,3 +176,65 @@ export function calculateLineTotal(line: ProofOrderLine): number {
   }
   return total
 }
+
+// ---------------------------------------------------------------------------
+// Catalogue-side types (F1 vendored helper).
+//
+// MIRROR: keep in sync with `print-room-staff-portal/src/types/proofs.ts`.
+// The staff portal owns authoring; this copy is consumed by the customer-
+// portal autofill helper that builds a proof shell after order submit.
+// ---------------------------------------------------------------------------
+
+export interface CatalogueProofProductColour {
+  swatchId: string
+  label: string
+  hex: string | null
+  imageUrl: string | null
+}
+
+export interface CatalogueProofProductDecoration {
+  linkId: string
+  decorationName: string
+  method: string
+  printAreaName: string | null
+  widthMm: number | null
+  heightMm: number | null
+  artworkUrl: string | null
+  snapshotUrl: string | null
+}
+
+export interface CatalogueProofProduct {
+  catalogueItemId: string
+  sourceProductId: string
+  name: string
+  imageUrl: string | null
+  colours: CatalogueProofProductColour[]
+  decorations: CatalogueProofProductDecoration[]
+}
+
+export interface CatalogueProofProductGreyed extends CatalogueProofProduct {
+  reasons: string[]
+}
+
+export interface ReadyProductsResult {
+  products: CatalogueProofProduct[]
+  greyed: CatalogueProofProductGreyed[]
+}
+
+export const PROOF_METHODS = [
+  'screenprint',
+  'embroidery',
+  'heat_press',
+  'super_color',
+  'other',
+] as const
+
+export type ProofMethod = (typeof PROOF_METHODS)[number]
+
+export interface ProofCreateInput {
+  organizationId: string
+  customerName: string
+  customerEmail: string
+  jobName: string
+  jobReference?: string
+}
