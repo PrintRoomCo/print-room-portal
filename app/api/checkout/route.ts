@@ -14,6 +14,8 @@ interface CheckoutRequestBody {
   idempotency_key?: string
   required_by?: string | null
   notes?: string | null
+  /** Slice 4: 'inventory' routes the order into the org's stock shelf instead of a customer delivery. */
+  intent?: 'customer' | 'inventory'
   lines?: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
 }
@@ -71,6 +73,23 @@ export async function POST(request: Request) {
     }
   }
 
+  // Slice 4: only org admins on tenants that track stock may route to inventory.
+  // Server enforces gating so a forged buyer/studio POST can't side-step the UI.
+  let intent: 'customer' | 'inventory' = 'customer'
+  if (body.intent === 'inventory') {
+    const canRoute =
+      auth.context.role === 'org_admin' &&
+      (auth.context.tenantType === 'studio_plus_inventory' ||
+        auth.context.tenantType === 'franchise')
+    if (!canRoute) {
+      return NextResponse.json(
+        { error: 'Only org admins on inventory-tracking tenants can route orders to inventory' },
+        { status: 403 },
+      )
+    }
+    intent = 'inventory'
+  }
+
   try {
     const result = await submitCustomerOrder(auth.admin, {
       context: auth.context,
@@ -80,6 +99,7 @@ export async function POST(request: Request) {
       internal_notes: null,
       lines: body.lines,
       custom_shipping_address: body.custom_shipping_address ?? null,
+      intent,
     })
     return NextResponse.json(result)
   } catch (e) {

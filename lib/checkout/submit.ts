@@ -38,6 +38,8 @@ export interface CheckoutInput {
   internal_notes?: string | null
   lines: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
+  /** Slice 4: 'inventory' routes the order into the org's stock shelf; 'customer' (default) is the existing delivery path. */
+  intent?: 'customer' | 'inventory'
 }
 
 export interface CheckoutResult {
@@ -557,6 +559,7 @@ export async function submitCustomerOrder(
         variant_id: l.variant_id ?? null,
       }
     }),
+    p_intent: input.intent ?? 'customer',
   })
   if (error) {
     if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {

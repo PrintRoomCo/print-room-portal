@@ -30,6 +30,8 @@ interface CheckoutClientProps {
    * is set for buyers, but we defend against drift by surfacing a banner.
    */
   isBuyer: boolean
+  /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
+  tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
 }
 
 interface CheckoutResponse {
@@ -60,6 +62,7 @@ export function CheckoutClient({
   defaultDepositPercent,
   defaultStoreId: buyerDefaultStoreId,
   isBuyer,
+  tenantType,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -86,6 +89,13 @@ export function CheckoutClient({
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'order'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
+  // Slice 4: admin-only "send this batch to inventory instead of a customer
+  // address" toggle. Only meaningful for orgs that track stock.
+  const canRouteToInventory =
+    !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
+  const [routeToInventory, setRouteToInventory] = useState(false)
+  const intent: 'customer' | 'inventory' =
+    canRouteToInventory && routeToInventory ? 'inventory' : 'customer'
 
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
@@ -129,6 +139,7 @@ export function CheckoutClient({
           idempotency_key: idempotencyKey.current,
           required_by: requiredBy || null,
           notes: notes || null,
+          intent,
           lines: cart.lines.map((l) => ({
             product_id: l.productId,
             product_name: l.productName,
@@ -282,6 +293,27 @@ export function CheckoutClient({
           A deposit of {depositPct}% ({formatPrice(depositAmount)}) will be
           invoiced up-front. Balance on {paymentTerms ?? 'net20'}.
         </div>
+      )}
+
+      {canRouteToInventory && (
+        <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={routeToInventory}
+              onChange={(e) => setRouteToInventory(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-pr-blue focus:ring-pr-blue/30"
+              disabled={submitting !== false}
+            />
+            <span className="text-sm">
+              <span className="font-medium text-gray-900">Add to my inventory</span>
+              <span className="ml-1 text-gray-500">
+                — produce these items to restock my shelf, not for a customer. Your account
+                manager will mark each variant received when stock lands.
+              </span>
+            </span>
+          </label>
+        </section>
       )}
 
       <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
