@@ -7,6 +7,7 @@ export const AUDIT_ACTIONS = {
   PROOF_AUTOFILL_SUCCEEDED: 'proof.autofill_succeeded',
   PROOF_AUTOFILL_SKIPPED: 'proof.autofill_skipped',
   PROOF_AUTOFILL_FAILED: 'proof.autofill_failed',
+  PROOF_AUTOFILL_PARTIAL: 'proof.autofill_partial',
   PROOF_AUTOFILL_AM_NOTIFIED: 'proof.autofill_am_notified',
   PROOF_AUTOFILL_AM_NOTIFICATION_FAILED: 'proof.autofill_am_notification_failed',
   PROOF_AUTOFILL_AM_NO_RECIPIENT: 'proof.autofill_am_no_recipient',
