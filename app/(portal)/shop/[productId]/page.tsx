@@ -5,6 +5,7 @@ import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
+import { cleanDescription } from '@/lib/shop/clean-description'
 
 export const dynamic = 'force-dynamic'
 
@@ -246,7 +247,7 @@ export default async function ProductDetailPage({
   const displayProduct = {
     ...productRow,
     name: catItemForked?.name ?? productRow.name,
-    description: catItemForked?.description ?? productRow.description,
+    description: cleanDescription(catItemForked?.description ?? productRow.description),
     image_url: catItemForked?.image_url ?? productRow.image_url,
   }
 

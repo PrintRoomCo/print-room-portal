@@ -6,10 +6,8 @@ import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type VariantRow } from './VariantPicker'
 import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { RequestReorderModal } from './RequestReorderModal'
-import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
-import { TierBadge } from '@/components/pricing/TierBadge'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
@@ -36,18 +34,6 @@ interface ProductData {
   fulfilment_type: FulfilmentType
   brand_name: string | null
   category_name: string | null
-}
-
-const FULFILMENT_BADGE_LABEL: Record<FulfilmentType, string> = {
-  stocked: 'In stock',
-  made_to_order: 'Made to order',
-  mixed: 'Some in stock',
-}
-
-const FULFILMENT_BADGE_CLASS: Record<FulfilmentType, string> = {
-  stocked: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  made_to_order: 'border-gray-200 bg-gray-50 text-gray-700',
-  mixed: 'border-sky-200 bg-sky-50 text-sky-700',
 }
 
 interface Bracket {
@@ -90,7 +76,6 @@ export function ProductDetailClient({
   effectiveMoq,
 }: Props) {
   const cart = useCart()
-  const pricingCtx = usePricingContext()
 
   const firstVariant = variants[0] ?? null
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
@@ -472,12 +457,6 @@ export function ProductDetailClient({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
-              <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-              <span
-                className={`rounded-full border px-2 py-0.5 text-xs ${FULFILMENT_BADGE_CLASS[product.fulfilment_type]}`}
-              >
-                {FULFILMENT_BADGE_LABEL[product.fulfilment_type]}
-              </span>
               {product.sizing_type && product.sizing_type !== 'multi_size' && (
                 <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
                   {product.sizing_type.replace(/_/g, ' ')}
