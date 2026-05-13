@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { coerceProofDocument, type ProofDocument } from '@/lib/proofs/types'
 import { buildDiffSummary, computeAmendmentDiff } from '@/lib/proofs/compute-amendment-diff'
+import { sendProofEmail } from '@/lib/email/send-proof-email'
 
 /**
  * POST /api/proofs/[id]/amendment-requests
@@ -40,11 +42,14 @@ interface ProofRow {
   proof_quality_status: string
   current_version_id: string | null
   created_by_user_id: string | null
+  name: string | null
+  customer_name: string | null
 }
 
 interface OrderRow {
   id: string
   status: string | null
+  assigned_to: string | null
 }
 
 interface VersionRow {
@@ -101,7 +106,7 @@ export async function POST(
   const { data: proofData } = await admin
     .from('design_proofs')
     .select(
-      'id, organization_id, order_id, status, proof_quality_status, current_version_id, created_by_user_id'
+      'id, organization_id, order_id, status, proof_quality_status, current_version_id, created_by_user_id, name, customer_name'
     )
     .eq('id', proofId)
     .maybeSingle()
@@ -125,7 +130,7 @@ export async function POST(
   // an approved proof (the same gate the read page enforces).
   const { data: orderData } = await admin
     .from('orders')
-    .select('id, status')
+    .select('id, status, assigned_to')
     .eq('id', proof.order_id)
     .maybeSingle()
   const order = orderData as OrderRow | null
@@ -205,8 +210,8 @@ export async function POST(
   }
 
   // Best-effort AM notification — audit_events row for the staff portal's
-  // notifications surface. Resend wrapper not wired in this repo; the
-  // staff portal Slice H/I will pick this up. Failure here must not bubble.
+  // in-app inbox (Slice H of the prior sprint depends on this action name).
+  // Failure here must NEVER break the customer-facing submit.
   try {
     await admin.from('audit_events').insert({
       org_id: proof.organization_id,
@@ -219,26 +224,207 @@ export async function POST(
         proofVersionId: version.id,
         orderId: proof.order_id,
         diffSummary,
-        deferred: 'no_resend_wrapper_in_customer_portal',
       },
     })
   } catch (err) {
-    console.warn('[amendment-request] audit_events deferred log failed', err)
+    console.warn('[amendment-request] audit_events log failed', err)
   }
+
+  // Resolve AM + send email. Wrapped in try/catch defense-in-depth — if
+  // anything throws here, we audit the failure and still 201 to the
+  // customer (their amendment_request row is persisted; that's the contract).
   try {
-    await admin.from('audit_events').insert({
+    const amResolution = await resolveAmRecipient(admin, {
+      creatorUserId: proof.created_by_user_id,
+      assignedUserId: order.assigned_to,
+    })
+
+    const auditBase = {
       org_id: proof.organization_id,
       actor_user_id: context.userId,
-      action: 'proof.amendment_request_am_deferred',
-      target_type: 'proof_amendment_request',
+      target_type: 'proof_amendment_request' as const,
       target_id: insertData.id,
-      metadata: { reason: 'customer_portal_has_no_resend_wrapper' },
-    })
-  } catch {
-    // swallow — defer logging is itself best-effort.
+    }
+
+    if (!amResolution) {
+      await admin.from('audit_events').insert({
+        ...auditBase,
+        action: 'proof.amendment_am_no_recipient',
+        metadata: {
+          amendment_request_id: insertData.id,
+          creator_user_id: proof.created_by_user_id,
+          assigned_to: order.assigned_to,
+        },
+      })
+    } else {
+      const { amUserId, email, firstName } = amResolution
+
+      const staffPortalUrl =
+        process.env.STAFF_PORTAL_URL ??
+        process.env.NEXT_PUBLIC_STAFF_PORTAL_URL ??
+        null
+      const proofLink = staffPortalUrl
+        ? `${staffPortalUrl.replace(/\/+$/, '')}/proofs/${proof.id}`
+        : null
+
+      const orderRef = proof.order_id ? proof.order_id.slice(0, 8) : 'unknown'
+      const amFirstNameOrFallback = firstName && firstName.trim().length > 0 ? firstName : 'there'
+      const customerNameOrFallback =
+        (context.fullName && context.fullName.trim().length > 0 && context.fullName) ||
+        proof.customer_name ||
+        'A customer'
+      const proofNameOrId =
+        proof.name && proof.name.trim().length > 0 ? proof.name : `#${proof.id}`
+      const rawNote = noteBody ?? ''
+      const truncatedNote =
+        rawNote.length > 200 ? `${rawNote.slice(0, 200).trimEnd()}…` : rawNote
+
+      const subject = `Amendment request — Proof for Order #${orderRef}`
+
+      const escape = (value: string): string =>
+        value
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+
+      const noteLine = truncatedNote
+        ? `  <li><strong>Customer note:</strong> ${escape(truncatedNote)}</li>\n`
+        : ''
+      const buttonOrFallback = proofLink
+        ? `<p><a href="${proofLink}" style="display:inline-block;padding:10px 16px;background:#000;color:#fff;text-decoration:none;border-radius:4px">Open proof in staff portal</a></p>\n`
+        : `<p>Open the staff portal to review.</p>\n`
+
+      const html =
+        `<p>Hi ${escape(amFirstNameOrFallback)},</p>\n` +
+        `<p>${escape(customerNameOrFallback)} has requested an amendment on a proof:</p>\n` +
+        `<ul>\n` +
+        `  <li><strong>Order:</strong> #${escape(orderRef)}</li>\n` +
+        `  <li><strong>Proof:</strong> ${escape(proofNameOrId)}</li>\n` +
+        noteLine +
+        `</ul>\n` +
+        buttonOrFallback +
+        `<p>— Print Room customer portal</p>\n`
+
+      const textLines: string[] = [
+        `Hi ${amFirstNameOrFallback},`,
+        '',
+        `${customerNameOrFallback} has requested an amendment on a proof:`,
+        '',
+        `Order: #${orderRef}`,
+        `Proof: ${proofNameOrId}`,
+      ]
+      if (truncatedNote) textLines.push(`Customer note: ${truncatedNote}`)
+      textLines.push('')
+      textLines.push(
+        proofLink
+          ? `Open proof in staff portal: ${proofLink}`
+          : 'Open the staff portal to review.'
+      )
+      textLines.push('')
+      textLines.push('— Print Room customer portal')
+      const text = textLines.join('\n')
+
+      const sendResult = await sendProofEmail({
+        to: email,
+        subject,
+        html,
+        text,
+        kind: 'proof.am_amendment_request',
+        correlation: {
+          proof_id: proof.id,
+          order_id: proof.order_id ?? undefined,
+          amendment_request_id: insertData.id,
+        },
+      })
+
+      if (sendResult.ok) {
+        await admin.from('audit_events').insert({
+          ...auditBase,
+          action: 'proof.amendment_am_notified',
+          metadata: {
+            am_user_id: amUserId,
+            recipient: email,
+            resend_message_id: sendResult.messageId,
+            amendment_request_id: insertData.id,
+          },
+        })
+      } else {
+        await admin.from('audit_events').insert({
+          ...auditBase,
+          action: 'proof.amendment_am_notification_failed',
+          metadata: {
+            am_user_id: amUserId,
+            recipient: email,
+            error: sendResult.error,
+            amendment_request_id: insertData.id,
+          },
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('[amendment-request] AM notification flow threw', err)
+    try {
+      await admin.from('audit_events').insert({
+        org_id: proof.organization_id,
+        actor_user_id: context.userId,
+        action: 'proof.amendment_am_notification_failed',
+        target_type: 'proof_amendment_request',
+        target_id: insertData.id,
+        metadata: {
+          am_user_id: null,
+          recipient: null,
+          error: err instanceof Error ? err.message : 'unknown error',
+          amendment_request_id: insertData.id,
+        },
+      })
+    } catch {
+      // best-effort — never break submit.
+    }
   }
 
   return NextResponse.json({ id: insertData.id }, { status: 201 })
+}
+
+interface AmResolution {
+  amUserId: string
+  email: string
+  firstName: string | null
+}
+
+/**
+ * Resolve an AM recipient using the documented priority:
+ *   1. design_proofs.created_by_user_id
+ *   2. orders.assigned_to
+ *   3. null — caller audits `proof.amendment_am_no_recipient`.
+ *
+ * If #1 is set but its email lookup fails, we fall back to #2. If both
+ * fail, returns null. NEVER throws — callers can rely on the result shape.
+ */
+async function resolveAmRecipient(
+  admin: SupabaseClient,
+  candidates: { creatorUserId: string | null; assignedUserId: string | null }
+): Promise<AmResolution | null> {
+  const ordered = [candidates.creatorUserId, candidates.assignedUserId].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0
+  )
+  for (const userId of ordered) {
+    try {
+      const { data, error } = await admin.auth.admin.getUserById(userId)
+      if (error || !data?.user?.email) continue
+      const meta = (data.user.user_metadata ?? null) as { first_name?: unknown } | null
+      const firstName =
+        meta && typeof meta.first_name === 'string' && meta.first_name.length > 0
+          ? meta.first_name
+          : null
+      return { amUserId: userId, email: data.user.email, firstName }
+    } catch {
+      // swallow and try the next candidate.
+      continue
+    }
+  }
+  return null
 }
 
 function isUuid(value: unknown): value is string {
