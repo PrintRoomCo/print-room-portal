@@ -73,7 +73,10 @@ export function CartTable({
   }, [lines, onOversellChange, onMoqViolationChange])
 
   useEffect(() => {
+    // Only stocked lines block checkout on oversell — make_to_stock lines are
+    // intentionally over-available and route to production instead.
     const oversells = lines.some((l) => {
+      if (l.fulfilmentType === 'make_to_stock') return false
       const avail = availability[l.variantId]
       return avail !== undefined && l.qty > avail
     })
@@ -127,14 +130,17 @@ export function CartTable({
         <tbody className="divide-y divide-gray-100">
           {lines.map((line) => {
             const avail = availability[line.variantId]
-            const isOversell = avail !== undefined && line.qty > avail
+            const isMakeToStock = line.fulfilmentType === 'make_to_stock'
+            // Oversell only applies to stocked lines; make_to_stock lines are
+            // intentionally ordering beyond available stock.
+            const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
             const moq = moqByProduct[line.productId]
             const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
             const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
             return (
               <tr
                 key={line.lineId}
-                className={isOversell || isMoqShort ? 'bg-red-50' : undefined}
+                className={isOversell || isMoqShort ? 'bg-red-50' : isMakeToStock ? 'bg-amber-50/40' : undefined}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -173,6 +179,14 @@ export function CartTable({
                               </span>
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {isMakeToStock && (
+                        <div className="mt-1 flex items-center gap-1 text-xs text-amber-700">
+                          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-medium">
+                            Make to stock
+                          </span>
+                          <span className="text-amber-600">— will go to your inventory shelf</span>
                         </div>
                       )}
                       {isOversell && (

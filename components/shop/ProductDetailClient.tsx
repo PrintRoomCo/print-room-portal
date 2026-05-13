@@ -363,6 +363,10 @@ export function ProductDetailClient({
         if (lineQty <= 0) continue
         const variantLabel =
           [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
+        const tracked = availability[variant.variant_id] !== undefined
+        const available = availability[variant.variant_id] ?? 0
+        const fulfilmentType: 'stocked' | 'make_to_stock' =
+          tracked && lineQty > available ? 'make_to_stock' : 'stocked'
         cart.addLine({
           productId: product.id,
           productName: product.name,
@@ -372,6 +376,7 @@ export function ProductDetailClient({
           unitPrice: pricing.unit_price,
           imageUrl: product.image_url,
           decorations: cartLineDecorations,
+          fulfilmentType,
         })
         added += lineQty
       }
@@ -386,6 +391,10 @@ export function ProductDetailClient({
     const colorLabel = selectedVariant.color_label ?? ''
     const sizeLabel = selectedVariant.size_label ?? ''
     const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
+    const singleTracked = availability[selectedVariant.variant_id] !== undefined
+    const singleAvailable = availability[selectedVariant.variant_id] ?? 0
+    const singleFulfilmentType: 'stocked' | 'make_to_stock' =
+      singleTracked && qty > singleAvailable ? 'make_to_stock' : 'stocked'
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -395,6 +404,7 @@ export function ProductDetailClient({
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
       decorations: cartLineDecorations,
+      fulfilmentType: singleFulfilmentType,
     })
     showToast('Added to cart')
   }

@@ -93,7 +93,13 @@ export function CheckoutClient({
   // address" toggle. Only meaningful for orgs that track stock.
   const canRouteToInventory =
     !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
-  const [routeToInventory, setRouteToInventory] = useState(false)
+  // Auto-engage when the cart contains make_to_stock lines (customer ordered
+  // beyond available stock on the PDP; those lines need production → inventory
+  // routing, not direct customer delivery).
+  const hasMakeToStockLines = cart.lines.some((l) => l.fulfilmentType === 'make_to_stock')
+  const [routeToInventory, setRouteToInventory] = useState(
+    canRouteToInventory && hasMakeToStockLines,
+  )
   const intent: 'customer' | 'inventory' =
     canRouteToInventory && routeToInventory ? 'inventory' : 'customer'
 
@@ -295,6 +301,13 @@ export function CheckoutClient({
         </div>
       )}
 
+      {canRouteToInventory && hasMakeToStockLines && !routeToInventory && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Your cart includes items that exceed your current stock. These will be routed to
+          production and added to your inventory shelf — enable &ldquo;Add to my inventory&rdquo; below
+          before submitting.
+        </div>
+      )}
       {canRouteToInventory && (
         <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
           <label className="flex items-start gap-3">
@@ -307,10 +320,18 @@ export function CheckoutClient({
             />
             <span className="text-sm">
               <span className="font-medium text-gray-900">Add to my inventory</span>
-              <span className="ml-1 text-gray-500">
-                — produce these items to restock my shelf, not for a customer. Your account
-                manager will mark each variant received when stock lands.
-              </span>
+              {hasMakeToStockLines ? (
+                <span className="ml-1 text-amber-700">
+                  — auto-selected because your cart contains items over current stock. These will
+                  go into production and land on your inventory shelf; your account manager will
+                  mark them received when stock arrives.
+                </span>
+              ) : (
+                <span className="ml-1 text-gray-500">
+                  — produce these items to restock my shelf, not for a customer. Your account
+                  manager will mark each variant received when stock lands.
+                </span>
+              )}
             </span>
           </label>
         </section>

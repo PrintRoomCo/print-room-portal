@@ -34,6 +34,13 @@ export interface CartLine {
    * added. Re-validated on checkout submit.
    */
   decorations: CartLineDecoration[]
+  /**
+   * 'stocked' — ships from org's existing inventory.
+   * 'make_to_stock' — qty exceeds available stock; goes into production and
+   * lands in the org's inventory shelf (not direct ship). Absent on legacy
+   * persisted lines; treat as 'stocked' when undefined.
+   */
+  fulfilmentType?: 'stocked' | 'make_to_stock'
 }
 
 export interface CartState {
