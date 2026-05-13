@@ -27,10 +27,10 @@ export interface B2BCustomerContext {
    * Customer-shape discriminator from b2b_accounts.tenant_type.
    * Null when no b2b_account row. See lib/company.ts for the full Access shape.
    */
-  tenantType: 'franchise' | 'all_store_org' | 'studio' | null
+  tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
   /**
-   * Derived from tenantType. True only for all_store_org (All Blacks shape).
-   * Mirrors B2BCustomerAccess so checkout code branches without re-deriving.
+   * Derived from tenantType. True only for studio_plus_inventory. Mirrors
+   * B2BCustomerAccess so checkout code branches without re-deriving.
    */
   allowsMultiStoreOrdering: boolean
 }
@@ -105,7 +105,7 @@ export async function requireB2BCustomer(
       defaultStoreId: membership.default_store_id ?? null,
       tenantType: (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type ?? null,
       allowsMultiStoreOrdering:
-        (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'all_store_org',
+        (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
     } satisfies B2BCustomerContext,
   }
 }
