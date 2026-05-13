@@ -106,7 +106,17 @@ export default async function CataloguePage({
   const scopedItemIds = catItemRows
     .filter((r) => productIds.includes(r.source_product_id))
     .map((r) => r.id)
-  const [{ prices }, { data: catalogueImageRows }] = await Promise.all([
+  const itemIdByProductId = new Map(
+    catItemRows
+      .filter((r) => productIds.includes(r.source_product_id))
+      .map((r) => [r.source_product_id, r.id]),
+  )
+  const [
+    { prices },
+    { data: catalogueImageRows },
+    { data: tierMinRows },
+    { data: decorationRows },
+  ] = await Promise.all([
     effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
     scopedItemIds.length > 0
       ? admin
@@ -114,6 +124,30 @@ export default async function CataloguePage({
           .select('catalogue_item_id, view, source, position, image_url, color_swatch_id')
           .in('catalogue_item_id', scopedItemIds)
       : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
+    scopedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_pricing_tiers')
+          .select('catalogue_item_id, unit_price')
+          .in('catalogue_item_id', scopedItemIds)
+      : Promise.resolve({
+          data: [] as Array<{ catalogue_item_id: string; unit_price: number }>,
+        }),
+    scopedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_decorations')
+          .select('catalogue_item_id, unit_price_override, org_decorations(unit_price)')
+          .in('catalogue_item_id', scopedItemIds)
+          .eq('is_default', true)
+      : Promise.resolve({
+          data: [] as Array<{
+            catalogue_item_id: string
+            unit_price_override: number | null
+            org_decorations:
+              | { unit_price: number | null }
+              | { unit_price: number | null }[]
+              | null
+          }>,
+        }),
   ])
 
   const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
@@ -125,16 +159,62 @@ export default async function CataloguePage({
     imagesByProduct.set(productId, list)
   }
 
+  // Lowest tier base price per catalogue item — the bottom of the volume
+  // pricing ladder. "From $X" on the card should reflect this floor.
+  const tierMinByItem = new Map<string, number>()
+  for (const r of (tierMinRows ?? []) as Array<{
+    catalogue_item_id: string
+    unit_price: number | string
+  }>) {
+    const price = Number(r.unit_price)
+    if (!Number.isFinite(price) || price <= 0) continue
+    const cur = tierMinByItem.get(r.catalogue_item_id)
+    if (cur === undefined || price < cur) tierMinByItem.set(r.catalogue_item_id, price)
+  }
+
+  // Sum of default decorations per catalogue item — what the PDP adds on top
+  // of the tier price for the all-in unit price.
+  const decorationSumByItem = new Map<string, number>()
+  for (const r of (decorationRows ?? []) as Array<{
+    catalogue_item_id: string
+    unit_price_override: number | string | null
+    org_decorations:
+      | { unit_price: number | string | null }
+      | { unit_price: number | string | null }[]
+      | null
+  }>) {
+    const orgDec = Array.isArray(r.org_decorations) ? r.org_decorations[0] : r.org_decorations
+    const override =
+      r.unit_price_override != null ? Number(r.unit_price_override) : null
+    const fallback =
+      orgDec?.unit_price != null ? Number(orgDec.unit_price) : 0
+    const price = override ?? fallback
+    if (!Number.isFinite(price) || price <= 0) continue
+    decorationSumByItem.set(
+      r.catalogue_item_id,
+      (decorationSumByItem.get(r.catalogue_item_id) ?? 0) + price,
+    )
+  }
+
   const products = rows.map((p) => {
-    const price = prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
+    const rpcPrice =
+      prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
+    const itemId = itemIdByProductId.get(p.id)
+    const tierFloor = itemId ? tierMinByItem.get(itemId) : undefined
+    const decorationOverlay = itemId ? decorationSumByItem.get(itemId) ?? 0 : 0
+    // Prefer the catalogue tier floor; fall back to the RPC price (which
+    // resolves legacy product-level pricing for items without tier rows).
+    const baseFromPrice = tierFloor ?? rpcPrice.unitPrice
+    const fromAllIn =
+      baseFromPrice > 0 ? baseFromPrice + decorationOverlay : rpcPrice.unitPrice
     return {
       id: p.id,
       name: p.name,
       sku: p.sku,
       image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
-      from_unit_price: price.unitPrice,
-      price_status: price.status,
-      has_stock: price.hasStock,
+      from_unit_price: fromAllIn,
+      price_status: rpcPrice.status,
+      has_stock: rpcPrice.hasStock,
     }
   })
 
