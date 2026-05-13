@@ -60,11 +60,11 @@ export interface B2BCustomerAccess {
    * Null when isIndividual (no b2b_account row).
    * Consumers should prefer the named permission flags below over raw enum reads.
    */
-  tenantType: 'franchise' | 'all_store_org' | 'studio' | null
+  tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
 
   /**
-   * Derived from tenantType. True only for all_store_org (All Blacks shape:
-   * players sign in and order to custom addresses, no fixed store binding).
+   * Derived from tenantType. True only for studio_plus_inventory tenants
+   * (catalogue + inventory shape; admins can place orders across stores).
    */
   allowsMultiStoreOrdering: boolean
 }

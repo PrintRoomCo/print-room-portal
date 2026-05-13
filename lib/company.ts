@@ -210,7 +210,7 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
     hasTrackedInventory,
 
     tenantType,
-    allowsMultiStoreOrdering: tenantType === 'all_store_org',
+    allowsMultiStoreOrdering: tenantType === 'studio_plus_inventory',
   }
 }
 
