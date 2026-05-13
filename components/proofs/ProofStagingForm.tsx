@@ -10,6 +10,14 @@ interface ProofStagingFormProps {
   versionId: string
   initialDocument: ProofDocument
   amName: string
+  /**
+   * Customer-editable field allow-list, loaded server-side from
+   * `proof_editable_field_paths` and passed in by the parent page. Kept as
+   * a prop because client components can't `await` the loader directly.
+   * The server route is the authoritative gate — this is defence-in-depth
+   * context for UI affordances only.
+   */
+  allowedPaths: string[]
 }
 
 interface SubmitErrorState {
@@ -21,8 +29,9 @@ interface SubmitErrorState {
 
 /**
  * Customer staging editor. Renders editable inputs for fields on the
- * CUSTOMER_EDITABLE_FIELDS allow-list and renders everything else as
- * read-only context.
+ * customer-editable allow-list (passed in as `allowedPaths`, sourced from
+ * the DB-backed `proof_editable_field_paths` table) and renders everything
+ * else as read-only context.
  *
  * Defence-in-depth only — the security boundary is the API route at
  * /api/proofs/[id]/amendment-requests. If a malicious client crafts a
@@ -35,6 +44,7 @@ export function ProofStagingForm({
   versionId,
   initialDocument,
   amName,
+  allowedPaths,
 }: ProofStagingFormProps) {
   const router = useRouter()
   const [doc, setDoc] = useState<ProofDocument>(initialDocument)
@@ -122,7 +132,11 @@ export function ProofStagingForm({
   const changeCount = useMemo(() => countSurfaceChanges(initialDocument, doc), [initialDocument, doc])
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit}>
+    <form
+      className="space-y-6"
+      onSubmit={handleSubmit}
+      data-allowed-paths-count={allowedPaths.length}
+    >
       <div
         className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"
         role="status"

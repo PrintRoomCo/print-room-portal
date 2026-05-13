@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { coerceProofDocument, type ProofDocument } from '@/lib/proofs/types'
 import { buildDiffSummary, computeAmendmentDiff } from '@/lib/proofs/compute-amendment-diff'
+import { getCustomerEditableFields } from '@/lib/proofs/customer-editable-fields'
 import { sendProofEmail } from '@/lib/email/send-proof-email'
 
 /**
@@ -24,7 +25,9 @@ import { sendProofEmail } from '@/lib/email/send-proof-email'
  *      ('org_admin','buyer')` for the proof's org. RLS on the table is the
  *      second line of defence; this route is the first.
  *
- *   3. Allow-list gate: every diff path must be in CUSTOMER_EDITABLE_FIELDS.
+ *   3. Allow-list gate: every diff path must be in the DB-backed allow-list
+ *      (`proof_editable_field_paths.paths`, loaded via
+ *      `getCustomerEditableFields()`).
  *      Any violation -> reject the whole request 400. We do not silently
  *      filter.
  *
@@ -172,7 +175,8 @@ export async function POST(
   const originalDoc = coerceProofDocument(version.snapshot_data)
   const stagedDoc: ProofDocument = coerceProofDocument(body.stagedSnapshot)
 
-  const result = computeAmendmentDiff(originalDoc, stagedDoc)
+  const allowedPaths = await getCustomerEditableFields()
+  const result = computeAmendmentDiff(originalDoc, stagedDoc, allowedPaths)
   if (!result.ok) {
     return NextResponse.json(
       {

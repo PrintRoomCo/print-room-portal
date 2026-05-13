@@ -3,6 +3,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProofNotReady } from '@/components/proofs/ProofNotReady'
 import { ProofStagingForm } from '@/components/proofs/ProofStagingForm'
 import { coerceProofDocument } from '@/lib/proofs/types'
+import { getCustomerEditableFields } from '@/lib/proofs/customer-editable-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +113,7 @@ export default async function OrderProofEditPage({
   }
 
   const document = coerceProofDocument(version.snapshot_data)
+  const allowedPaths = await getCustomerEditableFields()
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -132,6 +134,7 @@ export default async function OrderProofEditPage({
         versionId={version.id}
         initialDocument={document}
         amName={amName}
+        allowedPaths={allowedPaths}
       />
     </div>
   )

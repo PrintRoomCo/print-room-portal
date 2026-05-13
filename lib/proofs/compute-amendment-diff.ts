@@ -1,13 +1,12 @@
 import type { ProofDesign, ProofDocument, ProofOrderLine, ProofPrintArea } from './types'
-import { CUSTOMER_EDITABLE_FIELDS, isCustomerEditableField } from './customer-editable-fields'
 
 /**
  * One leaf change between original and staged snapshots.
  *
  * `path` is the canonical allow-list-style path string. The wildcard form
  * (`design.name`, `orderLines[].quantities`) is what gets validated against
- * CUSTOMER_EDITABLE_FIELDS — array indices and object keys aren't part of the
- * gate, only the structural location.
+ * the allow-list passed in by the caller — array indices and object keys
+ * aren't part of the gate, only the structural location.
  *
  * `instancePath` is the human-readable concrete path for the diff viewer
  * (e.g. `designs[0].name`, `orderLines[2].quantities.SML/10`).
@@ -43,6 +42,10 @@ export type ComputeDiffResult = ComputeDiffSuccess | ComputeDiffForbidden
  *     the FIRST violation; the API rejects the entire request with 400
  *     and does not try to filter.
  *
+ * `allowedPaths` is the DB-backed allow-list — pass `await
+ * getCustomerEditableFields()` from the route handler. Kept as a param
+ * (not imported) so this fn stays pure and testable.
+ *
  * The diff is sparse: paths whose values are deep-equal between original
  * and staged are omitted. An empty diff is a valid (no-op) request and
  * still returns `{ ok: true, diff: [] }` — the API route decides whether
@@ -50,8 +53,11 @@ export type ComputeDiffResult = ComputeDiffSuccess | ComputeDiffForbidden
  */
 export function computeAmendmentDiff(
   original: ProofDocument,
-  staged: ProofDocument
+  staged: ProofDocument,
+  allowedPaths: string[]
 ): ComputeDiffResult {
+  const allowed = new Set(allowedPaths)
+  const isAllowed = (path: string): boolean => allowed.has(path)
   const diff: AmendmentDiffEntry[] = []
 
   // -- top-level scalar fields (only `notes` is on the allow-list, but we
@@ -76,7 +82,7 @@ export function computeAmendmentDiff(
     const after = staged[key]
     if (before === after) continue
     const path = key as string
-    if (!isCustomerEditableField(path)) {
+    if (!isAllowed(path)) {
       return { ok: false, reason: 'field_not_editable', field: path, instancePath: path }
     }
     diff.push({ path, instancePath: path, before, after })
@@ -94,7 +100,7 @@ export function computeAmendmentDiff(
     }
   }
   for (let i = 0; i < original.designs.length; i++) {
-    const violation = diffDesign(original.designs[i]!, staged.designs[i]!, i, diff)
+    const violation = diffDesign(original.designs[i]!, staged.designs[i]!, i, diff, isAllowed)
     if (violation) return violation
   }
 
@@ -108,7 +114,7 @@ export function computeAmendmentDiff(
     }
   }
   for (let i = 0; i < original.orderLines.length; i++) {
-    const violation = diffOrderLine(original.orderLines[i]!, staged.orderLines[i]!, i, diff)
+    const violation = diffOrderLine(original.orderLines[i]!, staged.orderLines[i]!, i, diff, isAllowed)
     if (violation) return violation
   }
 
@@ -119,7 +125,8 @@ function diffDesign(
   before: ProofDesign,
   after: ProofDesign,
   index: number,
-  acc: AmendmentDiffEntry[]
+  acc: AmendmentDiffEntry[],
+  isAllowed: (path: string) => boolean
 ): ComputeDiffForbidden | null {
   const designScalars: Array<{ key: keyof ProofDesign; path: string }> = [
     { key: 'name', path: 'design.name' },
@@ -138,7 +145,7 @@ function diffDesign(
     const b = before[key]
     const a = after[key]
     if (b === a) continue
-    if (!isCustomerEditableField(path)) {
+    if (!isAllowed(path)) {
       return {
         ok: false,
         reason: 'field_not_editable',
@@ -158,7 +165,7 @@ function diffDesign(
     }
   }
   for (let j = 0; j < before.printAreas.length; j++) {
-    const v = diffPrintArea(before.printAreas[j]!, after.printAreas[j]!, index, j, acc)
+    const v = diffPrintArea(before.printAreas[j]!, after.printAreas[j]!, index, j, acc, isAllowed)
     if (v) return v
   }
   return null
@@ -169,7 +176,8 @@ function diffPrintArea(
   after: ProofPrintArea,
   designIndex: number,
   areaIndex: number,
-  acc: AmendmentDiffEntry[]
+  acc: AmendmentDiffEntry[],
+  isAllowed: (path: string) => boolean
 ): ComputeDiffForbidden | null {
   const scalars: Array<{ key: keyof ProofPrintArea; path: string }> = [
     { key: 'label', path: 'design.printAreas[].label' },
@@ -185,7 +193,7 @@ function diffPrintArea(
     const b = before[key]
     const a = after[key]
     if (b === a) continue
-    if (!isCustomerEditableField(path)) {
+    if (!isAllowed(path)) {
       return {
         ok: false,
         reason: 'field_not_editable',
@@ -207,7 +215,8 @@ function diffOrderLine(
   before: ProofOrderLine,
   after: ProofOrderLine,
   index: number,
-  acc: AmendmentDiffEntry[]
+  acc: AmendmentDiffEntry[],
+  isAllowed: (path: string) => boolean
 ): ComputeDiffForbidden | null {
   const scalars: Array<{ key: keyof ProofOrderLine; path: string }> = [
     { key: 'name', path: 'orderLines[].name' },
@@ -225,7 +234,7 @@ function diffOrderLine(
     const b = before[key]
     const a = after[key]
     if (b === a) continue
-    if (!isCustomerEditableField(path)) {
+    if (!isAllowed(path)) {
       return {
         ok: false,
         reason: 'field_not_editable',
@@ -261,7 +270,7 @@ function diffOrderLine(
     const b = before.quantities[size] ?? ''
     const a = after.quantities[size] ?? ''
     if (b === a) continue
-    if (!isCustomerEditableField(QUANTITIES_PATH)) {
+    if (!isAllowed(QUANTITIES_PATH)) {
       return {
         ok: false,
         reason: 'field_not_editable',
@@ -293,7 +302,3 @@ export function buildDiffSummary(diff: AmendmentDiffEntry[]): {
     notes: diff.filter((d) => d.path === 'notes'),
   }
 }
-
-/** Exposed for tests / debugging only. Re-export the allow-list as a Set
- *  so callers can do membership checks without importing the strings file. */
-export const CUSTOMER_EDITABLE_FIELDS_SET = new Set<string>(CUSTOMER_EDITABLE_FIELDS)
