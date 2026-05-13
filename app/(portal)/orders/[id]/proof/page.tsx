@@ -12,6 +12,7 @@ const ALLOWED_EDIT_ROLES = new Set(['org_admin', 'buyer'])
 interface OrderRow {
   id: string
   status: string | null
+  order_proof_approval_gate: string | null
   quote_id: string | null
   quotes: { organization_id: string | null } | null
 }
@@ -42,8 +43,8 @@ interface VersionRow {
  *   1. requireB2BCustomer()             - auth gate
  *   2. order.quotes.organization_id     - org gate
  *   3. proof.order_id non-null          - order-linked gate
- *   4. order.status='approved' + proof  - staff-approval gate
- *      .proof_quality_status visible
+ *   4. order.order_proof_approval_gate  - deliberate customer visibility gate
+ *      + proof_quality_status visible     (per stabilisation spec §G.5)
  *
  * Slice G adds the "Edit proof" entry point. This page intentionally renders
  * read-only.
@@ -69,7 +70,7 @@ export default async function OrderProofPage({
   // single 403 surface.
   const { data: orderData } = await admin
     .from('orders')
-    .select('id, status, quote_id, quotes!inner(organization_id)')
+    .select('id, status, order_proof_approval_gate, quote_id, quotes!inner(organization_id)')
     .eq('id', orderId)
     .maybeSingle()
   const order = orderData as unknown as OrderRow | null
@@ -107,16 +108,14 @@ export default async function OrderProofPage({
   // null `order_id` proof can never reach here, but guard explicitly.)
   if (!proof.order_id) return <ProofNotReady />
 
-  // Gate 4 — staff approval. Per spec §E.2 + §G, the customer only sees the
-  // proof once staff has approved the order. The approve route flips
-  // orders.status to 'approved' AND sets proof_quality_status to
-  // 'attached_to_monday' (then 'sent_to_customer' once the proof email goes
-  // out). Anything earlier is "not ready".
-  const VISIBLE_QUALITY_STATES = new Set(['attached_to_monday', 'sent_to_customer'])
-  const orderApproved = order.status === 'approved'
-  const proofVisible = VISIBLE_QUALITY_STATES.has(proof.proof_quality_status)
-
-  if (!orderApproved || !proofVisible) return <ProofNotReady />
+  // Gate 4 — staff approval. Per stabilisation spec 2026-05-13 §G.5, customer
+  // visibility is gated by the dedicated `order_proof_approval_gate` column
+  // (written by `POST /api/proofs/[id]/approve`) AND the proof being in
+  // `sent_to_customer`. Production-approval (`orders.status='approved'`) is
+  // a downstream operation that no longer affects customer visibility.
+  const gateApproved = order.order_proof_approval_gate === 'approved'
+  const proofSentToCustomer = proof.proof_quality_status === 'sent_to_customer'
+  if (!gateApproved || !proofSentToCustomer) return <ProofNotReady />
 
   // Happy path — load the snapshot for the current version and render.
   if (!proof.current_version_id) return <ProofNotReady />
