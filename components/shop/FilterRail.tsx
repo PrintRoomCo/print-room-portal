@@ -8,17 +8,18 @@ import { FilterAutoSubmitCheckbox } from './FilterAutoSubmitCheckbox'
 interface Props {
   filters: ShopFilters
   facets: ShopFacets
+  /** Route to post back to. `/catalogue` for catalogue listing, `/shop` for inventory. */
+  basePath: '/catalogue' | '/shop'
 }
 
-export function FilterRail({ filters, facets }: Props) {
+export function FilterRail({ filters, facets, basePath }: Props) {
   const hasActive = activeFilterCount(filters) > 0
 
-  const clearHref = filters.type === 'catalogue' ? '/shop' : `/shop?type=${filters.type}`
+  const clearHref = basePath
 
   return (
     <aside className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-      <form method="GET" action="/shop" className="space-y-4">
-        <input type="hidden" name="type" value={filters.type} />
+      <form method="GET" action={basePath} className="space-y-4">
         <Section label="Search">
           <input
             type="search"

@@ -97,7 +97,10 @@ export function ProductDetailClient({
     firstVariant?.color_swatch_id ?? null
   )
   const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
-  const [sizeQuantities, setSizeQuantities] = useState<Record<number, number>>({})
+  // Qty per variant_id. Survives colour-switches so the user can build a
+  // multi-variant order (e.g. 50 of Black M + 30 of White L) in a single PDP
+  // session without losing entries when they flip swatches.
+  const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
 
   const multiSize = useMemo(
     () => new Set(variants.filter((v) => v.size_id != null).map((v) => v.size_id)).size > 1,
@@ -153,9 +156,25 @@ export function ProductDetailClient({
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
   }, [variants, colorSwatchId, availability])
 
+  // Grand total across every colour the user has touched in this session,
+  // not just the currently-displayed colour. Drives pricing tier + Add to cart.
   const multiSizeTotalQty = useMemo(() => {
-    return sizeRowsForColour.reduce((sum, row) => sum + (sizeQuantities[row.sizeId] ?? 0), 0)
-  }, [sizeRowsForColour, sizeQuantities])
+    let sum = 0
+    for (const n of Object.values(variantQuantities)) sum += n
+    return sum
+  }, [variantQuantities])
+
+  // Total for the currently-displayed colour only — used for the grid's per-
+  // colour subtotal so the user can see what's queued under the active swatch.
+  const currentColourTotalQty = useMemo(() => {
+    return sizeRowsForColour.reduce(
+      (sum, row) => sum + (variantQuantities[row.variantId] ?? 0),
+      0,
+    )
+  }, [sizeRowsForColour, variantQuantities])
+
+  // Are there qtys queued under colours other than the currently-displayed one?
+  const otherColoursTotalQty = multiSizeTotalQty - currentColourTotalQty
 
   const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
@@ -335,19 +354,19 @@ export function ProductDetailClient({
     }))
 
     if (multiSize) {
-      const colorLabel =
-        sizeRowsForColour[0] != null
-          ? variants.find((v) => v.color_swatch_id === colorSwatchId)?.color_label ?? ''
-          : ''
       let added = 0
-      for (const row of sizeRowsForColour) {
-        const lineQty = sizeQuantities[row.sizeId] ?? 0
+      // Iterate every variant the user has touched across all colours — not
+      // just the currently-displayed swatch — so cross-variant qtys all flow
+      // into one cart submission.
+      for (const variant of variants) {
+        const lineQty = variantQuantities[variant.variant_id] ?? 0
         if (lineQty <= 0) continue
-        const variantLabel = [colorLabel, row.sizeLabel].filter(Boolean).join(' / ') || '—'
+        const variantLabel =
+          [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
         cart.addLine({
           productId: product.id,
           productName: product.name,
-          variantId: row.variantId,
+          variantId: variant.variant_id,
           variantLabel,
           qty: lineQty,
           unitPrice: pricing.unit_price,
@@ -357,7 +376,7 @@ export function ProductDetailClient({
         added += lineQty
       }
       if (added > 0) {
-        setSizeQuantities({})
+        setVariantQuantities({})
         showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
       }
       return
@@ -390,7 +409,6 @@ export function ProductDetailClient({
       pricing != null &&
       pricing.status === 'ok'
     : selectedVariant != null &&
-      !isOutOfStock &&
       !priceMissing &&
       Number.isInteger(qty) &&
       meetsMoq &&
@@ -498,43 +516,45 @@ export function ProductDetailClient({
                 <tbody>
                   {sizeRowsForColour.map((row) => {
                     const trackedRow = row.available !== null
-                    const out = trackedRow && row.available === 0
-                    const cap = trackedRow ? (row.available ?? 0) : undefined
-                    const value = sizeQuantities[row.sizeId] ?? 0
+                    const stocked = trackedRow ? (row.available ?? 0) : 0
+                    const value = variantQuantities[row.variantId] ?? 0
+                    // Backorder = qty entered above what's in stock for tracked
+                    // variants. For untracked rows the whole qty is "to be made".
+                    const backorder = trackedRow
+                      ? Math.max(0, value - stocked)
+                      : value
                     return (
-                      <tr key={row.sizeId} className="border-t border-gray-100">
+                      <tr key={row.variantId} className="border-t border-gray-100">
                         <td className="px-3 py-2 font-medium text-gray-800">{row.sizeLabel}</td>
-                        <td
-                          className={`px-3 py-2 text-xs ${
-                            out ? 'text-gray-400' : trackedRow ? 'text-gray-600' : 'text-gray-400'
-                          }`}
-                        >
-                          {!trackedRow ? '—' : out ? '0 in stock' : `${row.available}`}
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {!trackedRow ? '—' : `${stocked}`}
+                          {backorder > 0 && (
+                            <span className="ml-1 text-amber-700">
+                              ({backorder} to be made)
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right">
                           <input
                             type="number"
                             min={0}
-                            max={cap}
                             step={1}
                             value={value || ''}
                             placeholder="0"
-                            disabled={out}
                             onChange={(e) => {
                               const n = Number(e.target.value)
-                              setSizeQuantities((prev) => {
+                              setVariantQuantities((prev) => {
                                 const next = { ...prev }
                                 if (!Number.isFinite(n) || n <= 0) {
-                                  delete next[row.sizeId]
+                                  delete next[row.variantId]
                                 } else {
-                                  next[row.sizeId] =
-                                    cap !== undefined ? Math.min(n, cap) : n
+                                  next[row.variantId] = Math.floor(n)
                                 }
                                 return next
                               })
                             }}
                             aria-label={`Quantity for size ${row.sizeLabel}`}
-                            className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-right text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
+                            className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-right text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30"
                           />
                         </td>
                       </tr>
@@ -544,12 +564,25 @@ export function ProductDetailClient({
                 <tfoot>
                   <tr className="border-t border-gray-200 bg-gray-50">
                     <td className="px-3 py-2 text-xs font-medium text-gray-500" colSpan={2}>
-                      Total
+                      Total this colour
                     </td>
                     <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
-                      {multiSizeTotalQty}
+                      {currentColourTotalQty}
                     </td>
                   </tr>
+                  {otherColoursTotalQty > 0 && (
+                    <tr className="border-t border-gray-100 bg-gray-50/60">
+                      <td className="px-3 py-2 text-xs text-gray-500" colSpan={2}>
+                        Order total (across all variants)
+                      </td>
+                      <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                        {multiSizeTotalQty}
+                        <span className="ml-1 text-xs font-normal text-gray-500">
+                          (incl. {otherColoursTotalQty} from other colours)
+                        </span>
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               </table>
             </div>
@@ -579,9 +612,13 @@ export function ProductDetailClient({
                   step={1}
                   value={qty}
                   onChange={(e) => setQty(Number(e.target.value))}
-                  disabled={isOutOfStock}
-                  className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100 disabled:text-gray-400"
+                  className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30"
                 />
+                {isOutOfStock && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Out of stock — {qty} will be made.
+                  </p>
+                )}
               </div>
             )}
             <div className="flex-1 text-right text-sm">

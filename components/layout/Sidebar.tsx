@@ -12,16 +12,23 @@ interface SidebarProps {
   customer: B2BCustomerAccess
 }
 
+type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
+
+// Tenants that have physical stock (Shop + Inventory surfaces). Studio is
+// catalogue-only.
+const INVENTORY_TENANT_TYPES: ReadonlyArray<TenantType> = ['studio_plus_inventory', 'franchise']
+
 // Navigation items with permission requirements.
 // Cart is intentionally NOT a sidebar entry — it's a floating top-right chip (see CartChip).
 const allNavItems = [
-  { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Catalog', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Orders', href: '/my-collections', icon: CatalogsIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiresTrackedInventory: false },
-  { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiresTrackedInventory: false },
-  { name: 'Inventory', href: '/inventory', icon: InventoryIcon, requiresCompany: false, requiresLeavers: false, requiresTrackedInventory: true },
+  { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null as ReadonlyArray<TenantType> | null },
+  { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
+  { name: 'Catalogue', href: '/catalogue', icon: OrdersIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
+  { name: 'Shop', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: INVENTORY_TENANT_TYPES },
+  { name: 'Inventory', href: '/inventory', icon: InventoryIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: INVENTORY_TENANT_TYPES },
+  { name: 'Orders', href: '/my-collections', icon: OrdersIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
+  { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
+  { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiredTenantTypes: null },
 ] as const
 
 // Build navigation based on user permissions
@@ -29,7 +36,10 @@ function getNavigationItems(customer: B2BCustomerAccess) {
   return allNavItems.filter((item) => {
     if (item.requiresCompany && !customer.isCompanyUser) return false
     if (item.requiresLeavers && !customer.canUseLeavers) return false
-    if (item.requiresTrackedInventory && !customer.hasTrackedInventory) return false
+    if (item.requiredTenantTypes) {
+      if (!customer.tenantType) return false
+      if (!item.requiredTenantTypes.includes(customer.tenantType)) return false
+    }
     return true
   })
 }
@@ -237,7 +247,7 @@ function HomeIcon({ className }: { className?: string }) {
   )
 }
 
-function CatalogsIcon({ className }: { className?: string }) {
+function OrdersIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path

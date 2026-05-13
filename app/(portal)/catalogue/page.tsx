@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
@@ -12,6 +11,7 @@ import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
+import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +28,7 @@ interface ProductRow {
   created_at: string | null
 }
 
-export default async function ShopPage({
+export default async function CataloguePage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -39,34 +39,33 @@ export default async function ShopPage({
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
-  // Studio tenants are catalogue-only — they don't track inventory.
-  if (context.tenantType === 'studio' || context.tenantType === null) {
-    redirect('/catalogue')
-  }
-
   const limit = 24
   const offset = (filters.page - 1) * limit
 
-  // Inventory mode: every product the org tracks stock for. Zero-stock variants
-  // are included so reorderable made-to-order items remain browseable.
-  const { data: invRows } = await admin
-    .from('variant_inventory')
-    .select('product_variants!inner(product_id)')
-    .eq('organization_id', context.organizationId)
-  type InvRow = { product_variants: { product_id: string } | { product_id: string }[] | null }
-  const ids = new Set<string>()
-  for (const r of (invRows ?? []) as InvRow[]) {
-    const pv = Array.isArray(r.product_variants) ? r.product_variants[0] : r.product_variants
-    if (pv?.product_id) ids.add(pv.product_id)
-  }
-  const scopedProductIds = Array.from(ids)
+  const grantedItemIds = await getGrantedCatalogueItemIds(
+    admin,
+    context.membershipId,
+    context.organizationId,
+  )
+  const { data: catItems } = grantedItemIds.length === 0
+    ? { data: [] as Array<{ id: string; source_product_id: string }> }
+    : await admin
+        .from('b2b_catalogue_items')
+        .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+        .eq('b2b_catalogues.organization_id', context.organizationId)
+        .eq('b2b_catalogues.is_active', true)
+        .eq('is_active', true)
+        .in('id', grantedItemIds)
+  const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
+  const scopedProductIds = Array.from(new Set(catItemRows.map((r) => r.source_product_id)))
+  const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
 
   if (scopedProductIds.length === 0) {
     return (
       <div className="space-y-6 p-4 md:p-8">
         <PortalEmptyState
-          title="No tracked stock yet"
-          body="Your account manager will let you know when stocked items are ready to reorder."
+          title="Your catalogue is being set up"
+          body="Your account manager will let you know when products are ready for ordering."
           actionHref="mailto:sales@theprint-room.co.nz"
           actionLabel="Contact sales"
         />
@@ -104,29 +103,40 @@ export default async function ShopPage({
   const qtyByProduct: Record<string, number> = Object.fromEntries(
     rows.map((r) => [r.id, r.moq ?? 1]),
   )
-  const { prices } = await effectiveUnitPricesBulk(
-    admin,
-    productIds,
-    context.organizationId,
-    qtyByProduct,
-  )
+  const scopedItemIds = catItemRows
+    .filter((r) => productIds.includes(r.source_product_id))
+    .map((r) => r.id)
+  const [{ prices }, { data: catalogueImageRows }] = await Promise.all([
+    effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
+    scopedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_images')
+          .select('catalogue_item_id, view, source, position, image_url, color_swatch_id')
+          .in('catalogue_item_id', scopedItemIds)
+      : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
+  ])
 
-  const productsWithStock = rows.map((p) => {
+  const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
+  for (const row of (catalogueImageRows ?? []) as CatalogueItemImageRow[]) {
+    const productId = productIdByItemId.get(row.catalogue_item_id)
+    if (!productId) continue
+    const list = imagesByProduct.get(productId) ?? []
+    list.push(row)
+    imagesByProduct.set(productId, list)
+  }
+
+  const products = rows.map((p) => {
     const price = prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
     return {
       id: p.id,
       name: p.name,
       sku: p.sku,
-      image_url: pickCatalogueItemThumbnail(p.image_url, [] as CatalogueItemImageRow[]),
+      image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
       from_unit_price: price.unitPrice,
       price_status: price.status,
       has_stock: price.hasStock,
     }
   })
-
-  const products = filters.inStock
-    ? productsWithStock.filter((p) => p.has_stock)
-    : productsWithStock
 
   const activeCount = activeFilterCount(filters)
 
@@ -134,11 +144,11 @@ export default async function ShopPage({
     <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_1fr] md:gap-6 md:p-8">
       <div className="md:hidden">
         <FilterSheetTrigger activeCount={activeCount}>
-          <FilterRail filters={filters} facets={facets} basePath="/shop" />
+          <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
         </FilterSheetTrigger>
       </div>
       <div className="hidden md:block">
-        <FilterRail filters={filters} facets={facets} basePath="/shop" />
+        <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
       </div>
 
       <div className="space-y-6">
@@ -147,13 +157,13 @@ export default async function ShopPage({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Your stocked items
+                  Customer catalogue
                 </p>
                 <TierBadge label={tierLabel} pricingMode={pricingMode} />
               </div>
-              <h1 className="mt-2 text-2xl font-semibold text-gray-900">Shop</h1>
+              <h1 className="mt-2 text-2xl font-semibold text-gray-900">Catalogue</h1>
               <p className="mt-1 text-sm text-gray-600">
-                Stocked products tracked at your location, ready to reorder.
+                Products and prices are scoped to your dedicated catalogue.
               </p>
             </div>
             <p className="text-sm text-gray-500">
@@ -166,13 +176,13 @@ export default async function ShopPage({
           <PortalEmptyState
             title="No products match your filters"
             body="Try clearing some filters."
-            actionHref="/shop"
+            actionHref="/catalogue"
             actionLabel="Clear filters"
           />
         ) : (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {products.map((p) => (
-              <Link key={p.id} href={`/shop/${p.id}`} className="block">
+              <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
                 <ProductCard product={p} />
               </Link>
             ))}
