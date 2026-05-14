@@ -91,10 +91,33 @@ export function ProductDetailClient({
   // surfaces everything that's been touched.
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
 
-  const multiSize = useMemo(
-    () => new Set(variants.filter((v) => v.size_id != null).map((v) => v.size_id)).size > 1,
-    [variants],
+  type SizingMode = 'multi_size_with_variants' | 'multi_size_variantless' | 'one_size'
+
+  const sizingMode: SizingMode = useMemo(() => {
+    if (product.sizing_type === 'one_size') return 'one_size'
+    if (variants.length > 0) return 'multi_size_with_variants'
+    return 'multi_size_variantless'
+  }, [product.sizing_type, variants.length])
+
+  // Back-compat alias for the existing variant-driven render paths. True only
+  // when we still have product_variants to drive the colour×size grid.
+  const multiSize = sizingMode === 'multi_size_with_variants'
+
+  // Sizes for the variantless grid — empty when not in that mode.
+  const variantlessSizes = useMemo<string[]>(
+    () => (sizingMode === 'multi_size_variantless' ? product.default_sizes ?? [] : []),
+    [sizingMode, product.default_sizes],
   )
+
+  // qty state for variantless multi-size — keyed by size label since there
+  // are no variant UUIDs to key on.
+  const [variantlessQtyBySize, setVariantlessQtyBySize] = useState<Record<string, number>>({})
+
+  const variantlessTotalQty = useMemo(() => {
+    let sum = 0
+    for (const n of Object.values(variantlessQtyBySize)) sum += n
+    return sum
+  }, [variantlessQtyBySize])
 
   const selectedVariant = useMemo(
     () =>
@@ -191,7 +214,12 @@ export function ProductDetailClient({
 
   const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
-  const qty = multiSize ? multiSizeTotalQty : singleQty
+  const qty =
+    sizingMode === 'multi_size_with_variants'
+      ? multiSizeTotalQty
+      : sizingMode === 'multi_size_variantless'
+        ? variantlessTotalQty
+        : singleQty
   const setQty = setSingleQty
 
   useEffect(() => {
