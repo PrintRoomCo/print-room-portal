@@ -482,7 +482,7 @@ export function ProductDetailClient({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 md:px-6 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -490,9 +490,9 @@ export function ProductDetailClient({
             { label: product.name },
           ]}
         />
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
+        <div className="mt-6 grid gap-8 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
           {/* Image — soft plate, sticky on desktop */}
-          <div className="lg:sticky lg:top-[100px] h-fit">
+          <div className="lg:sticky lg:top-[92px] h-fit">
             <div className="overflow-hidden rounded-[32px] bg-white p-4 md:p-6">
               <ProductImageGallery
                 images={images}

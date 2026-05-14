@@ -353,7 +353,7 @@ export default async function CataloguePage({
           filterAction: '/catalogue',
         }}
       />
-      <div className="space-y-4 px-4 pt-4 md:px-8 md:pt-8">
+      <div className="space-y-4 px-4 pt-3 md:px-8 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -380,7 +380,7 @@ export default async function CataloguePage({
           />
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:mt-6 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-4 lg:grid-cols-5 lg:gap-4">
           {products.map((p) => (
             <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
               <ProductCard product={p} />
