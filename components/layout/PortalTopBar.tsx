@@ -62,9 +62,9 @@ export function PortalTopBar() {
   return (
     <header
       role="banner"
-      className="fixed inset-x-3 top-3 z-30 overflow-hidden rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
+      className="fixed inset-x-3 top-3 z-30 overflow-visible rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
     >
-      <div className="flex h-14 items-center px-3 md:px-4">
+      <div className="relative z-20 flex h-14 items-center px-3 md:px-4">
         {/* Menu trigger */}
         <button
           type="button"
@@ -115,7 +115,7 @@ export function PortalTopBar() {
           listing context publishes filters, animated via grid-rows trick so
           the bar can smoothly grow. */}
       <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+        className={`relative z-10 grid transition-[grid-template-rows] duration-200 ease-out ${
           hasFilterRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >

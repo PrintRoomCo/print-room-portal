@@ -43,7 +43,7 @@ export function AccountMenu() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className="relative z-30">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -59,7 +59,7 @@ export function AccountMenu() {
       <div
         role="menu"
         aria-hidden={open ? ('false' as const) : ('true' as const)}
-        className={`absolute right-0 top-full z-50 mt-2 w-44 origin-top-right overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none ${
+        className={`absolute right-0 top-full z-[80] mt-2 w-44 origin-top-right overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none ${
           open
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 -translate-y-1 pointer-events-none'
