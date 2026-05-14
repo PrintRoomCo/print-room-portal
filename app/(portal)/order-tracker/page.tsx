@@ -10,9 +10,6 @@ import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 
 type StatusFilter = 'active' | 'completed'
 
-const LABEL_CAP =
-  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
-
 export default function OrderTracker() {
   const { access, loading: companyLoading } = useCompany()
   const [trackers, setTrackers] = useState<JobTracker[]>([])
@@ -78,8 +75,7 @@ export default function OrderTracker() {
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         {/* Editorial hero */}
         <header className="mb-10 md:mb-12">
-          <p className={LABEL_CAP}>Order tracker</p>
-          <h1 className="mt-2 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Tracking
           </h1>
           <p className="mt-4 max-w-prose text-base text-gray-600">

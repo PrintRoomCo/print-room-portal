@@ -175,12 +175,11 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Account</h1>
-        <p className="mt-1 text-gray-600">
-          Manage your account settings and view your order history
-        </p>
-      </div>
+      <header className="mb-10 md:mb-12">
+        <h1 className="mt-2 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+          My Account
+        </h1>
+      </header>
 
       {/* Account Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
