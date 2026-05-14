@@ -149,7 +149,7 @@ export function CheckoutClient({
           lines: cart.lines.map((l) => ({
             product_id: l.productId,
             product_name: l.productName,
-            variant_id: l.variantId,
+            variant_id: l.variantId || null,
             qty: l.qty,
             ship_to_store_id: allCustom ? null : perLineShipTo[l.lineId] ?? null,
             cart_line_id: l.lineId,
@@ -211,7 +211,7 @@ export function CheckoutClient({
         if (data.error === 'insufficient_stock' || data.error === 'no_inventory') {
           const offendingLine = cart.lines.find(
             (l) =>
-              (l.variantId ?? null) === (data.detail?.variant_id ?? null) ||
+              (l.variantId || null) === (data.detail?.variant_id ?? null) ||
               l.productId === data.detail?.product_id,
           )
           const lineLabel = offendingLine?.productName ?? 'A product in your cart'
