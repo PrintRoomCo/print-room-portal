@@ -5,103 +5,99 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Right-slot top-bar dropdown — Settings (links to /account) + Sign In/Out.
-// Replaces the previous "My Account" sidebar entry.
+// Account dropdown for the top bar's right slot. "My Account" pill on
+// desktop, anchored panel with Settings + Sign Out. Signed-out users see
+// a "Sign In" link instead (no panel).
 export function AccountMenu() {
-  const router = useRouter()
   const { user, signOut } = useAuth()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
-    const onDocMouseDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+    function handleClick(e: MouseEvent) {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
     }
-    const onEsc = (e: KeyboardEvent) => {
+    function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('mousedown', onDocMouseDown)
-    document.addEventListener('keydown', onEsc)
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
     return () => {
-      document.removeEventListener('mousedown', onDocMouseDown)
-      document.removeEventListener('keydown', onEsc)
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
     }
   }, [open])
 
-  async function onSignOut() {
-    setOpen(false)
-    await signOut()
-    router.push('/sign-in')
+  if (!user) {
+    return (
+      <Link
+        href="/sign-in"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:text-gray-900"
+      >
+        Sign In
+      </Link>
+    )
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={wrapperRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open ? ('true' as const) : ('false' as const)}
         aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="My account menu"
-        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 transition-all duration-150 hover:border-gray-300 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1"
       >
-        My Account
-        <ChevronDownIcon className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="hidden sm:inline">My Account</span>
+        <span className="sm:hidden">Account</span>
+        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full mt-1.5 min-w-[10rem] rounded-xl border border-gray-200 bg-white py-1 shadow-md"
+
+      <div
+        role="menu"
+        aria-hidden={open ? ('false' as const) : ('true' as const)}
+        className={`absolute right-0 top-full z-50 mt-2 w-44 origin-top-right overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none ${
+          open
+            ? 'opacity-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 -translate-y-1 pointer-events-none'
+        }`}
+      >
+        <Link
+          href="/account"
+          role="menuitem"
+          tabIndex={open ? 0 : -1}
+          onClick={() => setOpen(false)}
+          className="block px-4 py-3 text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50"
         >
-          <Link
-            href="/account"
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="block px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-          >
-            Settings
-          </Link>
-          {user ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={onSignOut}
-              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-            >
-              Sign Out
-            </button>
-          ) : (
-            <Link
-              href="/sign-in"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-            >
-              Sign In
-            </Link>
-          )}
-        </div>
-      )}
+          Settings
+        </Link>
+        <button
+          type="button"
+          role="menuitem"
+          tabIndex={open ? 0 : -1}
+          onClick={() => {
+            // Optimistic: close + route immediately; auth listener clears state
+            // once signOut resolves on the background.
+            setOpen(false)
+            router.push('/sign-in')
+            void signOut()
+          }}
+          className="block w-full px-4 py-3 text-left text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50"
+        >
+          Sign Out
+        </button>
+      </div>
     </div>
   )
 }
 
-function ChevronDownIcon({ className }: { className?: string }) {
+function ChevronDown({ className }: { className?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
+    <svg className={className} fill="none" viewBox="0 0 12 12" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4.5l3 3 3-3" />
     </svg>
   )
 }

@@ -19,6 +19,9 @@ interface CartTableProps {
 type AvailabilityMap = Record<string, number | undefined>
 type MoqMap = Record<string, number | undefined>
 
+const LABEL_CAP =
+  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+
 export function CartTable({
   lines,
   onUpdateQty,
@@ -73,8 +76,6 @@ export function CartTable({
   }, [lines, onOversellChange, onMoqViolationChange])
 
   useEffect(() => {
-    // Only stocked lines block checkout on oversell — make_to_stock lines are
-    // intentionally over-available and route to production instead.
     const oversells = lines.some((l) => {
       if (l.fulfilmentType === 'make_to_stock') return false
       const avail = availability[l.variantId]
@@ -83,9 +84,6 @@ export function CartTable({
     onOversellChange?.(oversells)
   }, [lines, availability, onOversellChange])
 
-  // MOQ on B2B is per-product (across all sizes/variants of the same product),
-  // matching the PDP rule for multi-size: the qty floor is summed across every
-  // line that shares productId. Mirroring it here keeps cart and PDP consistent.
   const qtyByProduct = new Map<string, number>()
   for (const l of lines) {
     qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.qty)
@@ -100,7 +98,6 @@ export function CartTable({
       }
     }
     onMoqViolationChange?.(shortByProduct.size > 0)
-    // qtyByProduct is rebuilt every render — depend on the inputs that drive it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, moqByProduct, onMoqViolationChange])
 
@@ -109,110 +106,82 @@ export function CartTable({
       <PortalEmptyState
         title="Your cart is empty"
         body="Start from your catalogue and add products when you are ready to place an order."
-        actionHref="/shop"
+        actionHref="/catalogue"
         actionLabel="Browse catalogue"
       />
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-          <tr>
-            <th className="px-4 py-3">Product</th>
-            <th className="px-4 py-3">Qty</th>
-            <th className="px-4 py-3">Unit</th>
-            <th className="px-4 py-3">Total</th>
-            <th className="px-4 py-3" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {lines.map((line) => {
-            const avail = availability[line.variantId]
-            const isMakeToStock = line.fulfilmentType === 'make_to_stock'
-            // Oversell only applies to stocked lines; make_to_stock lines are
-            // intentionally ordering beyond available stock.
-            const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
-            const moq = moqByProduct[line.productId]
-            const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
-            const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
-            return (
-              <tr
-                key={line.lineId}
-                className={isOversell || isMoqShort ? 'bg-red-50' : isMakeToStock ? 'bg-amber-50/40' : undefined}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gray-50">
-                      {line.imageUrl ? (
-                        <Image
-                          src={line.imageUrl}
-                          alt={line.productName}
-                          fill
-                          sizes="48px"
-                          className="object-contain p-1"
-                          unoptimized
+    <div className="space-y-3">
+      {lines.map((line) => {
+        const avail = availability[line.variantId]
+        const isMakeToStock = line.fulfilmentType === 'make_to_stock'
+        const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
+        const moq = moqByProduct[line.productId]
+        const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
+        const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
+        const lineTotal = line.qty * (line.unitPrice + decorationPerUnit(line))
+        return (
+          <article
+            key={line.lineId}
+            className="rounded-[24px] bg-white p-5 transition-colors md:p-6"
+          >
+            <div className="flex items-start gap-4 md:gap-5">
+              {/* Image plate */}
+              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50 md:h-28 md:w-28">
+                {line.imageUrl ? (
+                  <Image
+                    src={line.imageUrl}
+                    alt={line.productName}
+                    fill
+                    sizes="(min-width: 768px) 112px, 96px"
+                    className="object-contain p-2"
+                    unoptimized
+                  />
+                ) : null}
+              </div>
+
+              {/* Detail column */}
+              <div className="min-w-0 flex-1">
+                <p className="font-dm-sans text-base font-medium text-gray-900 md:text-lg">
+                  {line.productName}
+                </p>
+                <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
+                {line.decorations.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    {line.decorations.map((d) => (
+                      <span
+                        key={d.linkId}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
+                        title={`${d.name} · +${formatPrice(d.unitPrice)} / unit`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={d.snapshotUrl ?? d.artworkUrl}
+                          alt=""
+                          className="h-4 w-4 rounded-sm bg-white object-contain"
                         />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-gray-900">{line.productName}</div>
-                      <div className="truncate text-xs text-gray-500">{line.variantLabel}</div>
-                      {line.decorations.length > 0 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          {line.decorations.map((d) => (
-                            <span
-                              key={d.linkId}
-                              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-700"
-                              title={`${d.name} · +${formatPrice(d.unitPrice)} / unit`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={d.snapshotUrl ?? d.artworkUrl}
-                                alt=""
-                                className="h-4 w-4 rounded-sm object-contain bg-white"
-                              />
-                              <span className="font-medium">{d.name}</span>
-                              <span className="tabular-nums text-gray-500">
-                                +{formatPrice(d.unitPrice)}
-                              </span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {isMakeToStock && (
-                        <div className="mt-1 flex items-center gap-1 text-xs text-amber-700">
-                          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-medium">
-                            Make to stock
-                          </span>
-                          <span className="text-amber-600">— will go to your inventory shelf</span>
-                        </div>
-                      )}
-                      {isOversell && (
-                        <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
-                          <span>Only {avail} available.</span>
-                          <button
-                            type="button"
-                            onClick={() => onUpdateQty(line.lineId, avail ?? 0)}
-                            className="rounded-full border border-red-300 bg-white px-2 py-0.5 font-medium text-red-700 hover:bg-red-50"
-                          >
-                            Reduce to {avail}
-                          </button>
-                        </div>
-                      )}
-                      {isMoqShort && moq !== undefined && (
-                        <div className="mt-1 flex items-center gap-2 text-xs text-red-700">
-                          <span>
-                            Below minimum order ({moq} units) — currently {totalForProduct}{' '}
-                            across this product.
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                        <span className="font-medium">{d.name}</span>
+                        <span className="tabular-nums text-gray-500">
+                          +{formatPrice(d.unitPrice)}
+                        </span>
+                      </span>
+                    ))}
                   </div>
-                </td>
-                <td className="px-4 py-3">
+                )}
+              </div>
+
+              {/* Qty + remove column */}
+              <div className="flex shrink-0 flex-col items-end gap-3">
+                <div className="flex items-center gap-1">
+                  <QtyChip
+                    onClick={() => onUpdateQty(line.lineId, Math.max(1, line.qty - 1))}
+                    disabled={line.qty <= 1}
+                    label="Decrease quantity"
+                  >
+                    −
+                  </QtyChip>
                   <input
                     type="number"
                     min={1}
@@ -221,43 +190,96 @@ export function CartTable({
                       const next = Number(e.target.value)
                       if (Number.isInteger(next) && next > 0) onUpdateQty(line.lineId, next)
                     }}
-                    className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30"
+                    aria-label="Quantity"
+                    className="w-14 rounded-full bg-gray-50 px-2 py-1.5 text-center text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
                   />
-                </td>
-                <td className="px-4 py-3 text-gray-700">{formatPrice(line.unitPrice)}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">
-                  {formatPrice(line.qty * (line.unitPrice + decorationPerUnit(line)))}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onRemove(line.lineId)}
-                    className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                    aria-label="Remove line"
+                  <QtyChip
+                    onClick={() => onUpdateQty(line.lineId, line.qty + 1)}
+                    label="Increase quantity"
                   >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-4 w-4"
+                    +
+                  </QtyChip>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemove(line.lineId)}
+                  className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-gray-900"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            {/* Inline status messages */}
+            {(isMakeToStock || isOversell || isMoqShort) && (
+              <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
+                {isMakeToStock && (
+                  <p className="text-amber-700">
+                    <span className="font-medium">Make to stock</span> — this will be
+                    added to your inventory shelf.
+                  </p>
+                )}
+                {isOversell && (
+                  <p className="flex items-center gap-2 text-rose-700">
+                    Only {avail} available.
+                    <button
+                      type="button"
+                      onClick={() => onUpdateQty(line.lineId, avail ?? 0)}
+                      className="rounded-full bg-rose-50 px-3 py-0.5 font-medium text-rose-700 transition-colors hover:bg-rose-100"
                     >
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                      Reduce to {avail}
+                    </button>
+                  </p>
+                )}
+                {isMoqShort && moq !== undefined && (
+                  <p className="text-rose-700">
+                    Below minimum order ({moq} units) — currently {totalForProduct}{' '}
+                    across this product.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Price row */}
+            <div className="mt-4 flex items-baseline justify-between border-t border-gray-100 pt-3 text-sm">
+              <span className="text-gray-500">
+                Unit · <span className="tabular-nums text-gray-700">{formatPrice(line.unitPrice)}</span>
+              </span>
+              <span className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
+                {formatPrice(lineTotal)}
+              </span>
+            </div>
+          </article>
+        )
+      })}
+
       {loading && (
-        <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-500">
-          Checking availability…
-        </div>
+        <p className={`px-2 ${LABEL_CAP}`}>Checking availability…</p>
       )}
     </div>
+  )
+}
+
+function QtyChip({
+  children,
+  onClick,
+  disabled,
+  label,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-base text-gray-700 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
   )
 }

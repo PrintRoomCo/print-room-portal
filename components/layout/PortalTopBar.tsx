@@ -2,8 +2,8 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   useTopBarContextValue,
   usePortalDrawer,
@@ -37,84 +37,202 @@ function fallbackSectionLabel(pathname: string): string {
 }
 
 const SELECT_CLASS =
-  'rounded-full bg-white/70 border border-gray-200 px-3 py-1.5 text-xs w-auto min-w-[9rem]'
+  'rounded-full bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs w-auto min-w-[9rem] focus:outline-none focus:ring-2 focus:ring-gray-300'
 
 export function PortalTopBar() {
   const pathname = usePathname() ?? ''
   const ctx = useTopBarContextValue()
-  const { toggle } = usePortalDrawer()
+  const drawer = usePortalDrawer()
 
-  // Listing context publishes filters → top bar grows a 2nd row with the form.
-  const hasFilterRow =
-    ctx?.kind === 'listing' && !!ctx.filters && !!ctx.facets
+  const hasFilterRow = !!(
+    ctx?.kind === 'listing' &&
+    ctx.filters &&
+    ctx.facets &&
+    ctx.filterAction
+  )
 
-  // Publish total clearance (top inset + bar height) as a CSS var so the main
-  // content can pad-top adaptively without knowing the route. Includes the
-  // 12px top margin so callers can use it as a single offset.
+  // Publish total bar height as a CSS variable so the main content can offset
+  // its top padding. 76px = 12px inset + 56px pill + 8px gap. With the filter
+  // row, add ~60px for the 2nd-row form + padding.
   useEffect(() => {
-    const root = document.documentElement
-    const value = hasFilterRow ? '136px' : '76px'
-    root.style.setProperty('--portal-topbar-h', value)
-    return () => {
-      root.style.removeProperty('--portal-topbar-h')
-    }
+    const h = hasFilterRow ? '136px' : '76px'
+    document.documentElement.style.setProperty('--portal-topbar-h', h)
   }, [hasFilterRow])
 
   return (
     <header
       role="banner"
-      className="pointer-events-none fixed inset-x-3 top-3 z-30 hidden md:block"
+      className="fixed inset-x-3 top-3 z-30 overflow-hidden rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
     >
-      <div className="pointer-events-auto rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md">
-        {/* Row 1: menu + context | brand | cart + currency + account */}
-        <div className="flex h-14 items-center px-4 md:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-4">
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label="Open menu"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <MenuIcon />
-            </button>
-            <ContextBlock ctx={ctx} pathname={pathname} />
-          </div>
+      <div className="flex h-14 items-center px-3 md:px-4">
+        {/* Menu trigger */}
+        <button
+          type="button"
+          onClick={drawer.toggle}
+          aria-label="Open navigation menu"
+          aria-expanded={drawer.open ? ('true' as const) : ('false' as const)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all duration-150 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1"
+        >
+          <MenuIcon className="h-4 w-4" />
+        </button>
 
-          <Link
-            href="/account"
-            aria-label="The Print Room"
-            className="flex shrink-0 items-center gap-2"
-          >
-            <Image
-              src="/print-room-logo.png"
-              alt=""
-              width={28}
-              height={28}
-              priority
-              className="h-7 w-7 object-contain"
-            />
-            <span className="text-sm font-medium lowercase tracking-tight text-pr-blue">
-              the print room
-            </span>
-          </Link>
-
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-            <TopBarCartPill />
-            <CurrencyPicker />
-            <AccountMenu />
-          </div>
+        {/* Left: contextual stat block (desktop only) */}
+        <div className="ml-3 hidden min-w-0 flex-1 items-center md:flex">
+          <ContextBlock ctx={ctx} pathname={pathname} />
         </div>
 
-        {/* Row 2: filter form — only on listing pages that ship filters */}
-        {hasFilterRow && ctx?.kind === 'listing' && ctx.filters && ctx.facets && (
-          <FilterRow
-            filters={ctx.filters}
-            facets={ctx.facets}
-            action={ctx.filterAction ?? pathname}
+        {/* Spacer on mobile */}
+        <div className="flex-1 md:hidden" />
+
+        {/* Centre: brand */}
+        <Link
+          href="/account"
+          aria-label="The Print Room"
+          className="flex shrink-0 items-center gap-2"
+        >
+          <Image
+            src="/print-room-logo.png"
+            alt=""
+            width={28}
+            height={28}
+            priority
+            className="h-7 w-7 object-contain"
           />
-        )}
+          <span className="hidden text-sm font-medium lowercase tracking-tight text-pr-blue sm:inline">
+            the print room
+          </span>
+        </Link>
+
+        {/* Right: cart + currency + account */}
+        <div className="ml-3 flex min-w-0 flex-1 items-center justify-end gap-2 md:gap-3">
+          <TopBarCartPill />
+          <CurrencyPicker />
+          <AccountMenu />
+        </div>
+      </div>
+
+      {/* Optional second row: catalogue filter form. Always rendered when
+          listing context publishes filters, animated via grid-rows trick so
+          the bar can smoothly grow. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          hasFilterRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          {ctx?.kind === 'listing' && ctx.filters && ctx.facets && ctx.filterAction && (
+            <FilterRow
+              filters={ctx.filters}
+              facets={ctx.facets}
+              action={ctx.filterAction}
+            />
+          )}
+        </div>
       </div>
     </header>
+  )
+}
+
+function FilterRow({
+  filters,
+  facets,
+  action,
+}: {
+  filters: NonNullable<
+    Extract<PortalTopBarContextValue, { kind: 'listing' }>['filters']
+  >
+  facets: NonNullable<
+    Extract<PortalTopBarContextValue, { kind: 'listing' }>['facets']
+  >
+  action: string
+}) {
+  const hasActive = activeFilterCount(filters) > 0
+
+  return (
+    <div className="border-t border-gray-200/70 px-3 py-2 md:px-4">
+      <form
+        method="GET"
+        action={action}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <input
+          type="search"
+          name="q"
+          defaultValue={filters.q}
+          placeholder="Search products"
+          aria-label="Search products"
+          className="min-w-[10rem] flex-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gray-300"
+        />
+
+        <FilterAutoSubmitSelect
+          name="brand_id"
+          defaultValue={filters.brandId ?? ''}
+          ariaLabel="Filter by brand"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All brands' },
+            ...facets.brands.map((b) => ({ value: b.id, label: b.name })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="category_id"
+          defaultValue={filters.categoryId ?? ''}
+          ariaLabel="Filter by category"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All categories' },
+            ...facets.categories.map((c) => ({ value: c.id, label: c.name })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="garment_family"
+          defaultValue={filters.garmentFamily ?? ''}
+          ariaLabel="Filter by garment family"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All families' },
+            ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="sort"
+          defaultValue={filters.sort}
+          ariaLabel="Sort"
+          className={SELECT_CLASS}
+          options={[
+            { value: 'name', label: 'Name (A → Z)' },
+            { value: 'newest', label: 'Newest' },
+          ]}
+        />
+
+        <FilterAutoSubmitCheckbox
+          name="in_stock"
+          defaultChecked={filters.inStock}
+          label="In stock only"
+        />
+
+        {hasActive && (
+          <Link
+            href={action}
+            className="ml-auto text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-900"
+          >
+            Clear all
+          </Link>
+        )}
+
+        <noscript>
+          <button
+            type="submit"
+            className="rounded-full bg-pr-blue px-3 py-1.5 text-xs text-white"
+          >
+            Apply filters
+          </button>
+        </noscript>
+      </form>
+    </div>
   )
 }
 
@@ -158,11 +276,7 @@ function ContextBlock({
   return <StatRow cells={[{ label: 'Section', value: label }]} />
 }
 
-function StatRow({
-  cells,
-}: {
-  cells: Array<{ label: string; value: string }>
-}) {
+function StatRow({ cells }: { cells: Array<{ label: string; value: string }> }) {
   return (
     <dl className="flex min-w-0 items-center gap-6 text-[10px] leading-tight">
       {cells.map((c, i) => (
@@ -179,117 +293,20 @@ function StatRow({
   )
 }
 
-function FilterRow({
-  filters,
-  facets,
-  action,
-}: {
-  filters: NonNullable<Extract<PortalTopBarContextValue, { kind: 'listing' }>['filters']>
-  facets: NonNullable<Extract<PortalTopBarContextValue, { kind: 'listing' }>['facets']>
-  action: string
-}) {
-  const hasActive = activeFilterCount(filters) > 0
-  return (
-    <div className="border-t border-gray-200/70 px-4 py-2.5 md:px-6">
-      <form
-        method="GET"
-        action={action}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <input
-          type="search"
-          name="q"
-          defaultValue={filters.q}
-          placeholder="Search products"
-          aria-label="Search products"
-          className="min-w-[10rem] flex-1 rounded-full border border-gray-200 bg-white/70 px-4 py-1.5 text-xs"
-        />
-        <FilterAutoSubmitSelect
-          name="brand_id"
-          defaultValue={filters.brandId ?? ''}
-          ariaLabel="Filter by brand"
-          className={SELECT_CLASS}
-          options={[
-            { value: '', label: 'All brands' },
-            ...facets.brands.map((b) => ({ value: b.id, label: b.name })),
-          ]}
-        />
-        <FilterAutoSubmitSelect
-          name="category_id"
-          defaultValue={filters.categoryId ?? ''}
-          ariaLabel="Filter by category"
-          className={SELECT_CLASS}
-          options={[
-            { value: '', label: 'All categories' },
-            ...facets.categories.map((c) => ({ value: c.id, label: c.name })),
-          ]}
-        />
-        <FilterAutoSubmitSelect
-          name="garment_family"
-          defaultValue={filters.garmentFamily ?? ''}
-          ariaLabel="Filter by garment family"
-          className={SELECT_CLASS}
-          options={[
-            { value: '', label: 'All families' },
-            ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
-          ]}
-        />
-        <FilterAutoSubmitSelect
-          name="sort"
-          defaultValue={filters.sort}
-          ariaLabel="Sort"
-          className={SELECT_CLASS}
-          options={[
-            { value: 'name', label: 'Name (A → Z)' },
-            { value: 'newest', label: 'Newest' },
-          ]}
-        />
-        <FilterAutoSubmitCheckbox
-          name="in_stock"
-          defaultChecked={filters.inStock}
-          label="In stock only"
-        />
-        {hasActive && (
-          <Link
-            href={action}
-            className="ml-auto text-xs font-medium text-gray-600 underline"
-          >
-            Clear all
-          </Link>
-        )}
-        <noscript>
-          <button
-            type="submit"
-            className="rounded-full bg-pr-blue px-4 py-1.5 text-xs text-white"
-          >
-            Apply
-          </button>
-        </noscript>
-      </form>
-    </div>
-  )
-}
-
 function formatType(t: string | null): string {
   if (!t) return '—'
   return t.replace(/_/g, ' ').toUpperCase()
 }
 
-function MenuIcon() {
+function MenuIcon({ className }: { className?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 6h16M4 12h16M4 18h16" />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 6h16M4 12h16M4 18h16"
+      />
     </svg>
   )
 }

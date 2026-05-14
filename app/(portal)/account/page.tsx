@@ -13,9 +13,9 @@ export default async function AccountPage({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-6 pb-16 pt-[120px]">
+      <div className="mx-auto max-w-[1320px] px-6 pt-[120px] pb-16">
         {sp.reason === 'no_org' && (
-          <div className="mb-12">
+          <div className="mb-8">
             <PortalEmptyState
               title="Your account isn't fully set up yet"
               body="Your organisation hasn't been provisioned in our system. Your account manager will reach out shortly — or contact us if you'd like to chase it up."

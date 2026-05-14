@@ -10,6 +10,9 @@ import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 
 type StatusFilter = 'active' | 'completed'
 
+const LABEL_CAP =
+  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+
 export default function OrderTracker() {
   const { access, loading: companyLoading } = useCompany()
   const [trackers, setTrackers] = useState<JobTracker[]>([])
@@ -38,9 +41,10 @@ export default function OrderTracker() {
   }, [companyLoading, access, fetchTrackers])
 
   const filteredTrackers = useMemo(() => {
-    let result = statusFilter === 'active'
-      ? trackers.filter((t) => !isTrackerCompleted(t.status))
-      : trackers.filter((t) => isTrackerCompleted(t.status))
+    let result =
+      statusFilter === 'active'
+        ? trackers.filter((t) => !isTrackerCompleted(t.status))
+        : trackers.filter((t) => isTrackerCompleted(t.status))
 
     if (search.trim()) {
       const query = search.toLowerCase().trim()
@@ -50,7 +54,7 @@ export default function OrderTracker() {
           t.monday_project_name?.toLowerCase().includes(query) ||
           t.tracker_token?.toLowerCase().includes(query) ||
           t.job_reference?.toLowerCase().includes(query) ||
-          t.customer_email?.toLowerCase().includes(query)
+          t.customer_email?.toLowerCase().includes(query),
       )
     }
 
@@ -59,8 +63,10 @@ export default function OrderTracker() {
 
   if (companyLoading || dataLoading) {
     return (
-      <div className="max-w-7xl mx-auto space-y-6">
-        <PortalSkeleton rows={3} />
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <PortalSkeleton rows={3} />
+        </div>
       </div>
     )
   }
@@ -68,74 +74,89 @@ export default function OrderTracker() {
   if (!access) return null
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Order tracker</p>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Tracking</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Track active production work and revisit completed orders.
-        </p>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        {/* Editorial hero */}
+        <header className="mb-10 md:mb-12">
+          <p className={LABEL_CAP}>Order tracker</p>
+          <h1 className="mt-2 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            Tracking
+          </h1>
+          <p className="mt-4 max-w-prose text-base text-gray-600">
+            Track active production work and revisit completed orders.
+          </p>
+        </header>
+
+        {/* Summary cards */}
+        {trackers.length > 0 && (
+          <div className="mb-8">
+            <TrackerSummaryCards
+              trackers={trackers}
+              isCompanyWide={isCompanyWide}
+            />
+          </div>
+        )}
+
+        {/* Search + filter */}
+        {trackers.length > 0 && (
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <SearchIcon className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by project, name, or reference…"
+                className="w-full rounded-full bg-white py-2.5 pl-10 pr-4 text-sm transition-colors focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+              />
+            </div>
+            <div className="inline-flex rounded-full bg-gray-100 p-1">
+              <FilterChip
+                active={statusFilter === 'active'}
+                onClick={() => setStatusFilter('active')}
+              >
+                Active
+              </FilterChip>
+              <FilterChip
+                active={statusFilter === 'completed'}
+                onClick={() => setStatusFilter('completed')}
+              >
+                Completed
+              </FilterChip>
+            </div>
+          </div>
+        )}
+
+        {/* Tracker list */}
+        {filteredTrackers.length > 0 ? (
+          <div className="space-y-4">
+            {filteredTrackers.map((tracker) => (
+              <JobTrackerOrderCard
+                key={tracker.id}
+                tracker={tracker}
+                showCustomerEmail={isCompanyWide}
+              />
+            ))}
+          </div>
+        ) : trackers.length > 0 ? (
+          <PortalEmptyState
+            title="No matches"
+            body={`Try ${search ? 'a different search term' : 'changing the filter'} to widen the list.`}
+          />
+        ) : (
+          <PortalEmptyState
+            title="Nothing tracked yet"
+            body="When your orders enter production, they will appear here with live status updates."
+            actionHref="/catalogue"
+            actionLabel="Browse catalogue"
+          />
+        )}
       </div>
-
-      {/* Summary Cards */}
-      {trackers.length > 0 && (
-        <TrackerSummaryCards trackers={trackers} isCompanyWide={isCompanyWide} />
-      )}
-
-      {/* Search + Filter */}
-      {trackers.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by project #, name, or reference..."
-              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/20 focus:border-[rgb(var(--color-primary))] transition-all duration-300"
-            />
-          </div>
-          <div className="flex gap-2">
-            <FilterButton active={statusFilter === 'active'} onClick={() => setStatusFilter('active')}>
-              Active
-            </FilterButton>
-            <FilterButton active={statusFilter === 'completed'} onClick={() => setStatusFilter('completed')}>
-              Completed
-            </FilterButton>
-          </div>
-        </div>
-      )}
-
-      {/* Tracker List */}
-      {filteredTrackers.length > 0 ? (
-        <div className="space-y-4">
-          {filteredTrackers.map((tracker) => (
-            <JobTrackerOrderCard
-              key={tracker.id}
-              tracker={tracker}
-              showCustomerEmail={isCompanyWide}
-            />
-          ))}
-        </div>
-      ) : trackers.length > 0 ? (
-        <PortalEmptyState
-          title="No matches"
-          body={`Try ${search ? 'a different search term' : 'changing the filter'} to widen the list.`}
-        />
-      ) : (
-        <PortalEmptyState
-          title="Nothing tracked yet"
-          body="When your orders enter production, they will appear here with live status updates."
-          actionHref="/shop"
-          actionLabel="Browse catalogue"
-        />
-      )}
     </div>
   )
 }
 
-function FilterButton({
+function FilterChip({
   active,
   onClick,
   children,
@@ -148,7 +169,11 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`filter-tab ${active ? 'filter-tab-active' : ''}`}
+      className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-150 ${
+        active
+          ? 'bg-white text-gray-900 shadow-sm'
+          : 'text-gray-500 hover:text-gray-900'
+      }`}
     >
       {children}
     </button>
@@ -157,11 +182,16 @@ function FilterButton({
 
 function SearchIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth={2}
+        strokeWidth={1.75}
         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
       />
     </svg>

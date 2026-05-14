@@ -22,10 +22,11 @@ export type PortalTopBarContextValue =
       count: number
       page?: number
       pageCount?: number
-      // When present, the top bar grows a second row hosting filter controls.
+      // Optional: when present, the top bar grows a second row hosting the
+      // filter form. Used by the catalogue listing so the grid renders
+      // full-width below.
       filters?: ShopFilters
       facets?: ShopFacets
-      // The form's GET action — defaults to the current pathname if omitted.
       filterAction?: string
     }
   | {
@@ -69,13 +70,20 @@ export function useSetTopBarContext() {
   )
 }
 
+// Drawer state lives in the top bar provider so the Menu button (mounted in
+// PortalTopBar) and the Sidebar drawer (mounted in PortalShell) share it.
 export function usePortalDrawer() {
   const ctx = useContext(Ctx)
-  return {
-    open: ctx?.drawerOpen ?? false,
-    setOpen: ctx?.setDrawerOpen ?? (() => {}),
-    toggle: () => ctx?.setDrawerOpen(!(ctx?.drawerOpen ?? false)),
-  }
+  const open = ctx?.drawerOpen ?? false
+  return useMemo(
+    () => ({
+      open,
+      setOpen: (next: boolean) => ctx?.setDrawerOpen(next),
+      toggle: () => ctx?.setDrawerOpen(!open),
+    }),
+    // ctx identity is stable (created once by provider); open changes per toggle
+    [ctx, open],
+  )
 }
 
 // Declarative helper — drop into a server component's JSX to set the bar

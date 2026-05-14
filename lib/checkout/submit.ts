@@ -146,6 +146,7 @@ interface QuoteItemRow {
   id: string
   product_id: string
   variant_id: string | null
+  product_name: string
 }
 
 interface QuoteRowForEmail {
@@ -635,17 +636,21 @@ export async function submitCustomerOrder(
   //    creates quote_items without ship-to or decorations; we set both here.
   const { data: newLines } = await admin
     .from('quote_items')
-    .select('id, product_id, variant_id')
+    .select('id, product_id, variant_id, product_name')
     .eq('quote_id', quote_id)
   if (newLines) {
     const rows = newLines as QuoteItemRow[]
+    const consumed = new Set<string>()
     for (const inLine of input.lines) {
       const match = rows.find(
         (x) =>
+          !consumed.has(x.id) &&
           x.product_id === inLine.product_id &&
-          (x.variant_id ?? null) === (inLine.variant_id ?? null)
+          (x.variant_id ?? null) === (inLine.variant_id ?? null) &&
+          x.product_name === inLine.product_name,
       )
       if (!match) continue
+      consumed.add(match.id)
       const update: Record<string, unknown> = {}
       if (inLine.ship_to_store_id !== undefined) {
         update.ship_to_store_id = inLine.ship_to_store_id ?? null
