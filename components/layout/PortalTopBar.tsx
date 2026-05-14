@@ -3,26 +3,46 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect } from 'react'
-import { usePortalDrawer } from './PortalTopBarContext'
+import {
+  useTopBarContextValue,
+  usePortalDrawer,
+  type PortalTopBarContextValue,
+} from './PortalTopBarContext'
 import { CurrencyPicker } from './CurrencyPicker'
 import { TopBarCartPill } from './TopBarCartPill'
 import { AccountMenu } from './AccountMenu'
+import { FilterAutoSubmitSelect } from '@/components/shop/FilterAutoSubmitSelect'
+import { FilterAutoSubmitCheckbox } from '@/components/shop/FilterAutoSubmitCheckbox'
+import { activeFilterCount } from '@/lib/shop/filter-params'
+
+const SELECT_CLASS =
+  'rounded-full bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs w-auto min-w-[9rem] focus:outline-none focus:ring-2 focus:ring-gray-300'
 
 export function PortalTopBar() {
+  const ctx = useTopBarContextValue()
   const drawer = usePortalDrawer()
 
+  const hasFilterRow = !!(
+    ctx?.kind === 'listing' &&
+    ctx.filters &&
+    ctx.facets &&
+    ctx.filterAction
+  )
+
   // Publish total bar height as a CSS variable so Sidebar's main content can
-  // offset its top padding. 76px = 12px inset + 56px pill + 8px gap.
+  // offset its top padding. 76px = 12px inset + 56px pill + 8px gap. With the
+  // filter row, add ~60px for the 2nd-row form + padding.
   useEffect(() => {
-    document.documentElement.style.setProperty('--portal-topbar-h', '76px')
-  }, [])
+    const h = hasFilterRow ? '136px' : '76px'
+    document.documentElement.style.setProperty('--portal-topbar-h', h)
+  }, [hasFilterRow])
 
   return (
     <header
       role="banner"
-      className="fixed inset-x-3 top-3 z-30 rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
+      className="fixed inset-x-3 top-3 z-30 overflow-visible rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
     >
-      <div className="flex h-14 items-center px-3 md:px-4">
+      <div className="relative z-20 flex h-14 items-center px-3 md:px-4">
         {/* Menu trigger — toggles the Sidebar drawer */}
         <button
           type="button"
@@ -63,7 +83,129 @@ export function PortalTopBar() {
           <AccountMenu />
         </div>
       </div>
+
+      {/* Optional second row: catalogue filter form. Rendered when the
+          listing context publishes filters, animated via grid-rows trick so
+          the bar can smoothly grow. */}
+      <div
+        className={`relative z-10 grid transition-[grid-template-rows] duration-200 ease-out ${
+          hasFilterRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          {ctx?.kind === 'listing' && ctx.filters && ctx.facets && ctx.filterAction && (
+            <FilterRow
+              filters={ctx.filters}
+              facets={ctx.facets}
+              action={ctx.filterAction}
+            />
+          )}
+        </div>
+      </div>
     </header>
+  )
+}
+
+function FilterRow({
+  filters,
+  facets,
+  action,
+}: {
+  filters: NonNullable<
+    Extract<PortalTopBarContextValue, { kind: 'listing' }>['filters']
+  >
+  facets: NonNullable<
+    Extract<PortalTopBarContextValue, { kind: 'listing' }>['facets']
+  >
+  action: string
+}) {
+  const hasActive = activeFilterCount(filters) > 0
+
+  return (
+    <div className="border-t border-gray-200/70 px-3 py-2 md:px-4">
+      <form
+        method="GET"
+        action={action}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <input
+          type="search"
+          name="q"
+          defaultValue={filters.q}
+          placeholder="Search products"
+          aria-label="Search products"
+          className="min-w-[10rem] flex-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gray-300"
+        />
+
+        <FilterAutoSubmitSelect
+          name="brand_id"
+          defaultValue={filters.brandId ?? ''}
+          ariaLabel="Filter by brand"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All brands' },
+            ...facets.brands.map((b) => ({ value: b.id, label: b.name })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="category_id"
+          defaultValue={filters.categoryId ?? ''}
+          ariaLabel="Filter by category"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All categories' },
+            ...facets.categories.map((c) => ({ value: c.id, label: c.name })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="garment_family"
+          defaultValue={filters.garmentFamily ?? ''}
+          ariaLabel="Filter by garment family"
+          className={SELECT_CLASS}
+          options={[
+            { value: '', label: 'All families' },
+            ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
+          ]}
+        />
+
+        <FilterAutoSubmitSelect
+          name="sort"
+          defaultValue={filters.sort}
+          ariaLabel="Sort"
+          className={SELECT_CLASS}
+          options={[
+            { value: 'name', label: 'Name (A → Z)' },
+            { value: 'newest', label: 'Newest' },
+          ]}
+        />
+
+        <FilterAutoSubmitCheckbox
+          name="in_stock"
+          defaultChecked={filters.inStock}
+          label="In stock only"
+        />
+
+        {hasActive && (
+          <Link
+            href={action}
+            className="ml-auto text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-900"
+          >
+            Clear all
+          </Link>
+        )}
+
+        <noscript>
+          <button
+            type="submit"
+            className="rounded-full bg-pr-blue px-3 py-1.5 text-xs text-white"
+          >
+            Apply filters
+          </button>
+        </noscript>
+      </form>
+    </div>
   )
 }
 
