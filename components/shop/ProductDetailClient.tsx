@@ -5,7 +5,6 @@ import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type VariantRow } from './VariantPicker'
 import { DecorationSwatchPicker } from './DecorationSwatchPicker'
-import { RequestReorderModal } from './RequestReorderModal'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
@@ -282,7 +281,6 @@ export function ProductDetailClient({
     }
   }, [qty, decorations, brackets])
 
-  const [reorderModalOpen, setReorderModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const selectedLinkIds = useMemo<ReadonlySet<string>>(
     () => new Set(decorations.map((d) => d.linkId)),
@@ -436,10 +434,6 @@ export function ProductDetailClient({
       pricing != null &&
       pricing.status === 'ok'
 
-  const selectedVariantLabel = selectedVariant
-    ? [selectedVariant.color_label, selectedVariant.size_label].filter(Boolean).join(' / ') || '—'
-    : '—'
-
   return (
     <div className="p-4 md:p-8">
       <div className="grid gap-8 lg:grid-cols-2">
@@ -463,6 +457,11 @@ export function ProductDetailClient({
                 </span>
               )}
             </div>
+            {product.sku && (
+              <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+                SKU {product.sku}
+              </p>
+            )}
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
             )}
@@ -722,34 +721,11 @@ export function ProductDetailClient({
             >
               Add to cart
             </button>
-            {isOutOfStock && selectedVariant && (
-              <button
-                type="button"
-                onClick={() => setReorderModalOpen(true)}
-                className="rounded-full border border-pr-blue px-5 py-2.5 text-sm font-medium text-pr-blue hover:bg-pr-blue/5"
-              >
-                Request reorder
-              </button>
-            )}
           </div>
         </div>
       </div>
 
       <ProductDetailsSection product={product} />
-
-      {reorderModalOpen && selectedVariant && (
-        <RequestReorderModal
-          variantId={selectedVariant.variant_id}
-          variantLabel={selectedVariantLabel}
-          productName={product.name}
-          defaultQty={qty}
-          onClose={() => setReorderModalOpen(false)}
-          onSuccess={() => {
-            setReorderModalOpen(false)
-            showToast('Reorder requested — staff notified')
-          }}
-        />
-      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">

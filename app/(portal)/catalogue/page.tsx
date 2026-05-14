@@ -12,6 +12,7 @@ import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
@@ -209,7 +210,7 @@ export default async function CataloguePage({
       baseFromPrice > 0 ? baseFromPrice + decorationOverlay : rpcPrice.unitPrice
     return {
       id: p.id,
-      name: p.name,
+      name: stripTrailingSku(p.name, p.sku),
       sku: p.sku,
       image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
       from_unit_price: fromAllIn,

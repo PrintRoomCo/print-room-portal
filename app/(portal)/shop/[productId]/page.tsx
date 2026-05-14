@@ -6,6 +6,7 @@ import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { cleanDescription } from '@/lib/shop/clean-description'
+import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 
 export const dynamic = 'force-dynamic'
 
@@ -246,7 +247,7 @@ export default async function ProductDetailPage({
 
   const displayProduct = {
     ...productRow,
-    name: catItemForked?.name ?? productRow.name,
+    name: stripTrailingSku(catItemForked?.name ?? productRow.name, productRow.sku),
     description: cleanDescription(catItemForked?.description ?? productRow.description),
     image_url: catItemForked?.image_url ?? productRow.image_url,
   }
