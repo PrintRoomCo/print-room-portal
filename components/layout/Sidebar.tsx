@@ -2,9 +2,8 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import type { B2BCustomerAccess } from '@/types/company'
 import { usePortalDrawer } from './PortalTopBarContext'
 
@@ -44,8 +43,6 @@ function getNavigationItems(customer: B2BCustomerAccess) {
 
 export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
-  const { signOut } = useAuth()
   const { open, setOpen, toggle } = usePortalDrawer()
 
   // Close drawer on route change
