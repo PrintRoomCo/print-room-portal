@@ -6,13 +6,13 @@ import { CURRENCY_OPTIONS, type SupportedCurrency } from '@/lib/currency/types'
 export function CurrencyPicker() {
   const { currency, setCurrency } = useCurrency()
   return (
-    <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+    <label className="relative inline-flex items-center">
       <span className="sr-only">Currency</span>
       <select
         value={currency}
         onChange={(e) => setCurrency(e.target.value as SupportedCurrency)}
         aria-label="Currency"
-        className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-gray-700 focus:border-gray-400 focus:outline-none"
+        className="appearance-none rounded-full bg-gray-100 px-3 py-1.5 pr-7 text-sm text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
       >
         {CURRENCY_OPTIONS.map((c) => (
           <option key={c.code} value={c.code}>
@@ -20,6 +20,15 @@ export function CurrencyPicker() {
           </option>
         ))}
       </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-500" />
     </label>
+  )
+}
+
+function ChevronDown({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 12 12" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4.5l3 3 3-3" />
+    </svg>
   )
 }

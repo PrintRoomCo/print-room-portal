@@ -35,7 +35,7 @@ export function AccountMenu() {
     return (
       <Link
         href="/sign-in"
-        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:text-gray-900"
+        className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200"
       >
         Sign In
       </Link>
@@ -47,19 +47,18 @@ export function AccountMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open ? ('true' as const) : ('false' as const)}
+        aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 transition-all duration-150 hover:border-gray-300 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1"
+        className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
       >
-        <span className="hidden sm:inline">My Account</span>
-        <span className="sm:hidden">Account</span>
+        <span>Account</span>
         <ChevronDown className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} />
       </button>
 
       <div
         role="menu"
-        aria-hidden={open ? ('false' as const) : ('true' as const)}
-        className={`absolute right-0 top-full z-[80] mt-2 w-44 origin-top-right overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none ${
+        aria-hidden={open ? 'false' : 'true'}
+        className={`absolute right-0 top-full z-[80] mt-2 w-44 origin-top-right overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-gray-200/70 transition-all duration-200 ease-out motion-reduce:transition-none ${
           open
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 -translate-y-1 pointer-events-none'
