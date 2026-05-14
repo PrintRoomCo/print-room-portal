@@ -255,6 +255,7 @@ export default async function ProductDetailPage({
   const effectiveMoq = getEffectiveMoq(
     { moq: productRow.moq },
     catItemForked ? { moq_override: catItemForked.moq_override } : null,
+    { orgMoqExempt: context.moqExempt },
   )
 
   return (

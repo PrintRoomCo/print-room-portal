@@ -41,6 +41,7 @@ export async function GET(
   let effectiveMoq = getEffectiveMoq(
     productRow as { moq: number | null } | null ?? { moq: null },
     null,
+    { orgMoqExempt: context.moqExempt },
   )
   if (grantedItemIds.length > 0) {
     const { data: catItem } = await admin
@@ -54,6 +55,7 @@ export async function GET(
     effectiveMoq = getEffectiveMoq(
       productRow as { moq: number | null } | null ?? { moq: null },
       catItem as { moq_override: number | null } | null,
+      { orgMoqExempt: context.moqExempt },
     )
   }
 

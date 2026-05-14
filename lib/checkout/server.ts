@@ -33,6 +33,12 @@ export interface B2BCustomerContext {
    * B2BCustomerAccess so checkout code branches without re-deriving.
    */
   allowsMultiStoreOrdering: boolean
+  /**
+   * organizations.moq_exempt. When true, every product short-circuits to MOQ=1
+   * — set by staff on the b2b-accounts org page for trusted multi-store
+   * customers. Mirrors submit_b2b_order's top-level branch.
+   */
+  moqExempt: boolean
 }
 
 export type AuthFailureKind =
@@ -67,7 +73,7 @@ export async function requireB2BCustomer(
 
   const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
     admin.from('organizations')
-      .select('id, name, customer_code')
+      .select('id, name, customer_code, moq_exempt')
       .eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
       .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type')
@@ -106,6 +112,7 @@ export async function requireB2BCustomer(
       tenantType: (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type ?? null,
       allowsMultiStoreOrdering:
         (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
+      moqExempt: Boolean((org as { moq_exempt?: boolean | null }).moq_exempt),
     } satisfies B2BCustomerContext,
   }
 }

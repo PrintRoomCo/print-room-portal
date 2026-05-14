@@ -189,7 +189,10 @@ export function CheckoutClient({
             .join('; ')
           setBanner({
             kind: 'error',
-            msg: `Minimum order quantity not met — review your cart. ${summary}`,
+            msg:
+              `Minimum order quantity not met. ${summary}. ` +
+              `Add more to meet the minimum, or contact your account manager — ` +
+              `they can lower the MOQ on a specific product or your whole account.`,
           })
           router.push('/cart')
           return

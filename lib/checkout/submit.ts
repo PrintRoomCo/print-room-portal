@@ -309,6 +309,7 @@ export async function submitCustomerOrder(
       overrideByProductId.has(line.product_id)
         ? { moq_override: overrideByProductId.get(line.product_id) ?? null }
         : null,
+      { orgMoqExempt: input.context.moqExempt },
     )
     const totalQty = totalQtyByProductId.get(line.product_id) ?? line.qty
     if (effectiveMoq > 1 && totalQty < effectiveMoq) {
