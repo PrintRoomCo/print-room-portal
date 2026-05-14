@@ -15,9 +15,6 @@ import { FilterAutoSubmitSelect } from '@/components/shop/FilterAutoSubmitSelect
 import { FilterAutoSubmitCheckbox } from '@/components/shop/FilterAutoSubmitCheckbox'
 import { activeFilterCount } from '@/lib/shop/filter-params'
 
-const SELECT_CLASS =
-  'rounded-full bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs w-auto min-w-[9rem] focus:outline-none focus:ring-2 focus:ring-gray-300'
-
 export function PortalTopBar() {
   const ctx = useTopBarContextValue()
   const drawer = usePortalDrawer()
@@ -134,14 +131,13 @@ function FilterRow({
           defaultValue={filters.q}
           placeholder="Search products"
           aria-label="Search products"
-          className="min-w-[10rem] flex-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className="min-w-[10rem] flex-1 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-500 transition-colors hover:bg-gray-200 focus:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300"
         />
 
         <FilterAutoSubmitSelect
           name="brand_id"
           defaultValue={filters.brandId ?? ''}
           ariaLabel="Filter by brand"
-          className={SELECT_CLASS}
           options={[
             { value: '', label: 'All brands' },
             ...facets.brands.map((b) => ({ value: b.id, label: b.name })),
@@ -152,7 +148,6 @@ function FilterRow({
           name="category_id"
           defaultValue={filters.categoryId ?? ''}
           ariaLabel="Filter by category"
-          className={SELECT_CLASS}
           options={[
             { value: '', label: 'All categories' },
             ...facets.categories.map((c) => ({ value: c.id, label: c.name })),
@@ -163,7 +158,6 @@ function FilterRow({
           name="garment_family"
           defaultValue={filters.garmentFamily ?? ''}
           ariaLabel="Filter by garment family"
-          className={SELECT_CLASS}
           options={[
             { value: '', label: 'All families' },
             ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
@@ -174,7 +168,6 @@ function FilterRow({
           name="sort"
           defaultValue={filters.sort}
           ariaLabel="Sort"
-          className={SELECT_CLASS}
           options={[
             { value: 'name', label: 'Name (A → Z)' },
             { value: 'newest', label: 'Newest' },
