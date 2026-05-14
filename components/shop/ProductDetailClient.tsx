@@ -426,11 +426,9 @@ export function ProductDetailClient({
       snapshotUrl: d.snapshotUrl,
     }))
 
-    if (multiSize) {
+    // Mode 1: existing multi-size with variants — one cart line per touched variant.
+    if (sizingMode === 'multi_size_with_variants') {
       let added = 0
-      // Iterate every variant the user has touched across all colours — not
-      // just the currently-displayed swatch — so cross-variant qtys all flow
-      // into one cart submission.
       for (const variant of variants) {
         const lineQty = variantQuantities[variant.variant_id] ?? 0
         if (lineQty <= 0) continue
@@ -460,24 +458,46 @@ export function ProductDetailClient({
       return
     }
 
-    if (!selectedVariant) return
-    const colorLabel = selectedVariant.color_label ?? ''
-    const sizeLabel = selectedVariant.size_label ?? ''
-    const variantLabel = [colorLabel, sizeLabel].filter(Boolean).join(' / ') || '—'
-    const singleTracked = availability[selectedVariant.variant_id] !== undefined
-    const singleAvailable = availability[selectedVariant.variant_id] ?? 0
-    const singleFulfilmentType: 'stocked' | 'make_to_stock' =
-      singleTracked && qty > singleAvailable ? 'make_to_stock' : 'stocked'
+    // Mode 2: variantless multi-size — one cart line per touched size.
+    // variant_id='' sentinel; size string is the only label; product_name gets
+    // the size suffix so it surfaces in /tracking + Monday subitems without
+    // parsing customizations jsonb.
+    if (sizingMode === 'multi_size_variantless') {
+      let added = 0
+      for (const size of variantlessSizes) {
+        const lineQty = variantlessQtyBySize[size] ?? 0
+        if (lineQty <= 0) continue
+        cart.addLine({
+          productId: product.id,
+          productName: `${product.name} — ${size}`,
+          variantId: '',
+          variantLabel: size,
+          qty: lineQty,
+          unitPrice: pricing.unit_price,
+          imageUrl: product.image_url,
+          decorations: cartLineDecorations,
+          fulfilmentType: 'make_to_stock',
+        })
+        added += lineQty
+      }
+      if (added > 0) {
+        setVariantlessQtyBySize({})
+        showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
+      }
+      return
+    }
+
+    // Mode 3: one_size — single cart line, no variant.
     cart.addLine({
       productId: product.id,
       productName: product.name,
-      variantId: selectedVariant.variant_id,
-      variantLabel,
+      variantId: '',
+      variantLabel: '—',
       qty,
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
       decorations: cartLineDecorations,
-      fulfilmentType: singleFulfilmentType,
+      fulfilmentType: 'make_to_stock',
     })
     showToast('Added to cart')
   }
