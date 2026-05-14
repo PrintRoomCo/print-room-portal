@@ -1,68 +1,105 @@
 import Image from 'next/image'
 import { Money } from './Money'
 
+export interface ProductCardSwatch {
+  hex: string | null
+  label: string | null
+}
+
 interface ProductCardData {
   id: string
   name: string
   sku: string | null
   image_url: string | null
+  /** Garment family (preferred) or category, uppercased on render. */
+  type: string | null
   from_unit_price: number
   price_status: 'ok' | 'missing'
   has_stock: boolean
-  // Stock total across every variant the org tracks. `null` means the org
-  // doesn't track stock for this product (catalogue-only entry) → no chip.
-  // A positive number → "N in stock". Zero → "Made to order" (stock tracking
-  // exists but everything is committed or unstocked).
+  /** Stock total across every tracked variant. Currently unused on card — */
+  /** kept on the data shape so the page query can stay consistent. */
   total_stock?: number | null
+  /** Already deduped + ordered by catalogue sort_order → swatch position. */
+  swatches: ProductCardSwatch[]
 }
 
 interface ProductCardProps {
   product: ProductCardData
 }
 
+const MAX_VISIBLE_SWATCHES = 5
+
 export function ProductCard({ product }: ProductCardProps) {
-  const stock = product.total_stock
+  const visibleSwatches = product.swatches.slice(0, MAX_VISIBLE_SWATCHES)
+  const extraSwatches = Math.max(0, product.swatches.length - MAX_VISIBLE_SWATCHES)
+
   return (
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 ease-spring hover:-translate-y-0.5 hover:border-[rgb(var(--color-brand-blue))]/20 hover:shadow-md">
-      <div className="relative aspect-square w-full bg-gray-50">
+    <article className="group flex h-full flex-col overflow-hidden bg-white transition-shadow duration-300 ease-spring hover:shadow-md">
+      <div className="relative aspect-square w-full bg-white">
         {product.image_url ? (
           <Image
             src={product.image_url}
             alt={product.name}
             fill
-            sizes="(min-width:1024px) 25vw, (min-width:768px) 33vw, 50vw"
-            className="object-contain p-4 transition-transform duration-500 ease-spring group-hover:scale-105"
+            sizes="(min-width:1024px) 33vw, (min-width:768px) 50vw, 100vw"
+            className="object-contain transition-transform duration-500 ease-spring group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-300 text-sm">
+          <div className="flex h-full items-center justify-center text-sm text-gray-300">
             No image
           </div>
         )}
-        {stock != null && (
-          <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
-            {stock > 0 ? (
-              <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
-                {stock} in stock
-              </span>
+      </div>
+
+      <div className="flex items-end justify-between gap-3 px-5 pb-4 pt-3">
+        <dl className="grid min-w-0 grid-cols-[auto_auto_auto] items-baseline gap-x-5 gap-y-0.5 text-[10px] leading-tight">
+          <dt className="font-medium uppercase tracking-wider text-gray-400">Product</dt>
+          <dt className="font-medium uppercase tracking-wider text-gray-400">Type</dt>
+          <dt className="font-medium uppercase tracking-wider text-gray-400">Price</dt>
+          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
+            {product.name}
+          </dd>
+          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
+            {formatType(product.type)}
+          </dd>
+          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
+            {product.price_status === 'missing' ? (
+              'On request'
             ) : (
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                Made to order
+              <>
+                From <Money nzd={product.from_unit_price} />
+              </>
+            )}
+          </dd>
+        </dl>
+
+        {visibleSwatches.length > 0 && (
+          <div
+            className="flex shrink-0 items-center gap-1"
+            aria-label={`${product.swatches.length} colour${product.swatches.length === 1 ? '' : 's'} available`}
+          >
+            {visibleSwatches.map((s, i) => (
+              <span
+                key={`${s.hex ?? 'na'}-${i}`}
+                className="block h-2.5 w-2.5 rounded-full border border-black/10"
+                // eslint-disable-next-line react/forbid-dom-props -- dynamic hex from DB requires inline style
+                style={{ backgroundColor: s.hex ?? '#e5e7eb' }}
+                title={s.label ?? undefined}
+              />
+            ))}
+            {extraSwatches > 0 && (
+              <span className="ml-0.5 text-[9px] font-medium uppercase tracking-wider text-gray-400">
+                +{extraSwatches}
               </span>
             )}
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <p className="text-xs uppercase tracking-wide text-gray-400">{product.sku}</p>
-        <h3 className="text-sm font-medium text-gray-900 line-clamp-2">{product.name}</h3>
-        {product.price_status === 'missing' ? (
-          <p className="mt-auto pt-3 text-sm text-gray-500">Price on request</p>
-        ) : (
-          <p className="mt-auto pt-3 text-sm text-gray-600">
-            From <Money nzd={product.from_unit_price} />
-          </p>
-        )}
-      </div>
-    </div>
+    </article>
   )
+}
+
+function formatType(t: string | null): string {
+  if (!t) return '—'
+  return t.replace(/_/g, ' ').toUpperCase()
 }

@@ -145,6 +145,7 @@ export default async function CataloguePage({
     { data: tierMinRows },
     { data: decorationRows },
     { data: stockRows },
+    { data: swatchRows },
   ] = await Promise.all([
     effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
     scopedItemIds.length > 0
@@ -194,6 +195,26 @@ export default async function CataloguePage({
               | null
           }>,
         }),
+    // Card swatches: catalogue-scoped colours joined to product_color_swatches
+    // for hex + label. Ordered by catalogue sort_order ASC then swatch position.
+    scopedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_colors')
+          .select(
+            'catalogue_item_id, sort_order, product_color_swatches(hex, label, position)',
+          )
+          .in('catalogue_item_id', scopedItemIds)
+          .order('sort_order', { ascending: true, nullsFirst: false })
+      : Promise.resolve({
+          data: [] as Array<{
+            catalogue_item_id: string
+            sort_order: number | null
+            product_color_swatches:
+              | { hex: string | null; label: string | null; position: number | null }
+              | { hex: string | null; label: string | null; position: number | null }[]
+              | null
+          }>,
+        }),
   ])
 
   const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
@@ -233,6 +254,38 @@ export default async function CataloguePage({
     if (!pv?.product_id) continue
     const cur = stockByProduct.get(pv.product_id) ?? 0
     stockByProduct.set(pv.product_id, cur + (Number.isFinite(r.available_qty) ? r.available_qty : 0))
+  }
+
+  // Card swatches per product — deduped by hex, capped at 8 to keep the card
+  // tidy; ProductCard renders the first 5 + "+N" overflow indicator. Source
+  // ordering: catalogue sort_order (already applied in query) → swatch position.
+  const swatchesByProduct = new Map<
+    string,
+    Array<{ hex: string | null; label: string | null }>
+  >()
+  const seenHexByProduct = new Map<string, Set<string>>()
+  for (const r of (swatchRows ?? []) as Array<{
+    catalogue_item_id: string
+    sort_order: number | null
+    product_color_swatches:
+      | { hex: string | null; label: string | null; position: number | null }
+      | { hex: string | null; label: string | null; position: number | null }[]
+      | null
+  }>) {
+    const productId = productIdByItemId.get(r.catalogue_item_id)
+    if (!productId) continue
+    const swatch = Array.isArray(r.product_color_swatches)
+      ? r.product_color_swatches[0]
+      : r.product_color_swatches
+    if (!swatch) continue
+    const list = swatchesByProduct.get(productId) ?? []
+    const seen = seenHexByProduct.get(productId) ?? new Set<string>()
+    const key = (swatch.hex ?? '').toLowerCase()
+    if (key && seen.has(key)) continue
+    if (key) seen.add(key)
+    list.push({ hex: swatch.hex, label: swatch.label })
+    swatchesByProduct.set(productId, list)
+    seenHexByProduct.set(productId, seen)
   }
 
   // Sum of default decorations per catalogue item — what the PDP adds on top
@@ -276,17 +329,19 @@ export default async function CataloguePage({
       name: stripTrailingSku(p.name, p.sku),
       sku: p.sku,
       image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
+      type: p.garment_family,
       from_unit_price: fromAllIn,
       price_status: rpcPrice.status,
       has_stock: rpcPrice.hasStock,
       total_stock: stockTotal,
+      swatches: swatchesByProduct.get(p.id) ?? [],
     }
   })
 
   const activeCount = activeFilterCount(filters)
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
+    <div className="-mx-4 -my-4 min-h-full bg-gray-100 px-0 md:-mx-8 md:-my-8">
       <SetTopBarContext
         value={{
           kind: 'listing',
@@ -296,31 +351,35 @@ export default async function CataloguePage({
           pageCount,
         }}
       />
-      <CatalogueTopBar
-        crumbs={[
-          { label: 'Home', href: '/account' },
-          { label: 'Catalogue' },
-        ]}
-      />
+      <div className="space-y-4 px-4 pt-4 md:px-8 md:pt-8">
+        <CatalogueTopBar
+          crumbs={[
+            { label: 'Home', href: '/account' },
+            { label: 'Catalogue' },
+          ]}
+        />
 
-      <div className="md:hidden">
-        <FilterSheetTrigger activeCount={activeCount}>
-          <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
-        </FilterSheetTrigger>
-      </div>
-      <div className="hidden md:block">
-        <CatalogueFilterBar filters={filters} facets={facets} />
+        <div className="md:hidden">
+          <FilterSheetTrigger activeCount={activeCount}>
+            <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
+          </FilterSheetTrigger>
+        </div>
+        <div className="hidden md:block">
+          <CatalogueFilterBar filters={filters} facets={facets} />
+        </div>
       </div>
 
       {products.length === 0 ? (
-        <PortalEmptyState
-          title="No products match your filters"
-          body="Try clearing some filters."
-          actionHref="/catalogue"
-          actionLabel="Clear filters"
-        />
+        <div className="px-4 py-8 md:px-8">
+          <PortalEmptyState
+            title="No products match your filters"
+            body="Try clearing some filters."
+            actionHref="/catalogue"
+            actionLabel="Clear filters"
+          />
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:mt-6 md:grid-cols-3">
           {products.map((p) => (
             <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
               <ProductCard product={p} />
