@@ -4,7 +4,6 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
 import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
-import { CatalogueFilterBar } from '@/components/shop/CatalogueFilterBar'
 import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { FilterRail } from '@/components/shop/FilterRail'
@@ -349,6 +348,9 @@ export default async function CataloguePage({
           count: totalProducts,
           page: filters.page,
           pageCount,
+          filters,
+          facets,
+          filterAction: '/catalogue',
         }}
       />
       <div className="space-y-4 px-4 pt-4 md:px-8 md:pt-8">
@@ -359,13 +361,12 @@ export default async function CataloguePage({
           ]}
         />
 
+        {/* Mobile keeps the bottom-sheet trigger. Desktop filters live in the
+            global PortalTopBar's second row (populated via SetTopBarContext). */}
         <div className="md:hidden">
           <FilterSheetTrigger activeCount={activeCount}>
             <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
           </FilterSheetTrigger>
-        </div>
-        <div className="hidden md:block">
-          <CatalogueFilterBar filters={filters} facets={facets} />
         </div>
       </div>
 

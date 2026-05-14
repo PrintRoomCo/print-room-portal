@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { B2BCustomerAccess } from '@/types/company'
+import { usePortalDrawer } from './PortalTopBarContext'
 
 interface SidebarProps {
   children: React.ReactNode
@@ -44,39 +45,26 @@ export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { signOut } = useAuth()
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-
-  // Hydrate sidebar collapsed state from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('sidebar-collapsed')
-    if (stored === 'true') setSidebarCollapsed(true)
-  }, [])
-
-  // Persist sidebar collapsed state
-  useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed))
-  }, [sidebarCollapsed])
+  const { open, setOpen, toggle } = usePortalDrawer()
 
   // Close drawer on route change
   useEffect(() => {
-    setDrawerOpen(false)
+    setOpen(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
-  // Close drawer on Escape key
+  // Close drawer on Escape
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false)
+      if (e.key === 'Escape') setOpen(false)
     }
-    if (drawerOpen) {
-      document.addEventListener('keydown', handleEscape)
-    }
+    if (open) document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [drawerOpen])
+  }, [open, setOpen])
 
   // Lock body scroll when drawer is open
   useEffect(() => {
-    if (drawerOpen) {
+    if (open) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
@@ -84,13 +72,14 @@ export function Sidebar({ children, customer }: SidebarProps) {
     return () => {
       document.body.style.overflow = ''
     }
-  }, [drawerOpen])
+  }, [open])
 
   const navigation = getNavigationItems(customer)
 
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* Mobile Floating Header */}
+    <div className="min-h-screen bg-white">
+      {/* Mobile-only floating header — provides the menu button on small screens
+          where the desktop PortalTopBar is hidden. */}
       <nav aria-label="Mobile header" className="md:hidden">
         <div className="header-floating-wrapper">
           <div className="header-floating-inner">
@@ -108,7 +97,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
             </Link>
             <button
               type="button"
-              onClick={() => setDrawerOpen(true)}
+              onClick={toggle}
               aria-label="Open navigation menu"
               className="p-2 rounded-full hover:bg-white/50 transition-colors duration-300 ease-spring"
             >
@@ -119,50 +108,35 @@ export function Sidebar({ children, customer }: SidebarProps) {
       </nav>
 
       {/* Drawer Backdrop */}
-      {drawerOpen && (
+      {open && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 md:hidden"
-          onClick={() => setDrawerOpen(false)}
+          className="fixed inset-0 bg-black/30 z-40"
+          onClick={() => setOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      {/* Sidebar / Drawer */}
+      {/* Drawer — slides in from the left on every viewport */}
       <aside
-        className={`fixed left-0 top-0 bottom-0 md:top-14 ${sidebarCollapsed ? 'w-[80px]' : 'w-64'} glass-sidebar flex flex-col z-50 transition-all duration-300 ease-spring ${drawerOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 overflow-hidden`}
+        className={`fixed left-0 top-0 bottom-0 w-64 glass-sidebar flex flex-col z-50 transition-transform duration-300 ease-spring ${
+          open ? 'translate-x-0' : '-translate-x-full'
+        } overflow-hidden`}
       >
-        {/* Top bar: mobile close + desktop collapse toggle */}
+        {/* Close button */}
         <div className="flex items-center justify-end p-2">
           <button
             type="button"
-            onClick={() => setDrawerOpen(false)}
+            onClick={() => setOpen(false)}
             aria-label="Close navigation menu"
-            className="p-2 rounded-full hover:bg-white/60 transition-colors duration-300 ease-spring md:hidden"
+            className="p-2 rounded-full hover:bg-white/60 transition-colors duration-300 ease-spring"
           >
             <CloseIcon className="w-5 h-5 text-muted-foreground" />
           </button>
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="p-2 rounded-full hover:bg-white/60 transition-colors duration-300 ease-spring hidden md:block"
-          >
-            {sidebarCollapsed ? (
-              <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
-            ) : (
-              <ChevronLeftIcon className="w-5 h-5 text-muted-foreground" />
-            )}
-          </button>
         </div>
 
-        {/* Logo - hidden on mobile (shown in top bar instead) */}
-        <div
-          className={`${sidebarCollapsed ? 'px-2 py-4 flex justify-center' : 'p-6'} border-b border-lime-200/60 hidden md:block transition-all duration-300`}
-        >
-          <Link
-            href="/account"
-            className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} group`}
-          >
+        {/* Logo */}
+        <div className="p-6 border-b border-lime-200/60">
+          <Link href="/account" className="flex items-center gap-3 group">
             <div className="w-16 h-16 rounded-2xl bg-white border border-gray-100 shadow-sm flex items-center justify-center overflow-hidden transition-all duration-300 ease-spring group-hover:shadow-md flex-shrink-0">
               <Image
                 src="/print-room-logo.png"
@@ -174,60 +148,50 @@ export function Sidebar({ children, customer }: SidebarProps) {
                 className="object-contain"
               />
             </div>
-            {!sidebarCollapsed && (
-              <>
-                <div className="h-10 w-px bg-pr-blue/30" />
-                <span className="text-pr-blue text-xl font-normal lowercase whitespace-nowrap">
-                  portal
-                </span>
-              </>
-            )}
+            <div className="h-10 w-px bg-pr-blue/30" />
+            <span className="text-pr-blue text-xl font-normal lowercase whitespace-nowrap">
+              portal
+            </span>
           </Link>
         </div>
 
         {/* Navigation */}
-        <nav
-          className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-3'} py-4 space-y-1 overflow-y-auto transition-all duration-300`}
-        >
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''} ${sidebarCollapsed ? 'justify-center !px-2' : ''}`}
-                title={sidebarCollapsed ? item.name : undefined}
+                className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''}`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!sidebarCollapsed && (
-                  <span className="whitespace-nowrap">{item.name}</span>
-                )}
+                <span className="whitespace-nowrap">{item.name}</span>
               </Link>
             )
           })}
         </nav>
 
         {/* Logout */}
-        <div
-          className={`${sidebarCollapsed ? 'p-2' : 'p-4'} border-t border-lime-200/60 transition-all duration-300`}
-        >
+        <div className="p-4 border-t border-lime-200/60">
           <button
             type="button"
             onClick={async () => { await signOut(); router.push('/sign-in') }}
-            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-4'} py-3 text-sm font-medium text-muted-foreground rounded-full hover:bg-white/50 transition-all duration-300 ease-spring font-dm-sans`}
-            title={sidebarCollapsed ? 'Sign Out' : undefined}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground rounded-full hover:bg-white/50 transition-all duration-300 ease-spring font-dm-sans"
           >
             <LogoutIcon className="w-5 h-5 flex-shrink-0" />
-            {!sidebarCollapsed && 'Sign Out'}
+            Sign Out
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main
-        className={`flex-1 ml-0 ${sidebarCollapsed ? 'md:ml-[80px]' : 'md:ml-64'} md:pt-14 transition-[margin] duration-300 ease-spring`}
-      >
-        <div className="p-4 pt-20 md:p-8 md:pt-8">{children}</div>
+      {/* Main Content — full-width on desktop now that sidebar is drawer-only.
+          Top padding clears the floating top bar (mobile) or the desktop
+          floating bar (CSS var --portal-topbar-h, set by PortalTopBar). */}
+      <main className="w-full">
+        <div className="p-4 pt-20 md:p-8 md:pt-[var(--portal-topbar-h,76px)]">
+          {children}
+        </div>
       </main>
     </div>
   )
@@ -280,22 +244,6 @@ function TrackerIcon({ className }: { className?: string }) {
   )
 }
 
-function ChevronLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  )
-}
-
-function ChevronRightIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-
 function CloseIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -308,32 +256,6 @@ function LeaversIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.26 10.147a60.438 60.438 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342" />
-    </svg>
-  )
-}
-
-function InventoryIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m-8-14l8 4m-8-4v10l8 4m0-10v10"
-      />
-    </svg>
-  )
-}
-
-function ShopIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.1 5.5a1 1 0 001 1.5H19M9 21a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"
-      />
     </svg>
   )
 }
