@@ -8,6 +8,7 @@ import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
+import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
 import { useSetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -483,19 +484,14 @@ export function ProductDetailClient({
 
   const priceMissing = pricing != null && pricing.status === 'missing'
   const meetsMoq = qty >= effectiveMoq
-  const multiSizeOk = multiSize && multiSizeTotalQty > 0
-  const canAddToCart = multiSize
-    ? multiSizeOk &&
-      meetsMoq &&
-      !priceMissing &&
-      pricing != null &&
-      pricing.status === 'ok'
-    : selectedVariant != null &&
-      !priceMissing &&
-      Number.isInteger(qty) &&
-      meetsMoq &&
-      pricing != null &&
-      pricing.status === 'ok'
+  const pricingOk = pricing != null && pricing.status === 'ok' && !priceMissing
+  const canAddToCart =
+    sizingMode === 'multi_size_with_variants'
+      ? multiSizeTotalQty > 0 && meetsMoq && pricingOk
+      : sizingMode === 'multi_size_variantless'
+        ? variantlessTotalQty > 0 && meetsMoq && pricingOk
+        : // one_size: no variant selection required
+          Number.isInteger(qty) && meetsMoq && pricingOk
 
   return (
     <div className="p-4 md:p-8">
@@ -538,17 +534,19 @@ export function ProductDetailClient({
             <ProductDetailsCondensed product={product} />
           </div>
 
-          <VariantPicker
-            variants={variants}
-            selectedColorSwatchId={colorSwatchId}
-            selectedSizeId={sizeId}
-            availability={availability}
-            showSizePicker={!multiSize}
-            onChange={({ colorSwatchId: c, sizeId: s }) => {
-              setColorSwatchId(c)
-              setSizeId(s)
-            }}
-          />
+          {sizingMode === 'multi_size_with_variants' && (
+            <VariantPicker
+              variants={variants}
+              selectedColorSwatchId={colorSwatchId}
+              selectedSizeId={sizeId}
+              availability={availability}
+              showSizePicker={false}
+              onChange={({ colorSwatchId: c, sizeId: s }) => {
+                setColorSwatchId(c)
+                setSizeId(s)
+              }}
+            />
+          )}
 
           <div className="flex items-center gap-3 flex-wrap">
             <AvailabilityBadge
@@ -673,13 +671,21 @@ export function ProductDetailClient({
             </div>
           )}
 
+          {sizingMode === 'multi_size_variantless' && variantlessSizes.length > 0 && (
+            <VariantlessSizeGrid
+              sizes={variantlessSizes}
+              quantities={variantlessQtyBySize}
+              onChange={setVariantlessQtyBySize}
+            />
+          )}
+
           {effectiveMoq > 1 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               Minimum order: <span className="font-semibold">{effectiveMoq} units</span>
-              {multiSize ? ' across all sizes' : ''}.
-              {multiSize && multiSizeTotalQty > 0 && multiSizeTotalQty < effectiveMoq ? (
+              {sizingMode !== 'one_size' ? ' across all sizes' : ''}.
+              {sizingMode !== 'one_size' && qty > 0 && qty < effectiveMoq ? (
                 <span className="ml-2 font-medium">
-                  Currently {multiSizeTotalQty} — add {effectiveMoq - multiSizeTotalQty} more.
+                  Currently {qty} — add {effectiveMoq - qty} more.
                 </span>
               ) : null}
             </div>
@@ -726,7 +732,7 @@ export function ProductDetailClient({
             </div>
           )}
           <div className="flex items-end gap-3">
-            {!multiSize && (
+            {sizingMode === 'one_size' && (
               <div>
                 <label htmlFor="qty" className="block text-sm font-medium text-gray-700">
                   Quantity
