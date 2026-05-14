@@ -61,6 +61,7 @@ export default async function WelcomePage() {
         .from('organizations')
         .select('settings')
         .eq('id', access.companyId)
+        .is('deleted_at', null)
         .maybeSingle(),
     ])
     // Phone is not on staff_users; pull it from the legacy jsonb settings as a

@@ -69,6 +69,7 @@ export async function autofillProofForOrder(
       .from('organizations')
       .select('id, name')
       .eq('id', orderRow.organizationId)
+      .is('deleted_at', null)
       .maybeSingle()
     if (orgError) throw new Error(`Organization lookup failed: ${orgError.message}`)
 

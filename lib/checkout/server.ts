@@ -68,7 +68,9 @@ export async function requireB2BCustomer(
   const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
     admin.from('organizations')
       .select('id, name, customer_code')
-      .eq('id', membership.organization_id).single(),
+      .eq('id', membership.organization_id)
+      .is('deleted_at', null)
+      .maybeSingle(),
     admin.from('b2b_accounts')
       .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type')
       .eq('organization_id', membership.organization_id).maybeSingle(),

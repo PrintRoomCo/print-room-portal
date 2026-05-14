@@ -72,12 +72,37 @@ export async function getCompanyAccess(
     })
   }
 
-  // 3. Get organization details
+  // 3. Get organization details (soft-deleted orgs return null → no_org gate)
   const { data: org } = await supabase
     .from('organizations')
     .select('*')
     .eq('id', orgMembership.organization_id)
-    .single()
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  // Org was soft-deleted (or never existed) — treat as individual user, not a
+  // phantom B2B session against a deleted company.
+  if (!org) {
+    return buildAccess({
+      userId,
+      email: userEmail,
+      firstName,
+      lastName,
+      companyId: null,
+      companyName: profile.company_name || null,
+      locationIds: [],
+      role: 'org_admin',
+      tier: 'bronze',
+      tierLabel: null,
+      tierDiscount: 0,
+      pricingMode: 'catalogue',
+      isCompanyUser: false,
+      leaversEnabled,
+      hasTrackedInventory: false,
+      defaultStoreId: null,
+      tenantType: null,
+    })
+  }
 
   // 4. Get B2B account details (tier, credit limit, etc.)
   const { data: b2bAccount } = await supabase
