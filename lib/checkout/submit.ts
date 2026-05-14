@@ -271,6 +271,18 @@ export async function submitCustomerOrder(
   //     here either. MOQ is per-product, summed across every line that
   //     shares productId (mirrors the PDP multi-size rule).
   const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
+
+  // Total qty per product across all lines — shared by MOQ enforcement (below)
+  // and per-product re-pricing (further down). Multi-size orders are one print
+  // run; pricing tier sums across sizes.
+  const totalQtyByProductId = new Map<string, number>()
+  for (const line of input.lines) {
+    totalQtyByProductId.set(
+      line.product_id,
+      (totalQtyByProductId.get(line.product_id) ?? 0) + line.qty,
+    )
+  }
+
   const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
     admin
       .from('products')
@@ -293,13 +305,6 @@ export async function submitCustomerOrder(
       moq_override: number | null
     }>).map((r) => [r.source_product_id, r.moq_override]),
   )
-  const totalQtyByProductId = new Map<string, number>()
-  for (const line of input.lines) {
-    totalQtyByProductId.set(
-      line.product_id,
-      (totalQtyByProductId.get(line.product_id) ?? 0) + line.qty,
-    )
-  }
   const moqViolations: MoqViolation[] = []
   // Report a violation per offending line (not per product) so the cart UI
   // can highlight every row affected, consistent with DecorationDriftError.
@@ -327,16 +332,28 @@ export async function submitCustomerOrder(
   // 2. Re-price every line on the server — ignore any client-sent prices.
   // Uses effective_unit_price so catalogue-scoped orgs get catalogue prices
   // (consistent with /shop), falling back to get_unit_price for global B2B.
-  const repriced = await Promise.all(
-    input.lines.map(async (l) => {
+  //
+  // Pricing tier is summed by product_id so multi-size orders price at the
+  // total run (mirrors the PDP: qty = multiSizeTotalQty | variantlessTotalQty).
+  // Without this, 6S + 6M + 6L + 6XL = 24 each line would price at the 6-tier
+  // instead of the 24-tier. Same fix path as the decoration totalQtyByLinkId
+  // pattern below.
+  const priceByProductId = new Map<string, number>()
+  await Promise.all(
+    Array.from(totalQtyByProductId.entries()).map(async ([productId, totalQty]) => {
       const { data: unit } = await admin.rpc('effective_unit_price', {
-        p_product_id: l.product_id,
+        p_product_id: productId,
         p_org_id: input.context.organizationId,
-        p_qty: l.qty,
+        p_qty: totalQty,
       })
-      return { ...l, unit_price: Number(unit ?? 0) }
-    })
+      priceByProductId.set(productId, Number(unit ?? 0))
+    }),
   )
+
+  const repriced = input.lines.map(l => ({
+    ...l,
+    unit_price: priceByProductId.get(l.product_id) ?? 0,
+  }))
 
   // 2b. Re-validate every selected decoration on every line. Server-side
   //     read of the link table + org_decoration; reject on cross-org reuse,
