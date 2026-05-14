@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
@@ -28,6 +29,16 @@ const NZ_REGIONS = [
   { code: 'WTC', name: 'West Coast' },
 ]
 
+const CURRENCY_OPTIONS: SupportedCurrency[] = ['NZD', 'AUD', 'USD', 'GBP', 'EUR']
+
+const CURRENCY_LABEL: Record<SupportedCurrency, string> = {
+  NZD: 'NZ$',
+  AUD: 'A$',
+  USD: 'US$',
+  GBP: '£',
+  EUR: '€',
+}
+
 interface Store {
   id: string
   name: string
@@ -50,7 +61,11 @@ interface Quote {
   created_at: string
 }
 
-export function AccountClient() {
+interface Props {
+  ratesFetchedAt: string | null
+}
+
+export function AccountClient({ ratesFetchedAt }: Props) {
   const { access, loading: companyLoading } = useCompany()
 
   const [stores, setStores] = useState<Store[]>([])
@@ -89,7 +104,6 @@ export function AccountClient() {
     }
   }, [companyLoading, access, fetchAccountData])
 
-  // Close profile edit on success
   useEffect(() => {
     if (profileResult?.success && editingProfile) {
       const timer = setTimeout(() => {
@@ -100,7 +114,6 @@ export function AccountClient() {
     }
   }, [profileResult, editingProfile])
 
-  // Close password change on success
   useEffect(() => {
     if (passwordResult?.success && showPasswordChange) {
       const timer = setTimeout(() => {
@@ -111,7 +124,6 @@ export function AccountClient() {
     }
   }, [passwordResult, showPasswordChange])
 
-  // Close location modal on success
   useEffect(() => {
     if (locationResult?.success && showAddStore) {
       const timer = setTimeout(() => {
@@ -155,13 +167,12 @@ export function AccountClient() {
 
   if (companyLoading || dataLoading) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-64 bg-gray-200 rounded-2xl" />
-            <div className="h-64 bg-gray-200 rounded-2xl" />
-          </div>
+      <div className="animate-pulse space-y-16">
+        <div className="h-[420px] rounded-[32px] bg-white" />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="h-56 rounded-[24px] bg-white" />
+          <div className="h-56 rounded-[24px] bg-white" />
+          <div className="h-56 rounded-[24px] bg-white" />
         </div>
       </div>
     )
@@ -170,599 +181,546 @@ export function AccountClient() {
   if (!access) return null
 
   const primaryStore = stores[0] || null
+  const roleLabel = capitalizeRole(access.role)
+  const chipLabel = access.companyName
+    ? `${roleLabel} · ${access.companyName}`
+    : roleLabel
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-gray-600">
-          Manage your account settings and view your order history
-        </p>
-      </div>
+    <div className="space-y-16">
+      {/* ── Hero card: H1 + role chip + Profile/Address ─────────────── */}
+      <section className="relative rounded-[32px] bg-white p-8 md:p-12">
+        {!editingProfile && (
+          <button
+            type="button"
+            onClick={() => setEditingProfile(true)}
+            className="absolute right-8 top-8 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-600 transition-colors hover:text-gray-900 md:right-12 md:top-12"
+          >
+            Edit
+          </button>
+        )}
 
-      {/* Account Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Profile Information */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Profile Information
-            </h2>
-            {!editingProfile ? (
-              <button
-                type="button"
-                onClick={() => setEditingProfile(true)}
-                className="text-sm text-[rgb(var(--color-primary))] hover:underline"
-              >
-                Edit
-              </button>
-            ) : (
-              <UserIcon />
-            )}
+        <h1 className="font-dm-sans font-medium text-gray-900 text-[clamp(40px,5vw,72px)] leading-[1.05] tracking-[-0.02em]">
+          My Account
+        </h1>
+        <div className="mt-4">
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+            {chipLabel}
+          </span>
+        </div>
+
+        {profileResult?.success && (
+          <div className="mt-6 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            {profileResult.message}
+          </div>
+        )}
+        {profileResult?.errors && (
+          <div className="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            {profileResult.errors.map((error, i) => (
+              <p key={i}>{error}</p>
+            ))}
+          </div>
+        )}
+
+        {/* Two-column profile + default address inside the hero */}
+        <div className="mt-10 grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
+          <div>
+            <SmallCapLabel>Profile</SmallCapLabel>
+            <div className="mt-4">
+              {editingProfile ? (
+                <form onSubmit={handleProfileSubmit} className="space-y-4">
+                  <div>
+                    <SmallCapLabel as="label" htmlFor="firstName">First name</SmallCapLabel>
+                    <input
+                      type="text"
+                      id="firstName"
+                      name="firstName"
+                      defaultValue={access.firstName}
+                      required
+                      aria-label="First name"
+                      className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <SmallCapLabel as="label" htmlFor="lastName">Last name</SmallCapLabel>
+                    <input
+                      type="text"
+                      id="lastName"
+                      name="lastName"
+                      defaultValue={access.lastName}
+                      required
+                      aria-label="Last name"
+                      className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <SmallCapLabel>Email</SmallCapLabel>
+                    <p className="mt-2 text-base text-gray-900">{access.email}</p>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => { setEditingProfile(false); setProfileResult(null) }}
+                      className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={profileSubmitting}
+                      className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      {profileSubmitting ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <dl className="space-y-4">
+                  <Field label="Name" value={`${access.firstName} ${access.lastName}`} />
+                  <Field label="Email" value={access.email} />
+                  {access.companyName && <Field label="Company" value={access.companyName} />}
+                  <Field label="Account type" value={roleLabel} />
+                </dl>
+              )}
+            </div>
           </div>
 
-          {profileResult?.success && (
-            <div className="glass-success-box p-3 mb-4">
-              <p className="text-sm">{profileResult.message}</p>
+          <div>
+            <SmallCapLabel>Default address</SmallCapLabel>
+            <div className="mt-4">
+              {primaryStore && (primaryStore.address || primaryStore.city) ? (
+                <div className="space-y-1 text-base text-gray-900">
+                  <p className="font-medium">{primaryStore.name}</p>
+                  {primaryStore.address && <p className="text-gray-700">{primaryStore.address}</p>}
+                  {primaryStore.location && <p className="text-gray-700">{primaryStore.location}</p>}
+                  <p className="text-gray-700">
+                    {[primaryStore.city, primaryStore.state, primaryStore.country].filter(Boolean).join(', ')}
+                  </p>
+                  {primaryStore.postal_code && <p className="text-gray-700">{primaryStore.postal_code}</p>}
+                  {primaryStore.phone && (
+                    <p className="pt-2 text-sm text-gray-500">Tel: {primaryStore.phone}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No default address set</p>
+              )}
             </div>
-          )}
-          {profileResult?.errors && (
-            <div className="glass-error-box p-3 mb-4">
-              {profileResult.errors.map((error, i) => (
-                <p key={i} className="text-sm">{error}</p>
-              ))}
-            </div>
-          )}
+          </div>
+        </div>
+      </section>
 
-          {editingProfile ? (
-            <form onSubmit={handleProfileSubmit} className="space-y-3">
-              <div>
-                <label htmlFor="firstName" className="text-sm text-gray-500">First Name</label>
-                <input
-                  type="text"
-                  id="firstName"
-                  name="firstName"
-                  defaultValue={access.firstName}
-                  required
-                  className="input-glass mt-1"
-                />
-              </div>
-              <div>
-                <label htmlFor="lastName" className="text-sm text-gray-500">Last Name</label>
-                <input
-                  type="text"
-                  id="lastName"
-                  name="lastName"
-                  defaultValue={access.lastName}
-                  required
-                  className="input-glass mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Email</label>
-                <p className="text-gray-900 font-medium">{access.email}</p>
-              </div>
-              <div className="flex gap-3 pt-2">
+      {/* ── 3-up smaller cards ──────────────────────────────────────── */}
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <DisplayPreferencesCard ratesFetchedAt={ratesFetchedAt} />
+        <SecurityCard
+          open={showPasswordChange}
+          submitting={passwordSubmitting}
+          result={passwordResult}
+          onOpen={() => setShowPasswordChange(true)}
+          onCancel={() => { setShowPasswordChange(false); setPasswordResult(null) }}
+          onSubmit={handlePasswordSubmit}
+        />
+        <RecentQuotesCard quotes={recentQuotes} />
+      </section>
+
+      {/* ── Locations horizontal scroll strip ───────────────────────── */}
+      {access.isCompanyUser && (
+        <section>
+          <div className="flex items-end justify-between px-2">
+            <SmallCapLabel>Locations</SmallCapLabel>
+          </div>
+          <div className="mt-4 -mx-6 overflow-x-auto px-6 pb-2">
+            <div className="flex gap-4 min-w-min">
+              {stores.map((store) => (
+                <LocationCard key={store.id} store={store} />
+              ))}
+              {access.isOrgAdmin && (
                 <button
                   type="button"
-                  onClick={() => { setEditingProfile(false); setProfileResult(null) }}
-                  className="flex-1 btn-secondary"
+                  onClick={() => setShowAddStore(true)}
+                  className="flex h-full min-h-[220px] w-72 shrink-0 flex-col items-center justify-center rounded-[24px] border-2 border-dashed border-gray-300 bg-transparent text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700"
+                >
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                    <PlusIcon />
+                  </div>
+                  <span className="text-sm font-medium">Add location</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Add Location modal (unchanged behaviour) ────────────────── */}
+      {showAddStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-[24px] bg-white p-8 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Add location</h2>
+              <button
+                type="button"
+                onClick={() => { setShowAddStore(false); setLocationResult(null) }}
+                aria-label="Close"
+                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            {locationResult?.success && (
+              <div className="mb-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {locationResult.message}
+              </div>
+            )}
+            {locationResult?.errors && (
+              <div className="mb-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {locationResult.errors.map((error, i) => (
+                  <p key={i}>{error}</p>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleLocationSubmit} className="space-y-4">
+              <Input id="storeName" name="storeName" label="Location name" required placeholder="e.g., Auckland Downtown" />
+              <Input id="phone" name="phone" type="tel" label="Phone" placeholder="e.g., 09 123 4567 or 021 123 4567" hint="NZ numbers will be formatted automatically" />
+
+              <div className="pt-2">
+                <SmallCapLabel>Shipping address</SmallCapLabel>
+                <div className="mt-3 space-y-3">
+                  <Input id="address1" name="address1" label="Street" placeholder="123 Main Street" />
+                  <Input id="address2" name="address2" label="Unit / suite (optional)" placeholder="Suite 100" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input id="city" name="city" label="City" placeholder="Auckland" />
+                    <div>
+                      <SmallCapLabel as="label" htmlFor="regionCode">Region</SmallCapLabel>
+                      <select
+                        id="regionCode"
+                        name="regionCode"
+                        aria-label="Region"
+                        className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900"
+                      >
+                        <option value="">Select region…</option>
+                        {NZ_REGIONS.map((region) => (
+                          <option key={region.code} value={region.code}>
+                            {region.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <Input id="zip" name="zip" label="Postal code" placeholder="1010" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddStore(false); setLocationResult(null) }}
+                  className="flex-1 rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
-                <button type="submit" disabled={profileSubmitting} className="flex-1 btn-primary">
-                  {profileSubmitting ? 'Saving...' : 'Save'}
+                <button
+                  type="submit"
+                  disabled={locationSubmitting}
+                  className="flex-1 rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {locationSubmitting ? 'Creating…' : 'Create location'}
                 </button>
               </div>
             </form>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm text-gray-500">Name</label>
-                <p className="text-gray-900 font-medium">
-                  {access.firstName} {access.lastName}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Email</label>
-                <p className="text-gray-900 font-medium">{access.email}</p>
-              </div>
-              {access.companyName && (
-                <div>
-                  <label className="text-sm text-gray-500">Company</label>
-                  <p className="text-gray-900 font-medium">
-                    {access.companyName}
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="text-sm text-gray-500">Account Type</label>
-                <p className="text-gray-900 font-medium capitalize">
-                  {access.role}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Default Address */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Default Address
-            </h2>
-            <AddressIcon />
           </div>
-          {primaryStore && (primaryStore.address || primaryStore.city) ? (
-            <div className="text-gray-900">
-              <p className="font-medium">{primaryStore.name}</p>
-              {primaryStore.address && (
-                <p className="mt-2 text-gray-600">{primaryStore.address}</p>
-              )}
-              {primaryStore.location && (
-                <p className="text-gray-600">{primaryStore.location}</p>
-              )}
-              <p className="text-gray-600">
-                {[primaryStore.city, primaryStore.state, primaryStore.country]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
-              {primaryStore.postal_code && (
-                <p className="text-gray-600">{primaryStore.postal_code}</p>
-              )}
-              {primaryStore.phone && (
-                <p className="text-gray-500 mt-2 text-sm">Tel: {primaryStore.phone}</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-gray-500">No default address set</p>
-          )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Card sub-components ─────────────────────────────────────────────
+
+function DisplayPreferencesCard({ ratesFetchedAt }: { ratesFetchedAt: string | null }) {
+  const { currency, setCurrency, loading } = useCurrency()
+  const fetchedLabel = ratesFetchedAt
+    ? new Date(ratesFetchedAt).toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'unknown'
+
+  return (
+    <article className="rounded-[24px] bg-white p-8">
+      <SmallCapLabel>Display preferences</SmallCapLabel>
+      <h3 className="mt-3 text-lg font-medium text-gray-900">Currency</h3>
+      <div
+        role="radiogroup"
+        aria-label="Display currency"
+        className="mt-4 inline-flex rounded-full bg-gray-100 p-1"
+      >
+        {CURRENCY_OPTIONS.map((code) => {
+          const active = code === currency
+          return (
+            <button
+              key={code}
+              type="button"
+              role="radio"
+              aria-checked={active ? 'true' : 'false'}
+              disabled={loading}
+              onClick={() => setCurrency(code)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {CURRENCY_LABEL[code]}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-4 text-xs text-gray-500">
+        Stored in NZD, converted for display. Rates updated {fetchedLabel}.
+      </p>
+    </article>
+  )
+}
+
+function SecurityCard({
+  open,
+  submitting,
+  result,
+  onOpen,
+  onCancel,
+  onSubmit,
+}: {
+  open: boolean
+  submitting: boolean
+  result: ActionResult | null
+  onOpen: () => void
+  onCancel: () => void
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <article className="rounded-[24px] bg-white p-8">
+      <div className="flex items-start justify-between">
+        <SmallCapLabel>Security</SmallCapLabel>
+        {!open && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-600 transition-colors hover:text-gray-900"
+          >
+            Change password
+          </button>
+        )}
       </div>
 
-      {/* Password Change */}
-      <div className="card-elevated p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Security</h2>
-          {!showPasswordChange && (
+      {result?.success && (
+        <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {result.message}
+        </div>
+      )}
+      {result?.errors && (
+        <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          {result.errors.map((error, i) => (
+            <p key={i}>{error}</p>
+          ))}
+        </div>
+      )}
+
+      {open ? (
+        <form onSubmit={onSubmit} className="mt-4 space-y-3">
+          <Input id="currentPassword" name="currentPassword" type="password" label="Current password" required />
+          <Input id="newPassword" name="newPassword" type="password" label="New password" required hint="Min 8 chars, with uppercase, lowercase, and a number" />
+          <Input id="confirmPassword" name="confirmPassword" type="password" label="Confirm new password" required />
+          <div className="flex gap-3 pt-1">
             <button
               type="button"
-              onClick={() => setShowPasswordChange(true)}
-              className="text-sm text-[rgb(var(--color-primary))] hover:underline"
+              onClick={onCancel}
+              className="flex-1 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Change Password
+              Cancel
             </button>
-          )}
-        </div>
-
-        {passwordResult?.success && (
-          <div className="glass-success-box p-3 mb-4">
-            <p className="text-sm">{passwordResult.message}</p>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {submitting ? 'Saving…' : 'Save'}
+            </button>
           </div>
-        )}
-        {passwordResult?.errors && (
-          <div className="glass-error-box p-3 mb-4">
-            {passwordResult.errors.map((error, i) => (
-              <p key={i} className="text-sm">{error}</p>
-            ))}
-          </div>
-        )}
+        </form>
+      ) : (
+        <p className="mt-4 text-sm text-gray-500">
+          Use a strong, unique password to protect your account.
+        </p>
+      )}
+    </article>
+  )
+}
 
-        {showPasswordChange ? (
-          <form onSubmit={handlePasswordSubmit} className="space-y-3">
-            <div>
-              <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                Current Password
-              </label>
-              <input type="password" id="currentPassword" name="currentPassword" required className="input-glass" />
-            </div>
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                New Password
-              </label>
-              <input type="password" id="newPassword" name="newPassword" required minLength={8} className="input-glass" />
-              <p className="text-xs text-gray-500 mt-1">Min 8 chars, with uppercase, lowercase, and a number</p>
-            </div>
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm New Password
-              </label>
-              <input type="password" id="confirmPassword" name="confirmPassword" required minLength={8} className="input-glass" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => { setShowPasswordChange(false); setPasswordResult(null) }}
-                className="flex-1 btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" disabled={passwordSubmitting} className="flex-1 btn-primary">
-                {passwordSubmitting ? 'Changing...' : 'Change Password'}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <p className="text-sm text-gray-500">
-            Use a strong, unique password to protect your account.
-          </p>
-        )}
+function RecentQuotesCard({ quotes }: { quotes: Quote[] }) {
+  return (
+    <article className="rounded-[24px] bg-white p-8">
+      <div className="flex items-start justify-between">
+        <SmallCapLabel>Recent quotes</SmallCapLabel>
+        <Link
+          href="/my-collections"
+          className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-600 transition-colors hover:text-gray-900"
+        >
+          View all
+        </Link>
       </div>
 
-      {/* Recent Quotes */}
-      <div className="card-elevated">
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Recent Quotes
-            </h2>
-            <Link href="/my-collections" className="text-sm text-[rgb(var(--color-primary))] hover:underline">
-              View all quotes
-            </Link>
-          </div>
+      {quotes.length === 0 ? (
+        <div className="mt-6 flex flex-col items-center py-6 text-center">
+          <BagIcon />
+          <p className="mt-3 text-sm font-medium text-gray-900">No quotes yet</p>
+          <p className="mt-1 text-xs text-gray-500">Your quote history will appear here.</p>
         </div>
-
-        {recentQuotes.length ? (
-          <div className="divide-y divide-gray-100">
-            {recentQuotes.map((quote) => {
-              const lineItems = Array.isArray(quote.line_items) ? quote.line_items : []
-              const totalAmount = Number(quote.total_amount)
-              const totalLabel =
-                Number.isFinite(totalAmount) && totalAmount > 0
-                  ? formatCurrency(totalAmount, (quote.currency || 'NZD') as SupportedCurrency)
-                  : formatPrice(quote.total_amount)
-              return (
-                <div
-                  key={quote.id}
-                  className="p-6 hover:bg-gray-50 transition-colors duration-300 block"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <h3 className="font-semibold text-gray-900">
-                          Quote {quote.quote_number || '—'}
-                        </h3>
-                        <QuoteStatusBadge status={quote.status} />
-                      </div>
-                      <p className="mt-1 text-sm text-gray-600">
-                        {new Date(quote.created_at).toLocaleDateString()}
-                      </p>
-                      <p className="mt-2 text-sm text-gray-500">
-                        {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">
-                        {totalLabel}
-                      </p>
-                    </div>
-                  </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {quotes.slice(0, 3).map((quote) => {
+            const lineItems = Array.isArray(quote.line_items) ? quote.line_items : []
+            const totalAmount = Number(quote.total_amount)
+            const totalLabel =
+              Number.isFinite(totalAmount) && totalAmount > 0
+                ? formatCurrency(totalAmount, (quote.currency || 'NZD') as SupportedCurrency)
+                : formatPrice(quote.total_amount)
+            return (
+              <li key={quote.id} className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900">
+                    Quote {quote.quote_number || '—'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(quote.created_at).toLocaleDateString()} · {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
-              )
-            })}
-          </div>
+                <p className="shrink-0 text-sm font-medium text-gray-900">{totalLabel}</p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </article>
+  )
+}
+
+function LocationCard({ store }: { store: Store }) {
+  return (
+    <div className="flex w-72 shrink-0 flex-col rounded-[24px] bg-white p-6">
+      <h3 className="font-medium text-gray-900">{store.name}</h3>
+      <div className="mt-2 flex-1 space-y-0.5 text-sm text-gray-600">
+        {store.address || store.city ? (
+          <>
+            {store.address && <p>{store.address}</p>}
+            {store.location && <p>{store.location}</p>}
+            <p>{[store.city, store.state, store.country].filter(Boolean).join(', ')}</p>
+            {store.postal_code && <p>{store.postal_code}</p>}
+          </>
         ) : (
-          <div className="p-12 text-center">
-            <OrderEmptyIcon />
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">
-              No quotes yet
-            </h3>
-            <p className="mt-2 text-gray-600">
-              Your quote history will appear here
-            </p>
-          </div>
+          <p className="italic text-gray-400">No address on file</p>
         )}
+        {store.phone && <p className="pt-1">Tel: {store.phone}</p>}
       </div>
-
-      {/* Locations */}
-      {access.isCompanyUser && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Locations</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {stores.map((store) => (
-              <div key={store.id} className="card-elevated p-6">
-                <h3 className="font-semibold text-gray-900">{store.name}</h3>
-                {store.address || store.city ? (
-                  <>
-                    {store.address && (
-                      <p className="text-sm text-gray-500 mt-1">{store.address}</p>
-                    )}
-                    {store.location && (
-                      <p className="text-sm text-gray-500">{store.location}</p>
-                    )}
-                    <p className="text-sm text-gray-500">
-                      {[store.city, store.state, store.country]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </p>
-                    {store.postal_code && (
-                      <p className="text-sm text-gray-500">{store.postal_code}</p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400 mt-1 italic">No address on file</p>
-                )}
-                {store.phone && (
-                  <p className="text-sm text-gray-500 mt-2">Tel: {store.phone}</p>
-                )}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <Link
-                    href={`/tracking?location=${encodeURIComponent(store.id)}`}
-                    className="text-sm text-[rgb(var(--color-primary))] hover:underline"
-                  >
-                    View orders for this location
-                  </Link>
-                </div>
-              </div>
-            ))}
-
-            {/* Add Location Card - Only for org admins */}
-            {access.isOrgAdmin && (
-              <button
-                onClick={() => setShowAddStore(true)}
-                className="card-elevated p-6 border-2 border-dashed border-gray-200 hover:border-[rgb(var(--color-primary))]/30 flex flex-col items-center justify-center text-center min-h-[200px] cursor-pointer group transition-all duration-300"
-              >
-                <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-[rgb(var(--color-primary))]/10 flex items-center justify-center mb-3 transition-colors">
-                  <svg className="w-6 h-6 text-gray-400 group-hover:text-[rgb(var(--color-primary))] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-700 group-hover:text-[rgb(var(--color-primary))] transition-colors">Add New Location</h3>
-                <p className="text-sm text-gray-500 mt-1">Create a new location for your company</p>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add Location Modal */}
-      {showAddStore && (
-        <div className="glass-modal-backdrop">
-          <div className="glass-modal-content max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Add New Location</h2>
-                <button
-                  onClick={() => { setShowAddStore(false); setLocationResult(null) }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label="Close modal"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {locationResult?.success && (
-                <div className="glass-success-box p-3 mb-4">
-                  <p className="text-sm">{locationResult.message}</p>
-                </div>
-              )}
-
-              {locationResult?.errors && (
-                <div className="glass-error-box p-3 mb-4">
-                  {locationResult.errors.map((error, i) => (
-                    <p key={i} className="text-sm">{error}</p>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={handleLocationSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="storeName"
-                    name="storeName"
-                    required
-                    placeholder="e.g., Auckland Downtown"
-                    className="input-glass"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    name="phone"
-                    placeholder="e.g., 09 123 4567 or 021 123 4567"
-                    className="input-glass"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">NZ numbers will be formatted automatically</p>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">Shipping Address</h3>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label htmlFor="address1" className="block text-sm font-medium text-gray-700 mb-1">
-                        Street Address
-                      </label>
-                      <input
-                        type="text"
-                        id="address1"
-                        name="address1"
-                        placeholder="123 Main Street"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="address2" className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit / Suite (optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="address2"
-                        name="address2"
-                        placeholder="Suite 100"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          id="city"
-                          name="city"
-                          placeholder="Auckland"
-                          className="input-glass"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="regionCode" className="block text-sm font-medium text-gray-700 mb-1">
-                          Region
-                        </label>
-                        <select
-                          id="regionCode"
-                          name="regionCode"
-                          className="input-glass"
-                        >
-                          <option value="">Select region...</option>
-                          {NZ_REGIONS.map((region) => (
-                            <option key={region.code} value={region.code}>
-                              {region.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="zip" className="block text-sm font-medium text-gray-700 mb-1">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        id="zip"
-                        name="zip"
-                        placeholder="1010"
-                        className="input-glass"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddStore(false); setLocationResult(null) }}
-                    className="flex-1 btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={locationSubmitting}
-                    className="flex-1 btn-primary"
-                  >
-                    {locationSubmitting ? 'Creating...' : 'Create Location'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      <Link
+        href={`/tracking?location=${encodeURIComponent(store.id)}`}
+        className="mt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-600 transition-colors hover:text-gray-900"
+      >
+        View orders
+      </Link>
     </div>
   )
 }
 
-function QuoteStatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    approved: 'glass-badge-green',
-    sent: 'glass-badge-blue',
-    draft: 'glass-badge-gray',
-    pending: 'glass-badge-yellow',
-    rejected: 'glass-badge-red',
-    expired: 'glass-badge-red',
+// ── Generic helpers ─────────────────────────────────────────────────
+
+function SmallCapLabel({
+  children,
+  as = 'span',
+  htmlFor,
+}: {
+  children: React.ReactNode
+  as?: 'span' | 'label'
+  htmlFor?: string
+}) {
+  const className = 'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+  if (as === 'label') {
+    return (
+      <label htmlFor={htmlFor} className={className}>
+        {children}
+      </label>
+    )
   }
+  return <span className={className}>{children}</span>
+}
 
-  const color = colors[status] || 'glass-badge-gray'
-
+function Field({ label, value }: { label: string; value: string }) {
   return (
-    <span className={color}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
+    <div>
+      <SmallCapLabel>{label}</SmallCapLabel>
+      <p className="mt-1 text-base text-gray-900">{value}</p>
+    </div>
   )
 }
 
-function UserIcon() {
+function Input({
+  id,
+  name,
+  label,
+  type = 'text',
+  required = false,
+  placeholder,
+  hint,
+}: {
+  id: string
+  name: string
+  label: string
+  type?: string
+  required?: boolean
+  placeholder?: string
+  hint?: string
+}) {
   return (
-    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-5 h-5 text-gray-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-        />
+    <div>
+      <SmallCapLabel as="label" htmlFor={id}>{label}{required ? ' *' : ''}</SmallCapLabel>
+      <input
+        type={type}
+        id={id}
+        name={name}
+        required={required}
+        placeholder={placeholder}
+        className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900"
+      />
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+    </div>
+  )
+}
+
+function capitalizeRole(role: string): string {
+  if (!role) return ''
+  return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+function BagIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+        <line x1="3" x2="21" y1="6" y2="6" />
+        <path d="M16 10a4 4 0 0 1-8 0" />
       </svg>
     </div>
   )
 }
 
-function AddressIcon() {
+function PlusIcon() {
   return (
-    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-5 h-5 text-gray-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-      </svg>
-    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
   )
 }
 
-function OrderEmptyIcon() {
+function CloseIcon() {
   return (
-    <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-8 h-8 text-gray-400"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-        />
-      </svg>
-    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
   )
 }
