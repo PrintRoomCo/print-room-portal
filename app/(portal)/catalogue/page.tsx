@@ -5,6 +5,7 @@ import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
 import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
 import { CatalogueFilterBar } from '@/components/shop/CatalogueFilterBar'
+import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
@@ -117,12 +118,14 @@ export default async function CataloguePage({
 
   q = q.order(orderColumn, { ascending: orderAscending }).range(offset, offset + limit - 1)
 
-  const [{ data: productData }, facets] = await Promise.all([
+  const [{ data: productData, count: totalCount }, facets] = await Promise.all([
     q,
     getShopFacets(admin, scopedProductIds),
   ])
 
   const rows = (productData ?? []) as unknown as ProductRow[]
+  const totalProducts = totalCount ?? rows.length
+  const pageCount = Math.max(1, Math.ceil(totalProducts / limit))
 
   const productIds = rows.map((r) => r.id)
   const qtyByProduct: Record<string, number> = Object.fromEntries(
@@ -284,6 +287,15 @@ export default async function CataloguePage({
 
   return (
     <div className="space-y-6 p-4 md:p-8">
+      <SetTopBarContext
+        value={{
+          kind: 'listing',
+          label: 'Catalogue',
+          count: totalProducts,
+          page: filters.page,
+          pageCount,
+        }}
+      />
       <CatalogueTopBar
         crumbs={[
           { label: 'Home', href: '/account' },

@@ -15,7 +15,7 @@ interface SidebarProps {
 type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
 
 // Navigation items with permission requirements.
-// Cart is intentionally NOT a sidebar entry — it's a floating top-right chip (see CartChip).
+// Cart is intentionally NOT a sidebar entry — it lives in the global PortalTopBar as the "Bag" pill (see TopBarCartPill).
 // Catalogue absorbs the previous Shop + Inventory surfaces — stock shows
 // inline on each product card, no separate page (2026-05-14).
 const allNavItems = [
@@ -129,7 +129,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
 
       {/* Sidebar / Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 ${sidebarCollapsed ? 'w-[80px]' : 'w-64'} glass-sidebar flex flex-col z-50 transition-all duration-300 ease-spring ${drawerOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 overflow-hidden`}
+        className={`fixed left-0 top-0 bottom-0 md:top-14 ${sidebarCollapsed ? 'w-[80px]' : 'w-64'} glass-sidebar flex flex-col z-50 transition-all duration-300 ease-spring ${drawerOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 overflow-hidden`}
       >
         {/* Top bar: mobile close + desktop collapse toggle */}
         <div className="flex items-center justify-end p-2">
@@ -225,7 +225,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
 
       {/* Main Content */}
       <main
-        className={`flex-1 ml-0 ${sidebarCollapsed ? 'md:ml-[80px]' : 'md:ml-64'} transition-[margin] duration-300 ease-spring`}
+        className={`flex-1 ml-0 ${sidebarCollapsed ? 'md:ml-[80px]' : 'md:ml-64'} md:pt-14 transition-[margin] duration-300 ease-spring`}
       >
         <div className="p-4 pt-20 md:p-8 md:pt-8">{children}</div>
       </main>
