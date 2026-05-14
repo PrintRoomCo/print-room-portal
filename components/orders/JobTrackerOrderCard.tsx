@@ -48,8 +48,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-6 text-left hover:bg-gray-50 transition-colors duration-300 cursor-pointer"
       >
-        <div>
-          <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h3 className="font-semibold text-black">
                   Project {tracker.quote_number || `#${tracker.monday_item_id || tracker.tracker_token}`}
@@ -151,8 +150,6 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                 compact
               />
             </div>
-          </div>
-        </div>
       </div>
 
       {/* Reorder Modal */}
