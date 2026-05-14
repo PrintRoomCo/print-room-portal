@@ -8,6 +8,8 @@ import {
   useMemo,
   useState,
 } from 'react'
+import type { ShopFilters } from '@/lib/shop/filter-params'
+import type { ShopFacets } from '@/lib/shop/facets'
 
 // Per-page context shown in the global top bar's left summary block.
 // Pages set this from their server component via <SetTopBarContext />, or
@@ -20,6 +22,12 @@ export type PortalTopBarContextValue =
       count: number
       page?: number
       pageCount?: number
+      // Optional: when present, the top bar grows a second row hosting the
+      // filter form. Used by the catalogue listing so the grid renders
+      // full-width below.
+      filters?: ShopFilters
+      facets?: ShopFacets
+      filterAction?: string
     }
   | {
       kind: 'pdp'
@@ -31,13 +39,19 @@ export type PortalTopBarContextValue =
 interface InternalCtx {
   value: PortalTopBarContextValue | null
   setValue: (v: PortalTopBarContextValue | null) => void
+  drawerOpen: boolean
+  setDrawerOpen: (open: boolean) => void
 }
 
 const Ctx = createContext<InternalCtx | null>(null)
 
 export function PortalTopBarProvider({ children }: { children: React.ReactNode }) {
   const [value, setValue] = useState<PortalTopBarContextValue | null>(null)
-  const contextValue = useMemo(() => ({ value, setValue }), [value])
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const contextValue = useMemo(
+    () => ({ value, setValue, drawerOpen, setDrawerOpen }),
+    [value, drawerOpen],
+  )
   return <Ctx.Provider value={contextValue}>{children}</Ctx.Provider>
 }
 
@@ -53,6 +67,22 @@ export function useSetTopBarContext() {
       ctx?.setValue(v)
     },
     [ctx],
+  )
+}
+
+// Drawer state lives in the top bar provider so the Menu button (mounted in
+// PortalTopBar) and the Sidebar drawer (mounted in PortalShell) share it.
+export function usePortalDrawer() {
+  const ctx = useContext(Ctx)
+  const open = ctx?.drawerOpen ?? false
+  return useMemo(
+    () => ({
+      open,
+      setOpen: (next: boolean) => ctx?.setDrawerOpen(next),
+      toggle: () => ctx?.setDrawerOpen(!open),
+    }),
+    // ctx identity is stable (created once by provider); open changes per toggle
+    [ctx, open],
   )
 }
 

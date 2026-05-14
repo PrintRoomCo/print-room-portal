@@ -3,12 +3,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
-import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { CURRENCY_OPTIONS, type SupportedCurrency } from '@/lib/currency/types'
+import {
+  updateProfile,
+  changePasswordAction,
+  createLocationAction,
+  type ActionResult,
+} from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
-import type { SupportedCurrency } from '@/lib/currency/types'
 
-// New Zealand region codes (ISO 3166-2:NZ)
 const NZ_REGIONS = [
   { code: 'AUK', name: 'Auckland' },
   { code: 'BOP', name: 'Bay of Plenty' },
@@ -46,12 +51,22 @@ interface Quote {
   status: string
   total_amount: number
   currency: string
-  line_items: any[] | null
+  line_items: unknown[] | null
   created_at: string
 }
 
-export function AccountClient() {
+interface AccountClientProps {
+  ratesFetchedAt: string | null
+}
+
+const LABEL_CAP =
+  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+const GHOST_LINK =
+  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 transition-colors duration-150 hover:text-gray-900'
+
+export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
   const { access, loading: companyLoading } = useCompany()
+  const { currency, setCurrency } = useCurrency()
 
   const [stores, setStores] = useState<Store[]>([])
   const [recentQuotes, setRecentQuotes] = useState<Quote[]>([])
@@ -89,7 +104,6 @@ export function AccountClient() {
     }
   }, [companyLoading, access, fetchAccountData])
 
-  // Close profile edit on success
   useEffect(() => {
     if (profileResult?.success && editingProfile) {
       const timer = setTimeout(() => {
@@ -100,7 +114,6 @@ export function AccountClient() {
     }
   }, [profileResult, editingProfile])
 
-  // Close password change on success
   useEffect(() => {
     if (passwordResult?.success && showPasswordChange) {
       const timer = setTimeout(() => {
@@ -111,7 +124,6 @@ export function AccountClient() {
     }
   }, [passwordResult, showPasswordChange])
 
-  // Close location modal on success
   useEffect(() => {
     if (locationResult?.success && showAddStore) {
       const timer = setTimeout(() => {
@@ -155,13 +167,12 @@ export function AccountClient() {
 
   if (companyLoading || dataLoading) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-64 bg-gray-200 rounded-2xl" />
-            <div className="h-64 bg-gray-200 rounded-2xl" />
-          </div>
+      <div className="space-y-16 animate-pulse">
+        <div className="h-[420px] rounded-[32px] bg-white" />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="h-56 rounded-[24px] bg-white" />
+          <div className="h-56 rounded-[24px] bg-white" />
+          <div className="h-56 rounded-[24px] bg-white" />
         </div>
       </div>
     )
@@ -170,511 +181,490 @@ export function AccountClient() {
   if (!access) return null
 
   const primaryStore = stores[0] || null
+  const roleLabel =
+    access.role === 'org_admin' ? 'Org admin' : access.role === 'buyer' ? 'Buyer' : access.role
+  const chipText = access.companyName
+    ? `${roleLabel} · ${access.companyName}`
+    : roleLabel
+  const fetchedLabel = ratesFetchedAt
+    ? new Date(ratesFetchedAt).toLocaleString('en-NZ', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : 'unknown'
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Account</h1>
-        <p className="mt-1 text-gray-600">
-          Manage your account settings and view your order history
-        </p>
-      </div>
+    <div className="space-y-16">
+      {/* ─── Hero card ─── */}
+      <section className="relative rounded-[32px] bg-white p-8 md:p-12">
+        {!editingProfile && (
+          <button
+            type="button"
+            onClick={() => setEditingProfile(true)}
+            className={`absolute right-8 top-8 md:right-12 md:top-12 ${GHOST_LINK}`}
+          >
+            Edit
+          </button>
+        )}
 
-      {/* Account Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Profile Information */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Profile Information
-            </h2>
-            {!editingProfile ? (
-              <button
-                type="button"
-                onClick={() => setEditingProfile(true)}
-                className="text-sm text-[rgb(var(--color-primary))] hover:underline"
-              >
-                Edit
-              </button>
-            ) : (
-              <UserIcon />
+        <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+          My Account
+        </h1>
+
+        <span className="mt-4 inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
+          {chipText}
+        </span>
+
+        <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12">
+          {/* Profile */}
+          <div>
+            <h2 className={LABEL_CAP}>Profile</h2>
+
+            {profileResult?.success && (
+              <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+                {profileResult.message}
+              </div>
             )}
-          </div>
+            {profileResult?.errors && (
+              <div className="mt-3 rounded-2xl bg-rose-50 px-4 py-2 text-sm text-rose-800">
+                {profileResult.errors.map((e, i) => (
+                  <p key={i}>{e}</p>
+                ))}
+              </div>
+            )}
 
-          {profileResult?.success && (
-            <div className="glass-success-box p-3 mb-4">
-              <p className="text-sm">{profileResult.message}</p>
-            </div>
-          )}
-          {profileResult?.errors && (
-            <div className="glass-error-box p-3 mb-4">
-              {profileResult.errors.map((error, i) => (
-                <p key={i} className="text-sm">{error}</p>
-              ))}
-            </div>
-          )}
-
-          {editingProfile ? (
-            <form onSubmit={handleProfileSubmit} className="space-y-3">
-              <div>
-                <label htmlFor="firstName" className="text-sm text-gray-500">First Name</label>
-                <input
-                  type="text"
-                  id="firstName"
+            {editingProfile ? (
+              <form onSubmit={handleProfileSubmit} className="mt-5 space-y-4">
+                <Field
+                  label="First name"
                   name="firstName"
                   defaultValue={access.firstName}
                   required
-                  className="input-glass mt-1"
                 />
-              </div>
-              <div>
-                <label htmlFor="lastName" className="text-sm text-gray-500">Last Name</label>
-                <input
-                  type="text"
-                  id="lastName"
+                <Field
+                  label="Last name"
                   name="lastName"
                   defaultValue={access.lastName}
                   required
-                  className="input-glass mt-1"
                 />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Email</label>
-                <p className="text-gray-900 font-medium">{access.email}</p>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setEditingProfile(false); setProfileResult(null) }}
-                  className="flex-1 btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" disabled={profileSubmitting} className="flex-1 btn-primary">
-                  {profileSubmitting ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm text-gray-500">Name</label>
-                <p className="text-gray-900 font-medium">
-                  {access.firstName} {access.lastName}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Email</label>
-                <p className="text-gray-900 font-medium">{access.email}</p>
-              </div>
-              {access.companyName && (
-                <div>
-                  <label className="text-sm text-gray-500">Company</label>
-                  <p className="text-gray-900 font-medium">
-                    {access.companyName}
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="text-sm text-gray-500">Account Type</label>
-                <p className="text-gray-900 font-medium capitalize">
-                  {access.role}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Default Address */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Default Address
-            </h2>
-            <AddressIcon />
-          </div>
-          {primaryStore && (primaryStore.address || primaryStore.city) ? (
-            <div className="text-gray-900">
-              <p className="font-medium">{primaryStore.name}</p>
-              {primaryStore.address && (
-                <p className="mt-2 text-gray-600">{primaryStore.address}</p>
-              )}
-              {primaryStore.location && (
-                <p className="text-gray-600">{primaryStore.location}</p>
-              )}
-              <p className="text-gray-600">
-                {[primaryStore.city, primaryStore.state, primaryStore.country]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
-              {primaryStore.postal_code && (
-                <p className="text-gray-600">{primaryStore.postal_code}</p>
-              )}
-              {primaryStore.phone && (
-                <p className="text-gray-500 mt-2 text-sm">Tel: {primaryStore.phone}</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-gray-500">No default address set</p>
-          )}
-        </div>
-      </div>
-
-      {/* Password Change */}
-      <div className="card-elevated p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Security</h2>
-          {!showPasswordChange && (
-            <button
-              type="button"
-              onClick={() => setShowPasswordChange(true)}
-              className="text-sm text-[rgb(var(--color-primary))] hover:underline"
-            >
-              Change Password
-            </button>
-          )}
-        </div>
-
-        {passwordResult?.success && (
-          <div className="glass-success-box p-3 mb-4">
-            <p className="text-sm">{passwordResult.message}</p>
-          </div>
-        )}
-        {passwordResult?.errors && (
-          <div className="glass-error-box p-3 mb-4">
-            {passwordResult.errors.map((error, i) => (
-              <p key={i} className="text-sm">{error}</p>
-            ))}
-          </div>
-        )}
-
-        {showPasswordChange ? (
-          <form onSubmit={handlePasswordSubmit} className="space-y-3">
-            <div>
-              <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                Current Password
-              </label>
-              <input type="password" id="currentPassword" name="currentPassword" required className="input-glass" />
-            </div>
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                New Password
-              </label>
-              <input type="password" id="newPassword" name="newPassword" required minLength={8} className="input-glass" />
-              <p className="text-xs text-gray-500 mt-1">Min 8 chars, with uppercase, lowercase, and a number</p>
-            </div>
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm New Password
-              </label>
-              <input type="password" id="confirmPassword" name="confirmPassword" required minLength={8} className="input-glass" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => { setShowPasswordChange(false); setPasswordResult(null) }}
-                className="flex-1 btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" disabled={passwordSubmitting} className="flex-1 btn-primary">
-                {passwordSubmitting ? 'Changing...' : 'Change Password'}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <p className="text-sm text-gray-500">
-            Use a strong, unique password to protect your account.
-          </p>
-        )}
-      </div>
-
-      {/* Recent Quotes */}
-      <div className="card-elevated">
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Recent Quotes
-            </h2>
-            <Link href="/my-collections" className="text-sm text-[rgb(var(--color-primary))] hover:underline">
-              View all quotes
-            </Link>
-          </div>
-        </div>
-
-        {recentQuotes.length ? (
-          <div className="divide-y divide-gray-100">
-            {recentQuotes.map((quote) => {
-              const lineItems = Array.isArray(quote.line_items) ? quote.line_items : []
-              const totalAmount = Number(quote.total_amount)
-              const totalLabel =
-                Number.isFinite(totalAmount) && totalAmount > 0
-                  ? formatCurrency(totalAmount, (quote.currency || 'NZD') as SupportedCurrency)
-                  : formatPrice(quote.total_amount)
-              return (
-                <div
-                  key={quote.id}
-                  className="p-6 hover:bg-gray-50 transition-colors duration-300 block"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <h3 className="font-semibold text-gray-900">
-                          Quote {quote.quote_number || '—'}
-                        </h3>
-                        <QuoteStatusBadge status={quote.status} />
-                      </div>
-                      <p className="mt-1 text-sm text-gray-600">
-                        {new Date(quote.created_at).toLocaleDateString()}
-                      </p>
-                      <p className="mt-2 text-sm text-gray-500">
-                        {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">
-                        {totalLabel}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="p-12 text-center">
-            <OrderEmptyIcon />
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">
-              No quotes yet
-            </h3>
-            <p className="mt-2 text-gray-600">
-              Your quote history will appear here
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Locations */}
-      {access.isCompanyUser && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Locations</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {stores.map((store) => (
-              <div key={store.id} className="card-elevated p-6">
-                <h3 className="font-semibold text-gray-900">{store.name}</h3>
-                {store.address || store.city ? (
-                  <>
-                    {store.address && (
-                      <p className="text-sm text-gray-500 mt-1">{store.address}</p>
-                    )}
-                    {store.location && (
-                      <p className="text-sm text-gray-500">{store.location}</p>
-                    )}
-                    <p className="text-sm text-gray-500">
-                      {[store.city, store.state, store.country]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </p>
-                    {store.postal_code && (
-                      <p className="text-sm text-gray-500">{store.postal_code}</p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400 mt-1 italic">No address on file</p>
-                )}
-                {store.phone && (
-                  <p className="text-sm text-gray-500 mt-2">Tel: {store.phone}</p>
-                )}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <Link
-                    href={`/tracking?location=${encodeURIComponent(store.id)}`}
-                    className="text-sm text-[rgb(var(--color-primary))] hover:underline"
-                  >
-                    View orders for this location
-                  </Link>
-                </div>
-              </div>
-            ))}
-
-            {/* Add Location Card - Only for org admins */}
-            {access.isOrgAdmin && (
-              <button
-                onClick={() => setShowAddStore(true)}
-                className="card-elevated p-6 border-2 border-dashed border-gray-200 hover:border-[rgb(var(--color-primary))]/30 flex flex-col items-center justify-center text-center min-h-[200px] cursor-pointer group transition-all duration-300"
-              >
-                <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-[rgb(var(--color-primary))]/10 flex items-center justify-center mb-3 transition-colors">
-                  <svg className="w-6 h-6 text-gray-400 group-hover:text-[rgb(var(--color-primary))] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-700 group-hover:text-[rgb(var(--color-primary))] transition-colors">Add New Location</h3>
-                <p className="text-sm text-gray-500 mt-1">Create a new location for your company</p>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add Location Modal */}
-      {showAddStore && (
-        <div className="glass-modal-backdrop">
-          <div className="glass-modal-content max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Add New Location</h2>
-                <button
-                  onClick={() => { setShowAddStore(false); setLocationResult(null) }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label="Close modal"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {locationResult?.success && (
-                <div className="glass-success-box p-3 mb-4">
-                  <p className="text-sm">{locationResult.message}</p>
-                </div>
-              )}
-
-              {locationResult?.errors && (
-                <div className="glass-error-box p-3 mb-4">
-                  {locationResult.errors.map((error, i) => (
-                    <p key={i} className="text-sm">{error}</p>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={handleLocationSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="storeName"
-                    name="storeName"
-                    required
-                    placeholder="e.g., Auckland Downtown"
-                    className="input-glass"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    name="phone"
-                    placeholder="e.g., 09 123 4567 or 021 123 4567"
-                    className="input-glass"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">NZ numbers will be formatted automatically</p>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">Shipping Address</h3>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label htmlFor="address1" className="block text-sm font-medium text-gray-700 mb-1">
-                        Street Address
-                      </label>
-                      <input
-                        type="text"
-                        id="address1"
-                        name="address1"
-                        placeholder="123 Main Street"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="address2" className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit / Suite (optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="address2"
-                        name="address2"
-                        placeholder="Suite 100"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          id="city"
-                          name="city"
-                          placeholder="Auckland"
-                          className="input-glass"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="regionCode" className="block text-sm font-medium text-gray-700 mb-1">
-                          Region
-                        </label>
-                        <select
-                          id="regionCode"
-                          name="regionCode"
-                          className="input-glass"
-                        >
-                          <option value="">Select region...</option>
-                          {NZ_REGIONS.map((region) => (
-                            <option key={region.code} value={region.code}>
-                              {region.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="zip" className="block text-sm font-medium text-gray-700 mb-1">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        id="zip"
-                        name="zip"
-                        placeholder="1010"
-                        className="input-glass"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
+                <FieldStatic label="Email" value={access.email} />
+                <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => { setShowAddStore(false); setLocationResult(null) }}
-                    className="flex-1 btn-secondary"
+                    onClick={() => {
+                      setEditingProfile(false)
+                      setProfileResult(null)
+                    }}
+                    className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={locationSubmitting}
-                    className="flex-1 btn-primary"
+                    disabled={profileSubmitting}
+                    className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
-                    {locationSubmitting ? 'Creating...' : 'Create Location'}
+                    {profileSubmitting ? 'Saving…' : 'Save'}
                   </button>
                 </div>
               </form>
+            ) : (
+              <div className="mt-5 space-y-4">
+                <FieldStatic
+                  label="Name"
+                  value={`${access.firstName} ${access.lastName}`}
+                />
+                <FieldStatic label="Email" value={access.email} />
+                {access.companyName && (
+                  <FieldStatic label="Company" value={access.companyName} />
+                )}
+                <FieldStatic label="Role" value={roleLabel} />
+              </div>
+            )}
+          </div>
+
+          {/* Default address */}
+          <div>
+            <h2 className={LABEL_CAP}>Default address</h2>
+            {primaryStore && (primaryStore.address || primaryStore.city) ? (
+              <div className="mt-5 space-y-1 text-sm text-gray-700">
+                <p className="text-base font-medium text-gray-900">
+                  {primaryStore.name}
+                </p>
+                {primaryStore.address && <p>{primaryStore.address}</p>}
+                {primaryStore.location && <p>{primaryStore.location}</p>}
+                <p>
+                  {[primaryStore.city, primaryStore.state, primaryStore.country]
+                    .filter(Boolean)
+                    .join(', ')}
+                </p>
+                {primaryStore.postal_code && <p>{primaryStore.postal_code}</p>}
+                {primaryStore.phone && (
+                  <p className="pt-2 text-xs text-gray-500">
+                    Tel: {primaryStore.phone}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-5 text-sm text-gray-500">No default address set</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── 3-up grid ─── */}
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {/* Display preferences with segmented currency pill */}
+        <article className="rounded-[24px] bg-white p-8">
+          <h3 className={LABEL_CAP}>Display preferences</h3>
+          <p className="mt-3 text-base font-medium text-gray-900">Currency</p>
+          <div
+            role="radiogroup"
+            aria-label="Display currency"
+            className="mt-4 inline-flex rounded-full bg-gray-100 p-1"
+          >
+            {CURRENCY_OPTIONS.map((opt) => {
+              const active = currency === opt.code
+              return (
+                <button
+                  key={opt.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={active ? ('true' as const) : ('false' as const)}
+                  onClick={() => setCurrency(opt.code as SupportedCurrency)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+                    active
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.shortLabel}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-4 text-xs text-gray-500">
+            Prices are stored in NZD and converted for display. Last rate update:{' '}
+            {fetchedLabel}.
+          </p>
+        </article>
+
+        {/* Security */}
+        <article className="relative rounded-[24px] bg-white p-8">
+          {!showPasswordChange && (
+            <button
+              type="button"
+              onClick={() => setShowPasswordChange(true)}
+              className={`absolute right-8 top-8 ${GHOST_LINK}`}
+            >
+              Change password
+            </button>
+          )}
+
+          <h3 className={LABEL_CAP}>Security</h3>
+          <p className="mt-3 text-base font-medium text-gray-900">Password</p>
+
+          {passwordResult?.success && (
+            <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+              {passwordResult.message}
             </div>
+          )}
+          {passwordResult?.errors && (
+            <div className="mt-3 rounded-2xl bg-rose-50 px-4 py-2 text-sm text-rose-800">
+              {passwordResult.errors.map((e, i) => (
+                <p key={i}>{e}</p>
+              ))}
+            </div>
+          )}
+
+          {showPasswordChange ? (
+            <form onSubmit={handlePasswordSubmit} className="mt-5 space-y-4">
+              <Field
+                label="Current password"
+                name="currentPassword"
+                type="password"
+                required
+              />
+              <Field
+                label="New password"
+                name="newPassword"
+                type="password"
+                required
+                minLength={8}
+                hint="Min 8 chars, with uppercase, lowercase, and a number"
+              />
+              <Field
+                label="Confirm new password"
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={8}
+              />
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordChange(false)
+                    setPasswordResult(null)
+                  }}
+                  className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordSubmitting}
+                  className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {passwordSubmitting ? 'Changing…' : 'Change password'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="mt-4 text-xs text-gray-500">
+              Use a strong, unique password to protect your account.
+            </p>
+          )}
+        </article>
+
+        {/* Recent quotes */}
+        <article className="relative rounded-[24px] bg-white p-8">
+          <Link href="/my-collections" className={`absolute right-8 top-8 ${GHOST_LINK}`}>
+            View all
+          </Link>
+
+          <h3 className={LABEL_CAP}>Recent quotes</h3>
+
+          {recentQuotes.length === 0 ? (
+            <div className="mt-6 flex flex-col items-start">
+              <BagIcon className="h-8 w-8 text-gray-300" />
+              <p className="mt-3 text-base font-medium text-gray-900">
+                No quotes yet
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Your quote history will appear here
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-5 space-y-3">
+              {recentQuotes.slice(0, 3).map((quote) => {
+                const lineItems = Array.isArray(quote.line_items)
+                  ? quote.line_items
+                  : []
+                const totalAmount = Number(quote.total_amount)
+                const totalLabel =
+                  Number.isFinite(totalAmount) && totalAmount > 0
+                    ? formatCurrency(
+                        totalAmount,
+                        (quote.currency || 'NZD') as SupportedCurrency,
+                      )
+                    : formatPrice(quote.total_amount)
+                return (
+                  <li key={quote.id} className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        Quote {quote.quote_number || '—'}
+                      </p>
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">
+                        {new Date(quote.created_at).toLocaleDateString()} ·{' '}
+                        {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <span className="ml-3 shrink-0 text-sm font-medium text-gray-900">
+                      {totalLabel}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </article>
+      </section>
+
+      {/* ─── Locations strip ─── */}
+      {access.isCompanyUser && (
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h2 className={LABEL_CAP}>Locations</h2>
+            <span className="text-[11px] text-gray-400">
+              {stores.length} {stores.length === 1 ? 'location' : 'locations'}
+            </span>
+          </div>
+          <div className="mt-5 -mx-6 overflow-x-auto px-6 pb-2">
+            <div className="flex gap-4">
+              {stores.map((store) => (
+                <article
+                  key={store.id}
+                  className="flex w-72 shrink-0 flex-col rounded-[24px] bg-white p-6"
+                >
+                  <h3 className="text-base font-medium text-gray-900">
+                    {store.name}
+                  </h3>
+                  {store.address || store.city ? (
+                    <div className="mt-2 space-y-0.5 text-sm text-gray-600">
+                      {store.address && <p>{store.address}</p>}
+                      {store.location && <p>{store.location}</p>}
+                      <p>
+                        {[store.city, store.state, store.country]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+                      {store.postal_code && <p>{store.postal_code}</p>}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm italic text-gray-400">
+                      No address on file
+                    </p>
+                  )}
+                  {store.phone && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Tel: {store.phone}
+                    </p>
+                  )}
+                  <Link
+                    href={`/tracking?location=${encodeURIComponent(store.id)}`}
+                    className={`mt-auto pt-4 ${GHOST_LINK}`}
+                  >
+                    View orders →
+                  </Link>
+                </article>
+              ))}
+
+              {access.isOrgAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddStore(true)}
+                  className="flex w-72 shrink-0 flex-col items-center justify-center rounded-[24px] border-2 border-dashed border-gray-200 p-6 text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-900"
+                >
+                  <PlusIcon className="h-6 w-6" />
+                  <span className="mt-3 text-sm font-medium">
+                    Add location
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Add Location Modal ─── */}
+      {showAddStore && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
+          onClick={() => {
+            setShowAddStore(false)
+            setLocationResult(null)
+          }}
+        >
+          <div
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-[32px] bg-white p-6 sm:rounded-[32px] sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-dm-sans text-2xl font-medium text-gray-900">
+                Add location
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddStore(false)
+                  setLocationResult(null)
+                }}
+                aria-label="Close modal"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+              >
+                <CloseIcon className="h-4 w-4" />
+              </button>
+            </div>
+
+            {locationResult?.success && (
+              <div className="mb-4 rounded-2xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+                {locationResult.message}
+              </div>
+            )}
+            {locationResult?.errors && (
+              <div className="mb-4 rounded-2xl bg-rose-50 px-4 py-2 text-sm text-rose-800">
+                {locationResult.errors.map((e, i) => (
+                  <p key={i}>{e}</p>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleLocationSubmit} className="space-y-4">
+              <Field
+                label="Location name"
+                name="storeName"
+                required
+                placeholder="e.g., Auckland Downtown"
+              />
+              <Field
+                label="Phone"
+                name="phone"
+                type="tel"
+                placeholder="e.g., 09 123 4567 or 021 123 4567"
+                hint="NZ numbers will be formatted automatically"
+              />
+
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className={LABEL_CAP}>Shipping address</h3>
+                <div className="mt-3 space-y-3">
+                  <Field
+                    label="Street address"
+                    name="address1"
+                    placeholder="123 Main Street"
+                  />
+                  <Field
+                    label="Unit / Suite"
+                    name="address2"
+                    placeholder="Suite 100"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="City" name="city" placeholder="Auckland" />
+                    <div>
+                      <label
+                        htmlFor="regionCode"
+                        className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-gray-500"
+                      >
+                        Region
+                      </label>
+                      <select
+                        id="regionCode"
+                        name="regionCode"
+                        className="w-full rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm focus:border-gray-400 focus:bg-white focus:outline-none"
+                      >
+                        <option value="">Select region…</option>
+                        {NZ_REGIONS.map((region) => (
+                          <option key={region.code} value={region.code}>
+                            {region.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <Field label="Postal code" name="zip" placeholder="1010" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddStore(false)
+                    setLocationResult(null)
+                  }}
+                  className="flex-1 rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={locationSubmitting}
+                  className="flex-1 rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {locationSubmitting ? 'Creating…' : 'Create location'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -682,87 +672,111 @@ export function AccountClient() {
   )
 }
 
-function QuoteStatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    approved: 'glass-badge-green',
-    sent: 'glass-badge-blue',
-    draft: 'glass-badge-gray',
-    pending: 'glass-badge-yellow',
-    rejected: 'glass-badge-red',
-    expired: 'glass-badge-red',
-  }
+// ─── Helpers ────────────────────────────────────────────────────────
 
-  const color = colors[status] || 'glass-badge-gray'
-
+function Field({
+  label,
+  name,
+  type = 'text',
+  defaultValue,
+  required,
+  minLength,
+  placeholder,
+  hint,
+}: {
+  label: string
+  name: string
+  type?: string
+  defaultValue?: string
+  required?: boolean
+  minLength?: number
+  placeholder?: string
+  hint?: string
+}) {
   return (
-    <span className={color}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  )
-}
-
-function UserIcon() {
-  return (
-    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-5 h-5 text-gray-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
+    <div>
+      <label
+        htmlFor={name}
+        className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-gray-500"
       >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-        />
-      </svg>
+        {label}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        defaultValue={defaultValue}
+        required={required}
+        minLength={minLength}
+        placeholder={placeholder}
+        className="w-full rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm transition-colors focus:border-gray-400 focus:bg-white focus:outline-none"
+      />
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
     </div>
   )
 }
 
-function AddressIcon() {
+function FieldStatic({ label, value }: { label: string; value: string }) {
   return (
-    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-5 h-5 text-gray-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-      </svg>
+    <div>
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-medium text-gray-900">{value}</p>
     </div>
   )
 }
 
-function OrderEmptyIcon() {
+function BagIcon({ className }: { className?: string }) {
   return (
-    <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center">
-      <svg
-        className="w-8 h-8 text-gray-400"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-        />
-      </svg>
-    </div>
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+      />
+    </svg>
+  )
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M12 5v14m-7-7h14"
+      />
+    </svg>
+  )
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M6 18L18 6M6 6l12 12"
+      />
+    </svg>
   )
 }
