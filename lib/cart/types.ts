@@ -61,3 +61,17 @@ export function decorationSignature(decorations: CartLineDecoration[]): string {
     .sort()
     .join('|')
 }
+
+/**
+ * Stable signature for matching cart lines on add. Same product + variant +
+ * variantLabel + decoration set merges quantity. Includes variantLabel so
+ * variantless lines (variantId = '') with different sizes stay separate.
+ */
+export function lineSignature(
+  productId: string,
+  variantId: string,
+  variantLabel: string,
+  decorations: CartLineDecoration[],
+): string {
+  return `${productId}::${variantId}::${variantLabel}::${decorationSignature(decorations)}`
+}
