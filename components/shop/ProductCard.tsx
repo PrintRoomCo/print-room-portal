@@ -1,5 +1,4 @@
 import Image from 'next/image'
-import { TierBadge } from '@/components/pricing/TierBadge'
 import { Money } from './Money'
 
 interface ProductCardData {
@@ -39,19 +38,19 @@ export function ProductCard({ product }: ProductCardProps) {
             No image
           </div>
         )}
-        <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
-          <TierBadge />
-          {stock != null && stock > 0 && (
-            <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
-              {stock} in stock
-            </span>
-          )}
-          {stock != null && stock === 0 && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-              Made to order
-            </span>
-          )}
-        </div>
+        {stock != null && (
+          <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+            {stock > 0 ? (
+              <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
+                {stock} in stock
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                Made to order
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
         <p className="text-xs uppercase tracking-wide text-gray-400">{product.sku}</p>
