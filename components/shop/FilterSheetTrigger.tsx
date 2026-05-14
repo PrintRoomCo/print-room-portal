@@ -16,7 +16,11 @@ export function FilterSheetTrigger({ activeCount, children }: Props) {
       if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
+    }
   }, [open])
 
   return (
@@ -24,28 +28,70 @@ export function FilterSheetTrigger({ activeCount, children }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="md:hidden rounded-full border border-gray-200 bg-white px-4 py-2 text-sm shadow-sm"
+        className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200 md:hidden"
       >
-        Filters{activeCount > 0 ? ` (${activeCount})` : ''}
+        <FilterIcon className="h-4 w-4" />
+        Filters
+        {activeCount > 0 && (
+          <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white tabular-nums">
+            {activeCount}
+          </span>
+        )}
       </button>
-      {open && (
-        <div className="fixed inset-0 z-50 flex bg-black/40 md:hidden">
-          <div className="ml-auto h-full w-full max-w-sm overflow-y-auto bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Filters</h2>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ×
-              </button>
-            </div>
-            {children}
-          </div>
+
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close filters"
+        onClick={() => setOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/30 transition-opacity duration-200 md:hidden ${
+          open ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+
+      {/* Bottom sheet */}
+      <div
+        role="dialog"
+        aria-label="Filters"
+        aria-hidden={!open}
+        className={`fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl transition-transform duration-300 ease-out md:hidden ${
+          open ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-medium text-gray-900">Filters</h2>
+          <button
+            type="button"
+            aria-label="Close filters"
+            onClick={() => setOpen(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
         </div>
-      )}
+        {children}
+      </div>
     </>
+  )
+}
+
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M3 4h18M6 12h12M10 20h4"
+      />
+    </svg>
+  )
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
   )
 }

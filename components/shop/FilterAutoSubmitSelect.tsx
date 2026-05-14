@@ -16,7 +16,7 @@ interface Props {
 }
 
 const DEFAULT_CLASSNAME =
-  'rounded-full bg-gray-50 border border-gray-200 px-4 py-2 text-sm w-full'
+  'w-full appearance-none rounded-full bg-gray-50 px-4 py-2 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300'
 
 export function FilterAutoSubmitSelect({
   name,

@@ -18,7 +18,7 @@ export function FilterRail({ filters, facets, basePath }: Props) {
   const clearHref = basePath
 
   return (
-    <aside className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <aside>
       <form method="GET" action={basePath} className="space-y-4">
         <Section label="Search">
           <input
@@ -26,7 +26,7 @@ export function FilterRail({ filters, facets, basePath }: Props) {
             name="q"
             defaultValue={filters.q}
             placeholder="Search products"
-            className="rounded-full bg-gray-50 border border-gray-200 px-4 py-2 text-sm w-full"
+            className="w-full rounded-full bg-gray-50 px-4 py-2 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </Section>
 
@@ -99,7 +99,7 @@ export function FilterRail({ filters, facets, basePath }: Props) {
       {hasActive && (
         <Link
           href={clearHref}
-          className="mt-3 inline-block text-xs font-medium text-gray-600 underline"
+          className="mt-4 inline-block text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-900"
         >
           Clear all
         </Link>
@@ -110,8 +110,8 @@ export function FilterRail({ filters, facets, basePath }: Props) {
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
+    <div className="space-y-2">
+      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">{label}</p>
       {children}
     </div>
   )
