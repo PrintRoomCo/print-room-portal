@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useCompany } from '@/contexts/CompanyContext'
-import { decorationSignature, type CartLine, type CartState } from '@/lib/cart/types'
+import { lineSignature, type CartLine, type CartState } from '@/lib/cart/types'
 
 export interface CartApi {
   lines: CartLine[]
@@ -97,12 +97,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     lines: state.lines,
     addLine: (line) =>
       setState((s) => {
-        const incomingSig = decorationSignature(line.decorations ?? [])
+        const incomingSig = lineSignature(
+          line.productId,
+          line.variantId,
+          line.variantLabel,
+          line.decorations ?? [],
+        )
         const existing = s.lines.find(
           (l) =>
-            l.productId === line.productId &&
-            l.variantId === line.variantId &&
-            decorationSignature(l.decorations) === incomingSig,
+            lineSignature(l.productId, l.variantId, l.variantLabel, l.decorations) ===
+            incomingSig,
         )
         if (existing) {
           return {

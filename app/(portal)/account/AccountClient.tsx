@@ -175,7 +175,7 @@ export function AccountClient() {
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Account</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="mt-1 text-gray-600">
           Manage your account settings and view your order history
         </p>

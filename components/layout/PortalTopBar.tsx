@@ -6,11 +6,12 @@ import { usePathname } from 'next/navigation'
 import { useTopBarContextValue } from './PortalTopBarContext'
 import { CurrencyPicker } from './CurrencyPicker'
 import { TopBarCartPill } from './TopBarCartPill'
+import { AccountMenu } from './AccountMenu'
 
 // Pathname → section label fallback when no page-set context is present.
 // Keep in sync with Sidebar navigation labels.
 const SECTION_LABELS: Array<{ test: (p: string) => boolean; label: string }> = [
-  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'My Account' },
+  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'Settings' },
   { test: (p) => p === '/tracking' || p.startsWith('/tracking/'), label: 'Tracking' },
   { test: (p) => p === '/catalogue', label: 'Catalogue' },
   { test: (p) => p.startsWith('/catalogue/'), label: 'Product' },
@@ -60,10 +61,11 @@ export function PortalTopBar() {
         </span>
       </Link>
 
-      {/* Right: cart + currency */}
+      {/* Right: cart + currency + account dropdown */}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
         <TopBarCartPill />
         <CurrencyPicker />
+        <AccountMenu />
       </div>
     </header>
   )
