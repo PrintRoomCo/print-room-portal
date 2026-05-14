@@ -127,7 +127,8 @@ export function Sidebar({ children, customer }: SidebarProps) {
           <Link
             href="/account"
             onClick={() => drawer.setOpen(false)}
-            className="flex items-center gap-2"
+            aria-label="The Print Room"
+            className="flex items-center"
           >
             <Image
               src="/print-room-logo.png"
@@ -137,9 +138,6 @@ export function Sidebar({ children, customer }: SidebarProps) {
               priority
               className="h-7 w-7 object-contain"
             />
-            <span className="text-sm font-medium lowercase tracking-tight text-pr-blue">
-              portal
-            </span>
           </Link>
           <button
             type="button"
@@ -178,9 +176,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
 
         {customer.companyName && (
           <div className="border-t border-gray-200/70 px-5 py-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
-              Signed in as
-            </p>
+            <p className="text-xs text-gray-500">Signed in as</p>
             <p className="mt-1 truncate text-sm font-medium text-gray-900">
               {customer.firstName} {customer.lastName}
             </p>
