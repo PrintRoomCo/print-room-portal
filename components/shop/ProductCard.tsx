@@ -10,6 +10,11 @@ interface ProductCardData {
   from_unit_price: number
   price_status: 'ok' | 'missing'
   has_stock: boolean
+  // Stock total across every variant the org tracks. `null` means the org
+  // doesn't track stock for this product (catalogue-only entry) → no chip.
+  // A positive number → "N in stock". Zero → "Made to order" (stock tracking
+  // exists but everything is committed or unstocked).
+  total_stock?: number | null
 }
 
 interface ProductCardProps {
@@ -17,6 +22,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const stock = product.total_stock
   return (
     <div className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 ease-spring hover:-translate-y-0.5 hover:border-[rgb(var(--color-brand-blue))]/20 hover:shadow-md">
       <div className="relative aspect-square w-full bg-gray-50">
@@ -35,9 +41,14 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
           <TierBadge />
-          {product.has_stock && (
+          {stock != null && stock > 0 && (
             <span className="rounded-full bg-lime-100 px-2.5 py-1 text-xs font-medium text-lime-800">
-              In stock
+              {stock} in stock
+            </span>
+          )}
+          {stock != null && stock === 0 && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+              Made to order
             </span>
           )}
         </div>

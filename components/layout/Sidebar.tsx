@@ -14,18 +14,14 @@ interface SidebarProps {
 
 type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
 
-// Tenants that have physical stock (Shop + Inventory surfaces). Studio is
-// catalogue-only.
-const INVENTORY_TENANT_TYPES: ReadonlyArray<TenantType> = ['studio_plus_inventory', 'franchise']
-
 // Navigation items with permission requirements.
 // Cart is intentionally NOT a sidebar entry — it's a floating top-right chip (see CartChip).
+// Catalogue absorbs the previous Shop + Inventory surfaces — stock shows
+// inline on each product card, no separate page (2026-05-14).
 const allNavItems = [
   { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null as ReadonlyArray<TenantType> | null },
   { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
   { name: 'Catalogue', href: '/catalogue', icon: OrdersIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
-  { name: 'Shop', href: '/shop', icon: ShopIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: INVENTORY_TENANT_TYPES },
-  { name: 'Inventory', href: '/inventory', icon: InventoryIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: INVENTORY_TENANT_TYPES },
   { name: 'Orders', href: '/my-collections', icon: OrdersIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
   { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
   { name: 'Leavers Quotes', href: '/leavers-quotes', icon: LeaversIcon, requiresCompany: false, requiresLeavers: true, requiredTenantTypes: null },

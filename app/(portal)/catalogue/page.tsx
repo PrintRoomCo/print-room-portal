@@ -17,6 +17,11 @@ import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
+// Tenants that track physical stock — for these, the catalogue listing is
+// unioned with any product that has a variant_inventory row. Studio tenants
+// stay catalogue-only.
+const INVENTORY_TENANT_TYPES = new Set(['studio_plus_inventory', 'franchise'])
+
 interface ProductRow {
   id: string
   name: string
@@ -58,8 +63,31 @@ export default async function CataloguePage({
         .eq('is_active', true)
         .in('id', grantedItemIds)
   const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
-  const scopedProductIds = Array.from(new Set(catItemRows.map((r) => r.source_product_id)))
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
+
+  // Inventory tenants: union curated catalogue with any product they track
+  // stock for. Studio tenants stay catalogue-only. Today this rarely adds
+  // products (PRT's tracked products are already in their catalogue), but the
+  // union is the correct data model for any future split.
+  const inventoryProductIds = new Set<string>()
+  if (context.tenantType && INVENTORY_TENANT_TYPES.has(context.tenantType)) {
+    const { data: invRows } = await admin
+      .from('variant_inventory')
+      .select('product_variants!inner(product_id)')
+      .eq('organization_id', context.organizationId)
+    type InvRow = {
+      product_variants:
+        | { product_id: string }
+        | { product_id: string }[]
+        | null
+    }
+    for (const r of (invRows ?? []) as InvRow[]) {
+      const pv = Array.isArray(r.product_variants) ? r.product_variants[0] : r.product_variants
+      if (pv?.product_id) inventoryProductIds.add(pv.product_id)
+    }
+  }
+  const catalogueProductIds = new Set(catItemRows.map((r) => r.source_product_id))
+  const scopedProductIds = Array.from(new Set([...catalogueProductIds, ...inventoryProductIds]))
 
   if (scopedProductIds.length === 0) {
     return (
@@ -117,6 +145,7 @@ export default async function CataloguePage({
     { data: catalogueImageRows },
     { data: tierMinRows },
     { data: decorationRows },
+    { data: stockRows },
   ] = await Promise.all([
     effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
     scopedItemIds.length > 0
@@ -149,6 +178,23 @@ export default async function CataloguePage({
               | null
           }>,
         }),
+    // Stock totals per product for the inline chip. Untracked products
+    // (no variant_inventory rows) return no row → total_stock stays null.
+    productIds.length > 0 && context.tenantType && INVENTORY_TENANT_TYPES.has(context.tenantType)
+      ? admin
+          .from('variant_availability')
+          .select('available_qty, product_variants!inner(product_id)')
+          .eq('organization_id', context.organizationId)
+          .in('product_variants.product_id', productIds)
+      : Promise.resolve({
+          data: [] as Array<{
+            available_qty: number
+            product_variants:
+              | { product_id: string }
+              | { product_id: string }[]
+              | null
+          }>,
+        }),
   ])
 
   const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
@@ -171,6 +217,23 @@ export default async function CataloguePage({
     if (!Number.isFinite(price) || price <= 0) continue
     const cur = tierMinByItem.get(r.catalogue_item_id)
     if (cur === undefined || price < cur) tierMinByItem.set(r.catalogue_item_id, price)
+  }
+
+  // Stock total per product_id. Products with no variant_inventory rows
+  // resolve to undefined → null on the card (no badge). Products with rows
+  // resolve to a number — even zero, which surfaces as "Made to order".
+  const stockByProduct = new Map<string, number>()
+  for (const r of (stockRows ?? []) as Array<{
+    available_qty: number
+    product_variants:
+      | { product_id: string }
+      | { product_id: string }[]
+      | null
+  }>) {
+    const pv = Array.isArray(r.product_variants) ? r.product_variants[0] : r.product_variants
+    if (!pv?.product_id) continue
+    const cur = stockByProduct.get(pv.product_id) ?? 0
+    stockByProduct.set(pv.product_id, cur + (Number.isFinite(r.available_qty) ? r.available_qty : 0))
   }
 
   // Sum of default decorations per catalogue item — what the PDP adds on top
@@ -208,6 +271,7 @@ export default async function CataloguePage({
     const baseFromPrice = tierFloor ?? rpcPrice.unitPrice
     const fromAllIn =
       baseFromPrice > 0 ? baseFromPrice + decorationOverlay : rpcPrice.unitPrice
+    const stockTotal = stockByProduct.has(p.id) ? stockByProduct.get(p.id)! : null
     return {
       id: p.id,
       name: stripTrailingSku(p.name, p.sku),
@@ -216,6 +280,7 @@ export default async function CataloguePage({
       from_unit_price: fromAllIn,
       price_status: rpcPrice.status,
       has_stock: rpcPrice.hasStock,
+      total_stock: stockTotal,
     }
   })
 
