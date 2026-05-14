@@ -8,8 +8,8 @@ import { ReorderForm } from '@/components/orders/ReorderForm'
 import { useAuth } from '@/contexts/AuthContext'
 import type { JobTracker } from '@/lib/job-tracker'
 import {
+  STATUS_STEPS,
   getItemTotalQty,
-  getStatusGuidance,
   getStatusLabel,
   getTrackerUrl,
   getTrackingNumber,
@@ -349,55 +349,95 @@ function StatusTimeline({
 }: {
   history: Array<{ id: string; status: string; status_key?: string; changed_at: string }>
 }) {
-  const sorted = [...history].sort(
-    (a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime()
-  )
+  const historyByKey = new Map<string, { changed_at: string }>()
+  ;[...history]
+    .sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())
+    .forEach((entry) => {
+      const key = (entry.status_key || entry.status).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      if (!historyByKey.has(key)) historyByKey.set(key, entry)
+    })
+
+  let currentStepIndex = -1
+  STATUS_STEPS.forEach((step, idx) => {
+    if (historyByKey.has(step.key)) currentStepIndex = idx
+  })
+
+  const currentEntry =
+    currentStepIndex >= 0
+      ? historyByKey.get(STATUS_STEPS[currentStepIndex].key)
+      : null
+  const currentLabel =
+    currentStepIndex >= 0
+      ? getStatusLabel(STATUS_STEPS[currentStepIndex].key)
+      : 'Not started'
 
   return (
-    <div className="mt-4">
-      <h4 className="text-sm font-medium text-black mb-3">Status Timeline</h4>
-      <div className="relative pl-6">
-        <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[rgb(var(--color-brand-blue))]/20" />
-
-        <div className="space-y-4">
-          {sorted.map((entry, index) => {
-            const statusKey = entry.status_key || entry.status
-            const label = getStatusLabel(statusKey)
-            const guidance = getStatusGuidance(statusKey)
-            const isLatest = index === 0
-
-            return (
-              <div key={entry.id} className="relative">
-                <div
-                  className={`absolute -left-6 top-0.5 w-3.5 h-3.5 rounded-full border-2 ${
-                    isLatest
-                      ? 'bg-[rgb(var(--color-brand-blue))] border-[rgb(var(--color-brand-blue))]/30 shadow-sm shadow-[rgb(var(--color-brand-blue))]/20'
-                      : 'bg-[rgb(var(--color-brand-yellow))] border-[rgb(var(--color-brand-blue))]/15'
-                  }`}
-                />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-sm font-medium ${
-                        isLatest ? 'text-[rgb(var(--color-brand-blue))]' : 'text-gray-600'
-                      }`}
-                    >
-                      {label}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(entry.changed_at).toLocaleDateString('en-NZ', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{guidance.body}</p>
-                </div>
-              </div>
-            )
-          })}
+    <div className="mt-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-sm text-gray-500">Status</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-medium text-gray-900">
+            {currentLabel}
+          </span>
+          {currentEntry && (
+            <span className="text-xs tabular-nums text-gray-500">
+              {new Date(currentEntry.changed_at).toLocaleDateString('en-NZ', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}
+            </span>
+          )}
         </div>
+      </div>
+
+      <div className="mt-4 flex gap-1">
+        {STATUS_STEPS.map((step, idx) => {
+          const reached = idx <= currentStepIndex
+          return (
+            <span
+              key={step.key}
+              title={step.tooltip}
+              className={`h-1 flex-1 rounded-full transition-colors duration-500 ${
+                reached ? 'bg-gray-900' : 'bg-gray-100'
+              }`}
+            />
+          )
+        })}
+      </div>
+
+      <div className="mt-3 flex gap-1">
+        {STATUS_STEPS.map((step, idx) => {
+          const entry = historyByKey.get(step.key)
+          const reached = idx <= currentStepIndex
+          const isCurrent = idx === currentStepIndex
+          return (
+            <div
+              key={step.key}
+              className="flex flex-1 flex-col items-start gap-0.5 px-0.5"
+            >
+              <span
+                className={`text-[11px] leading-tight ${
+                  isCurrent
+                    ? 'font-medium text-gray-900'
+                    : reached
+                      ? 'text-gray-500'
+                      : 'text-gray-300'
+                }`}
+              >
+                {getStatusLabel(step.key)}
+              </span>
+              {entry && (
+                <span className="text-[10px] tabular-nums text-gray-400">
+                  {new Date(entry.changed_at).toLocaleDateString('en-NZ', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
