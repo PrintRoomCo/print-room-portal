@@ -21,12 +21,12 @@ export function TrackerSummaryCards({ trackers, isCompanyWide }: TrackerSummaryC
 
   return (
     <div className={`grid gap-4 ${isCompanyWide ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
-      <SummaryCard label="Active" value={active} color="primary" />
+      <SummaryCard label="Active" value={active} />
       {proofAwaitingCount !== null && (
-        <SummaryCard label="Awaiting Proof" value={proofAwaitingCount} color="yellow" />
+        <SummaryCard label="Awaiting Proof" value={proofAwaitingCount} />
       )}
-      <SummaryCard label="Completed" value={completed} color="blue" />
-      <SummaryCard label="Total" value={total} color="gray" />
+      <SummaryCard label="Completed" value={completed} />
+      <SummaryCard label="Total" value={total} />
     </div>
   )
 }
@@ -34,23 +34,14 @@ export function TrackerSummaryCards({ trackers, isCompanyWide }: TrackerSummaryC
 function SummaryCard({
   label,
   value,
-  color,
 }: {
   label: string
   value: number
-  color: 'primary' | 'blue' | 'yellow' | 'gray'
 }) {
-  const colorClasses = {
-    primary: 'text-[rgb(var(--color-primary))]',
-    blue: 'text-[rgb(var(--color-brand-blue))]',
-    yellow: 'text-yellow-600',
-    gray: 'text-gray-600',
-  }
-
   return (
-    <div className="card-elevated p-4">
+    <div className="rounded-3xl bg-white p-5">
       <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${colorClasses[color]}`}>{value}</p>
+      <p className="mt-2 font-dm-sans text-3xl font-medium text-gray-900 tabular-nums">{value}</p>
     </div>
   )
 }

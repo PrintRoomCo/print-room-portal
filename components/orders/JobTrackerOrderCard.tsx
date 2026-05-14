@@ -61,7 +61,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
   }
 
   return (
-    <div className="card-elevated overflow-hidden">
+    <div className="rounded-3xl bg-white overflow-hidden">
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
@@ -69,7 +69,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
       >
         <div className="flex gap-6">
           {/* Product Image */}
-          <div className="w-24 h-24 bg-gray-100/50 rounded-xl overflow-hidden flex-shrink-0 border border-gray-100">
+          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
             {orderImage ? (
               <img
                 src={orderImage}
@@ -111,7 +111,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                   })}
                 </p>
                 {tracker.job_reference && (
-                  <p className="text-xs text-gray-500 mt-0.5 font-mono">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     Ref: {tracker.job_reference}
                   </p>
                 )}
@@ -131,7 +131,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                         setReorderSuccess(false)
                         setShowReorderModal(true)
                       }}
-                      className="btn-secondary"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
                     >
                       Reorder
                     </button>
@@ -140,7 +140,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                     <Link
                       href={`/my-collections/${tracker.quote_id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="btn-secondary"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
                     >
                       View Quote
                     </Link>
@@ -151,7 +151,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="btn-primary"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
                     >
                       Track Project
                     </a>
@@ -173,17 +173,17 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 text-black">
-                <span className="text-xs">{isExpanded ? 'Hide' : 'Show'} details</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200">
+                <span>{isExpanded ? 'Hide' : 'Show'} details</span>
                 <svg
-                  className={`w-5 h-5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
-              </div>
+              </span>
             </div>
 
             {/* Progress Bar */}
@@ -262,14 +262,14 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
       {/* Expanded Details */}
       {isExpanded && (
-        <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4">
+        <div className="border-t border-gray-100 px-6 py-4">
           {/* Tracking Info */}
           {(() => {
             const displayNumber = getTrackingNumber(tracker.tracking_info)
             const trackingUrl = tracker.tracking_info?.url
             if (!displayNumber && !trackingUrl) return null
             return (
-              <div className="mb-4 p-3 glass-chip">
+              <div className="mb-4 rounded-2xl bg-gray-50 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[rgb(var(--color-brand-blue))]/10 border border-[rgb(var(--color-brand-blue))]/20 flex items-center justify-center">
@@ -282,7 +282,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                         {tracker.tracking_info?.carrier || 'Tracking'}
                       </p>
                       {displayNumber && (
-                        <p className="text-xs text-gray-600 font-mono">{displayNumber}</p>
+                        <p className="text-xs text-gray-600">{displayNumber}</p>
                       )}
                     </div>
                   </div>
@@ -291,7 +291,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       href={trackingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn-primary text-sm"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 hover:bg-gray-200"
                     >
                       Track Package
                     </a>
@@ -303,7 +303,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
           {/* Estimated Delivery */}
           {tracker.estimated_delivery_at && (
-            <div className="mb-4 p-3 glass-success-box">
+            <div className="mb-4 rounded-2xl bg-gray-50 p-4">
               <div className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-[rgb(var(--color-brand-blue))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -336,7 +336,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
               </div>
             </>
           ) : (
-            <div className="glass-chip p-4 text-sm text-gray-600">
+            <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
               No itemised products on record for this project — your account manager
               can reference the original quote.
             </div>
@@ -353,7 +353,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                     href={file.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -376,7 +376,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
               href={trackerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-medium text-[rgb(var(--color-primary))] hover:text-[rgb(var(--color-primary-dark))] transition-colors"
+              className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200"
             >
               View Full Project Tracker
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
