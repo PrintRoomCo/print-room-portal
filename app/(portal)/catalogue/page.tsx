@@ -340,7 +340,7 @@ export default async function CataloguePage({
   const activeCount = activeFilterCount(filters)
 
   return (
-    <div className="-mx-4 -my-4 min-h-full bg-gray-100 px-0 md:-mx-8 md:-my-8">
+    <div className="min-h-screen bg-[#FAFAFA]">
       <SetTopBarContext
         value={{
           kind: 'listing',
@@ -353,7 +353,7 @@ export default async function CataloguePage({
           filterAction: '/catalogue',
         }}
       />
-      <div className="space-y-4 px-4 pt-3 md:px-8 md:pt-4">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 md:px-6 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -363,31 +363,31 @@ export default async function CataloguePage({
 
         {/* Mobile keeps the bottom-sheet trigger. Desktop filters live in the
             global PortalTopBar's second row (populated via SetTopBarContext). */}
-        <div className="md:hidden">
+        <div className="mt-4 md:hidden">
           <FilterSheetTrigger activeCount={activeCount}>
             <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
           </FilterSheetTrigger>
         </div>
-      </div>
 
-      {products.length === 0 ? (
-        <div className="px-4 py-8 md:px-8">
-          <PortalEmptyState
-            title="No products match your filters"
-            body="Try clearing some filters."
-            actionHref="/catalogue"
-            actionLabel="Clear filters"
-          />
-        </div>
-      ) : (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-4 lg:grid-cols-5 lg:gap-4">
-          {products.map((p) => (
-            <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
-              <ProductCard product={p} />
-            </Link>
-          ))}
-        </div>
-      )}
+        {products.length === 0 ? (
+          <div className="py-8">
+            <PortalEmptyState
+              title="No products match your filters"
+              body="Try clearing some filters."
+              actionHref="/catalogue"
+              actionLabel="Clear filters"
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+            {products.map((p) => (
+              <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
+                <ProductCard product={p} />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
