@@ -79,17 +79,19 @@ export default function MyCollections() {
 
   if (companyLoading || dataLoading) {
     return (
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="flex gap-2">
-            <div className="h-10 bg-gray-200 rounded-full w-24" />
-            <div className="h-10 bg-gray-200 rounded-full w-24" />
-          </div>
-          <div className="space-y-3">
-            <div className="h-20 bg-gray-200 rounded-2xl" />
-            <div className="h-20 bg-gray-200 rounded-2xl" />
-            <div className="h-20 bg-gray-200 rounded-2xl" />
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <div className="animate-pulse space-y-6">
+            <div className="h-16 bg-gray-200 rounded w-64" />
+            <div className="flex gap-2">
+              <div className="h-10 bg-gray-200 rounded-full w-24" />
+              <div className="h-10 bg-gray-200 rounded-full w-24" />
+            </div>
+            <div className="space-y-3">
+              <div className="h-20 bg-gray-200 rounded-2xl" />
+              <div className="h-20 bg-gray-200 rounded-2xl" />
+              <div className="h-20 bg-gray-200 rounded-2xl" />
+            </div>
           </div>
         </div>
       </div>
@@ -99,15 +101,19 @@ export default function MyCollections() {
   if (!access) return null
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Quotes</h1>
-        <p className="mt-1 text-gray-600">View and manage your quotes.</p>
-      </div>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <header className="mb-10 md:mb-12">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            Orders
+          </h1>
+          <p className="mt-4 max-w-prose text-base text-gray-600">
+            View and manage your quotes and orders.
+          </p>
+        </header>
 
-      {/* Active/Expired Toggle */}
-      <div className="flex gap-2">
+        {/* Active/Expired Toggle */}
+        <div className="mb-6 flex gap-2">
         <button
           type="button"
           onClick={() => setQuoteFilter('active')}
@@ -163,6 +169,7 @@ export default function MyCollections() {
           ))}
         </div>
       )}
+      </div>
     </div>
   )
 }

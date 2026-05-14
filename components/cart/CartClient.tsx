@@ -61,8 +61,7 @@ export function CartClient({
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         {/* Hero — editorial H1 + item count */}
         <header className="mb-10 md:mb-12">
-          <p className={LABEL_CAP}>Cart</p>
-          <h1 className="mt-2 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Your cart
           </h1>
           <p className="mt-3 text-sm text-gray-600">

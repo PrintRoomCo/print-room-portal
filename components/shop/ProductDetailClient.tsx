@@ -10,8 +10,6 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
-import { useSetTopBarContext } from '@/components/layout/PortalTopBarContext'
-import { useCurrency } from '@/contexts/CurrencyContext'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
 import type { CartLineDecoration } from '@/lib/cart/types'
@@ -315,37 +313,6 @@ export function ProductDetailClient({
 
   const [toast, setToast] = useState<string | null>(null)
 
-  // Publish PDP context to the global top bar: PRODUCT / TYPE / PRICE.
-  // The price reflects the lowest tier (or RPC price) converted into the
-  // customer's selected currency — same source as the in-page price block.
-  const setTopBarContext = useSetTopBarContext()
-  const { format: formatCurrency } = useCurrency()
-  const lowestBracketPrice = useMemo(() => {
-    if (brackets.length === 0) return null
-    return brackets.reduce(
-      (min, b) => (b.unit_price < min ? b.unit_price : min),
-      brackets[0]!.unit_price,
-    )
-  }, [brackets])
-  const priceLabel = useMemo(() => {
-    const base =
-      lowestBracketPrice != null
-        ? lowestBracketPrice
-        : pricing && pricing.status === 'ok'
-          ? pricing.unit_price
-          : null
-    if (base == null) return null
-    return `FROM ${formatCurrency(base)}`
-  }, [lowestBracketPrice, pricing, formatCurrency])
-  useEffect(() => {
-    setTopBarContext({
-      kind: 'pdp',
-      productName: product.name,
-      type: product.garment_family ?? product.category_name,
-      priceLabel,
-    })
-    return () => setTopBarContext(null)
-  }, [setTopBarContext, product.name, product.garment_family, product.category_name, priceLabel])
   const selectedLinkIds = useMemo<ReadonlySet<string>>(
     () => new Set(decorations.map((d) => d.linkId)),
     [decorations],

@@ -24,12 +24,16 @@ export default async function LeaversQuotesPage() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Leavers Quotes</h1>
-        <span className="glass-badge-blue">{quotes?.length || 0} quotes</span>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <header className="mb-10 md:mb-12 flex items-end justify-between gap-4">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            Leavers Quotes
+          </h1>
+          <span className="glass-badge-blue">{quotes?.length || 0} quotes</span>
+        </header>
+        <QuoteList quotes={quotes || []} />
       </div>
-      <QuoteList quotes={quotes || []} />
     </div>
   )
 }
