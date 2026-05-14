@@ -353,7 +353,7 @@ export default async function CataloguePage({
           filterAction: '/catalogue',
         }}
       />
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 md:px-6 md:pt-4">
+      <div className="mx-auto max-w-[1680px] px-4 pb-16 pt-3 md:px-8 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -379,7 +379,7 @@ export default async function CataloguePage({
             />
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5">
             {products.map((p) => (
               <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
                 <ProductCard product={p} />
