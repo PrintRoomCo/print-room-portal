@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -86,15 +85,14 @@ export function usePortalDrawer() {
   )
 }
 
-// Declarative helper — drop into a server component's JSX to set the bar
-// context for the lifetime of that page. Clears on unmount.
+/**
+ * @deprecated The top bar no longer renders contextual stat blocks.
+ * Pages should drop their <SetTopBarContext> calls — see
+ * ~/.claude/plans/2026-05-15-oem-care-portal-sweep.md (Phase D).
+ * This component is a no-op kept for transitional safety so existing
+ * callers compile until Phase D ships.
+ */
 export function SetTopBarContext({ value }: { value: PortalTopBarContextValue }) {
-  const setValue = useSetTopBarContext()
-  useEffect(() => {
-    setValue(value)
-    return () => setValue(null)
-    // Compare by serialized shape so server-rendered identical values don't
-    // thrash the setter on every render.
-  }, [setValue, JSON.stringify(value)])
+  void value
   return null
 }
