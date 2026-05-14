@@ -19,7 +19,7 @@ export default async function AccountPage({
             <PortalEmptyState
               title="Your account isn't fully set up yet"
               body="Your organisation hasn't been provisioned in our system. Your account manager will reach out shortly — or contact us if you'd like to chase it up."
-              actionHref="mailto:sales@theprint-room.co.nz"
+              actionHref="mailto:hello@theprint-room.co.nz"
               actionLabel="Contact sales"
             />
           </div>
