@@ -11,14 +11,11 @@ import {
 } from './PortalTopBarContext'
 import { CurrencyPicker } from './CurrencyPicker'
 import { TopBarCartPill } from './TopBarCartPill'
-import { FilterAutoSubmitSelect } from '@/components/shop/FilterAutoSubmitSelect'
-import { FilterAutoSubmitCheckbox } from '@/components/shop/FilterAutoSubmitCheckbox'
-import { activeFilterCount } from '@/lib/shop/filter-params'
 
 // Pathname → section label fallback when no page-set context is present.
 // Keep in sync with Sidebar navigation labels.
 const SECTION_LABELS: Array<{ test: (p: string) => boolean; label: string }> = [
-  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'My Account' },
+  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'Settings' },
   { test: (p) => p === '/tracking' || p.startsWith('/tracking/'), label: 'Tracking' },
   { test: (p) => p === '/catalogue', label: 'Catalogue' },
   { test: (p) => p.startsWith('/catalogue/'), label: 'Product' },
@@ -97,20 +94,10 @@ export function PortalTopBar() {
             </span>
           </Link>
 
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-            <TopBarCartPill />
-            <CurrencyPicker />
-          </div>
-        </div>
-
-        {/* Row 2: filter form — only on listing pages that ship filters */}
-        {hasFilterRow && ctx?.kind === 'listing' && ctx.filters && ctx.facets && (
-          <FilterRow
-            filters={ctx.filters}
-            facets={ctx.facets}
-            action={ctx.filterAction ?? pathname}
-          />
-        )}
+      {/* Right: cart + currency */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+        <TopBarCartPill />
+        <CurrencyPicker />
       </div>
     </header>
   )

@@ -19,9 +19,10 @@ type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
 // Cart is intentionally NOT a sidebar entry — it lives in the global PortalTopBar as the "Bag" pill (see TopBarCartPill).
 // Catalogue absorbs the previous Shop + Inventory surfaces — stock shows
 // inline on each product card, no separate page (2026-05-14).
+// My Account lives in the top bar's right-slot dropdown (Settings + Sign Out)
+// — accessible from every page without opening the drawer.
 const allNavItems = [
-  { name: 'My Account', href: '/account', icon: HomeIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null as ReadonlyArray<TenantType> | null },
-  { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
+  { name: 'Tracking', href: '/tracking', icon: TrackerIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null as ReadonlyArray<TenantType> | null },
   { name: 'Catalogue', href: '/catalogue', icon: OrdersIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
   { name: 'Orders', href: '/my-collections', icon: OrdersIcon, requiresCompany: false, requiresLeavers: false, requiredTenantTypes: null },
   { name: 'Proofs', href: '/proofs', icon: ProofsIcon, requiresCompany: true, requiresLeavers: false, requiredTenantTypes: null },
