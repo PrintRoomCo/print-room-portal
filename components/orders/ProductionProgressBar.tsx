@@ -16,33 +16,26 @@ export function ProductionProgressBar({
   const currentStepIndex = getStatusStepIndex(currentStatus)
 
   if (compact) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1">
-          {STATUS_STEPS.map((step, index) => {
-            const isCompleted = index <= currentStepIndex
-            const isCurrent = index === currentStepIndex
+    const totalSteps = STATUS_STEPS.length
+    const progress =
+      currentStepIndex >= 0 ? ((currentStepIndex + 1) / totalSteps) * 100 : 0
+    const currentLabel =
+      currentStepIndex >= 0 ? STATUS_STEPS[currentStepIndex].label : null
 
-            return (
-              <div
-                key={step.key}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  isCurrent
-                    ? 'bg-[rgb(var(--color-brand-blue))] ring-2 ring-[rgb(var(--color-brand-blue))]/20'
-                    : isCompleted
-                      ? 'bg-[rgb(var(--color-brand-yellow))]'
-                      : 'bg-gray-200'
-                }`}
-                title={step.tooltip}
-              />
-            )
-          })}
+    return (
+      <div className="flex items-center gap-3">
+        <div
+          className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100"
+          title={currentLabel ?? undefined}
+        >
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-gray-900 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
         </div>
 
-        {currentStepIndex >= 0 && (
-          <span className="text-xs font-medium text-gray-700">
-            {STATUS_STEPS[currentStepIndex].label}
-          </span>
+        {currentLabel && (
+          <span className="shrink-0 text-xs text-gray-700">{currentLabel}</span>
         )}
       </div>
     )

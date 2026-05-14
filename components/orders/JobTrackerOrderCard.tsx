@@ -8,8 +8,6 @@ import { ReorderForm } from '@/components/orders/ReorderForm'
 import { useAuth } from '@/contexts/AuthContext'
 import type { JobTracker } from '@/lib/job-tracker'
 import {
-  getItemArtworkUrl,
-  getItemDisplayName,
   getItemTotalQty,
   getStatusGuidance,
   getStatusLabel,
@@ -34,26 +32,9 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
   const items = quoteData?.items ?? []
   const subtotal = quoteData?.summary?.total ?? quoteData?.summary?.subtotal ?? quoteData?.subtotal ?? 0
   const currency = quoteData?.currencyCode || 'NZD'
-  const firstItem = items[0]
-  const productImages = tracker.productImagesByProductId || {}
 
-  const getOrderImage = (): string | undefined => {
-    if (firstItem?.productId && productImages[firstItem.productId]) {
-      return productImages[firstItem.productId]
-    }
-    if (tracker.product_images && tracker.product_images.length > 0) {
-      return tracker.product_images[0]
-    }
-    if (firstItem) {
-      return getItemArtworkUrl(firstItem) ?? firstItem.image?.url
-    }
-    return undefined
-  }
-
-  const orderImage = getOrderImage()
   const trackerUrl = getTrackerUrl(tracker.tracker_token)
   const totalItems = items.reduce((sum, item) => sum + getItemTotalQty(item), 0)
-  const firstItemLabel = firstItem ? getItemDisplayName(firstItem) : 'Order'
 
   function closeReorderModal() {
     setShowReorderModal(false)
@@ -67,32 +48,8 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-6 text-left hover:bg-gray-50 transition-colors duration-300 cursor-pointer"
       >
-        <div className="flex gap-6">
-          {/* Product Image */}
-          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
-            {orderImage ? (
-              <img
-                src={orderImage}
-                alt={firstItemLabel}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  />
-                </svg>
-              </div>
-            )}
-          </div>
-
-          {/* Order Details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h3 className="font-semibold text-black">
                   Project {tracker.quote_number || `#${tracker.monday_item_id || tracker.tracker_token}`}
