@@ -64,7 +64,7 @@ export function CartClient({
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Your account is pending setup — staff need to assign your customer code
           before you can place orders. Contact{' '}
-          <a className="underline" href="mailto:sales@theprint-room.co.nz">sales@theprint-room.co.nz</a>.
+          <a className="underline" href="mailto:hello@theprint-room.co.nz">hello@theprint-room.co.nz</a>.
         </div>
       )}
 

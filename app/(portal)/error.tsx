@@ -21,8 +21,8 @@ export default function PortalError({
         <p className="text-sm text-gray-600">
           We hit an unexpected error loading this page.
           {error.digest ? ` Reference: ${error.digest}.` : ''} Please try again, or contact{' '}
-          <a className="underline" href="mailto:sales@theprint-room.co.nz">
-            sales@theprint-room.co.nz
+          <a className="underline" href="mailto:hello@theprint-room.co.nz">
+            hello@theprint-room.co.nz
           </a>{' '}
           if it keeps happening.
         </p>

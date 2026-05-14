@@ -743,7 +743,7 @@ export function ProductDetailClient({
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-700">Price on request</p>
                   <a
-                    href="mailto:sales@theprint-room.co.nz"
+                    href="mailto:hello@theprint-room.co.nz"
                     className="text-xs text-pr-blue underline"
                   >
                     Contact sales

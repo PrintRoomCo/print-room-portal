@@ -94,7 +94,7 @@ export default async function CataloguePage({
         <PortalEmptyState
           title="Your catalogue is being set up"
           body="Your account manager will let you know when products are ready for ordering."
-          actionHref="mailto:sales@theprint-room.co.nz"
+          actionHref="mailto:hello@theprint-room.co.nz"
           actionLabel="Contact sales"
         />
       </div>
