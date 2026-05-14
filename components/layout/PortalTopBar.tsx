@@ -20,7 +20,7 @@ export function PortalTopBar() {
   return (
     <header
       role="banner"
-      className="fixed inset-x-3 top-3 z-30 rounded-2xl bg-white"
+      className="fixed inset-x-3 top-3 z-30 rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
     >
       <div className="flex h-14 items-center px-3 md:px-4">
         {/* Menu trigger — toggles the Sidebar drawer */}
