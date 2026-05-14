@@ -465,6 +465,7 @@ export function ProductDetailClient({
             {product.description && (
               <p className="mt-2 text-sm text-gray-600">{product.description}</p>
             )}
+            <ProductDetailsCondensed product={product} />
           </div>
 
           <VariantPicker
@@ -725,8 +726,6 @@ export function ProductDetailClient({
         </div>
       </div>
 
-      <ProductDetailsSection product={product} />
-
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
           {toast}
@@ -740,20 +739,20 @@ function formatSpecKey(key: string): string {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function ProductDetailsSection({ product }: { product: ProductData }) {
+// Condensed details rail rendered directly under the product description.
+// Skips fields surfaced elsewhere on the PDP (SKU above title, sizing-type
+// pill next to title, lead-time chip next to availability) to avoid the
+// "same info three times" feel.
+function ProductDetailsCondensed({ product }: { product: ProductData }) {
   const rows: { label: string; value: React.ReactNode }[] = []
 
   if (product.brand_name) rows.push({ label: 'Brand', value: product.brand_name })
   if (product.category_name) rows.push({ label: 'Category', value: product.category_name })
-  if (product.sku) rows.push({ label: 'SKU', value: <span className="font-mono">{product.sku}</span> })
   if (product.garment_family) rows.push({ label: 'Garment family', value: product.garment_family.replace(/_/g, ' ') })
-  if (product.sizing_type && product.sizing_type !== 'multi_size') rows.push({ label: 'Sizing', value: product.sizing_type.replace(/_/g, ' ') })
-  if (product.default_sizes && product.default_sizes.length > 0) rows.push({ label: 'Available sizes', value: product.default_sizes.join(', ') })
+  if (product.default_sizes && product.default_sizes.length > 0) rows.push({ label: 'Sizes', value: product.default_sizes.join(', ') })
   if (product.supports_labels) rows.push({ label: 'Label support', value: 'Yes' })
   if (product.safety_standard) rows.push({ label: 'Safety standard', value: product.safety_standard })
-  if (product.lead_time_days != null) rows.push({ label: 'Lead time', value: `~${product.lead_time_days} days` })
 
-  // Flatten specs JSONB — skip keys already covered above, skip arrays/objects
   if (product.specs && typeof product.specs === 'object') {
     const skipKeys = new Set(['sizes', 'sizeRange'])
     for (const [k, v] of Object.entries(product.specs)) {
@@ -766,16 +765,13 @@ function ProductDetailsSection({ product }: { product: ProductData }) {
   if (rows.length === 0) return null
 
   return (
-    <div className="mt-10 border-t border-gray-100 pt-8">
-      <h2 className="mb-4 text-sm font-semibold text-gray-700">Product details</h2>
-      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((r) => (
-          <div key={r.label} className="flex flex-col gap-0.5">
-            <dt className="text-xs font-medium text-gray-500">{r.label}</dt>
-            <dd className="text-sm text-gray-800">{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-gray-100 pt-3 text-xs">
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-baseline gap-2">
+          <dt className="shrink-0 text-gray-500">{r.label}</dt>
+          <dd className="truncate text-gray-800">{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
