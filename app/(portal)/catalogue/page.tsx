@@ -3,8 +3,7 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
-import { getTierLabel } from '@/lib/pricing/tier-labels'
-import { TierBadge } from '@/components/pricing/TierBadge'
+import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
@@ -13,7 +12,6 @@ import { getShopFacets } from '@/lib/shop/facets'
 import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
-import type { PricingMode } from '@/lib/pricing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,9 +99,6 @@ export default async function CataloguePage({
       </div>
     )
   }
-
-  const tierLabel = getTierLabel(context.tierLevel)
-  const pricingMode: PricingMode = 'catalogue'
 
   const orderColumn = filters.sort === 'newest' ? 'created_at' : 'name'
   const orderAscending = filters.sort !== 'newest'
@@ -298,25 +293,12 @@ export default async function CataloguePage({
       </div>
 
       <div className="space-y-6">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Customer catalogue
-                </p>
-                <TierBadge label={tierLabel} pricingMode={pricingMode} />
-              </div>
-              <h1 className="mt-2 text-2xl font-semibold text-gray-900">Catalogue</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Products and prices are scoped to your dedicated catalogue.
-              </p>
-            </div>
-            <p className="text-sm text-gray-500">
-              {products.length} product{products.length === 1 ? '' : 's'}
-            </p>
-          </div>
-        </div>
+        <CatalogueTopBar
+          crumbs={[
+            { label: 'Home', href: '/account' },
+            { label: 'Catalogue' },
+          ]}
+        />
 
         {products.length === 0 ? (
           <PortalEmptyState

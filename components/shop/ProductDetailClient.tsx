@@ -8,6 +8,7 @@ import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
+import { CatalogueTopBar } from './CatalogueTopBar'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
 import type { CartLineDecoration } from '@/lib/cart/types'
@@ -436,6 +437,13 @@ export function ProductDetailClient({
 
   return (
     <div className="p-4 md:p-8">
+      <CatalogueTopBar
+        crumbs={[
+          { label: 'Home', href: '/account' },
+          { label: 'Catalogue', href: '/catalogue' },
+          { label: product.name },
+        ]}
+      />
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Image */}
         <ProductImageGallery
