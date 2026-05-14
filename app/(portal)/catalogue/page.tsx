@@ -4,6 +4,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
 import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
+import { CatalogueFilterBar } from '@/components/shop/CatalogueFilterBar'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
@@ -282,41 +283,39 @@ export default async function CataloguePage({
   const activeCount = activeFilterCount(filters)
 
   return (
-    <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_1fr] md:gap-6 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
+      <CatalogueTopBar
+        crumbs={[
+          { label: 'Home', href: '/account' },
+          { label: 'Catalogue' },
+        ]}
+      />
+
       <div className="md:hidden">
         <FilterSheetTrigger activeCount={activeCount}>
           <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
         </FilterSheetTrigger>
       </div>
       <div className="hidden md:block">
-        <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
+        <CatalogueFilterBar filters={filters} facets={facets} />
       </div>
 
-      <div className="space-y-6">
-        <CatalogueTopBar
-          crumbs={[
-            { label: 'Home', href: '/account' },
-            { label: 'Catalogue' },
-          ]}
+      {products.length === 0 ? (
+        <PortalEmptyState
+          title="No products match your filters"
+          body="Try clearing some filters."
+          actionHref="/catalogue"
+          actionLabel="Clear filters"
         />
-
-        {products.length === 0 ? (
-          <PortalEmptyState
-            title="No products match your filters"
-            body="Try clearing some filters."
-            actionHref="/catalogue"
-            actionLabel="Clear filters"
-          />
-        ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {products.map((p) => (
-              <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
-                <ProductCard product={p} />
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {products.map((p) => (
+            <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
+              <ProductCard product={p} />
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

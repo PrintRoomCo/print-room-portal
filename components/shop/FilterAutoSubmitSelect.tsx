@@ -12,9 +12,19 @@ interface Props {
   defaultValue: string
   options: Option[]
   ariaLabel: string
+  className?: string
 }
 
-export function FilterAutoSubmitSelect({ name, defaultValue, options, ariaLabel }: Props) {
+const DEFAULT_CLASSNAME =
+  'rounded-full bg-gray-50 border border-gray-200 px-4 py-2 text-sm w-full'
+
+export function FilterAutoSubmitSelect({
+  name,
+  defaultValue,
+  options,
+  ariaLabel,
+  className = DEFAULT_CLASSNAME,
+}: Props) {
   const ref = useRef<HTMLSelectElement>(null)
 
   function handleChange(_: ChangeEvent<HTMLSelectElement>) {
@@ -28,7 +38,7 @@ export function FilterAutoSubmitSelect({ name, defaultValue, options, ariaLabel 
       defaultValue={defaultValue}
       onChange={handleChange}
       aria-label={ariaLabel}
-      className="rounded-full bg-gray-50 border border-gray-200 px-4 py-2 text-sm w-full"
+      className={className}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
