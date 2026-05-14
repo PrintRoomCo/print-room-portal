@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
