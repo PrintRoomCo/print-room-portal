@@ -11,11 +11,15 @@ import {
 } from './PortalTopBarContext'
 import { CurrencyPicker } from './CurrencyPicker'
 import { TopBarCartPill } from './TopBarCartPill'
+import { AccountMenu } from './AccountMenu'
+import { FilterAutoSubmitSelect } from '@/components/shop/FilterAutoSubmitSelect'
+import { FilterAutoSubmitCheckbox } from '@/components/shop/FilterAutoSubmitCheckbox'
+import { activeFilterCount } from '@/lib/shop/filter-params'
 
 // Pathname → section label fallback when no page-set context is present.
 // Keep in sync with Sidebar navigation labels.
 const SECTION_LABELS: Array<{ test: (p: string) => boolean; label: string }> = [
-  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'Settings' },
+  { test: (p) => p === '/account' || p.startsWith('/account/'), label: 'My Account' },
   { test: (p) => p === '/tracking' || p.startsWith('/tracking/'), label: 'Tracking' },
   { test: (p) => p === '/catalogue', label: 'Catalogue' },
   { test: (p) => p.startsWith('/catalogue/'), label: 'Product' },
@@ -62,7 +66,7 @@ export function PortalTopBar() {
       className="pointer-events-none fixed inset-x-3 top-3 z-30 hidden md:block"
     >
       <div className="pointer-events-auto rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md">
-        {/* Row 1: menu + context | brand | cart + currency */}
+        {/* Row 1: menu + context | brand | cart + currency + account */}
         <div className="flex h-14 items-center px-4 md:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <button
@@ -94,10 +98,21 @@ export function PortalTopBar() {
             </span>
           </Link>
 
-      {/* Right: cart + currency */}
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-        <TopBarCartPill />
-        <CurrencyPicker />
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            <TopBarCartPill />
+            <CurrencyPicker />
+            <AccountMenu />
+          </div>
+        </div>
+
+        {/* Row 2: filter form — only on listing pages that ship filters */}
+        {hasFilterRow && ctx?.kind === 'listing' && ctx.filters && ctx.facets && (
+          <FilterRow
+            filters={ctx.filters}
+            facets={ctx.facets}
+            action={ctx.filterAction ?? pathname}
+          />
+        )}
       </div>
     </header>
   )
