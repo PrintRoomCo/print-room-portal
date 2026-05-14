@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
-import { useCurrency } from '@/contexts/CurrencyContext'
+import { CurrencyDisplayPreferenceSection } from '@/components/account/CurrencyDisplayPreferenceSection'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
@@ -28,16 +28,6 @@ const NZ_REGIONS = [
   { code: 'WTC', name: 'West Coast' },
 ]
 
-const CURRENCY_OPTIONS: SupportedCurrency[] = ['NZD', 'AUD', 'USD', 'GBP', 'EUR']
-
-const CURRENCY_LABEL: Record<SupportedCurrency, string> = {
-  NZD: 'NZ$',
-  AUD: 'A$',
-  USD: 'US$',
-  GBP: '£',
-  EUR: '€',
-}
-
 interface Store {
   id: string
   name: string
@@ -60,9 +50,12 @@ interface Quote {
   created_at: string
 }
 
-export function AccountClient() {
+interface AccountClientProps {
+  ratesFetchedAt: string | null
+}
+
+export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
   const { access, loading: companyLoading } = useCompany()
-  const { currency, setCurrency } = useCurrency()
 
   const [stores, setStores] = useState<Store[]>([])
   const [recentQuotes, setRecentQuotes] = useState<Quote[]>([])
@@ -328,6 +321,8 @@ export function AccountClient() {
           )}
         </div>
       </div>
+
+      <CurrencyDisplayPreferenceSection fetchedAt={ratesFetchedAt} />
 
       {/* Password Change */}
       <div className="card-elevated p-6">
