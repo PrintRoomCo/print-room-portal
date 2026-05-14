@@ -4,7 +4,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * Resolve which b2b_catalogue_items.id values a member can see.
  *
  * Rules (mirror of `auth_member_has_catalogue_item` RLS helper):
- *   1. Member must have a catalogue grant for the item's catalogue.
+ *   0. `org_admin` membership role implicitly grants access to every active
+ *      item in every active catalogue in the org — grants are a buyer-scoping
+ *      tool, not an admin gate.
+ *   1. Otherwise, member must have a catalogue grant for the item's catalogue.
  *   2. Within a granted catalogue, item visibility is:
  *      - "all items" when zero item-grants exist for (member, catalogue) → every active item.
  *      - "whitelist" when one or more item-grants exist → only the explicit set.
@@ -16,6 +19,25 @@ export async function getGrantedCatalogueItemIds(
   membershipId: string,
   organizationId: string,
 ): Promise<string[]> {
+  // 0. Admin bypass — admins see every active item in every active catalogue
+  // in their org, regardless of b2b_member_catalogue_grants rows.
+  const { data: membership } = await admin
+    .from('user_organizations')
+    .select('role')
+    .eq('id', membershipId)
+    .maybeSingle()
+
+  if ((membership as { role?: string } | null)?.role === 'org_admin') {
+    const { data: adminItems } = await admin
+      .from('b2b_catalogue_items')
+      .select('id, b2b_catalogues!inner(organization_id, is_active)')
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', organizationId)
+      .eq('b2b_catalogues.is_active', true)
+
+    return ((adminItems ?? []) as Array<{ id: string }>).map((r) => r.id)
+  }
+
   // 1. Catalogues granted to this membership (intersected with org's active catalogues).
   const { data: grantedRows } = await admin
     .from('b2b_member_catalogue_grants')
