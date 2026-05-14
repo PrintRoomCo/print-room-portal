@@ -6,6 +6,7 @@ import { useCompany } from '@/contexts/CompanyContext'
 import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
+import type { SupportedCurrency } from '@/lib/currency/types'
 
 const NZ_REGIONS = [
   { code: 'AUK', name: 'Auckland' },
