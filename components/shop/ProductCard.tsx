@@ -60,10 +60,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <p className="mt-auto pt-3 text-sm text-gray-500">Price on request</p>
         ) : (
           <p className="mt-auto pt-3 text-sm text-gray-600">
-            From{' '}
-            <span className="rounded-full bg-[rgb(var(--color-brand-yellow))] px-2 py-0.5 font-semibold text-[rgb(var(--color-brand-blue))]">
-              <Money nzd={product.from_unit_price} />
-            </span>
+            From <Money nzd={product.from_unit_price} />
           </p>
         )}
       </div>
