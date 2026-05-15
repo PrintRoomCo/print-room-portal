@@ -14,57 +14,50 @@ export async function getShopFacets(
     return { brands: [], categories: [], garmentFamilies: [] }
   }
 
-  const [brandsRes, categoriesRes, familyRes] = await Promise.all([
-    admin
-      .from('products')
-      .select('brand_id, brands!products_brand_id_fkey!inner(id, name)')
-      .in('id', scopedProductIds),
-    admin
-      .from('products')
-      .select('category_id, categories!products_category_id_fkey!inner(id, name)')
-      .in('id', scopedProductIds),
-    admin
-      .from('products')
-      .select('garment_family')
-      .in('id', scopedProductIds),
-  ])
+  // Step 1: collect the distinct facet keys actually present on products in
+  // scope. Single scan over `products` — no embedded FK joins (the chained
+  // `tablename!fk_name!inner(...)` PostgREST syntax was returning empty data
+  // for newly-ported orgs even though the FKs resolved at the SQL layer).
+  const { data: rows } = await admin
+    .from('products')
+    .select('brand_id, category_id, garment_family')
+    .in('id', scopedProductIds)
 
-  // TEMP DIAGNOSTIC — bg-topbar-filters, remove after fix
-  console.log('[getShopFacets]', {
-    scopedCount: scopedProductIds.length,
-    brands: { len: brandsRes.data?.length ?? 0, err: brandsRes.error?.message ?? null, sample: brandsRes.data?.[0] },
-    categories: { len: categoriesRes.data?.length ?? 0, err: categoriesRes.error?.message ?? null, sample: categoriesRes.data?.[0] },
-    families: { len: familyRes.data?.length ?? 0, err: familyRes.error?.message ?? null, samples: familyRes.data?.slice(0, 3) },
-  })
-
-  const brandMap = new Map<string, { id: string; name: string }>()
-  for (const r of (brandsRes.data ?? []) as Array<{
-    brand_id: string
-    brands: { id: string; name: string } | { id: string; name: string }[] | null
-  }>) {
-    const b = Array.isArray(r.brands) ? r.brands[0] : r.brands
-    if (b) brandMap.set(b.id, { id: b.id, name: b.name })
-  }
-
-  const categoryMap = new Map<string, { id: string; name: string }>()
-  for (const r of (categoriesRes.data ?? []) as Array<{
-    category_id: string
-    categories: { id: string; name: string } | { id: string; name: string }[] | null
-  }>) {
-    const c = Array.isArray(r.categories) ? r.categories[0] : r.categories
-    if (c) categoryMap.set(c.id, { id: c.id, name: c.name })
-  }
-
+  const brandIdSet = new Set<string>()
+  const categoryIdSet = new Set<string>()
   const familySet = new Set<string>()
-  for (const r of (familyRes.data ?? []) as Array<{ garment_family: string | null }>) {
+  for (const r of (rows ?? []) as Array<{
+    brand_id: string | null
+    category_id: string | null
+    garment_family: string | null
+  }>) {
+    if (r.brand_id) brandIdSet.add(r.brand_id)
+    if (r.category_id) categoryIdSet.add(r.category_id)
     if (r.garment_family && r.garment_family.trim() !== '') {
       familySet.add(r.garment_family)
     }
   }
 
+  // Step 2: hydrate labels from brands + categories. Separate queries keep the
+  // result shape flat and avoid PostgREST FK-disambiguation quirks.
+  const brandIds = Array.from(brandIdSet)
+  const categoryIds = Array.from(categoryIdSet)
+  const [brandsRes, categoriesRes] = await Promise.all([
+    brandIds.length > 0
+      ? admin.from('brands').select('id, name').in('id', brandIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+    categoryIds.length > 0
+      ? admin.from('categories').select('id, name').in('id', categoryIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+  ])
+
   return {
-    brands: Array.from(brandMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
-    categories: Array.from(categoryMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    brands: ((brandsRes.data ?? []) as Array<{ id: string; name: string }>)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    categories: ((categoriesRes.data ?? []) as Array<{ id: string; name: string }>)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name)),
     garmentFamilies: Array.from(familySet).sort((a, b) => a.localeCompare(b)),
   }
 }
