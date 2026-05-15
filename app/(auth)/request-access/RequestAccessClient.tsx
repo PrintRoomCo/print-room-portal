@@ -39,6 +39,7 @@ const REFERRAL_OPTIONS = [
 
 export default function RequestAccess() {
   const [customerType, setCustomerType] = useState<'company' | 'creative'>('company')
+  const [useCaptchaFreeFallback, setUseCaptchaFreeFallback] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -61,7 +62,11 @@ export default function RequestAccess() {
 
     const formData = new FormData(e.currentTarget)
     formData.set('customerType', customerType)
-    if (captchaToken) formData.set('captchaToken', captchaToken)
+    if (useCaptchaFreeFallback) {
+      formData.set('accessibility_fallback', 'true')
+    } else if (captchaToken) {
+      formData.set('captchaToken', captchaToken)
+    }
 
     const result = await submitAccessRequest(formData)
 
@@ -122,7 +127,7 @@ export default function RequestAccess() {
             </div>
 
             {error && (
-              <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
+              <div role="alert" className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
                 <p className="text-sm text-red-600">{error}</p>
               </div>
             )}
@@ -148,35 +153,35 @@ export default function RequestAccess() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                  <input type="text" name="firstName" required autoComplete="given-name" className="input-glass" />
+                  <label htmlFor="request-first-name" className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                  <input id="request-first-name" type="text" name="firstName" required autoComplete="given-name" className="input-glass" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                  <input type="text" name="lastName" required autoComplete="family-name" className="input-glass" />
+                  <label htmlFor="request-last-name" className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                  <input id="request-last-name" type="text" name="lastName" required autoComplete="family-name" className="input-glass" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" className="input-glass" />
+                <label htmlFor="request-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input id="request-email" type="email" name="email" required autoComplete="email" placeholder="you@company.com" className="input-glass" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input type="tel" name="phone" autoComplete="tel" placeholder="+64 21 123 4567" className="input-glass" />
+                <label htmlFor="request-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input id="request-phone" type="tel" name="phone" autoComplete="tel" placeholder="+64 21 123 4567" className="input-glass" />
               </div>
 
               {customerType === 'company' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
-                  <input type="text" name="companyName" required autoComplete="organization" className="input-glass" />
+                  <label htmlFor="request-company-name" className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                  <input id="request-company-name" type="text" name="companyName" required autoComplete="organization" className="input-glass" />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                <select name="industry" className="input-glass appearance-none cursor-pointer">
+                <label htmlFor="request-industry" className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                <select id="request-industry" name="industry" className="input-glass appearance-none cursor-pointer">
                   <option value="">Select your industry...</option>
                   {INDUSTRY_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -185,8 +190,8 @@ export default function RequestAccess() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Volume</label>
-                <select name="estimatedVolume" className="input-glass appearance-none cursor-pointer">
+                <label htmlFor="request-estimated-volume" className="block text-sm font-medium text-gray-700 mb-1">Estimated Volume</label>
+                <select id="request-estimated-volume" name="estimatedVolume" className="input-glass appearance-none cursor-pointer">
                   <option value="">Select estimated volume...</option>
                   {VOLUME_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -195,8 +200,8 @@ export default function RequestAccess() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">How did you hear about us?</label>
-                <select name="referralSource" className="input-glass appearance-none cursor-pointer">
+                <label htmlFor="request-referral-source" className="block text-sm font-medium text-gray-700 mb-1">How did you hear about us?</label>
+                <select id="request-referral-source" name="referralSource" className="input-glass appearance-none cursor-pointer">
                   <option value="">Select...</option>
                   {REFERRAL_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -205,11 +210,11 @@ export default function RequestAccess() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea name="message" rows={3} placeholder="Tell us about your needs..." className="textarea-glass" />
+                <label htmlFor="request-message" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea id="request-message" name="message" rows={3} placeholder="Tell us about your needs..." className="textarea-glass" />
               </div>
 
-              {hcaptchaSitekey && (
+              {hcaptchaSitekey && !useCaptchaFreeFallback && (
                 <div className="flex justify-center">
                   <HCaptcha
                     ref={captchaRef}
@@ -218,6 +223,21 @@ export default function RequestAccess() {
                     onExpire={() => setCaptchaToken(null)}
                   />
                 </div>
+              )}
+
+              {!useCaptchaFreeFallback && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseCaptchaFreeFallback(true)
+                    setCaptchaToken(null)
+                    setError(null)
+                    captchaRef.current?.resetCaptcha()
+                  }}
+                  className="w-full text-center text-sm font-medium text-[rgb(var(--color-brand-blue))] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pr-blue"
+                >
+                  Trouble with the captcha? Send us your request via email
+                </button>
               )}
 
               <button
