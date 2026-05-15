@@ -1,7 +1,37 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { getSupabaseServer } from '@/lib/supabase'
 import { createAccountRequestItem } from '@/lib/monday/account-requests'
+
+const FALLBACK_LIMIT = 5
+const FALLBACK_WINDOW_MS = 60 * 60 * 1000
+const fallbackAttempts = new Map<string, number[]>()
+
+async function getRequestIp() {
+  const headerStore = await headers()
+  const forwardedFor = headerStore.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return (
+    forwardedFor ||
+    headerStore.get('x-real-ip') ||
+    headerStore.get('cf-connecting-ip') ||
+    'unknown'
+  )
+}
+
+function isFallbackRateLimited(ip: string, now = Date.now()) {
+  const cutoff = now - FALLBACK_WINDOW_MS
+  const recent = (fallbackAttempts.get(ip) ?? []).filter((ts) => ts > cutoff)
+
+  if (recent.length >= FALLBACK_LIMIT) {
+    fallbackAttempts.set(ip, recent)
+    return true
+  }
+
+  recent.push(now)
+  fallbackAttempts.set(ip, recent)
+  return false
+}
 
 export async function submitAccessRequest(
   formData: FormData
@@ -16,9 +46,17 @@ export async function submitAccessRequest(
   const estimatedVolume = formData.get('estimatedVolume') as string
   const referralSource = formData.get('referralSource') as string
   const message = formData.get('message') as string
+  const accessibilityFallback = formData.get('accessibility_fallback') === 'true'
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return { error: 'First name, last name, and email are required.' }
+  }
+
+  if (accessibilityFallback && isFallbackRateLimited(await getRequestIp())) {
+    return {
+      error:
+        'Too many access requests from this connection. Please wait and try again, or email our team directly.',
+    }
   }
 
   const supabase = getSupabaseServer()
