@@ -1,9 +1,14 @@
+import type { Metadata } from 'next'
 import { AccountClient } from './AccountClient'
 import { getServerExchangeRate } from '@/lib/currency/server-exchange-rates'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { getPortalAccountData } from '@/lib/portal-data'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Account',
+}
 
 export default async function AccountPage({
   searchParams,

@@ -1,5 +1,6 @@
 'use client'
 
+import * as Dialog from '@radix-ui/react-dialog'
 import { useReducer, useEffect, useCallback, useRef } from 'react'
 import { z } from 'zod'
 import { GarmentLinesForm } from './GarmentLinesForm'
@@ -201,6 +202,7 @@ export function QuoteBuilder() {
   })
 
   const pricingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const designPickerReturnFocusRef = useRef<HTMLElement | null>(null)
 
   // Load catalog data
   useEffect(() => {
@@ -286,6 +288,11 @@ export function QuoteBuilder() {
     const updated = state.garmentLines.filter((_, i) => i !== idx)
     debouncePricing(updated)
   }, [state.garmentLines, debouncePricing])
+  const handleOpenDesignPicker = useCallback((lineIdx: number, decoIdx: number) => {
+    designPickerReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dispatch({ type: 'OPEN_DESIGN_PICKER', lineIdx, decoIdx })
+  }, [])
 
   const handleGoToDetails = useCallback(() => {
     // Validate all lines with Zod
@@ -378,7 +385,7 @@ export function QuoteBuilder() {
             onLineChange={handleLineChange}
             onAddLine={handleAddLine}
             onRemoveLine={handleRemoveLine}
-            onOpenDesignPicker={(lineIdx, decoIdx) => dispatch({ type: 'OPEN_DESIGN_PICKER', lineIdx, decoIdx })}
+            onOpenDesignPicker={handleOpenDesignPicker}
             quoteSessionId={state.quoteSessionId}
             artworkUploadUrl={ARTWORK_UPLOAD_URL}
           />
@@ -430,13 +437,31 @@ export function QuoteBuilder() {
       )}
 
       {/* Design Picker Modal */}
-      {state.designPickerOpen && (
-        <div className="glass-modal-backdrop" onClick={() => dispatch({ type: 'CLOSE_DESIGN_PICKER' })}>
-          <div className="glass-modal-content max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+      <Dialog.Root
+        open={state.designPickerOpen}
+        onOpenChange={(open) => {
+          if (!open) dispatch({ type: 'CLOSE_DESIGN_PICKER' })
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content
+            className="glass-modal-content fixed left-1/2 top-1/2 z-[60] max-h-[80vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto p-6"
+            onCloseAutoFocus={(event) => {
+              if (!designPickerReturnFocusRef.current) return
+              event.preventDefault()
+              designPickerReturnFocusRef.current.focus()
+            }}
+          >
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">Choose a Standard Design</h3>
-              <button className="btn-ghost" onClick={() => dispatch({ type: 'CLOSE_DESIGN_PICKER' })}>Close</button>
+              <Dialog.Title className="text-lg font-bold">Choose a Standard Design</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className="btn-ghost">Close</button>
+              </Dialog.Close>
             </div>
+            <Dialog.Description className="sr-only">
+              Select one standard artwork design to attach to the current decoration.
+            </Dialog.Description>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {state.catalog.standardDesigns.map((design: any) => (
                 <button
@@ -468,9 +493,9 @@ export function QuoteBuilder() {
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

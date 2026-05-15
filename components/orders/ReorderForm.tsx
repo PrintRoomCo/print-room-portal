@@ -23,6 +23,12 @@ const MAX_FILE_BYTES = 15 * 1024 * 1024
 const NOTES_PLACEHOLDER =
   "Include any order details e.g. size /qty breakdown, design names, new design you're adding to the order or any additional information."
 
+interface ReorderFieldErrors {
+  deliveryAddress?: string
+  inHandDate?: string
+  quantity?: string
+}
+
 function todayIso(): string {
   const now = new Date()
   return new Date(
@@ -58,6 +64,7 @@ export function ReorderForm({
   const [editedItems, setEditedItems] = useState<ReorderEditedItem[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<ReorderFieldErrors>({})
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const sourceItems = tracker.quote_data?.items ?? []
   const handleEditedChange = useCallback(
@@ -121,25 +128,31 @@ export function ReorderForm({
     if (submitting) return
 
     const addressTrimmed = deliveryAddress.trim()
+    const nextFieldErrors: ReorderFieldErrors = {}
     if (addressTrimmed.length < 6) {
-      setError('Please enter a full delivery address.')
-      return
+      nextFieldErrors.deliveryAddress = 'Please enter a full delivery address.'
     }
     if (!inHandDate) {
-      setError('Please choose the in-hand date.')
-      return
+      nextFieldErrors.inHandDate = 'Please choose the in-hand date.'
     }
 
     let quantityValue: number | undefined
     if (quantity.trim().length > 0) {
       const parsed = Number(quantity)
       if (!Number.isInteger(parsed) || parsed <= 0) {
-        setError('Quantity must be a positive whole number.')
-        return
+        nextFieldErrors.quantity = 'Quantity must be a positive whole number.'
+      } else {
+        quantityValue = parsed
       }
-      quantityValue = parsed
     }
 
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      setError(null)
+      return
+    }
+
+    setFieldErrors({})
     setError(null)
     setSubmitting(true)
     try {
@@ -172,7 +185,7 @@ export function ReorderForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {/* Past order reference + email — read-only chips */}
       <div className="grid gap-3 sm:grid-cols-2">
         <ReadOnlyField label="Past order reference" value={pastRef} />
@@ -209,11 +222,29 @@ export function ReorderForm({
           required
           rows={3}
           value={deliveryAddress}
-          onChange={(e) => setDeliveryAddress(e.target.value)}
+          onChange={(e) => {
+            setDeliveryAddress(e.target.value)
+            if (fieldErrors.deliveryAddress) {
+              setFieldErrors((prev) => ({ ...prev, deliveryAddress: undefined }))
+            }
+          }}
           placeholder="Full delivery address — street, suburb, city, postcode"
           className="textarea-glass"
           disabled={submitting}
+          aria-invalid={fieldErrors.deliveryAddress ? true : undefined}
+          aria-describedby={
+            fieldErrors.deliveryAddress ? 'reorder-delivery-address-error' : undefined
+          }
         />
+        {fieldErrors.deliveryAddress && (
+          <p
+            id="reorder-delivery-address-error"
+            role="alert"
+            className="mt-1 text-xs text-red-600"
+          >
+            {fieldErrors.deliveryAddress}
+          </p>
+        )}
       </div>
 
       {/* In-hand date */}
@@ -230,11 +261,31 @@ export function ReorderForm({
           required
           min={minDate}
           value={inHandDate}
-          onChange={(e) => setInHandDate(e.target.value)}
+          onChange={(e) => {
+            setInHandDate(e.target.value)
+            if (fieldErrors.inHandDate) {
+              setFieldErrors((prev) => ({ ...prev, inHandDate: undefined }))
+            }
+          }}
           className="input-glass"
           disabled={submitting}
+          aria-invalid={fieldErrors.inHandDate ? true : undefined}
+          aria-describedby={
+            fieldErrors.inHandDate
+              ? 'reorder-in-hand-date-error reorder-in-hand-date-hint'
+              : 'reorder-in-hand-date-hint'
+          }
         />
-        <p className="mt-1 text-xs text-gray-500">
+        {fieldErrors.inHandDate && (
+          <p
+            id="reorder-in-hand-date-error"
+            role="alert"
+            className="mt-1 text-xs text-red-600"
+          >
+            {fieldErrors.inHandDate}
+          </p>
+        )}
+        <p id="reorder-in-hand-date-hint" className="mt-1 text-xs text-gray-500">
           The date you need the order delivered by. Typical production lead time is
           15–20 business days.
         </p>
@@ -255,11 +306,23 @@ export function ReorderForm({
           step={1}
           inputMode="numeric"
           value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
+          onChange={(e) => {
+            setQuantity(e.target.value)
+            if (fieldErrors.quantity) {
+              setFieldErrors((prev) => ({ ...prev, quantity: undefined }))
+            }
+          }}
           placeholder="Total quantity (optional)"
           className="input-glass"
           disabled={submitting}
+          aria-invalid={fieldErrors.quantity ? true : undefined}
+          aria-describedby={fieldErrors.quantity ? 'reorder-quantity-error' : undefined}
         />
+        {fieldErrors.quantity && (
+          <p id="reorder-quantity-error" role="alert" className="mt-1 text-xs text-red-600">
+            {fieldErrors.quantity}
+          </p>
+        )}
       </div>
 
       {/* Notes */}
@@ -319,7 +382,10 @@ export function ReorderForm({
       </p>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </div>
       )}

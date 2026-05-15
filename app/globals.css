@@ -25,11 +25,15 @@
  * ============================================ */
 @layer base {
   :root {
-    /* Brand colors (RGB triplets for Tailwind alpha support) */
+    /* Brand colors (RGB triplets for Tailwind alpha support unless noted).
+     * RULE: --color-brand-yellow / pr-yellow is BACKGROUND-ONLY.
+     * Never use it as text on light surfaces (1.09:1 on white — fails AA).
+     * For yellow-tinted foreground, use --color-brand-yellow-strong / pr-yellow-strong. */
     --color-primary: 30 35 38;         /* #1E2326 - dark charcoal */
     --color-primary-dark: 20 23 26;    /* darker charcoal for hover */
     --color-brand-blue: 43 57 144;     /* #2B3990 - brand accent */
     --color-brand-yellow: 241 255 165; /* #F1FFA5 - secondary accent */
+    --color-brand-yellow-strong: 73 87% 41%; /* ≈ #A4D200 - HSL, foreground-safe */
     --color-surface: 248 250 244;      /* #F8FAF4 - sidebar/secondary bg */
 
     /* Design system tokens (HSL) */
@@ -44,12 +48,15 @@
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted-foreground: 0 0% 38%;
     --accent: 0 0% 96.1%;
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
+    /* Structural border — inputs and selected states must meet 3:1 against white. */
+    --border: 0 0% 70%;
+    /* Decorative separator — cards and list dividers where no state is conveyed. */
+    --border-decorative: 0 0% 89.8%;
     --input: 0 0% 89.8%;
     --ring: 210 12% 13%;
     --radius: 0.5rem;
@@ -64,7 +71,12 @@
   *,
   *::before,
   *::after {
-    border-color: hsl(var(--border));
+    border-color: hsl(var(--border-decorative));
+  }
+
+  html {
+    scroll-padding-top: 5rem;
+    scroll-padding-right: 5rem;
   }
 
   body {
@@ -227,7 +239,7 @@
    * ============================================ */
 
   .input-glass {
-    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200;
+    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200;
   }
 
   .input-glass:focus {
@@ -235,7 +247,7 @@
   }
 
   .select-glass {
-    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-gray-200 text-foreground focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 appearance-none cursor-pointer;
+    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-[hsl(var(--border))] text-foreground focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 appearance-none cursor-pointer;
   }
 
   .select-glass:focus {
@@ -243,7 +255,7 @@
   }
 
   .textarea-glass {
-    @apply w-full px-5 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 resize-none;
+    @apply w-full px-5 py-3 rounded-2xl bg-gray-50 border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 resize-none;
   }
 
   .textarea-glass:focus {

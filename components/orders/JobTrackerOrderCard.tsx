@@ -1,5 +1,6 @@
 'use client'
 
+import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ProductionProgressBar } from '@/components/orders/ProductionProgressBar'
@@ -152,30 +153,31 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
       </div>
 
       {/* Reorder Modal */}
-      {showReorderModal && (
-        <div
-          className="glass-modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeReorderModal()
-          }}
-        >
-          <div
-            className="glass-modal-content max-w-lg w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <Dialog.Root
+        open={showReorderModal}
+        onOpenChange={(open) => {
+          if (!open) closeReorderModal()
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content className="glass-modal-content fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Reorder project</h2>
-                <button
-                  type="button"
-                  onClick={closeReorderModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label="Close"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <Dialog.Title className="text-xl font-bold text-gray-900">
+                  Reorder project
+                </Dialog.Title>
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label="Close"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </Dialog.Close>
               </div>
 
               {reorderSuccess ? (
@@ -209,9 +211,9 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                 </p>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Expanded Details */}
       {isExpanded && (

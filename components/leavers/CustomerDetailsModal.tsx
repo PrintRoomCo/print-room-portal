@@ -21,22 +21,22 @@ export function CustomerDetailsModal({ customerDetails, onChange, onBack, onSubm
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Full Name *</label>
-          <input className="input-glass" value={d.fullName} onChange={e => onChange({ fullName: e.target.value })} placeholder="Your full name" />
+          <input className="input-glass" value={d.fullName} onChange={e => onChange({ fullName: e.target.value })} placeholder="Your full name" autoComplete="name" />
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Email *</label>
-          <input className="input-glass" type="email" value={d.email} onChange={e => onChange({ email: e.target.value })} placeholder="you@email.com" />
+          <input className="input-glass" type="email" value={d.email} onChange={e => onChange({ email: e.target.value })} placeholder="you@email.com" autoComplete="email" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">School Name *</label>
-          <input className="input-glass" value={d.schoolName} onChange={e => onChange({ schoolName: e.target.value })} placeholder="School name" />
+          <input className="input-glass" value={d.schoolName} onChange={e => onChange({ schoolName: e.target.value })} placeholder="School name" autoComplete="organization" />
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Phone Number</label>
-          <input className="input-glass" type="tel" value={d.phoneNumber} onChange={e => onChange({ phoneNumber: e.target.value })} placeholder="021 000 0000" />
+          <input className="input-glass" type="tel" value={d.phoneNumber} onChange={e => onChange({ phoneNumber: e.target.value })} placeholder="021 000 0000" autoComplete="tel" />
         </div>
       </div>
 
@@ -47,7 +47,7 @@ export function CustomerDetailsModal({ customerDetails, onChange, onBack, onSubm
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Teacher Email *</label>
-          <input className="input-glass" type="email" value={d.teacherEmail} onChange={e => onChange({ teacherEmail: e.target.value })} placeholder="teacher@school.nz" />
+          <input className="input-glass" type="email" value={d.teacherEmail} onChange={e => onChange({ teacherEmail: e.target.value })} placeholder="teacher@school.nz" autoComplete="email" />
         </div>
       </div>
 

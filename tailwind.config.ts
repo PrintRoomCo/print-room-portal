@@ -15,6 +15,7 @@ export default {
       },
       colors: {
         border: 'hsl(var(--border))',
+        'border-decorative': 'hsl(var(--border-decorative))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
@@ -52,6 +53,7 @@ export default {
         'pr-charcoal': 'rgb(var(--color-primary) / <alpha-value>)',
         'pr-blue': 'rgb(var(--color-brand-blue) / <alpha-value>)',
         'pr-yellow': 'rgb(var(--color-brand-yellow) / <alpha-value>)',
+        'pr-yellow-strong': 'hsl(var(--color-brand-yellow-strong) / <alpha-value>)',
         'pr-surface': 'rgb(var(--color-surface) / <alpha-value>)',
       },
       borderRadius: {
