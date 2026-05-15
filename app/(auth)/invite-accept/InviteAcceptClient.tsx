@@ -68,7 +68,7 @@ function InviteAccept() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
+          <div role="alert" className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
             <p className="text-sm text-red-600">{error}</p>
           </div>
         )}

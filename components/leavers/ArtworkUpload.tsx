@@ -14,11 +14,13 @@ interface Props {
 export function ArtworkUpload({ decoration, onChange, onOpenDesignPicker, quoteSessionId, artworkUploadUrl }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setError(null)
     setUploading(true)
     try {
       // Get signed URL
@@ -35,7 +37,7 @@ export function ArtworkUpload({ decoration, onChange, onOpenDesignPicker, quoteS
 
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || 'Upload failed')
+        setError(err.error || 'Upload failed')
         return
       }
 
@@ -49,7 +51,7 @@ export function ArtworkUpload({ decoration, onChange, onOpenDesignPicker, quoteS
       })
 
       if (!uploadRes.ok) {
-        alert('File upload failed. Please try again.')
+        setError('File upload failed. Please try again.')
         return
       }
 
@@ -60,7 +62,7 @@ export function ArtworkUpload({ decoration, onChange, onOpenDesignPicker, quoteS
         _artworkFileName: file.name,
       })
     } catch {
-      alert('Upload failed. Please try again.')
+      setError('Upload failed. Please try again.')
     } finally {
       setUploading(false)
     }
@@ -98,6 +100,14 @@ export function ArtworkUpload({ decoration, onChange, onOpenDesignPicker, quoteS
           </span>
         )}
       </div>
+      {error && (
+        <div
+          role="alert"
+          className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+        >
+          {error}
+        </div>
+      )}
     </div>
   )
 }

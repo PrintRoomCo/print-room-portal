@@ -175,7 +175,10 @@ function SignIn() {
               </div>
             )}
             {displayError && (
-              <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]">
+              <div
+                role="alert"
+                className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]"
+              >
                 <p className="text-sm text-red-600">{displayError}</p>
               </div>
             )}
