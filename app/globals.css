@@ -74,6 +74,11 @@
     border-color: hsl(var(--border-decorative));
   }
 
+  html {
+    scroll-padding-top: 5rem;
+    scroll-padding-right: 5rem;
+  }
+
   body {
     @apply bg-background text-foreground font-sans;
   }
