@@ -7,7 +7,13 @@ import {
   type ReactNode,
 } from 'react'
 import { useCompany } from '@/contexts/CompanyContext'
-import { lineSignature, type CartLine, type CartState } from '@/lib/cart/types'
+import {
+  applyUpdatePatch,
+  lineSignature,
+  type CartLine,
+  type CartLineBracket,
+  type CartState,
+} from '@/lib/cart/types'
 
 export interface CartApi {
   lines: CartLine[]
@@ -19,6 +25,20 @@ export interface CartApi {
 }
 
 export const CartContext = createContext<CartApi | null>(null)
+
+function normalizeBrackets(raw: unknown): CartLineBracket[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: CartLineBracket[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const b = r as Partial<CartLineBracket>
+    if (typeof b.minQty !== 'number' || typeof b.unitPrice !== 'number') continue
+    const maxQty =
+      typeof b.maxQty === 'number' ? b.maxQty : b.maxQty === null ? null : null
+    out.push({ minQty: b.minQty, maxQty, unitPrice: b.unitPrice })
+  }
+  return out.length > 0 ? out : undefined
+}
 
 function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
@@ -43,6 +63,7 @@ function normalizePersisted(raw: unknown): CartState {
           ? (l.shipToStoreId ?? null)
           : null,
       decorations: Array.isArray(l.decorations) ? l.decorations : [],
+      brackets: normalizeBrackets(l.brackets),
     })
   }
   return { lines: normalized }
@@ -128,7 +149,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }),
     updateLine: (lineId, patch) =>
       setState((s) => ({
-        lines: s.lines.map((l) => (l.lineId === lineId ? { ...l, ...patch } : l)),
+        lines: s.lines.map((l) => (l.lineId === lineId ? applyUpdatePatch(l, patch) : l)),
       })),
     removeLine: (lineId) =>
       setState((s) => ({ lines: s.lines.filter((l) => l.lineId !== lineId) })),

@@ -36,4 +36,15 @@ describe('PriceBreakdown', () => {
     render(<PriceBreakdown breakdown={ob} variant="cart-totals" />)
     expect(screen.queryByText(/discount/i)).toBeNull()
   })
+
+  it('honours a custom format prop in place of NZD fallback', () => {
+    const format = (n: number) => `A$${(n * 0.9).toFixed(2)}`
+    render(<PriceBreakdown breakdown={ob} variant="cart-totals" format={format} />)
+    // 215 * 0.9 = 193.50
+    expect(screen.getByText(/A\$193\.50/)).toBeDefined()
+    // 247.25 * 0.9 = 222.525 -> 222.53
+    expect(screen.getByText(/A\$222\.53/)).toBeDefined()
+    // NZD-formatted strings should be absent.
+    expect(screen.queryByText(/\$215\.00/)).toBeNull()
+  })
 })

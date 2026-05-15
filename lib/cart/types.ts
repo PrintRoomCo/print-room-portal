@@ -17,6 +17,13 @@ export interface CartLineDecoration {
   snapshotUrl: string | null
 }
 
+export interface CartLineBracket {
+  minQty: number
+  /** null = unbounded tail bucket (e.g. 100+). */
+  maxQty: number | null
+  unitPrice: number
+}
+
 export interface CartLine {
   lineId: string
   productId: string
@@ -41,6 +48,13 @@ export interface CartLine {
    * persisted lines; treat as 'stocked' when undefined.
    */
   fulfilmentType?: 'stocked' | 'make_to_stock'
+  /**
+   * Volume-tier brackets snapshotted at add-time. Used by CartProvider to
+   * re-derive unitPrice when qty changes (so a 100→24 edit drops back to the
+   * smaller-tier price). Absent on legacy persisted lines; in that case
+   * unitPrice stays frozen until checkout submit re-prices server-side.
+   */
+  brackets?: CartLineBracket[]
 }
 
 export interface CartState {
@@ -74,4 +88,37 @@ export function lineSignature(
   decorations: CartLineDecoration[],
 ): string {
   return `${productId}::${variantId}::${variantLabel}::${decorationSignature(decorations)}`
+}
+
+/**
+ * Pick the volume bracket that applies to a given qty, or null when the line
+ * has no bracket snapshot (legacy persisted lines). Tail bracket has maxQty
+ * null to mean "qty and above"; assumes ascending sort.
+ */
+export function pickBracket(
+  brackets: CartLineBracket[] | undefined,
+  qty: number,
+): CartLineBracket | null {
+  if (!brackets || brackets.length === 0) return null
+  return (
+    brackets.find(
+      (b) => qty >= b.minQty && (b.maxQty == null || qty <= b.maxQty),
+    ) ?? null
+  )
+}
+
+/**
+ * Apply a partial patch to a cart line. When the patch changes qty (and does
+ * not explicitly set unitPrice), the unit price is re-derived from the line's
+ * brackets snapshot so a 100→24 edit drops back to the smaller-tier price.
+ * Legacy lines without brackets keep their frozen unitPrice (server still
+ * re-prices canonically on submit).
+ */
+export function applyUpdatePatch(line: CartLine, patch: Partial<CartLine>): CartLine {
+  const next: CartLine = { ...line, ...patch }
+  if (patch.qty !== undefined && patch.unitPrice === undefined) {
+    const bracket = pickBracket(line.brackets, next.qty)
+    if (bracket) next.unitPrice = bracket.unitPrice
+  }
+  return next
 }

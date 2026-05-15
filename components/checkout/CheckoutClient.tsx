@@ -14,8 +14,8 @@ import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
-import { formatPrice } from '@/lib/format/price'
 import { decorationPerUnit } from '@/lib/cart/types'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -50,6 +50,7 @@ export function CheckoutClient({
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
+  const { format } = useCurrency()
 
   const idempotencyKey = useRef<string>(crypto.randomUUID())
 
@@ -229,7 +230,7 @@ export function CheckoutClient({
 
       {depositPct > 0 && (
         <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-          A deposit of {depositPct}% ({formatPrice(depositAmount)}) will be
+          A deposit of {depositPct}% ({format(depositAmount)}) will be
           invoiced up-front. Balance on {paymentTerms ?? 'net20'}.
         </div>
       )}
@@ -421,7 +422,7 @@ export function CheckoutClient({
           <span className="text-sm text-gray-700">Pricing for</span>
           <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
         </div>
-        <PriceBreakdown breakdown={breakdown} variant="checkout-review" />
+        <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
       </section>
 
       <div className="mt-6 flex flex-wrap justify-end gap-2">

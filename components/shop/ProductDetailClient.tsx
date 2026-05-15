@@ -12,7 +12,8 @@ import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
-import type { CartLineDecoration } from '@/lib/cart/types'
+import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -77,6 +78,7 @@ export function ProductDetailClient({
   effectiveMoq,
 }: Props) {
   const cart = useCart()
+  const { format } = useCurrency()
 
   const firstVariant = variants[0] ?? null
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
@@ -408,6 +410,11 @@ export function ProductDetailClient({
       artworkUrl: d.artworkUrl,
       snapshotUrl: d.snapshotUrl,
     }))
+    const cartLineBrackets: CartLineBracket[] = brackets.map((b) => ({
+      minQty: b.min_quantity,
+      maxQty: b.max_quantity,
+      unitPrice: b.unit_price,
+    }))
 
     // Mode 1: existing multi-size with variants — one cart line per touched variant.
     if (sizingMode === 'multi_size_with_variants') {
@@ -431,6 +438,7 @@ export function ProductDetailClient({
           imageUrl: product.image_url,
           decorations: cartLineDecorations,
           fulfilmentType,
+          brackets: cartLineBrackets,
         })
         added += lineQty
       }
@@ -460,6 +468,7 @@ export function ProductDetailClient({
           imageUrl: product.image_url,
           decorations: cartLineDecorations,
           fulfilmentType: 'make_to_stock',
+          brackets: cartLineBrackets,
         })
         added += lineQty
       }
@@ -481,6 +490,7 @@ export function ProductDetailClient({
       imageUrl: product.image_url,
       decorations: cartLineDecorations,
       fulfilmentType: 'make_to_stock',
+      brackets: cartLineBrackets,
     })
     showToast('Added to cart')
   }
@@ -589,7 +599,7 @@ export function ProductDetailClient({
                         {b.min_quantity}
                         {b.max_quantity ? `–${b.max_quantity}` : '+'}
                       </span>{' '}
-                      <span className="text-gray-500">@ ${allInUnit.toFixed(2)}</span>
+                      <span className="text-gray-500">@ {format(allInUnit)}</span>
                     </li>
                   )
                 })}
@@ -793,6 +803,7 @@ export function ProductDetailClient({
                       gstRate: 0.15,
                     })}
                     variant="pdp"
+                    format={format}
                   />
                 ) : pricing && pricing.status === 'missing' ? (
                   <div>

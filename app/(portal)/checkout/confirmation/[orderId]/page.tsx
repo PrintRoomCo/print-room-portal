@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
-import { formatPrice } from '@/lib/format/price'
+import { ConfirmationTotals } from './ConfirmationTotals'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,26 +120,13 @@ export default async function ConfirmationPage({
 
           <div className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
             <h2 className="text-sm font-medium text-gray-700">Order total</h2>
-            <dl className="mt-3 space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-600">Subtotal (ex-GST)</dt>
-                <dd className="text-gray-900">{formatPrice(subtotalExGst)}</dd>
-              </div>
-              {decorationCost > 0 && (
-                <div className="flex justify-between text-gray-500">
-                  <dt className="pl-3">Includes decoration</dt>
-                  <dd>{formatPrice(decorationCost)}</dd>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <dt className="text-gray-600">GST (15%)</dt>
-                <dd className="text-gray-900">{formatPrice(gst)}</dd>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-gray-100 pt-2 text-base font-semibold">
-                <dt>Total payable</dt>
-                <dd>{formatPrice(totalIncGst)}</dd>
-              </div>
-            </dl>
+            <ConfirmationTotals
+              subtotalExGst={subtotalExGst}
+              decorationCost={decorationCost}
+              gst={gst}
+              totalIncGst={totalIncGst}
+              gstRate={GST_RATE}
+            />
           </div>
 
           {!mondaySynced && !awaitingApproval && (

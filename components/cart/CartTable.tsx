@@ -3,8 +3,8 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { decorationPerUnit, type CartLine } from '@/lib/cart/types'
-import { formatPrice } from '@/lib/format/price'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -29,6 +29,7 @@ export function CartTable({
   onOversellChange,
   onMoqViolationChange,
 }: CartTableProps) {
+  const { format } = useCurrency()
   const [availability, setAvailability] = useState<AvailabilityMap>({})
   const [moqByProduct, setMoqByProduct] = useState<MoqMap>({})
   const [loading, setLoading] = useState(false)
@@ -154,7 +155,7 @@ export function CartTable({
                       <span
                         key={d.linkId}
                         className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
-                        title={`${d.name} · +${formatPrice(d.unitPrice)} / unit`}
+                        title={`${d.name} · +${format(d.unitPrice)} / unit`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -164,7 +165,7 @@ export function CartTable({
                         />
                         <span className="font-medium">{d.name}</span>
                         <span className="tabular-nums text-gray-500">
-                          +{formatPrice(d.unitPrice)}
+                          +{format(d.unitPrice)}
                         </span>
                       </span>
                     ))}
@@ -243,10 +244,10 @@ export function CartTable({
             {/* Price row */}
             <div className="mt-4 flex items-baseline justify-between border-t border-gray-100 pt-3 text-sm">
               <span className="text-gray-500">
-                Unit · <span className="tabular-nums text-gray-700">{formatPrice(line.unitPrice)}</span>
+                Unit · <span className="tabular-nums text-gray-700">{format(line.unitPrice)}</span>
               </span>
               <span className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
-                {formatPrice(lineTotal)}
+                {format(lineTotal)}
               </span>
             </div>
           </article>

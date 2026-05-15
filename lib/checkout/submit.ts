@@ -28,6 +28,16 @@ export interface CheckoutLineInput {
   decorations?: CheckoutLineDecorationInput[]
   /** Stable per-line id from the cart, used in error responses to point at the offending line. */
   cart_line_id?: string
+  /**
+   * Cart's claimed bare-product unit price at submit-time. Set when the cart
+   * had a brackets snapshot (B.2/B.3); the server compares against the
+   * canonical tier price and throws UnitPriceDriftError on mismatch. Absent
+   * for legacy carts — server silently uses its canonical price (current
+   * pre-2026-05-15 behaviour).
+   */
+  claimed_unit_price?: number
+  /** True iff the cart carried a brackets snapshot for this line. */
+  has_brackets?: boolean
 }
 
 export interface CheckoutInput {
@@ -62,6 +72,24 @@ export class DecorationDriftError extends Error {
   constructor(drift: DecorationDrift[]) {
     super('decoration_price_drift')
     this.name = 'DecorationDriftError'
+    this.drift = drift
+  }
+}
+
+export interface UnitPriceDrift {
+  cartLineId: string | null
+  productId: string
+  productName: string
+  qty: number
+  claimedUnitPrice: number
+  canonicalUnitPrice: number
+}
+
+export class UnitPriceDriftError extends Error {
+  readonly drift: UnitPriceDrift[]
+  constructor(drift: UnitPriceDrift[]) {
+    super('unit_price_drift')
+    this.name = 'UnitPriceDriftError'
     this.drift = drift
   }
 }
@@ -355,6 +383,34 @@ export async function submitCustomerOrder(
     ...l,
     unit_price: priceByProductId.get(l.product_id) ?? 0,
   }))
+
+  // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
+  //     a brackets snapshot (post-2026-05-15) — for legacy carts (no
+  //     has_brackets flag) we keep the historical silent re-price path. The
+  //     cart already re-derives unitPrice from its bracket snapshot on every
+  //     qty edit (CartProvider.updateLine + pickBracket), so a mismatch here
+  //     means the snapshot diverged from the live tier (e.g. AM changed
+  //     pricing while the customer was checking out).
+  const PRICE_DRIFT_TOLERANCE = 0.005
+  const unitPriceDrift: UnitPriceDrift[] = []
+  for (const line of input.lines) {
+    if (!line.has_brackets) continue
+    if (typeof line.claimed_unit_price !== 'number') continue
+    const canonical = priceByProductId.get(line.product_id) ?? 0
+    if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
+      unitPriceDrift.push({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        productName: line.product_name,
+        qty: line.qty,
+        claimedUnitPrice: line.claimed_unit_price,
+        canonicalUnitPrice: canonical,
+      })
+    }
+  }
+  if (unitPriceDrift.length > 0) {
+    throw new UnitPriceDriftError(unitPriceDrift)
+  }
 
   // 2b. Re-validate every selected decoration on every line. Server-side
   //     read of the link table + org_decoration; reject on cross-org reuse,

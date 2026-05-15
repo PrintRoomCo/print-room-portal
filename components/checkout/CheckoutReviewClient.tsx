@@ -9,7 +9,7 @@ import { TierBadge } from '@/components/pricing/TierBadge'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { decorationPerUnit } from '@/lib/cart/types'
-import { formatPrice } from '@/lib/format/price'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import type { StoreOption } from './ShipToRow'
 import {
   allLinesUseCustomAddress,
@@ -39,6 +39,7 @@ export function CheckoutReviewClient({
   const cart = useCart()
   const router = useRouter()
   const pricingCtx = usePricingContext()
+  const { format } = useCurrency()
   const [reviewState, setReviewState] = useState<CheckoutReviewState | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -117,6 +118,8 @@ export function CheckoutReviewClient({
             ship_to_store_id: allCustom ? null : reviewState.perLineShipTo[line.lineId] ?? null,
             cart_line_id: line.lineId,
             decorations: line.decorations,
+            claimed_unit_price: line.unitPrice,
+            has_brackets: Array.isArray(line.brackets) && line.brackets.length > 0,
           })),
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),
@@ -131,6 +134,14 @@ export function CheckoutReviewClient({
             was: number
             now: number
             reason: string
+          }>
+          priceDrift?: Array<{
+            cartLineId: string | null
+            productId: string
+            productName: string
+            qty: number
+            claimedUnitPrice: number
+            canonicalUnitPrice: number
           }>
           violations?: Array<{
             cartLineId: string | null
@@ -167,6 +178,20 @@ export function CheckoutReviewClient({
           setBanner({
             kind: 'error',
             msg: `Decoration pricing has changed - review your cart. ${summary}`,
+          })
+          router.push('/cart')
+          return
+        }
+        if (data.error === 'unit_price_drift' && data.priceDrift) {
+          const summary = data.priceDrift
+            .map(
+              (d) =>
+                `${d.productName}: cart $${d.claimedUnitPrice.toFixed(2)} -> live $${d.canonicalUnitPrice.toFixed(2)}`,
+            )
+            .join('; ')
+          setBanner({
+            kind: 'error',
+            msg: `Pricing has changed since you added these to your cart - review and resubmit. ${summary}`,
           })
           router.push('/cart')
           return
@@ -329,15 +354,15 @@ export function CheckoutReviewClient({
                       <ul className="mt-2 space-y-1 text-xs text-gray-600">
                         {line.decorations.map((decoration) => (
                           <li key={decoration.linkId}>
-                            {decoration.name} +{formatPrice(decoration.unitPrice)} / unit
+                            {decoration.name} +{format(decoration.unitPrice)} / unit
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
                   <div className="text-right text-sm">
-                    <p className="text-gray-500">Unit {formatPrice(line.unitPrice)}</p>
-                    <p className="mt-1 font-semibold text-gray-900">{formatPrice(lineTotal)}</p>
+                    <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
+                    <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
                   </div>
                 </div>
               </article>
@@ -400,7 +425,7 @@ export function CheckoutReviewClient({
           <span className="text-sm text-gray-700">Pricing for</span>
           <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
         </div>
-        <PriceBreakdown breakdown={breakdown} variant="checkout-review" />
+        <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
         {(depositPct > 0 || paymentTerms) && (
           <div className="mt-4 space-y-1 text-xs text-gray-500">
             {paymentTerms && (
@@ -413,7 +438,7 @@ export function CheckoutReviewClient({
               <p>
                 Expected deposit ({depositPct}%):{' '}
                 <span className="font-medium text-gray-900 tabular-nums">
-                  {formatPrice(depositAmount)}
+                  {format(depositAmount)}
                 </span>
               </p>
             )}

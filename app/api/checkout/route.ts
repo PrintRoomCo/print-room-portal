@@ -6,6 +6,7 @@ import {
   MemberAccessDriftError,
   MoqViolationError,
   StockShortfallError,
+  UnitPriceDriftError,
   submitCustomerOrder,
   type CheckoutLineInput,
 } from '@/lib/checkout/submit'
@@ -106,6 +107,12 @@ export async function POST(request: Request) {
     if (e instanceof DecorationDriftError) {
       return NextResponse.json(
         { error: 'decoration_price_drift', drift: e.drift },
+        { status: 409 },
+      )
+    }
+    if (e instanceof UnitPriceDriftError) {
+      return NextResponse.json(
+        { error: 'unit_price_drift', priceDrift: e.drift },
         { status: 409 },
       )
     }

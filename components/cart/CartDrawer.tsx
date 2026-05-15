@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
-import { formatPrice } from '@/lib/format/price'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { CartTable } from './CartTable'
 import { useCart } from './useCart'
 
@@ -16,6 +16,7 @@ export function CartDrawer() {
   const drawer = useCartDrawer()
   const pathname = usePathname()
   const router = useRouter()
+  const { format } = useCurrency()
   const [oversell, setOversell] = useState(false)
   const [moqShort, setMoqShort] = useState(false)
 
@@ -92,7 +93,7 @@ export function CartDrawer() {
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-sm text-gray-500">Total</span>
                   <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
-                    {formatPrice(breakdown.total)}
+                    {format(breakdown.total)}
                   </span>
                 </div>
                 {(oversell || moqShort) && (
