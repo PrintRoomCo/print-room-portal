@@ -326,15 +326,15 @@ export function Sidebar({ children, customer }: SidebarProps) {
                     >
                       <Link
                         href={row.href}
-                        title={row.id}
-                        aria-label={row.id}
+                        title={row.label}
+                        aria-label={row.label}
                         data-discover="true"
                         data-row={row.id}
                         aria-current={row.isActive ? 'page' : undefined}
                         tabIndex={drawer.open ? 0 : -1}
                         className="block h-full w-full cursor-pointer"
                       >
-                        <span className="sr-only">{row.id}</span>
+                        <span className="sr-only">{row.label}</span>
                       </Link>
                     </foreignObject>
                   )
