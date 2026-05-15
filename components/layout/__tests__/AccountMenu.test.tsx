@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   signOut: vi.fn(),
   useAuth: vi.fn(),
+  useCompany: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -17,10 +18,17 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: mocks.useAuth,
 }))
 
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: mocks.useCompany,
+}))
+
 beforeEach(() => {
   mocks.push.mockClear()
   mocks.signOut.mockReset().mockResolvedValue(undefined)
   mocks.useAuth.mockReset()
+  mocks.useCompany.mockReset().mockReturnValue({
+    access: { firstName: 'Jamie', lastName: 'Sedgewick' },
+  })
 })
 
 describe('AccountMenu', () => {
@@ -41,7 +49,7 @@ describe('AccountMenu', () => {
 
     render(<AccountMenu />)
 
-    const trigger = screen.getByRole('button', { name: /account/i })
+    const trigger = screen.getByRole('button', { name: /jamie sedgewick/i })
     trigger.focus()
     await user.keyboard('{Enter}')
 
@@ -61,10 +69,19 @@ describe('AccountMenu', () => {
 
     render(<AccountMenu />)
 
-    await user.click(screen.getByRole('button', { name: /account/i }))
+    await user.click(screen.getByRole('button', { name: /jamie sedgewick/i }))
     await user.click(await screen.findByRole('menuitem', { name: /sign out/i }))
 
     expect(mocks.push).toHaveBeenCalledWith('/sign-in')
     expect(mocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to Account when the member name is missing', () => {
+    mocks.useAuth.mockReturnValue({ user: { id: 'user-1' }, signOut: mocks.signOut })
+    mocks.useCompany.mockReturnValue({ access: { firstName: '', lastName: '' } })
+
+    render(<AccountMenu />)
+
+    expect(screen.getByRole('button', { name: /account/i })).toBeInTheDocument()
   })
 })

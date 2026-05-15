@@ -5,14 +5,19 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useCompany } from '@/contexts/CompanyContext'
 
 // Account dropdown for the top bar's right slot. "My Account" pill on
 // desktop, anchored panel with Settings + Sign Out. Signed-out users see
 // a "Sign In" link instead (no panel).
 export function AccountMenu() {
   const { user, signOut } = useAuth()
+  const { access } = useCompany()
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const displayName =
+    [access?.firstName, access?.lastName].filter(Boolean).join(' ').trim() ||
+    'Account'
 
   if (!user) {
     return (
@@ -32,7 +37,9 @@ export function AccountMenu() {
           type="button"
           className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
         >
-          <span>Account</span>
+          <span className="max-w-[16ch] truncate" title={displayName}>
+            {displayName}
+          </span>
           <ChevronDown className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} />
         </button>
       </DropdownMenu.Trigger>
