@@ -3,12 +3,22 @@
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { sendPasswordResetEmail } from './actions'
+import { useAuth } from '@/contexts/AuthContext'
+
+type CodeStage = 'request' | 'verify'
 
 export default function ResetPassword() {
+  const router = useRouter()
+  const { requestEmailCode, verifyEmailCode } = useAuth()
   const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [codeStage, setCodeStage] = useState<CodeStage>('request')
+  const [useEmailCode, setUseEmailCode] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [successEmail, setSuccessEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -24,9 +34,20 @@ export default function ResetPassword() {
     }
   }, [error])
 
+  function switchToEmailCode() {
+    setUseEmailCode(true)
+    setError(null)
+    setInfo(null)
+    setCode('')
+    setCodeStage('request')
+    setCaptchaToken(null)
+    captchaRef.current?.resetCaptcha()
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setInfo(null)
     setIsSubmitting(true)
 
     const result = await sendPasswordResetEmail(email, captchaToken || undefined)
@@ -40,6 +61,40 @@ export default function ResetPassword() {
     setSuccessEmail(email)
     setSuccess(true)
     setIsSubmitting(false)
+  }
+
+  async function handleRequestCode(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+    setIsSubmitting(true)
+
+    const result = await requestEmailCode(email)
+    setIsSubmitting(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setCodeStage('verify')
+    setInfo(`We emailed a 6-digit code to ${email}. It expires in 10 minutes.`)
+  }
+
+  async function handleVerifyCode(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setIsSubmitting(true)
+
+    const result = await verifyEmailCode(email, code.trim())
+
+    if (result.error) {
+      setError(result.error)
+      setIsSubmitting(false)
+      return
+    }
+
+    router.push('/set-password')
   }
 
   if (success) {
@@ -82,54 +137,159 @@ export default function ResetPassword() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]">
+          <div
+            role="alert"
+            className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]"
+          >
             <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Email <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              name="email"
-              placeholder="you@company.com"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input-glass"
-            />
+        {info && !error && (
+          <div className="mb-6 p-4 rounded-2xl bg-blue-50 border border-blue-200/50">
+            <p className="text-sm text-blue-700">{info}</p>
           </div>
+        )}
 
-          {hcaptchaSitekey && (
-            <div className="mt-6 flex justify-center">
-              <HCaptcha
-                ref={captchaRef}
-                sitekey={hcaptchaSitekey}
-                onVerify={(token) => setCaptchaToken(token)}
-                onExpire={() => setCaptchaToken(null)}
+        {!useEmailCode ? (
+          <form onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="reset-email"
+                type="email"
+                name="email"
+                placeholder="you@company.com"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input-glass"
               />
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="mt-6 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
-          >
-            {isSubmitting ? 'Sending...' : 'Send Reset Link'}
-          </button>
+            {hcaptchaSitekey && (
+              <div className="mt-6 flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hcaptchaSitekey}
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+            )}
 
-          <p className="mt-6 text-center text-sm text-gray-600">
-            Remember your password?{' '}
-            <Link href="/sign-in" className="text-[rgb(var(--color-primary))] font-medium hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </form>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="mt-6 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
+            >
+              {isSubmitting ? 'Sending...' : 'Send Reset Link'}
+            </button>
+
+            <button
+              type="button"
+              onClick={switchToEmailCode}
+              className="mt-4 w-full text-center text-sm font-medium text-[rgb(var(--color-brand-blue))] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pr-blue"
+            >
+              Can&apos;t solve the captcha? Verify via email code instead
+            </button>
+
+            <p className="mt-6 text-center text-sm text-gray-600">
+              Remember your password?{' '}
+              <Link href="/sign-in" className="text-[rgb(var(--color-primary))] font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        ) : codeStage === 'request' ? (
+          <form onSubmit={handleRequestCode}>
+            <div>
+              <label htmlFor="reset-code-email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="reset-code-email"
+                type="email"
+                name="email"
+                placeholder="you@company.com"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input-glass"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || !email}
+              className="mt-6 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
+            >
+              {isSubmitting ? 'Sending code...' : 'Send code'}
+            </button>
+
+            <p className="mt-6 text-center text-sm text-gray-600">
+              Remember your password?{' '}
+              <Link href="/sign-in" className="text-[rgb(var(--color-primary))] font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode}>
+            <div>
+              <label htmlFor="reset-code" className="block text-sm font-medium text-gray-700 mb-1.5">
+                6-digit code <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="reset-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="123456"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                className="input-glass tracking-widest text-center text-lg"
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Sent to <span className="font-medium">{email}</span>.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCodeStage('request')
+                    setCode('')
+                    setInfo(null)
+                  }}
+                  className="text-[rgb(var(--color-brand-blue))] hover:underline"
+                >
+                  Use a different email
+                </button>
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || code.length !== 6}
+              className="mt-6 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
+            >
+              {isSubmitting ? 'Verifying...' : 'Verify & continue'}
+            </button>
+
+            <p className="mt-6 text-center text-sm text-gray-600">
+              Remember your password?{' '}
+              <Link href="/sign-in" className="text-[rgb(var(--color-primary))] font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   )
