@@ -1,8 +1,9 @@
 'use client'
 
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
 // Account dropdown for the top bar's right slot. "My Account" pill on
@@ -12,24 +13,6 @@ export function AccountMenu() {
   const { user, signOut } = useAuth()
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e: MouseEvent) {
-      if (!wrapperRef.current) return
-      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [open])
 
   if (!user) {
     return (
@@ -43,53 +26,46 @@ export function AccountMenu() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative z-30">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
-      >
-        <span>Account</span>
-        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      <div
-        role="menu"
-        aria-hidden={open ? 'false' : 'true'}
-        className={`absolute right-0 top-full z-[80] mt-2 w-44 origin-top-right overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-gray-200/70 transition-all duration-200 ease-out motion-reduce:transition-none ${
-          open
-            ? 'opacity-100 translate-y-0 pointer-events-auto'
-            : 'opacity-0 -translate-y-1 pointer-events-none'
-        }`}
-      >
-        <Link
-          href="/account"
-          role="menuitem"
-          tabIndex={open ? 0 : -1}
-          onClick={() => setOpen(false)}
-          className="block px-4 py-3 text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50"
-        >
-          Settings
-        </Link>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+      <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          role="menuitem"
-          tabIndex={open ? 0 : -1}
-          onClick={() => {
-            // Optimistic: close + route immediately; auth listener clears state
-            // once signOut resolves on the background.
-            setOpen(false)
-            router.push('/sign-in')
-            void signOut()
-          }}
-          className="block w-full px-4 py-3 text-left text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
         >
-          Sign Out
+          <span>Account</span>
+          <ChevronDown className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} />
         </button>
-      </div>
-    </div>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={8}
+          loop
+          className="z-[80] w-44 origin-top-right overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-gray-200/70 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+        >
+          <DropdownMenu.Item asChild>
+            <Link
+              href="/account"
+              className="block cursor-pointer px-4 py-3 text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+            >
+              Settings
+            </Link>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => {
+              // Optimistic: close + route immediately; auth listener clears state
+              // once signOut resolves on the background.
+              setOpen(false)
+              router.push('/sign-in')
+              void signOut()
+            }}
+            className="block w-full cursor-pointer px-4 py-3 text-left text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+          >
+            Sign Out
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   )
 }
 
