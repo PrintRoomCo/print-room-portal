@@ -371,8 +371,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
 
         {customer.companyName && (
           <div className="border-t border-gray-200/70 px-5 py-4">
-            <p className="text-xs text-gray-500">Signed in as</p>
-            <p className="mt-1 truncate text-sm font-medium text-gray-900">
+            <p className="truncate text-sm font-medium text-gray-900">
               {customer.firstName} {customer.lastName}
             </p>
             <p className="truncate text-xs text-gray-500">{customer.companyName}</p>
