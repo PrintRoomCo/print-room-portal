@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useCompany } from '@/contexts/CompanyContext'
@@ -64,8 +65,21 @@ export default function CollectionDetail() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
   const [showAddDesignModal, setShowAddDesignModal] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const modalReturnFocusRef = useRef<HTMLElement | null>(null)
 
   const collectionId = params.collectionId ?? ''
+
+  function openModal(setOpen: (open: boolean) => void) {
+    modalReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setOpen(true)
+  }
+
+  function restoreModalTriggerFocus(event: Event) {
+    if (!modalReturnFocusRef.current) return
+    event.preventDefault()
+    modalReturnFocusRef.current.focus()
+  }
 
   const fetchData = useCallback((signal?: AbortSignal) => {
     if (!collectionId) return
@@ -294,13 +308,13 @@ export default function CollectionDetail() {
 
         {isDraft && (
           <div className="flex gap-2 w-full sm:w-auto">
-            <button onClick={() => setShowEditModal(true)} className="btn-secondary flex items-center gap-2 flex-1 sm:flex-none">
+            <button onClick={() => openModal(setShowEditModal)} className="btn-secondary flex items-center gap-2 flex-1 sm:flex-none">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
               Edit
             </button>
-            <button onClick={() => setShowDeleteConfirm(true)} className="btn-ghost text-red-600 hover:bg-red-50/50 flex-1 sm:flex-none">
+            <button onClick={() => openModal(setShowDeleteConfirm)} className="btn-ghost text-red-600 hover:bg-red-50/50 flex-1 sm:flex-none">
               Delete
             </button>
           </div>
@@ -420,7 +434,7 @@ export default function CollectionDetail() {
           </h2>
           {isDraft && availableDesigns.length > 0 && (
             <button
-              onClick={() => setShowAddDesignModal(true)}
+              onClick={() => openModal(setShowAddDesignModal)}
               className="btn-secondary flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -440,7 +454,7 @@ export default function CollectionDetail() {
             </div>
             <p className="text-gray-500 mb-4">No designs in this collection yet.</p>
             {isDraft && availableDesigns.length > 0 && (
-              <button onClick={() => setShowAddDesignModal(true)} className="btn-primary">
+              <button onClick={() => openModal(setShowAddDesignModal)} className="btn-primary">
                 Add Design
               </button>
             )}
@@ -463,7 +477,7 @@ export default function CollectionDetail() {
       {/* Submit Button */}
       {canSubmit && (
         <div className="flex justify-end pt-6 border-t border-gray-100">
-          <button onClick={() => setShowSubmitConfirm(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => openModal(setShowSubmitConfirm)} className="btn-primary flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -473,11 +487,18 @@ export default function CollectionDetail() {
       )}
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <div className="glass-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false) }}>
-          <div className="glass-modal-content max-w-md w-full">
+      <Dialog.Root open={showEditModal} onOpenChange={setShowEditModal}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content
+            className="glass-modal-content fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2"
+            onCloseAutoFocus={restoreModalTriggerFocus}
+          >
             <div className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Edit Collection</h2>
+              <Dialog.Title className="text-xl font-bold text-gray-900 mb-4">Edit Collection</Dialog.Title>
+              <Dialog.Description className="sr-only">
+                Update the collection name or description.
+              </Dialog.Description>
               <form onSubmit={handleEdit} className="space-y-4">
                 <div>
                   <label htmlFor="editName" className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -488,64 +509,87 @@ export default function CollectionDetail() {
                   <textarea id="editDesc" name="description" rows={3} defaultValue={collection.description || ''} className="textarea-glass" />
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 btn-secondary">Cancel</button>
+                  <Dialog.Close asChild>
+                    <button type="button" className="flex-1 btn-secondary">Cancel</button>
+                  </Dialog.Close>
                   <button type="submit" className="flex-1 btn-primary">Save</button>
                 </div>
               </form>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Delete Confirm Modal */}
-      {showDeleteConfirm && (
-        <div className="glass-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowDeleteConfirm(false) }}>
-          <div className="glass-modal-content max-w-sm w-full p-6 text-center">
+      <Dialog.Root open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content
+            className="glass-modal-content fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 p-6 text-center"
+            onCloseAutoFocus={restoreModalTriggerFocus}
+          >
             <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
               <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">Delete &quot;{collection.name}&quot;?</h3>
-            <p className="text-sm text-gray-500 mt-2">This action cannot be undone. Designs will be unlinked but not deleted.</p>
+            <Dialog.Title className="text-lg font-semibold text-gray-900">Delete &quot;{collection.name}&quot;?</Dialog.Title>
+            <Dialog.Description className="text-sm text-gray-500 mt-2">This action cannot be undone. Designs will be unlinked but not deleted.</Dialog.Description>
             <div className="flex gap-3 mt-6">
-              <button type="button" onClick={() => setShowDeleteConfirm(false)} className="flex-1 btn-secondary">Cancel</button>
+              <Dialog.Close asChild>
+                <button type="button" className="flex-1 btn-secondary">Cancel</button>
+              </Dialog.Close>
               <button type="button" onClick={handleDelete} className="flex-1 btn-danger">Delete</button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Submit Confirm Modal */}
-      {showSubmitConfirm && (
-        <div className="glass-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowSubmitConfirm(false) }}>
-          <div className="glass-modal-content max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Submit for Approval?</h3>
-            <p className="text-sm text-gray-600 mt-2">
+      <Dialog.Root open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content
+            className="glass-modal-content fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 p-6"
+            onCloseAutoFocus={restoreModalTriggerFocus}
+          >
+            <Dialog.Title className="text-lg font-semibold text-gray-900">Submit for Approval?</Dialog.Title>
+            <Dialog.Description className="text-sm text-gray-600 mt-2">
               Your collection with {collection.design_count} design{collection.design_count !== 1 ? 's' : ''} will be sent
               for review. Our team will check artwork quality and confirm pricing. This usually takes 1-2 business days.
-            </p>
+            </Dialog.Description>
             <div className="flex gap-3 mt-6">
-              <button type="button" onClick={() => setShowSubmitConfirm(false)} className="flex-1 btn-secondary">Cancel</button>
+              <Dialog.Close asChild>
+                <button type="button" className="flex-1 btn-secondary">Cancel</button>
+              </Dialog.Close>
               <button type="button" onClick={handleSubmit} className="flex-1 btn-primary">Submit</button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Add Design Modal */}
-      {showAddDesignModal && (
-        <div className="glass-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowAddDesignModal(false) }}>
-          <div className="glass-modal-content max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <Dialog.Root open={showAddDesignModal} onOpenChange={setShowAddDesignModal}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="glass-modal-backdrop" />
+          <Dialog.Content
+            className="glass-modal-content fixed left-1/2 top-1/2 z-[60] max-h-[80vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto"
+            onCloseAutoFocus={restoreModalTriggerFocus}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Add Design</h2>
-                <button onClick={() => setShowAddDesignModal(false)} className="text-gray-400 hover:text-gray-600">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <Dialog.Title className="text-xl font-bold text-gray-900">Add Design</Dialog.Title>
+                <Dialog.Close asChild>
+                  <button type="button" className="text-gray-400 hover:text-gray-600">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </Dialog.Close>
               </div>
+              <Dialog.Description className="sr-only">
+                Select an existing design to add to this collection.
+              </Dialog.Description>
               {availableDesigns.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">No available designs to add.</p>
               ) : (
@@ -576,9 +620,9 @@ export default function CollectionDetail() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }
