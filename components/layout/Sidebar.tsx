@@ -19,10 +19,10 @@ type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
 // (e.g. Leavers Quotes) falls back to a classic Link row beneath the SVG.
 type SvgRowId = 'tracking' | 'catalogue' | 'orders' | 'proofs'
 const SVG_ROWS: ReadonlyArray<{ id: SvgRowId; label: string; href: string }> = [
-  { id: 'tracking',  label: 'tracking',  href: '/tracking' },
-  { id: 'catalogue', label: 'catalogue', href: '/catalogue' },
-  { id: 'orders',    label: 'orders',    href: '/my-collections' },
-  { id: 'proofs',    label: 'proofs',    href: '/proofs' },
+  { id: 'tracking',  label: 'Tracking',  href: '/tracking' },
+  { id: 'catalogue', label: 'Catalogue', href: '/catalogue' },
+  { id: 'orders',    label: 'Orders',    href: '/my-collections' },
+  { id: 'proofs',    label: 'Proofs',    href: '/proofs' },
 ]
 
 // Navigation items with permission requirements.
@@ -261,10 +261,16 @@ export function Sidebar({ children, customer }: SidebarProps) {
                         )}
                         {row.id === 'orders' && (
                           <>
-                            {/* Phone handset — earpiece curving to mouthpiece, t.e. contact. */}
+                            {/* 12-petal flower/sun with inner hub — t.e. orders. */}
                             <path
                               className="cls-line"
-                              d="M5,5 Q5,3 7,3 H9 Q11,3 11,6 V8 Q11,10 9,11 Q10,14 13,16 Q14,15 16,15 H18 Q20,15 20,17 V19 Q20,21 18,21 C10,21 5,15 5,7 Z"
+                              d="M22,12 L19.2,13.9 L20.7,17 L17.3,17.3 L17,20.7 L13.9,19.2 L12,22 L10.1,19.2 L7,20.7 L6.7,17.3 L3.3,17 L4.8,13.9 L2,12 L4.8,10.1 L3.3,7 L6.7,6.7 L7,3.3 L10.1,4.8 L12,2 L13.9,4.8 L17,3.3 L17.3,6.7 L20.7,7 L19.2,10.1 Z"
+                            />
+                            <circle
+                              className="cls-line"
+                              cx={12}
+                              cy={12}
+                              r={3}
                             />
                           </>
                         )}
