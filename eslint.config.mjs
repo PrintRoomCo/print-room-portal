@@ -11,6 +11,9 @@
 
 import nextCoreWebVitals from 'eslint-config-next/core-web-vitals'
 import nextTypescript from 'eslint-config-next/typescript'
+// jsx-a11y is already registered by eslint-config-next/core-web-vitals;
+// we import only the recommended ruleset to layer on top.
+import jsxA11y from 'eslint-plugin-jsx-a11y'
 
 export default [
   {
@@ -51,6 +54,23 @@ export default [
       // TODO(sprint cleanup): re-enable as 'error'. One occurrence in
       // app/(portal)/account/actions.ts.
       'prefer-const': 'warn',
+    },
+  },
+  // WCAG 2.2 AA — jsx-a11y on warn (Strategy A). Pre-existing violations
+  // cleaned up sprint-by-sprint; the warn level keeps the baseline visible.
+  // The jsx-a11y plugin itself is registered by eslint-config-next; this block
+  // layers the full recommended ruleset on top of next/core-web-vitals' subset.
+  {
+    files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}'],
+    rules: {
+      ...Object.fromEntries(
+        Object.entries(jsxA11y.configs.recommended.rules).map(([rule, level]) => [
+          rule,
+          // Force everything to 'warn' regardless of recommended severity, to
+          // match Strategy A. Errors block CI; warns ride on --max-warnings.
+          level === 'off' || level === 0 ? level : 'warn',
+        ]),
+      ),
     },
   },
 ]
