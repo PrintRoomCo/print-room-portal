@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import type { User } from '@supabase/supabase-js'
+import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getCompanyAccess } from '@/lib/company'
@@ -42,6 +42,12 @@ export interface PortalAccountData {
   stores: PortalAccountStore[]
   recentQuotes: PortalAccountQuote[]
   ownerKey: string | null
+}
+
+interface PortalAccountOrderStatusRow {
+  id: string
+  quote_id: string | null
+  status: string | null
 }
 
 export interface PortalOrderTrackerData {
@@ -148,7 +154,10 @@ export const getPortalAccountData = cache(async (): Promise<PortalAccountData> =
     ])
 
     stores = (storesData || []) as PortalAccountStore[]
-    recentQuotes = (quotesData || []) as PortalAccountQuote[]
+    recentQuotes = await overlayLatestOrderStatuses(
+      adminClient,
+      (quotesData || []) as PortalAccountQuote[],
+    )
   } else if (user.email) {
     const { data: quotesData } = await adminClient
       .from('quotes')
@@ -156,7 +165,10 @@ export const getPortalAccountData = cache(async (): Promise<PortalAccountData> =
       .eq('customer_email', user.email)
       .order('created_at', { ascending: false })
 
-    recentQuotes = (quotesData || []) as PortalAccountQuote[]
+    recentQuotes = await overlayLatestOrderStatuses(
+      adminClient,
+      (quotesData || []) as PortalAccountQuote[],
+    )
   }
 
   return {
@@ -165,3 +177,34 @@ export const getPortalAccountData = cache(async (): Promise<PortalAccountData> =
     ownerKey: membership?.organization_id ? `org:${membership.organization_id}` : `user:${user.id}`,
   }
 })
+
+async function overlayLatestOrderStatuses(
+  adminClient: SupabaseClient,
+  quotes: PortalAccountQuote[],
+): Promise<PortalAccountQuote[]> {
+  const quoteIds = quotes.map((quote) => quote.id).filter(Boolean)
+  if (quoteIds.length === 0) return quotes
+
+  const { data: orderRows, error } = await adminClient
+    .from('orders')
+    .select('id, quote_id, status')
+    .in('quote_id', quoteIds)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('[PortalData] Failed to overlay order statuses:', error)
+    return quotes
+  }
+
+  const latestOrderByQuoteId = new Map<string, PortalAccountOrderStatusRow>()
+  for (const order of (orderRows ?? []) as PortalAccountOrderStatusRow[]) {
+    if (!order.quote_id || latestOrderByQuoteId.has(order.quote_id)) continue
+    latestOrderByQuoteId.set(order.quote_id, order)
+  }
+
+  return quotes.map((quote) => {
+    const order = latestOrderByQuoteId.get(quote.id)
+    if (!order?.status) return quote
+    return { ...quote, status: order.status }
+  })
+}
