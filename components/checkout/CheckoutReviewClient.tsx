@@ -216,20 +216,40 @@ export function CheckoutReviewClient({
 
   if (cart.lines.length === 0) {
     return (
-      <div className="p-4 md:p-8">
-        <PortalEmptyState
-          title="Review is ready when your cart is"
-          body="Add products from your catalogue, then return to checkout to review the order."
-          actionHref="/shop"
-          actionLabel="Browse catalogue"
-        />
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <header className="mb-10 md:mb-12">
+            <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+              Review order
+            </h1>
+            <p className="mt-3 text-sm text-gray-600">
+              Check shipping, options, and totals before placing the order.
+            </p>
+          </header>
+          <PortalEmptyState
+            title="Review is ready when your cart is"
+            body="Add products from your catalogue, then return to checkout to review the order."
+            actionHref="/catalogue"
+            actionLabel="Browse catalogue"
+          />
+        </div>
       </div>
     )
   }
 
   if (hydrated && !reviewState) {
     return (
-      <div className="space-y-6 p-4 md:p-8">
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <header className="mb-10 md:mb-12">
+            <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+              Review order
+            </h1>
+            <p className="mt-3 text-sm text-gray-600">
+              Check shipping, options, and totals before placing the order.
+            </p>
+          </header>
+        <div className="space-y-6">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
           Checkout details are missing. Return to checkout, confirm shipping, then review
           the order.
@@ -241,30 +261,37 @@ export function CheckoutReviewClient({
         >
           Back to checkout
         </button>
+        </div>
+        </div>
       </div>
     )
   }
 
   if (!reviewState) {
     return (
-      <div className="p-4 md:p-8">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-sm text-gray-600">
-          Loading review...
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <div className="rounded-[32px] bg-white p-7 text-sm text-gray-600 md:p-8">
+            Loading review...
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Step 4 of 4</p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">Review order</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Check shipping, options, and totals before placing the order.
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <header className="mb-10 md:mb-12">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            Review order
+          </h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Check shipping, options, and totals before placing the order.
+          </p>
+        </header>
 
+        <div className="space-y-6">
       {banner && (
         <div
           role={banner.kind === 'error' ? 'alert' : undefined}
@@ -285,7 +312,7 @@ export function CheckoutReviewClient({
         </div>
       )}
 
-      <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <section className="rounded-[32px] bg-white p-7 md:p-8">
         <h2 className="text-sm font-medium text-gray-700">Items</h2>
         <div className="mt-3 divide-y divide-gray-100">
           {cart.lines.map((line) => {
@@ -319,7 +346,7 @@ export function CheckoutReviewClient({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <section className="rounded-[32px] bg-white p-7 md:p-8">
         <h2 className="text-sm font-medium text-gray-700">Shipping and options</h2>
         <dl className="mt-3 space-y-3 text-sm">
           <div className="flex justify-between gap-4">
@@ -368,7 +395,7 @@ export function CheckoutReviewClient({
         </dl>
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4">
+      <section className="rounded-[32px] bg-white p-7 md:p-8">
         <div className="mb-3 flex items-center gap-2">
           <span className="text-sm text-gray-700">Pricing for</span>
           <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
@@ -410,6 +437,8 @@ export function CheckoutReviewClient({
         >
           {submitting ? 'Placing order...' : 'Confirm & place order'}
         </button>
+      </div>
+        </div>
       </div>
     </div>
   )
