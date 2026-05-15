@@ -72,81 +72,98 @@ export default async function ConfirmationPage({
   const totalIncGst = Math.round((subtotalExGst + gst) * 100) / 100
 
   return (
-    <div className="max-w-2xl p-4 md:p-8">
-      <h1 className="text-2xl font-semibold text-gray-900">Order received</h1>
-      <p className="mt-2 text-sm text-gray-600">
-        {awaitingApproval
-          ? "Thanks — your order is awaiting approval from our team. We'll notify you once it moves into production."
-          : "Thanks — your order is in our system and we'll be in touch shortly."}
-      </p>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <div className="max-w-3xl">
+          <header className="mb-10 md:mb-12">
+            {awaitingApproval && (
+              <span className="mb-4 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                Awaiting account manager approval
+              </span>
+            )}
+            <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+              Order received
+            </h1>
+            <p className="mt-3 text-sm text-gray-600">
+              {awaitingApproval
+                ? "Thanks — your order is with our team. We'll notify you once it moves into production."
+                : "Thanks — your order is in our system and we'll be in touch shortly."}
+            </p>
+          </header>
 
-      <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-4">
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-gray-500">Order reference</dt>
-            <dd className="font-mono text-base text-gray-900">{orderRef}</dd>
+          <div className="rounded-[32px] bg-white p-7 md:p-8">
+            <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-gray-500">
+                  Order reference
+                </dt>
+                <dd className="font-mono text-base text-gray-900">{orderRef}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-gray-500">Status</dt>
+                <dd className="text-gray-900">{order.status ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-gray-500">
+                  Production sync
+                </dt>
+                <dd className="text-gray-900">
+                  {mondaySynced
+                    ? 'Synced to production'
+                    : awaitingApproval
+                      ? 'Will sync once approved'
+                      : 'Syncing to production…'}
+                </dd>
+              </div>
+            </dl>
           </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-gray-500">Status</dt>
-            <dd className="text-gray-900">{order.status ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-gray-500">Production sync</dt>
-            <dd className="text-gray-900">
-              {mondaySynced
-                ? 'Synced to production'
-                : awaitingApproval
-                  ? 'Will sync once approved'
-                  : 'Syncing to production…'}
-            </dd>
-          </div>
-        </dl>
-      </div>
 
-      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-4">
-        <h2 className="text-sm font-medium text-gray-700">Order total</h2>
-        <dl className="mt-3 space-y-1.5 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-gray-600">Subtotal (ex-GST)</dt>
-            <dd className="text-gray-900">{formatPrice(subtotalExGst)}</dd>
+          <div className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
+            <h2 className="text-sm font-medium text-gray-700">Order total</h2>
+            <dl className="mt-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-gray-600">Subtotal (ex-GST)</dt>
+                <dd className="text-gray-900">{formatPrice(subtotalExGst)}</dd>
+              </div>
+              {decorationCost > 0 && (
+                <div className="flex justify-between text-gray-500">
+                  <dt className="pl-3">Includes decoration</dt>
+                  <dd>{formatPrice(decorationCost)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <dt className="text-gray-600">GST (15%)</dt>
+                <dd className="text-gray-900">{formatPrice(gst)}</dd>
+              </div>
+              <div className="mt-2 flex justify-between border-t border-gray-100 pt-2 text-base font-semibold">
+                <dt>Total payable</dt>
+                <dd>{formatPrice(totalIncGst)}</dd>
+              </div>
+            </dl>
           </div>
-          {decorationCost > 0 && (
-            <div className="flex justify-between text-gray-500">
-              <dt className="pl-3">Includes decoration</dt>
-              <dd>{formatPrice(decorationCost)}</dd>
-            </div>
+
+          {!mondaySynced && !awaitingApproval && (
+            <p className="mt-3 text-xs text-gray-500">
+              If this takes more than a few minutes our staff will reconcile it from their
+              side — your order is safe.
+            </p>
           )}
-          <div className="flex justify-between">
-            <dt className="text-gray-600">GST (15%)</dt>
-            <dd className="text-gray-900">{formatPrice(gst)}</dd>
-          </div>
-          <div className="mt-2 flex justify-between border-t border-gray-100 pt-2 text-base font-semibold">
-            <dt>Total payable</dt>
-            <dd>{formatPrice(totalIncGst)}</dd>
-          </div>
-        </dl>
-      </div>
 
-      {!mondaySynced && !awaitingApproval && (
-        <p className="mt-3 text-xs text-gray-500">
-          If this takes more than a few minutes our staff will reconcile it from their side —
-          your order is safe.
-        </p>
-      )}
-
-      <div className="mt-6 flex flex-wrap gap-2">
-        <Link
-          href="/order-tracker"
-          className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90"
-        >
-          View in order tracker
-        </Link>
-        <Link
-          href="/shop"
-          className="rounded-full border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
-        >
-          Continue shopping
-        </Link>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link
+              href="/order-tracker"
+              className="rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              View in order tracker
+            </Link>
+            <Link
+              href="/catalogue"
+              className="rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              Continue shopping
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   )
