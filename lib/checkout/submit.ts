@@ -681,7 +681,7 @@ export async function submitCustomerOrder(
   //     check — see §F.1). The helper never throws; failure paths collapse to
   //     an audit_events row so the order submit always succeeds.
   try {
-    const { data: quote } = await admin
+    const { data: quote, error: quoteError } = await admin
       .from('quotes')
       .select('id, organization_id, customer_name, customer_email, order_ref')
       .eq('id', quote_id)
@@ -692,10 +692,18 @@ export async function submitCustomerOrder(
         customer_email: string | null
         order_ref: string | null
       }>()
-    const { data: lineRows } = await admin
+    if (quoteError) {
+      throw new Error(`Autofill quote lookup failed: ${quoteError.message}`)
+    }
+
+    const { data: lineRows, error: lineRowsError } = await admin
       .from('quote_items')
       .select('product_id')
       .eq('quote_id', quote_id)
+    if (lineRowsError) {
+      throw new Error(`Autofill quote item lookup failed: ${lineRowsError.message}`)
+    }
+
     const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
       .map((r) => r.product_id)
       .filter((id): id is string => typeof id === 'string' && id.length > 0)
@@ -717,10 +725,34 @@ export async function submitCustomerOrder(
   } catch (e) {
     // Defence-in-depth — the helper is contracted never to throw, but a
     // failure here must NEVER bubble out of submit and break the order.
+    const message = e instanceof Error ? e.message : String(e)
     console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
       orderId: order_id,
-      err: e instanceof Error ? e.message : String(e),
+      err: message,
     })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.PROOF_AUTOFILL_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: {
+            order_ref,
+            quote_id,
+            error: message,
+            source: 'checkout_submit_outer_catch',
+          },
+        },
+        admin,
+      )
+    } catch (auditErr) {
+      console.error('[Checkout] proof autofill failure audit threw (swallowed)', {
+        orderId: order_id,
+        err: auditErr instanceof Error ? auditErr.message : String(auditErr),
+      })
+    }
   }
 
   // Fetch the email payload from quotes/quote_items for the confirmation email below.
