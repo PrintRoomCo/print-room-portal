@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
@@ -94,6 +94,36 @@ export function ProductImageGallery({
     [overlays, activeImage],
   )
 
+  function handleThumbnailKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (
+      event.key !== 'ArrowRight' &&
+      event.key !== 'ArrowLeft' &&
+      event.key !== 'Home' &&
+      event.key !== 'End'
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    )
+    if (buttons.length === 0) return
+
+    const currentIndex = buttons.findIndex((button) => button === document.activeElement)
+    const activeIndex = Math.max(currentIndex, 0)
+    let nextIndex = activeIndex
+
+    if (event.key === 'ArrowRight') nextIndex = (activeIndex + 1) % buttons.length
+    if (event.key === 'ArrowLeft') nextIndex = (activeIndex - 1 + buttons.length) % buttons.length
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = buttons.length - 1
+
+    const nextButton = buttons[nextIndex]
+    nextButton?.focus()
+    nextButton?.click()
+  }
+
   if (!activeUrl) {
     return (
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
@@ -142,7 +172,12 @@ export function ProductImageGallery({
         })}
       </div>
       {ordered.length > 1 && (
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Product views">
+        <div
+          className="flex flex-wrap gap-2"
+          role="tablist"
+          aria-label="Product views"
+          onKeyDown={handleThumbnailKeyDown}
+        >
           {ordered.map((img) => {
             const isActive = img.url === activeUrl
             return (
@@ -152,6 +187,7 @@ export function ProductImageGallery({
                 role="tab"
                 aria-selected={isActive}
                 aria-label={`View ${img.view ?? 'image'}`}
+                tabIndex={isActive ? 0 : -1}
                 onClick={() => setActiveUrl(img.url)}
                 className={
                   'relative h-16 w-16 overflow-hidden rounded-lg border bg-white transition ' +
