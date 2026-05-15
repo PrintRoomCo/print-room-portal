@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useTopBarContextValue,
   usePortalDrawer,
@@ -32,6 +32,22 @@ export function PortalTopBar() {
   useEffect(() => {
     const h = hasFilterRow ? '136px' : '76px'
     document.documentElement.style.setProperty('--portal-topbar-h', h)
+  }, [hasFilterRow])
+
+  // The filter-row wrapper must clip (`overflow-hidden`) during the
+  // grid-template-rows transition (0fr → 1fr) so collapsed content stays
+  // hidden. Once the row is fully open and the transition has settled, we
+  // flip to `overflow-visible` so the FilterAutoSubmitSelect popovers can
+  // hang below the top bar without being clipped at its bottom edge.
+  // Transition duration is 200ms; 220ms buffers a frame for safety.
+  const [rowSettled, setRowSettled] = useState(false)
+  useEffect(() => {
+    if (!hasFilterRow) {
+      setRowSettled(false)
+      return
+    }
+    const t = setTimeout(() => setRowSettled(true), 220)
+    return () => clearTimeout(t)
   }, [hasFilterRow])
 
   return (
@@ -89,7 +105,7 @@ export function PortalTopBar() {
           hasFilterRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >
-        <div className="overflow-hidden">
+        <div className={rowSettled ? 'overflow-visible' : 'overflow-hidden'}>
           {ctx?.kind === 'listing' && ctx.filters && ctx.facets && ctx.filterAction && (
             <FilterRow
               filters={ctx.filters}
