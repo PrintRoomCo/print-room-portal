@@ -8,6 +8,8 @@ import { updateProfile, changePasswordAction, createLocationAction, type ActionR
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
 import type { SupportedCurrency } from '@/lib/currency/types'
+import { getPortalOwnerKey } from '@/lib/portal-owner'
+import type { PortalAccountData } from '@/lib/portal-data'
 
 const NZ_REGIONS = [
   { code: 'AUK', name: 'Auckland' },
@@ -46,20 +48,23 @@ interface Quote {
   status: string
   total_amount: number
   currency: string
-  line_items: unknown[] | null
+  line_items?: unknown[] | null
   created_at: string
 }
 
 interface AccountClientProps {
   ratesFetchedAt: string | null
+  initialData: PortalAccountData
 }
 
-export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
+export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProps) {
   const { access, loading: companyLoading } = useCompany()
+  const currentOwnerKey = getPortalOwnerKey(access)
 
-  const [stores, setStores] = useState<Store[]>([])
-  const [recentQuotes, setRecentQuotes] = useState<Quote[]>([])
-  const [dataLoading, setDataLoading] = useState(true)
+  const [stores, setStores] = useState<Store[]>(initialData.stores)
+  const [recentQuotes, setRecentQuotes] = useState<Quote[]>(initialData.recentQuotes)
+  const [dataOwnerKey, setDataOwnerKey] = useState(initialData.ownerKey)
+  const [dataLoading, setDataLoading] = useState(false)
 
   const [showAddStore, setShowAddStore] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
@@ -74,24 +79,47 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
   const [locationResult, setLocationResult] = useState<ActionResult | null>(null)
   const [locationSubmitting, setLocationSubmitting] = useState(false)
 
-  const fetchAccountData = useCallback(() => {
-    fetch('/api/account-data')
+  const fetchAccountData = useCallback((signal?: AbortSignal) => {
+    return fetch('/api/account-data', { signal })
       .then((res) => (res.ok ? res.json() : { stores: [], recentQuotes: [] }))
-      .then((data) => {
+      .then((data: PortalAccountData) => {
         setStores(data.stores || [])
         setRecentQuotes(data.recentQuotes || [])
+        setDataOwnerKey(data.ownerKey ?? currentOwnerKey)
         setDataLoading(false)
       })
-      .catch(() => setDataLoading(false))
-  }, [])
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+        setStores([])
+        setRecentQuotes([])
+        setDataOwnerKey(currentOwnerKey)
+        setDataLoading(false)
+      })
+  }, [currentOwnerKey])
 
   useEffect(() => {
-    if (!companyLoading && access) {
-      fetchAccountData()
-    } else if (!companyLoading) {
+    if (companyLoading) return
+
+    if (!currentOwnerKey) {
+      setStores([])
+      setRecentQuotes([])
+      setDataOwnerKey(null)
       setDataLoading(false)
+      return
     }
-  }, [companyLoading, access, fetchAccountData])
+
+    if (currentOwnerKey === dataOwnerKey) {
+      setDataLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setStores([])
+    setRecentQuotes([])
+    setDataLoading(true)
+    fetchAccountData(controller.signal)
+    return () => controller.abort()
+  }, [companyLoading, currentOwnerKey, dataOwnerKey, fetchAccountData])
 
   useEffect(() => {
     if (profileResult?.success && editingProfile) {
@@ -126,6 +154,7 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
 
   async function handleProfileSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (profileSubmitting) return
     setProfileSubmitting(true)
     setProfileResult(null)
     const formData = new FormData(e.currentTarget)
@@ -136,6 +165,7 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
 
   async function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (passwordSubmitting) return
     setPasswordSubmitting(true)
     setPasswordResult(null)
     const formData = new FormData(e.currentTarget)
@@ -146,6 +176,7 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
 
   async function handleLocationSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (locationSubmitting) return
     setLocationSubmitting(true)
     setLocationResult(null)
     const formData = new FormData(e.currentTarget)
@@ -154,7 +185,7 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
     setLocationSubmitting(false)
   }
 
-  if (companyLoading || dataLoading) {
+  if (dataLoading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <div className="animate-pulse space-y-6">
@@ -173,7 +204,7 @@ export function AccountClient({ ratesFetchedAt }: AccountClientProps) {
   const primaryStore = stores[0] || null
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 motion-safe:animate-portal-enter">
       {/* Header */}
       <header className="mb-10 md:mb-12">
         <h1 className="mt-2 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
@@ -766,21 +797,5 @@ function OrderEmptyIcon() {
         />
       </svg>
     </div>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
   )
 }

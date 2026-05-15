@@ -26,6 +26,7 @@ export async function proxy(request: NextRequest) {
   const portalRoutes = [
     '/account',
     '/cart',
+    '/catalogue',
     '/checkout',
     '/inventory',
     '/my-collections',
@@ -77,6 +78,7 @@ export const config = {
   matcher: [
     '/account/:path*',
     '/cart/:path*',
+    '/catalogue/:path*',
     '/checkout/:path*',
     '/inventory/:path*',
     '/order-tracker/:path*',

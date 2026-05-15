@@ -18,6 +18,12 @@ export interface ServerExchangeRateResult {
   fetchedAt: string | null;
 }
 
+export interface ServerExchangeRatesResult {
+  rates: ExchangeRates;
+  source: 'database' | 'fallback';
+  fetchedAt: string | null;
+}
+
 /**
  * Get server-side exchange rate for NZD -> target currency.
  * Falls back to hardcoded rates on DB failure instead of throwing.
@@ -71,5 +77,35 @@ export async function getServerExchangeRate(
       isStale: false,
       fetchedAt: null,
     };
+  }
+}
+
+export async function getServerExchangeRates(): Promise<ServerExchangeRatesResult> {
+  try {
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from('exchange_rates')
+      .select('target_currency, rate, fetched_at')
+      .eq('base_currency', 'NZD');
+
+    if (error || !data || data.length === 0) {
+      console.warn('[FX] DB lookup failed for NZD exchange rates, using fallback:', error?.message);
+      return { rates: FALLBACK_RATES, source: 'fallback', fetchedAt: null };
+    }
+
+    const rates: ExchangeRates = { ...FALLBACK_RATES };
+    let fetchedAt: string | null = null;
+    for (const row of data) {
+      const currency = row.target_currency as SupportedCurrency;
+      if (currency in rates) {
+        rates[currency] = Number(row.rate);
+        fetchedAt = fetchedAt ?? (row.fetched_at as string | null);
+      }
+    }
+
+    return { rates, source: 'database', fetchedAt };
+  } catch (err) {
+    console.error('[FX] Unexpected error for NZD exchange rates:', err);
+    return { rates: FALLBACK_RATES, source: 'fallback', fetchedAt: null };
   }
 }

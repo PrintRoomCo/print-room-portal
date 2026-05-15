@@ -1,6 +1,7 @@
 import { AccountClient } from './AccountClient'
 import { getServerExchangeRate } from '@/lib/currency/server-exchange-rates'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
+import { getPortalAccountData } from '@/lib/portal-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +10,11 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<{ reason?: string }>
 }) {
-  const [sp, result] = await Promise.all([searchParams, getServerExchangeRate('AUD')])
+  const [sp, result, accountData] = await Promise.all([
+    searchParams,
+    getServerExchangeRate('AUD'),
+    getPortalAccountData(),
+  ])
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
@@ -24,7 +29,10 @@ export default async function AccountPage({
             />
           </div>
         )}
-        <AccountClient ratesFetchedAt={result.fetchedAt} />
+        <AccountClient
+          ratesFetchedAt={result.fetchedAt}
+          initialData={accountData}
+        />
       </div>
     </div>
   )

@@ -33,10 +33,16 @@ function getStoredCurrency(): SupportedCurrency | null {
   return null;
 }
 
-export function CurrencyProvider({ children }: { children: React.ReactNode }) {
+export function CurrencyProvider({
+  children,
+  initialRates = null,
+}: {
+  children: React.ReactNode
+  initialRates?: ExchangeRates | null
+}) {
   const [currency, setCurrencyState] = useState<SupportedCurrency>('NZD');
-  const [rates, setRates] = useState<ExchangeRates | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [rates, setRates] = useState<ExchangeRates | null>(initialRates);
+  const [loading, setLoading] = useState(!initialRates);
 
   // Initialize: load saved preference or detect from browser, then fetch rates
   useEffect(() => {
@@ -44,10 +50,24 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const detected = saved ?? detectCurrencyFromBrowser();
     setCurrencyState(detected);
 
+    if (initialRates) {
+      setLoading(false);
+      return;
+    }
+
+    let stale = false;
     fetchExchangeRates()
-      .then(setRates)
-      .finally(() => setLoading(false));
-  }, []);
+      .then((nextRates) => {
+        if (!stale) setRates(nextRates);
+      })
+      .finally(() => {
+        if (!stale) setLoading(false);
+      });
+
+    return () => {
+      stale = true;
+    };
+  }, [initialRates]);
 
   const setCurrency = useCallback((c: SupportedCurrency) => {
     setCurrencyState(c);

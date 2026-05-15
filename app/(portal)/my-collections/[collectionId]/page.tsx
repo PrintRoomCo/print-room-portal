@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCompany } from '@/contexts/CompanyContext'
+import { getPortalOwnerKey } from '@/lib/portal-owner'
 import {
   updateCollectionAction,
   deleteCollectionAction,
@@ -45,6 +46,8 @@ function formatMoney(value: number, currency = 'NZD'): string {
 export default function CollectionDetail() {
   const { access, loading: companyLoading } = useCompany()
   const router = useRouter()
+  const params = useParams<{ collectionId: string }>()
+  const currentOwnerKey = getPortalOwnerKey(access)
   const [mode, setMode] = useState<'collection' | 'quote' | null>(null)
   const [collection, setCollection] = useState<CollectionWithDesigns | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -52,6 +55,8 @@ export default function CollectionDetail() {
   const [tracker, setTracker] = useState<JobTracker | null>(null)
   const [availableDesigns, setAvailableDesigns] = useState<DesignSubmission[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+  const [dataOwnerKey, setDataOwnerKey] = useState<string | null>(null)
+  const [dataCollectionId, setDataCollectionId] = useState<string | null>(null)
 
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false)
@@ -60,14 +65,11 @@ export default function CollectionDetail() {
   const [showAddDesignModal, setShowAddDesignModal] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  // Extract collectionId from URL
-  const collectionId = typeof window !== 'undefined'
-    ? window.location.pathname.split('/my-collections/')[1]
-    : ''
+  const collectionId = params.collectionId ?? ''
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback((signal?: AbortSignal) => {
     if (!collectionId) return
-    fetch(`/api/collections/${collectionId}`)
+    return fetch(`/api/collections/${collectionId}`, { signal })
       .then((r) => {
         if (!r.ok) throw new Error('Not found')
         return r.json()
@@ -83,18 +85,67 @@ export default function CollectionDetail() {
           setAvailableDesigns(data.availableDesigns || [])
           setTracker(data.tracker)
         }
+        setDataOwnerKey(currentOwnerKey)
+        setDataCollectionId(collectionId)
         setDataLoading(false)
       })
-      .catch(() => setDataLoading(false))
-  }, [collectionId])
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+        setDataLoading(false)
+      })
+  }, [collectionId, currentOwnerKey])
 
   useEffect(() => {
-    if (!companyLoading && access) {
-      fetchData()
-    } else if (!companyLoading) {
+    if (companyLoading) return
+
+    if (!currentOwnerKey) {
+      setMode(null)
+      setCollection(null)
+      setQuote(null)
+      setLinkedCollection(null)
+      setTracker(null)
+      setAvailableDesigns([])
+      setDataOwnerKey(null)
+      setDataCollectionId(null)
       setDataLoading(false)
+      return
     }
-  }, [companyLoading, access, fetchData])
+
+    if (!collectionId) {
+      setDataLoading(false)
+      return
+    }
+
+    if (
+      dataOwnerKey === currentOwnerKey &&
+      dataCollectionId === collectionId &&
+      (collection || quote || mode !== null)
+    ) {
+      setDataLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setMode(null)
+    setCollection(null)
+    setQuote(null)
+    setLinkedCollection(null)
+    setTracker(null)
+    setAvailableDesigns([])
+    setDataLoading(true)
+    fetchData(controller.signal)
+    return () => controller.abort()
+  }, [
+    companyLoading,
+    currentOwnerKey,
+    dataOwnerKey,
+    dataCollectionId,
+    collectionId,
+    collection,
+    quote,
+    mode,
+    fetchData,
+  ])
 
   if (companyLoading || dataLoading) {
     return (
@@ -219,7 +270,7 @@ export default function CollectionDetail() {
   const trackerUrl = tracker?.tracker_token ? getTrackerUrl(tracker.tracker_token) : null
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 motion-safe:animate-portal-enter">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>

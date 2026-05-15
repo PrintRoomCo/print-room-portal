@@ -79,7 +79,7 @@
    * ============================================ */
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-full border-2 border-[rgb(var(--color-brand-blue))] bg-transparent px-6 py-2.5 text-sm font-medium text-[rgb(var(--color-brand-blue))] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full border-2 border-[rgb(var(--color-brand-blue))] bg-transparent px-6 py-2.5 text-sm font-medium text-[rgb(var(--color-brand-blue))] transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -89,7 +89,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-6 py-2.5 text-sm font-medium text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-6 py-2.5 text-sm font-medium text-foreground transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -98,7 +98,7 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-full bg-transparent px-5 py-2.5 text-sm font-medium text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full bg-transparent px-5 py-2.5 text-sm font-medium text-foreground transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -107,7 +107,7 @@
   }
 
   .btn-accent {
-    @apply inline-flex items-center justify-center rounded-full bg-[rgb(var(--color-brand-blue))] px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full bg-[rgb(var(--color-brand-blue))] px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
     box-shadow: var(--shadow-sm);
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -118,7 +118,7 @@
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-full bg-red-500 px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full bg-red-500 px-6 py-2.5 text-sm font-medium text-white transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
     box-shadow: var(--shadow-sm);
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }

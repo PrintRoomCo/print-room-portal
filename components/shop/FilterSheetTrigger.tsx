@@ -28,7 +28,7 @@ export function FilterSheetTrigger({ activeCount, children }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200 md:hidden"
+        className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98] md:hidden"
       >
         <FilterIcon className="h-4 w-4" />
         Filters
@@ -64,7 +64,7 @@ export function FilterSheetTrigger({ activeCount, children }: Props) {
             type="button"
             aria-label="Close filters"
             onClick={() => setOpen(false)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
           >
             <CloseIcon className="h-4 w-4" />
           </button>

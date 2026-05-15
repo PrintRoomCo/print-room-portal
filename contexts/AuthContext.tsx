@@ -32,28 +32,45 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuthProvider({
+  children,
+  initialUser = null,
+}: {
+  children: ReactNode
+  initialUser?: User | null
+}) {
+  const [user, setUser] = useState<User | null>(initialUser)
+  const [loading, setLoading] = useState(!initialUser)
 
   useEffect(() => {
     const supabase = getSupabaseBrowser()
+    let stale = false
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (stale) return
       setUser(session?.user ?? null)
       setLoading(false)
     })
+      .catch(() => {
+        if (stale) return
+        setUser(null)
+        setLoading(false)
+      })
 
     // Listen for auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (stale) return
       setUser(session?.user ?? null)
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      stale = true
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signIn = useCallback(

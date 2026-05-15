@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerCached } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
 import { ProductCard } from '@/components/shop/ProductCard'
@@ -40,7 +40,7 @@ export default async function CataloguePage({
 }) {
   const sp = await searchParams
   const filters = parseShopFilters(sp)
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerCached()
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
@@ -353,7 +353,7 @@ export default async function CataloguePage({
           filterAction: '/catalogue',
         }}
       />
-      <div className="mx-auto max-w-[1680px] px-4 pb-16 pt-3 md:px-8 md:pt-4">
+      <div className="mx-auto max-w-[1680px] px-4 pb-16 pt-3 motion-safe:animate-portal-enter md:px-8 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -381,7 +381,11 @@ export default async function CataloguePage({
         ) : (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5">
             {products.map((p) => (
-              <Link key={p.id} href={`/catalogue/${p.id}`} className="block">
+              <Link
+                key={p.id}
+                href={`/catalogue/${p.id}`}
+                className="block transition-transform duration-150 active:scale-[0.99]"
+              >
                 <ProductCard product={p} />
               </Link>
             ))}

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 interface Option {
   value: string
@@ -20,11 +21,17 @@ export function FilterAutoSubmitSelect({
   options,
   ariaLabel,
 }: Props) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
   const [value, setValue] = useState(defaultValue)
   const [open, setOpen] = useState(false)
-  const [pendingSubmit, setPendingSubmit] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setValue(defaultValue)
+  }, [defaultValue])
 
   useEffect(() => {
     if (!open) return
@@ -43,12 +50,6 @@ export function FilterAutoSubmitSelect({
     }
   }, [open])
 
-  useEffect(() => {
-    if (!pendingSubmit) return
-    inputRef.current?.form?.requestSubmit()
-    setPendingSubmit(false)
-  }, [pendingSubmit, value])
-
   const currentLabel =
     options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
 
@@ -56,21 +57,37 @@ export function FilterAutoSubmitSelect({
     setOpen(false)
     if (v === value) return
     setValue(v)
-    setPendingSubmit(true)
+
+    const params = new URLSearchParams(searchParams.toString())
+    if (v) {
+      params.set(name, v)
+    } else {
+      params.delete(name)
+    }
+    params.set('page', '1')
+    const query = params.toString()
+    const nextUrl = query ? `${pathname}?${query}` : pathname
+    startTransition(() => router.push(nextUrl, { scroll: false }))
   }
 
   return (
     <div ref={wrapperRef} className="relative">
-      <input ref={inputRef} type="hidden" name={name} value={value} />
+      <input type="hidden" name={name} value={value} />
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open ? 'true' : 'false'}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+        aria-busy={isPending ? 'true' : 'false'}
+        className={`inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 active:scale-[0.98] ${
+          isPending ? 'opacity-60' : ''
+        }`}
       >
         <span className="max-w-[12rem] truncate">{currentLabel}</span>
+        {isPending && (
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-500 animate-pulse" />
+        )}
         <ChevronDown
           className={`h-3 w-3 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`}
         />

@@ -6,6 +6,8 @@ import { syncJobTrackerItemsFromMonday } from '@/lib/monday/sync-job-tracker-ite
 const STALE_SYNC_INTERVAL_MS = 60 * 60 * 1000
 const STALE_SYNC_CONCURRENCY = 10
 const STALE_SYNC_PER_CALL_TIMEOUT_MS = 2000
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function isItemsSyncEnabled(): boolean {
   return process.env.ENABLE_MONDAY_ITEMS_SYNC === 'true'
@@ -49,6 +51,10 @@ function fireAndForgetItemsSync(trackers: JobTracker[]): void {
   )
 }
 
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value)
+}
+
 async function attachProductImages(trackers: JobTracker[]): Promise<JobTracker[]> {
   if (trackers.length === 0) return trackers
 
@@ -58,7 +64,9 @@ async function attachProductImages(trackers: JobTracker[]): Promise<JobTracker[]
     const items = tracker.quote_data?.items ?? []
     for (const item of items) {
       if (item?.productId) productIds.add(item.productId)
-      if (item?.designInstanceId) designInstanceIds.add(item.designInstanceId)
+      if (item?.designInstanceId && isUuid(item.designInstanceId)) {
+        designInstanceIds.add(item.designInstanceId)
+      }
     }
   }
 

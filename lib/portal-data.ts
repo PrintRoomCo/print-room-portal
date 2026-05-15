@@ -1,0 +1,167 @@
+import { cache } from 'react'
+import type { User } from '@supabase/supabase-js'
+import { getSupabaseServer } from '@/lib/supabase'
+import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
+import { getCompanyAccess } from '@/lib/company'
+import {
+  getJobsForCompany,
+  getJobsForUser,
+} from '@/lib/job-tracker-queries'
+import type { JobTracker } from '@/lib/job-tracker'
+import type { B2BCustomerAccess } from '@/types/company'
+
+export interface PortalAccountStore {
+  id: string
+  name: string
+  address: string | null
+  location: string | null
+  city: string | null
+  state: string | null
+  country: string | null
+  postal_code: string | null
+  phone: string | null
+}
+
+export interface PortalAccountQuote {
+  id: string
+  reference: string | null
+  quote_number: string | null
+  status: string
+  customer_name: string | null
+  customer_email: string
+  customer_company: string | null
+  subtotal: number
+  total_amount: number
+  currency: string
+  source: string | null
+  created_at: string
+  line_items?: unknown[] | null
+}
+
+export interface PortalAccountData {
+  stores: PortalAccountStore[]
+  recentQuotes: PortalAccountQuote[]
+  ownerKey: string | null
+}
+
+export interface PortalOrderTrackerData {
+  trackers: JobTracker[]
+  isCompanyWide: boolean
+  ownerKey: string | null
+}
+
+export const getPortalUser = cache(async (): Promise<User | null> => {
+  const supabase = await getSupabaseServerComponent()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user ?? null
+})
+
+export const getPortalCompanyAccess = cache(async (): Promise<B2BCustomerAccess | null> => {
+  const user = await getPortalUser()
+  if (!user) return null
+  return getCompanyAccess(user.id, user.email ?? undefined)
+})
+
+export const getPortalOrderTrackerData = cache(async (): Promise<PortalOrderTrackerData> => {
+  const user = await getPortalUser()
+  if (!user) {
+    return { trackers: [], isCompanyWide: false, ownerKey: null }
+  }
+
+  const adminClient = getSupabaseServer()
+  const { data: membership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id, role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  let trackers: JobTracker[] = []
+  let isCompanyWide = false
+
+  try {
+    const canSeeAllOrgOrders = membership?.role === 'org_admin'
+
+    if (canSeeAllOrgOrders && membership?.organization_id) {
+      const { data: b2bAccount } = await adminClient
+        .from('b2b_accounts')
+        .select('company_id')
+        .eq('organization_id', membership.organization_id)
+        .maybeSingle()
+
+      if (b2bAccount?.company_id) {
+        const { data: stores } = await adminClient
+          .from('stores')
+          .select('id')
+          .eq('organization_id', membership.organization_id)
+
+        const locationIds = stores?.map((s) => s.id) || []
+        trackers = await getJobsForCompany(b2bAccount.company_id, locationIds)
+        isCompanyWide = trackers.length > 0
+      }
+    }
+
+    if (trackers.length === 0) {
+      trackers = await getJobsForUser(user.id, user.email || undefined)
+      isCompanyWide = false
+    }
+  } catch (error) {
+    console.error('[OrderTracker] Failed to fetch trackers:', error)
+  }
+
+  return {
+    trackers,
+    isCompanyWide,
+    ownerKey: membership?.organization_id ? `org:${membership.organization_id}` : `user:${user.id}`,
+  }
+})
+
+export const getPortalAccountData = cache(async (): Promise<PortalAccountData> => {
+  const user = await getPortalUser()
+  if (!user) {
+    return { stores: [], recentQuotes: [], ownerKey: null }
+  }
+
+  const adminClient = getSupabaseServer()
+  const { data: membership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  let stores: PortalAccountStore[] = []
+  let recentQuotes: PortalAccountQuote[] = []
+
+  if (membership) {
+    const [{ data: storesData }, { data: quotesData }] = await Promise.all([
+      adminClient
+        .from('stores')
+        .select('id, name, address, location, city, state, country, postal_code, phone')
+        .eq('organization_id', membership.organization_id)
+        .order('created_at', { ascending: true }),
+      adminClient
+        .from('quotes')
+        .select('id, reference, quote_number, status, customer_name, customer_email, customer_company, subtotal, total_amount, currency, source, created_at')
+        .eq('organization_id', membership.organization_id)
+        .order('created_at', { ascending: false }),
+    ])
+
+    stores = (storesData || []) as PortalAccountStore[]
+    recentQuotes = (quotesData || []) as PortalAccountQuote[]
+  } else if (user.email) {
+    const { data: quotesData } = await adminClient
+      .from('quotes')
+      .select('id, reference, quote_number, status, customer_name, customer_email, customer_company, subtotal, total_amount, currency, source, created_at')
+      .eq('customer_email', user.email)
+      .order('created_at', { ascending: false })
+
+    recentQuotes = (quotesData || []) as PortalAccountQuote[]
+  }
+
+  return {
+    stores,
+    recentQuotes,
+    ownerKey: membership?.organization_id ? `org:${membership.organization_id}` : `user:${user.id}`,
+  }
+})

@@ -24,7 +24,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         className="min-h-screen flex items-center justify-center bg-white"
         suppressHydrationWarning
       >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" suppressHydrationWarning>
+        <div className="rounded-3xl border border-gray-200 bg-white p-5 text-sm text-gray-700" suppressHydrationWarning>
           Unable to load account data. Please sign in again or contact your account manager.
         </div>
       </div>

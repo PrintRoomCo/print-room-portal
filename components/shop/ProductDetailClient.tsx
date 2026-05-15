@@ -239,8 +239,13 @@ export function ProductDetailClient({
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!Number.isInteger(qty) || qty <= 0) return
     if (priceTimer.current) clearTimeout(priceTimer.current)
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setPricingLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    let cancelled = false
     setPricingLoading(true)
     priceTimer.current = setTimeout(async () => {
       try {
@@ -248,15 +253,23 @@ export function ProductDetailClient({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ product_id: product.id, qty }),
+          signal: controller.signal,
         })
-        if (res.ok) {
+        if (res.ok && !cancelled) {
           setPricing((await res.json()) as PricingResponse)
         }
+      } catch (error) {
+        if (!cancelled && error instanceof Error && error.name !== 'AbortError') {
+          setPricing(null)
+        }
       } finally {
+        if (cancelled) return
         setPricingLoading(false)
       }
     }, 300)
     return () => {
+      cancelled = true
+      controller.abort()
       if (priceTimer.current) clearTimeout(priceTimer.current)
     }
   }, [qty, product.id])
@@ -278,6 +291,7 @@ export function ProductDetailClient({
     )
 
     if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
+    const controller = new AbortController()
     let cancelled = false
     decorationPriceTimer.current = setTimeout(async () => {
       try {
@@ -285,6 +299,7 @@ export function ProductDetailClient({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ qtys: probeQtys, items: recalcItems }),
+          signal: controller.signal,
         })
         if (res.ok && !cancelled) {
           const json = (await res.json()) as {
@@ -307,6 +322,7 @@ export function ProductDetailClient({
     }, 300)
     return () => {
       cancelled = true
+      controller.abort()
       if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
     }
   }, [qty, decorations, brackets])
@@ -482,7 +498,7 @@ export function ProductDetailClient({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 md:px-6 md:pt-4">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 motion-safe:animate-portal-enter md:px-6 md:pt-4">
         <CatalogueTopBar
           crumbs={[
             { label: 'Home', href: '/account' },
@@ -799,10 +815,10 @@ export function ProductDetailClient({
             <button
               type="button"
               onClick={handleAddToCart}
-              disabled={!canAddToCart}
-              className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canAddToCart || pricingLoading}
+              className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Add to cart
+              {pricingLoading ? 'Checking price...' : 'Add to cart'}
             </button>
           </section>
           </div>

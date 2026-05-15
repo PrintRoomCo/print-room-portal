@@ -46,7 +46,7 @@ export function PortalTopBar() {
           onClick={drawer.toggle}
           aria-label="Open navigation menu"
           aria-expanded={drawer.open}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
         >
           <MenuIcon className="h-4 w-4" />
         </button>

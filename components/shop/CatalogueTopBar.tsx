@@ -21,7 +21,7 @@ export function CatalogueTopBar({ crumbs }: Props) {
         type="button"
         onClick={() => router.back()}
         aria-label="Go back"
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

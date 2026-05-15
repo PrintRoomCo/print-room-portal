@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { requireB2BCustomer } from '@/lib/checkout/server'
+import { requireB2BCustomerCached } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
@@ -59,7 +59,7 @@ export default async function ProductDetailPage({
   params: Promise<{ productId: string }>
 }) {
   const { productId } = await params
-  const auth = await requireB2BCustomer()
+  const auth = await requireB2BCustomerCached()
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 

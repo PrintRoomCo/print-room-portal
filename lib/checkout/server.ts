@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
@@ -116,6 +117,11 @@ export async function requireB2BCustomer(
     } satisfies B2BCustomerContext,
   }
 }
+
+export const requireB2BCustomerCached = cache(
+  async (requireCustomerCode = false): Promise<RequireB2BCustomerResult> =>
+    requireB2BCustomer({ requireCustomerCode }),
+)
 
 const AUTH_FAILURE_RESPONSE: Record<AuthFailureKind, { status: number; message: string }> = {
   unauthenticated: { status: 401, message: 'Unauthorized' },

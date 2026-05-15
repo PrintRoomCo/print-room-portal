@@ -43,7 +43,6 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
   return (
     <div className="rounded-3xl bg-white overflow-hidden">
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-6 text-left hover:bg-gray-50 transition-colors duration-300 cursor-pointer"
@@ -87,7 +86,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                         setReorderSuccess(false)
                         setShowReorderModal(true)
                       }}
-                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
                       Reorder
                     </button>
@@ -96,7 +95,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                     <Link
                       href={`/my-collections/${tracker.quote_id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
                       View Quote
                     </Link>
@@ -107,7 +106,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-colors hover:bg-gray-200"
+                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
                       Track Project
                     </a>
