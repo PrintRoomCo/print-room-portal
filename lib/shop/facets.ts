@@ -29,6 +29,14 @@ export async function getShopFacets(
       .in('id', scopedProductIds),
   ])
 
+  // TEMP DIAGNOSTIC — bg-topbar-filters, remove after fix
+  console.log('[getShopFacets]', {
+    scopedCount: scopedProductIds.length,
+    brands: { len: brandsRes.data?.length ?? 0, err: brandsRes.error?.message ?? null, sample: brandsRes.data?.[0] },
+    categories: { len: categoriesRes.data?.length ?? 0, err: categoriesRes.error?.message ?? null, sample: categoriesRes.data?.[0] },
+    families: { len: familyRes.data?.length ?? 0, err: familyRes.error?.message ?? null, samples: familyRes.data?.slice(0, 3) },
+  })
+
   const brandMap = new Map<string, { id: string; name: string }>()
   for (const r of (brandsRes.data ?? []) as Array<{
     brand_id: string
