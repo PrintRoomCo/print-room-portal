@@ -1,9 +1,14 @@
+import type { Metadata } from 'next'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutClient } from '@/components/checkout/CheckoutClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Checkout',
+}
 
 export default async function CheckoutPage() {
   const auth = await requireB2BCustomer()

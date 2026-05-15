@@ -1,5 +1,7 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { requireB2BCustomerCached } from '@/lib/checkout/server'
+import { cache } from 'react'
+import { requireB2BCustomerCached, type AuthFailure } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
@@ -53,14 +55,22 @@ function pickOne<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? v[0] ?? null : v
 }
 
-export default async function ProductDetailPage({
-  params,
-}: {
+type ProductDetailClientProps = Parameters<typeof ProductDetailClient>[0]
+
+type ProductDetailLoadResult =
+  | { status: 'auth-failure'; failure: AuthFailure }
+  | { status: 'not-found' }
+  | { status: 'ok'; data: ProductDetailClientProps }
+
+interface ProductDetailPageProps {
   params: Promise<{ productId: string }>
-}) {
-  const { productId } = await params
+}
+
+const loadProductDetailPageData = cache(async (
+  productId: string,
+): Promise<ProductDetailLoadResult> => {
   const auth = await requireB2BCustomerCached()
-  if ('kind' in auth) return handleAuthFailure(auth)
+  if ('kind' in auth) return { status: 'auth-failure', failure: auth }
   const { admin, context } = auth
 
   // Per-member access filter — gate before we even reach the product table.
@@ -69,7 +79,7 @@ export default async function ProductDetailPage({
     context.membershipId,
     context.organizationId,
   )
-  if (grantedItemIds.length === 0) return notFound()
+  if (grantedItemIds.length === 0) return { status: 'not-found' }
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
@@ -82,7 +92,7 @@ export default async function ProductDetailPage({
     .limit(1)
     .maybeSingle()
 
-  if (!catItem) return notFound()
+  if (!catItem) return { status: 'not-found' }
 
   const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
 
@@ -137,7 +147,7 @@ export default async function ProductDetailPage({
   ])
 
   const productRow = product as unknown as ProductDetail | null
-  if (!productRow || !productRow.is_active) return notFound()
+  if (!productRow || !productRow.is_active) return { status: 'not-found' }
 
   const catalogueColors = (catalogueColorRows ?? []) as Array<{
     color_swatch_id: string
@@ -258,9 +268,10 @@ export default async function ProductDetailPage({
     { orgMoqExempt: context.moqExempt },
   )
 
-  return (
-    <ProductDetailClient
-      product={{
+  return {
+    status: 'ok',
+    data: {
+      product: {
         id: displayProduct.id,
         name: displayProduct.name,
         description: displayProduct.description,
@@ -279,14 +290,37 @@ export default async function ProductDetailPage({
         fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
         brand_name: brandName,
         category_name: categoryName,
-      }}
-      variants={mappedVariants}
-      brackets={bracketRows}
-      availability={availability}
-      organizationId={context.organizationId}
-      images={images}
-      decorations={decorations}
-      effectiveMoq={effectiveMoq}
-    />
-  )
+      },
+      variants: mappedVariants,
+      brackets: bracketRows,
+      availability,
+      organizationId: context.organizationId,
+      images,
+      decorations,
+      effectiveMoq,
+    },
+  }
+})
+
+export async function generateMetadata({
+  params,
+}: ProductDetailPageProps): Promise<Metadata> {
+  const { productId } = await params
+  const result = await loadProductDetailPageData(productId)
+
+  return {
+    title: result.status === 'ok' ? result.data.product.name : 'Product',
+  }
+}
+
+export default async function ProductDetailPage({
+  params,
+}: ProductDetailPageProps) {
+  const { productId } = await params
+  const result = await loadProductDetailPageData(productId)
+
+  if (result.status === 'auth-failure') return handleAuthFailure(result.failure)
+  if (result.status === 'not-found') notFound()
+
+  return <ProductDetailClient {...result.data} />
 }

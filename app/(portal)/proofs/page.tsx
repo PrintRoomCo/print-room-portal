@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { ProofArchiveCard } from '@/components/proofs/ProofArchiveCard'
 import { requireB2BCustomer } from '@/lib/checkout/server'
@@ -5,6 +6,10 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { listVisibleProofsForOrg } from '@/lib/proofs/visibility'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Proofs',
+}
 
 export default async function ProofsPage() {
   const auth = await requireB2BCustomer()

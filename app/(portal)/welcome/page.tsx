@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
@@ -7,6 +8,10 @@ import { TierBadge } from '@/components/pricing/TierBadge'
 import { WelcomeContinueButton } from '@/components/welcome/WelcomeContinueButton'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Welcome',
+}
 
 interface AccountManager {
   name: string
