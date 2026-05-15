@@ -1,7 +1,7 @@
 'use client'
 
 import * as Dialog from '@radix-ui/react-dialog'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface RequestReorderModalProps {
   variantId: string
@@ -26,10 +26,12 @@ export function RequestReorderModal({
   const [error, setError] = useState<string | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  if (previousFocusRef.current == null && typeof document !== 'undefined') {
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null
-  }
+  useEffect(() => {
+    if (previousFocusRef.current == null) {
+      previousFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null
+    }
+  }, [])
 
   async function handleSubmit() {
     if (!Number.isInteger(qty) || qty <= 0) {
