@@ -39,18 +39,28 @@ export type PortalTopBarContextValue =
 interface InternalCtx {
   value: PortalTopBarContextValue | null
   setValue: (v: PortalTopBarContextValue | null) => void
-  drawerOpen: boolean
-  setDrawerOpen: (open: boolean) => void
+  navDrawerOpen: boolean
+  setNavDrawerOpen: (open: boolean) => void
+  cartDrawerOpen: boolean
+  setCartDrawerOpen: (open: boolean) => void
 }
 
 const Ctx = createContext<InternalCtx | null>(null)
 
 export function PortalTopBarProvider({ children }: { children: React.ReactNode }) {
   const [value, setValue] = useState<PortalTopBarContextValue | null>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false)
+  const [cartDrawerOpen, setCartDrawerOpen] = useState(false)
   const contextValue = useMemo(
-    () => ({ value, setValue, drawerOpen, setDrawerOpen }),
-    [value, drawerOpen],
+    () => ({
+      value,
+      setValue,
+      navDrawerOpen,
+      setNavDrawerOpen,
+      cartDrawerOpen,
+      setCartDrawerOpen,
+    }),
+    [value, navDrawerOpen, cartDrawerOpen],
   )
   return <Ctx.Provider value={contextValue}>{children}</Ctx.Provider>
 }
@@ -74,14 +84,27 @@ export function useSetTopBarContext() {
 // PortalTopBar) and the Sidebar drawer (mounted in PortalShell) share it.
 export function usePortalDrawer() {
   const ctx = useContext(Ctx)
-  const open = ctx?.drawerOpen ?? false
+  const open = ctx?.navDrawerOpen ?? false
   return useMemo(
     () => ({
       open,
-      setOpen: (next: boolean) => ctx?.setDrawerOpen(next),
-      toggle: () => ctx?.setDrawerOpen(!open),
+      setOpen: (next: boolean) => ctx?.setNavDrawerOpen(next),
+      toggle: () => ctx?.setNavDrawerOpen(!open),
     }),
     // ctx identity is stable (created once by provider); open changes per toggle
+    [ctx, open],
+  )
+}
+
+export function useCartDrawer() {
+  const ctx = useContext(Ctx)
+  const open = ctx?.cartDrawerOpen ?? false
+  return useMemo(
+    () => ({
+      open,
+      setOpen: (next: boolean) => ctx?.setCartDrawerOpen(next),
+      toggle: () => ctx?.setCartDrawerOpen(!open),
+    }),
     [ctx, open],
   )
 }

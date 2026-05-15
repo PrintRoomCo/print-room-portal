@@ -6,6 +6,7 @@ import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 import { RoleChangeNotice } from './RoleChangeNotice'
 import { PortalTopBar } from './PortalTopBar'
 import { PortalTopBarProvider } from './PortalTopBarContext'
+import { CartDrawer } from '@/components/cart/CartDrawer'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const { access, loading } = useCompany()
@@ -40,6 +41,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
       <PortalTopBar />
+      <CartDrawer />
       <Sidebar customer={access}>
         {children}
         <RoleChangeNotice />
