@@ -149,28 +149,28 @@ export default function RequestAccess() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                  <input type="text" name="firstName" required className="input-glass" />
+                  <input type="text" name="firstName" required autoComplete="given-name" className="input-glass" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                  <input type="text" name="lastName" required className="input-glass" />
+                  <input type="text" name="lastName" required autoComplete="family-name" className="input-glass" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" name="email" required placeholder="you@company.com" className="input-glass" />
+                <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" className="input-glass" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input type="tel" name="phone" placeholder="+64 21 123 4567" className="input-glass" />
+                <input type="tel" name="phone" autoComplete="tel" placeholder="+64 21 123 4567" className="input-glass" />
               </div>
 
               {customerType === 'company' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
-                  <input type="text" name="companyName" required className="input-glass" />
+                  <input type="text" name="companyName" required autoComplete="organization" className="input-glass" />
                 </div>
               )}
 
