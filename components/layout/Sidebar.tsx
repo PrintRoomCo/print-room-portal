@@ -215,7 +215,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                     >
                       {row.isActive && (
                         <rect
-                          x={8}
+                          x={0}
                           y={rowY + 24}
                           width={2}
                           height={32}
@@ -223,7 +223,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                           fill="currentColor"
                         />
                       )}
-                      <g transform={`translate(20 ${rowY + 24}) scale(${ICON_SCALE})`}>
+                      <g transform={`translate(8 ${rowY + 24}) scale(${ICON_SCALE})`}>
                         {row.id === 'tracking' && (
                           <>
                             {/* Screen printing carousel — top-down with
@@ -297,7 +297,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
                     <text
                       key={`t-${row.id}`}
                       data-row={row.id}
-                      x={68}
+                      x={56}
                       y={rowY + 40}
                       dominantBaseline="middle"
                       fill="currentColor"
