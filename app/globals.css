@@ -25,11 +25,15 @@
  * ============================================ */
 @layer base {
   :root {
-    /* Brand colors (RGB triplets for Tailwind alpha support) */
+    /* Brand colors (RGB triplets for Tailwind alpha support unless noted).
+     * RULE: --color-brand-yellow / pr-yellow is BACKGROUND-ONLY.
+     * Never use it as text on light surfaces (1.09:1 on white — fails AA).
+     * For yellow-tinted foreground, use --color-brand-yellow-strong / pr-yellow-strong. */
     --color-primary: 30 35 38;         /* #1E2326 - dark charcoal */
     --color-primary-dark: 20 23 26;    /* darker charcoal for hover */
     --color-brand-blue: 43 57 144;     /* #2B3990 - brand accent */
     --color-brand-yellow: 241 255 165; /* #F1FFA5 - secondary accent */
+    --color-brand-yellow-strong: 73 87% 41%; /* ≈ #A4D200 - HSL, foreground-safe */
     --color-surface: 248 250 244;      /* #F8FAF4 - sidebar/secondary bg */
 
     /* Design system tokens (HSL) */
