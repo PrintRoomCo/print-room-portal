@@ -105,7 +105,6 @@ export function VariantPicker({
                   value={c.id}
                   title={c.label ?? ''}
                   aria-label={`Select colour ${c.label ?? ''}`}
-                  aria-pressed={isSelected}
                   className={`h-9 w-9 rounded-full border-2 transition-all duration-200 ease-spring ${
                     isSelected
                       ? 'border-pr-blue ring-2 ring-pr-blue/30'
@@ -149,7 +148,6 @@ export function VariantPicker({
                 <ToggleGroup.Item
                   key={s.id}
                   value={String(s.id)}
-                  aria-pressed={isSelected}
                   className={`flex flex-col items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-spring ${
                     isSelected
                       ? 'border-pr-blue bg-pr-blue text-white'
