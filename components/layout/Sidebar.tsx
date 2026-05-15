@@ -109,16 +109,19 @@ export function Sidebar({ children, customer }: SidebarProps) {
       {/* Backdrop scrim — fades in/out */}
       <div
         onClick={() => drawer.setOpen(false)}
-        aria-hidden={!drawer.open}
+        aria-hidden={drawer.open ? 'false' : 'true'}
         className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] transition-opacity duration-300 ease-out motion-reduce:transition-none ${
           drawer.open ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
 
-      {/* Drawer — floating glass pill, slides in from the left */}
+      {/* Drawer — floating glass pill, slides in from the left.
+          `inert` (React 19 boolean prop) takes the closed subtree out of the
+          focus + accessibility tree atomically — replaces aria-hidden so a
+          retained focus on the close button doesn't trip the WAI-ARIA rule. */}
       <aside
         aria-label="Portal navigation"
-        aria-hidden={!drawer.open}
+        inert={!drawer.open}
         className={`fixed left-3 top-3 bottom-3 z-50 flex w-72 flex-col overflow-hidden rounded-2xl border border-gray-200/70 bg-white/95 shadow-lg backdrop-blur-md transition-transform duration-300 ease-out motion-reduce:transition-none ${
           drawer.open ? 'translate-x-0' : '-translate-x-[calc(100%+12px)]'
         }`}
@@ -186,7 +189,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
       </aside>
 
       {/* Main content — offset by the floating top bar height */}
-      <main className="w-full pt-[var(--portal-topbar-h,76px)]">
+      <main id="main-content" className="w-full pt-[var(--portal-topbar-h,76px)]">
         {children}
       </main>
     </>
