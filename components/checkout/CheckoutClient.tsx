@@ -167,27 +167,40 @@ export function CheckoutClient({
 
   if (cart.lines.length === 0) {
     return (
-      <div className="p-4 md:p-8">
-        <PortalEmptyState
-          title="Checkout is ready when your cart is"
-          body="Add products from your catalogue, then return here to confirm shipping and submit the order."
-          actionHref="/shop"
-          actionLabel="Browse catalogue"
-        />
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+          <header className="mb-10 md:mb-12">
+            <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+              Checkout
+            </h1>
+            <p className="mt-3 text-sm text-gray-600">
+              Confirm shipping and submit against your account terms.
+            </p>
+          </header>
+          <PortalEmptyState
+            title="Checkout is ready when your cart is"
+            body="Add products from your catalogue, then return here to confirm shipping and submit the order."
+            actionHref="/catalogue"
+            actionLabel="Browse catalogue"
+          />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Step 3 of 3</p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">Checkout</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Confirm shipping and submit against your account terms.
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <header className="mb-10 md:mb-12">
+          <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            Checkout
+          </h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Confirm shipping and submit against your account terms.
+          </p>
+        </header>
 
+        <div className="space-y-6">
       {banner && (
         <div
           className={`mb-4 rounded-xl border p-4 text-sm ${
@@ -229,7 +242,7 @@ export function CheckoutClient({
         </div>
       )}
       {canRouteToInventory && (
-        <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <section className="rounded-[32px] bg-white p-7 md:p-8">
           <label className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -257,7 +270,7 @@ export function CheckoutClient({
         </section>
       )}
 
-      <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <section className="rounded-[32px] bg-white p-7 md:p-8">
         <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
         <div className="mt-3 space-y-2">
           {cart.lines.map((line) => (
@@ -285,7 +298,7 @@ export function CheckoutClient({
       )}
 
       {allCustom && (
-        <section className="mt-4 rounded-xl border border-gray-100 bg-white p-4">
+        <section className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
           <h2 className="mb-3 text-sm font-medium text-gray-700">Custom shipping address</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
@@ -376,7 +389,7 @@ export function CheckoutClient({
         </section>
       )}
 
-      <section className="grid grid-cols-1 gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 rounded-[32px] bg-white p-7 md:grid-cols-2 md:p-8">
         <div>
           <label htmlFor="required-by" className="block text-sm font-medium text-gray-700">
             Required by (optional)
@@ -403,7 +416,7 @@ export function CheckoutClient({
         </div>
       </section>
 
-      <section className="mt-6 rounded-xl border border-gray-100 bg-white p-4">
+      <section className="mt-6 rounded-[32px] bg-white p-7 md:p-8">
         <div className="mb-3 flex items-center gap-2">
           <span className="text-sm text-gray-700">Pricing for</span>
           <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
@@ -420,6 +433,8 @@ export function CheckoutClient({
         >
           {submitting === 'review' ? 'Preparing review…' : 'Review order'}
         </button>
+      </div>
+        </div>
       </div>
     </div>
   )
