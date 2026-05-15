@@ -31,9 +31,8 @@ export interface SendEmailResult {
  * Send an email via Resend.
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
-  const apiKey = getApiKey()
-
   try {
+    const apiKey = getApiKey()
     const response = await fetch(`${RESEND_API_URL}/emails`, {
       method: 'POST',
       headers: {
