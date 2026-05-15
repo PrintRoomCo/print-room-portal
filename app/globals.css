@@ -418,3 +418,46 @@
     @apply w-12 text-center text-sm font-medium text-gray-900 bg-transparent;
   }
 }
+
+/* ============================================
+ * INLINE SVG SIDEBAR MENU
+ * Stroke-only icons + cross-layer :has() hover bridge so that hovering
+ * a row's <a> (inside foreignObject) highlights the matching icon group
+ * and label text in pr-blue.
+ * ============================================ */
+
+@layer utilities {
+  .cls-line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+@layer components {
+  nav svg:has(g#links a[data-row="tracking"]:hover)  g#outline g[data-row="tracking"],
+  nav svg:has(g#links a[data-row="tracking"]:hover)  g#text    text[data-row="tracking"],
+  nav svg:has(g#links a[data-row="catalogue"]:hover) g#outline g[data-row="catalogue"],
+  nav svg:has(g#links a[data-row="catalogue"]:hover) g#text    text[data-row="catalogue"],
+  nav svg:has(g#links a[data-row="orders"]:hover)    g#outline g[data-row="orders"],
+  nav svg:has(g#links a[data-row="orders"]:hover)    g#text    text[data-row="orders"],
+  nav svg:has(g#links a[data-row="proofs"]:hover)    g#outline g[data-row="proofs"],
+  nav svg:has(g#links a[data-row="proofs"]:hover)    g#text    text[data-row="proofs"] {
+    color: rgb(43 57 144);
+  }
+
+  /* Keyboard parity — when a row's <a> is focused (drawer open + tab),
+     mirror the hover styling so sighted keyboard users see the same cue. */
+  nav svg:has(g#links a[data-row="tracking"]:focus-visible)  g#outline g[data-row="tracking"],
+  nav svg:has(g#links a[data-row="tracking"]:focus-visible)  g#text    text[data-row="tracking"],
+  nav svg:has(g#links a[data-row="catalogue"]:focus-visible) g#outline g[data-row="catalogue"],
+  nav svg:has(g#links a[data-row="catalogue"]:focus-visible) g#text    text[data-row="catalogue"],
+  nav svg:has(g#links a[data-row="orders"]:focus-visible)    g#outline g[data-row="orders"],
+  nav svg:has(g#links a[data-row="orders"]:focus-visible)    g#text    text[data-row="orders"],
+  nav svg:has(g#links a[data-row="proofs"]:focus-visible)    g#outline g[data-row="proofs"],
+  nav svg:has(g#links a[data-row="proofs"]:focus-visible)    g#text    text[data-row="proofs"] {
+    color: rgb(43 57 144);
+  }
+}

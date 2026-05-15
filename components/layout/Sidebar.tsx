@@ -14,6 +14,17 @@ interface SidebarProps {
 
 type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
 
+// Identifiers for the four hand-drawn rows rendered inside the inline SVG
+// menu. Order = display order. Anything in `allNavItems` not listed here
+// (e.g. Leavers Quotes) falls back to a classic Link row beneath the SVG.
+type SvgRowId = 'tracking' | 'catalogue' | 'orders' | 'proofs'
+const SVG_ROWS: ReadonlyArray<{ id: SvgRowId; label: string; href: string }> = [
+  { id: 'tracking',  label: 'tracking',  href: '/tracking' },
+  { id: 'catalogue', label: 'catalogue', href: '/catalogue' },
+  { id: 'orders',    label: 'orders',    href: '/my-collections' },
+  { id: 'proofs',    label: 'proofs',    href: '/proofs' },
+]
+
 // Navigation items with permission requirements.
 // "My Account" lives in the AccountMenu dropdown in the top bar — not here.
 // "Sign Out" lives in the AccountMenu too. Catalogue absorbs the previous
@@ -77,6 +88,32 @@ export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname() ?? ''
   const drawer = usePortalDrawer()
   const navigation = getNavigationItems(customer)
+
+  // SVG menu rows the current user is allowed to see. Permission gating
+  // flows through `navigation` (already filtered by getNavigationItems).
+  const visibleRows = SVG_ROWS
+    .filter((row) => navigation.some((n) => n.href === row.href))
+    .map((row) => ({
+      ...row,
+      isActive:
+        pathname === row.href || pathname.startsWith(row.href + '/'),
+    }))
+
+  // Anything else still in `navigation` (e.g. Leavers Quotes) renders as
+  // a classic Link below the SVG so we don't drop it silently.
+  const extraItems = navigation.filter(
+    (n) => !SVG_ROWS.some((r) => r.href === n.href),
+  )
+
+  // Row geometry (SVG units = viewBox).
+  // - 80-tall rows give icons room to read and a 64-tall hit area, which
+  //   sits well above WCAG 2.5.8 AA (24×24) and meets the larger 2.5.5 AAA
+  //   target threshold on the long axis.
+  // - Icons are drawn in a 24×24 local space and scaled 4/3 to 32×32.
+  const ROW_H = 80
+  const TOP_Y = 16
+  const ICON_SCALE = 32 / 24
+  const viewH = visibleRows.length * ROW_H + TOP_Y * 2
 
   // Close drawer on route change
   useEffect(() => {
@@ -153,28 +190,170 @@ export function Sidebar({ children, customer }: SidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-3">
-          <ul className="space-y-1">
-            {navigation.map((item) => {
-              const isActive =
-                pathname === item.href || pathname.startsWith(item.href + '/')
-              return (
-                <li key={item.name}>
-                  <Link
-                    href={item.href}
-                    className={`group flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-150 ${
-                      isActive
-                        ? 'bg-pr-blue/10 text-pr-blue'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                    tabIndex={drawer.open ? 0 : -1}
-                  >
-                    <item.icon className="h-5 w-5 flex-shrink-0" />
-                    <span>{item.name}</span>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+          {visibleRows.length > 0 && (
+            <svg
+              viewBox={`0 0 280 ${viewH}`}
+              xmlns="http://www.w3.org/2000/svg"
+              role="menu"
+              aria-label="primary navigation"
+              className="block w-full font-dm-sans text-base font-medium text-gray-700"
+            >
+              <defs />
+
+              <g id="outline" pointerEvents="none">
+                {visibleRows.map((row, i) => {
+                  const rowY = TOP_Y + i * ROW_H
+                  return (
+                    <g
+                      key={`o-${row.id}`}
+                      data-row={row.id}
+                      className={
+                        row.isActive
+                          ? 'text-[rgb(43_57_144)]'
+                          : 'text-gray-700'
+                      }
+                    >
+                      {row.isActive && (
+                        <rect
+                          x={8}
+                          y={rowY + 24}
+                          width={2}
+                          height={32}
+                          rx={1}
+                          fill="currentColor"
+                        />
+                      )}
+                      <g transform={`translate(20 ${rowY + 24}) scale(${ICON_SCALE})`}>
+                        {row.id === 'tracking' && (
+                          <>
+                            {/* Screen printing carousel — top-down with
+                                slight perspective oval on the hub. */}
+                            <ellipse className="cls-line" cx={12} cy={12} rx={3} ry={2} />
+                            <line className="cls-line" x1={12} y1={10} x2={12} y2={6} />
+                            <line className="cls-line" x1={14} y1={12} x2={18} y2={12} />
+                            <line className="cls-line" x1={12} y1={14} x2={12} y2={18} />
+                            <line className="cls-line" x1={10} y1={12} x2={6} y2={12} />
+                            <rect className="cls-line" x={8.5} y={2}   width={7} height={4} rx={1} />
+                            <rect className="cls-line" x={18}  y={8.5} width={4} height={7} rx={1} />
+                            <rect className="cls-line" x={8.5} y={18}  width={7} height={4} rx={1} />
+                            <rect className="cls-line" x={2}   y={8.5} width={4} height={7} rx={1} />
+                          </>
+                        )}
+                        {row.id === 'catalogue' && (
+                          <>
+                            {/* Paper bag with arched handle — t.e. shop. */}
+                            <path
+                              className="cls-line"
+                              d="M5,8 H19 L17.5,22 H6.5 Z"
+                            />
+                            <path
+                              className="cls-line"
+                              d="M8,8 V5.5 C8,3 16,3 16,5.5 V8"
+                            />
+                          </>
+                        )}
+                        {row.id === 'orders' && (
+                          <>
+                            {/* Phone handset — earpiece curving to mouthpiece, t.e. contact. */}
+                            <path
+                              className="cls-line"
+                              d="M5,5 Q5,3 7,3 H9 Q11,3 11,6 V8 Q11,10 9,11 Q10,14 13,16 Q14,15 16,15 H18 Q20,15 20,17 V19 Q20,21 18,21 C10,21 5,15 5,7 Z"
+                            />
+                          </>
+                        )}
+                        {row.id === 'proofs' && (
+                          <>
+                            {/* Guidebook — cover, spine, and text lines, t.e. guides. */}
+                            <rect className="cls-line" x={4} y={3} width={16} height={18} rx={0.5} />
+                            <line className="cls-line" x1={7} y1={3} x2={7} y2={21} />
+                            <line className="cls-line" x1={9.5} y1={8} x2={17.5} y2={8} />
+                            <line className="cls-line" x1={9.5} y1={11} x2={17.5} y2={11} />
+                            <line className="cls-line" x1={9.5} y1={14} x2={15} y2={14} />
+                          </>
+                        )}
+                      </g>
+                    </g>
+                  )
+                })}
+              </g>
+
+              <g id="text" pointerEvents="none">
+                {visibleRows.map((row, i) => {
+                  const rowY = TOP_Y + i * ROW_H
+                  return (
+                    <text
+                      key={`t-${row.id}`}
+                      data-row={row.id}
+                      x={68}
+                      y={rowY + 40}
+                      dominantBaseline="middle"
+                      fill="currentColor"
+                      className={
+                        row.isActive
+                          ? 'text-[rgb(43_57_144)]'
+                          : 'text-gray-700'
+                      }
+                    >
+                      {row.label}
+                    </text>
+                  )
+                })}
+              </g>
+
+              <g id="links">
+                {visibleRows.map((row, i) => {
+                  const rowY = TOP_Y + i * ROW_H
+                  return (
+                    <foreignObject
+                      key={`l-${row.id}`}
+                      x={16}
+                      y={rowY + 8}
+                      width={248}
+                      height={64}
+                    >
+                      <Link
+                        href={row.href}
+                        title={row.id}
+                        aria-label={row.id}
+                        data-discover="true"
+                        data-row={row.id}
+                        aria-current={row.isActive ? 'page' : undefined}
+                        tabIndex={drawer.open ? 0 : -1}
+                        className="block h-full w-full cursor-pointer"
+                      >
+                        <span className="sr-only">{row.id}</span>
+                      </Link>
+                    </foreignObject>
+                  )
+                })}
+              </g>
+            </svg>
+          )}
+
+          {extraItems.length > 0 && (
+            <ul className="mt-1 space-y-1">
+              {extraItems.map((item) => {
+                const isActive =
+                  pathname === item.href || pathname.startsWith(item.href + '/')
+                return (
+                  <li key={item.name}>
+                    <Link
+                      href={item.href}
+                      className={`group flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-150 ${
+                        isActive
+                          ? 'bg-pr-blue/10 text-pr-blue'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                      tabIndex={drawer.open ? 0 : -1}
+                    >
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      <span>{item.name}</span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </nav>
 
         {customer.companyName && (
