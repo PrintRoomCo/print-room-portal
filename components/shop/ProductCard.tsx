@@ -82,7 +82,6 @@ export function ProductCard({ product }: ProductCardProps) {
               <span
                 key={`${s.hex ?? 'na'}-${i}`}
                 className="block h-2.5 w-2.5 rounded-full border border-black/10"
-                // eslint-disable-next-line react/forbid-dom-props -- dynamic hex from DB requires inline style
                 style={{ backgroundColor: s.hex ?? '#e5e7eb' }}
                 title={s.label ?? undefined}
               />

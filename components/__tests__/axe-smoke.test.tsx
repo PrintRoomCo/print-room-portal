@@ -16,6 +16,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ user: null, signOut: vi.fn() }),
 }))
 
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: () => ({ access: null }),
+}))
+
 const variants: VariantRow[] = [
   {
     variant_id: 'red-s',
