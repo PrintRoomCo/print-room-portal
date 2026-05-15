@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireB2BCustomerCached } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
@@ -15,6 +16,10 @@ import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Catalogue',
+}
 
 // Tenants that track physical stock — for these, the catalogue listing is
 // unioned with any product that has a variant_inventory row. Studio tenants
