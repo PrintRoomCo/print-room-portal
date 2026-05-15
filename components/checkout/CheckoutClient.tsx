@@ -1,9 +1,14 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import {
+  EMPTY_CUSTOM_ADDRESS,
+  writeCheckoutReviewState,
+  type CustomAddress,
+} from './checkoutReviewState'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
@@ -32,27 +37,6 @@ interface CheckoutClientProps {
   isBuyer: boolean
   /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
-}
-
-interface CheckoutResponse {
-  order_id: string
-  order_ref: string
-}
-
-interface CustomAddress {
-  name: string
-  address: string
-  city: string
-  postal_code: string
-  country: string
-}
-
-const EMPTY_CUSTOM: CustomAddress = {
-  name: '',
-  address: '',
-  city: '',
-  postal_code: '',
-  country: 'NZ',
 }
 
 export function CheckoutClient({
@@ -84,10 +68,10 @@ export function CheckoutClient({
     return m
   })
 
-  const [customAddress, setCustomAddress] = useState<CustomAddress>(EMPTY_CUSTOM)
+  const [customAddress, setCustomAddress] = useState<CustomAddress>(EMPTY_CUSTOM_ADDRESS)
   const [requiredBy, setRequiredBy] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
-  const [submitting, setSubmitting] = useState<false | 'order'>(false)
+  const [submitting, setSubmitting] = useState<false | 'review'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
   // Slice 4: admin-only "send this batch to inventory instead of a customer
   // address" toggle. Only meaningful for orgs that track stock.
@@ -102,6 +86,23 @@ export function CheckoutClient({
   )
   const intent: 'customer' | 'inventory' =
     canRouteToInventory && routeToInventory ? 'inventory' : 'customer'
+
+  useEffect(() => {
+    setPerLineShipTo((prev) => {
+      let changed = false
+      const next: Record<string, string | null> = {}
+      for (const line of cart.lines) {
+        if (Object.prototype.hasOwnProperty.call(prev, line.lineId)) {
+          next[line.lineId] = prev[line.lineId]
+        } else {
+          next[line.lineId] = initialStoreId
+          changed = true
+        }
+      }
+      if (Object.keys(prev).length !== Object.keys(next).length) changed = true
+      return changed ? next : prev
+    })
+  }, [cart.lines, initialStoreId])
 
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
@@ -138,116 +139,28 @@ export function CheckoutClient({
     !customIncomplete &&
     !buyerMisconfigured
 
-  async function submitOrder() {
-    setSubmitting('order')
+  function proceedToReview() {
+    if (!canSubmitOrder) return
+    setSubmitting('review')
     setBanner(null)
     try {
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idempotency_key: idempotencyKey.current,
-          required_by: requiredBy || null,
-          notes: notes || null,
-          intent,
-          lines: cart.lines.map((l) => ({
-            product_id: l.productId,
-            product_name: l.productName,
-            variant_id: l.variantId || null,
-            qty: l.qty,
-            ship_to_store_id: allCustom ? null : perLineShipTo[l.lineId] ?? null,
-            cart_line_id: l.lineId,
-            decorations: l.decorations,
-          })),
-          custom_shipping_address: allCustom ? customAddress : null,
-        }),
+      writeCheckoutReviewState({
+        idempotencyKey: idempotencyKey.current,
+        requiredBy,
+        notes,
+        intent,
+        perLineShipTo,
+        customAddress,
+        createdAt: new Date().toISOString(),
       })
-      if (res.status === 409) {
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          drift?: Array<{
-            cartLineId: string | null
-            decorationName: string
-            was: number
-            now: number
-            reason: string
-          }>
-          violations?: Array<{
-            cartLineId: string | null
-            productId: string
-            productName: string
-            effectiveMoq: number
-            totalQty: number
-          }>
-          detail?: {
-            code?: 'insufficient_stock' | 'no_inventory'
-            product_id?: string | null
-            variant_id?: string | null
-            available?: number
-            requested?: number
-          }
-        }
-        if (data.error === 'moq_violation' && data.violations) {
-          const summary = data.violations
-            .map((v) => `${v.productName}: ${v.totalQty} ordered, min ${v.effectiveMoq}`)
-            .join('; ')
-          setBanner({
-            kind: 'error',
-            msg:
-              `Minimum order quantity not met. ${summary}. ` +
-              `Add more to meet the minimum, or contact your account manager — ` +
-              `they can lower the MOQ on a specific product or your whole account.`,
-          })
-          router.push('/cart')
-          return
-        }
-        if (data.error === 'decoration_price_drift' && data.drift) {
-          const summary = data.drift
-            .map((d) => `${d.decorationName}: was $${d.was.toFixed(2)} → now $${d.now.toFixed(2)} (${d.reason})`)
-            .join('; ')
-          setBanner({
-            kind: 'error',
-            msg: `Decoration pricing has changed — review your cart. ${summary}`,
-          })
-          router.push('/cart')
-          return
-        }
-        if (data.error === 'insufficient_stock' || data.error === 'no_inventory') {
-          const offendingLine = cart.lines.find(
-            (l) =>
-              (l.variantId || null) === (data.detail?.variant_id ?? null) ||
-              l.productId === data.detail?.product_id,
-          )
-          const lineLabel = offendingLine?.productName ?? 'A product in your cart'
-          const msg =
-            data.error === 'insufficient_stock'
-              ? `Sorry, ${lineLabel} went out of stock` +
-                (data.detail?.available != null && data.detail?.requested != null
-                  ? ` — you asked for ${data.detail.requested}, only ${data.detail.available} available.`
-                  : '.') +
-                ' Please reduce the quantity or remove it.'
-              : `Sorry, ${lineLabel} is not stocked for your account — please contact staff or remove it from your cart.`
-          setBanner({ kind: 'error', msg })
-          router.push('/cart')
-          return
-        }
-        setBanner({
-          kind: 'error',
-          msg: 'Stock changed while you were checking out — please review your cart and try again.',
-        })
-        router.push('/cart')
-        return
-      }
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error ?? `Request failed (${res.status})`)
-      }
-      const result = (await res.json()) as CheckoutResponse
-      cart.clear()
-      router.push(`/checkout/confirmation/${result.order_id}`)
+      router.push('/checkout/review')
     } catch (e) {
-      setBanner({ kind: 'error', msg: (e as Error).message })
-    } finally {
+      setBanner({
+        kind: 'error',
+        msg:
+          (e as Error).message ||
+          'Could not prepare the review step. Please try again.',
+      })
       setSubmitting(false)
     }
   }
@@ -501,11 +414,11 @@ export function CheckoutClient({
       <div className="mt-6 flex flex-wrap justify-end gap-2">
         <button
           type="button"
-          onClick={submitOrder}
+          onClick={proceedToReview}
           disabled={!canSubmitOrder}
           className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting === 'order' ? 'Placing order…' : 'Submit order'}
+          {submitting === 'review' ? 'Preparing review…' : 'Review order'}
         </button>
       </div>
     </div>
