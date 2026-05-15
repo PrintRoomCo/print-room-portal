@@ -15,6 +15,7 @@ export default {
       },
       colors: {
         border: 'hsl(var(--border))',
+        'border-decorative': 'hsl(var(--border-decorative))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
