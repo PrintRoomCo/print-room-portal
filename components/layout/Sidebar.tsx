@@ -319,9 +319,9 @@ export function Sidebar({ children, customer }: SidebarProps) {
                   return (
                     <foreignObject
                       key={`l-${row.id}`}
-                      x={16}
+                      x={0}
                       y={rowY + 8}
-                      width={248}
+                      width={264}
                       height={64}
                     >
                       <Link
