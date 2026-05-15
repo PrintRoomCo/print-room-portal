@@ -1,5 +1,7 @@
 'use client'
 
+import * as ToggleGroup from '@radix-ui/react-toggle-group'
+
 export interface VariantRow {
   variant_id: string
   color_swatch_id: string | null
@@ -86,14 +88,21 @@ export function VariantPicker({
               <span className="text-sm text-gray-600">{selectedColor.label}</span>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <ToggleGroup.Root
+            type="single"
+            value={selectedColorSwatchId ?? undefined}
+            onValueChange={(next) => {
+              if (next) onChange({ colorSwatchId: next, sizeId: selectedSizeId })
+            }}
+            aria-label="Select colour"
+            className="flex flex-wrap gap-2"
+          >
             {colors.map((c) => {
               const isSelected = c.id === selectedColorSwatchId
               return (
-                <button
+                <ToggleGroup.Item
                   key={c.id}
-                  type="button"
-                  onClick={() => onChange({ colorSwatchId: c.id, sizeId: selectedSizeId })}
+                  value={c.id}
                   title={c.label ?? ''}
                   aria-label={`Select colour ${c.label ?? ''}`}
                   aria-pressed={isSelected}
@@ -106,14 +115,24 @@ export function VariantPicker({
                 />
               )
             })}
-          </div>
+          </ToggleGroup.Root>
         </div>
       )}
 
       {showSizePicker && sizes.length > 0 && (
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-900">Size</label>
-          <div className="flex flex-wrap gap-2">
+          <ToggleGroup.Root
+            type="single"
+            value={selectedSizeId == null ? undefined : String(selectedSizeId)}
+            onValueChange={(next) => {
+              if (next) {
+                onChange({ colorSwatchId: selectedColorSwatchId, sizeId: Number(next) })
+              }
+            }}
+            aria-label="Select size"
+            className="flex flex-wrap gap-2"
+          >
             {sizes.map((s) => {
               const isSelected = s.id === selectedSizeId
               const variantForSize = variants.find(
@@ -127,10 +146,9 @@ export function VariantPicker({
               const qty = tracked ? availability![variantForSize!.variant_id] : null
               const outOfStock = tracked && (qty ?? 0) === 0
               return (
-                <button
+                <ToggleGroup.Item
                   key={s.id}
-                  type="button"
-                  onClick={() => onChange({ colorSwatchId: selectedColorSwatchId, sizeId: s.id })}
+                  value={String(s.id)}
                   aria-pressed={isSelected}
                   className={`flex flex-col items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-spring ${
                     isSelected
@@ -156,10 +174,10 @@ export function VariantPicker({
                       {outOfStock ? '0 in stock' : `${qty} in stock`}
                     </span>
                   )}
-                </button>
+                </ToggleGroup.Item>
               )
             })}
-          </div>
+          </ToggleGroup.Root>
         </div>
       )}
     </div>
