@@ -26,6 +26,47 @@ export type ProofSizeColumn = (typeof SIZE_COLUMNS)[number]
 
 export type ProofSourceMode = 'manual' | 'catalogue_product' | 'customer_order_catalogue_product'
 
+export type ProofMockupAsset = {
+  schema_version: 1
+  product_id: string
+  variant_id: string | null
+  catalogue_item_id?: string | null
+  product_view_key: string
+  product_image_id?: string | null
+  print_area_key: string
+  artwork: { storage_path: string; preview_url: string; original_filename?: string }
+  mockup: { storage_path: string; preview_url: string; width_px?: number; height_px?: number }
+  placement_transform: {
+    x: number
+    y: number
+    w: number
+    h: number
+    rotation?: number
+    coordinate_space: 'print_area_normalized'
+  }
+  dimensions_mm: {
+    artwork_w: number
+    artwork_h: number
+    print_area_w?: number
+    print_area_h?: number
+  }
+  decoration: {
+    method: ProofMethod
+    pantones: string[]
+    production_note?: string | null
+    pricing_ref: {
+      kind: 'product' | 'catalogue_item' | 'quote_builder_decoration'
+      product_id: string
+      catalogue_item_id?: string | null
+      decoration_source_id?: number | null
+      decoration_type?: string
+      decoration_detail?: string
+      location_key?: string
+    }
+  }
+  quantities: { sizes: Record<string, number>; one_size_qty?: number | null; total_qty: number }
+}
+
 export interface ProofCatalogueSource {
   mode: ProofSourceMode
   catalogueItemId?: string | null
@@ -65,6 +106,7 @@ export interface ProofDesign {
   printHeightsNote: string
   productionNote: string
   printAreas: ProofPrintArea[]
+  mockupAssets?: ProofMockupAsset[]
   sourceMode?: ProofSourceMode
   catalogueSource?: ProofCatalogueSource | null
 }

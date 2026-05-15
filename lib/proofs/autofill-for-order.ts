@@ -2,13 +2,21 @@
 // `print-room-staff-portal/src/lib/proofs/autofill-for-order.ts`.
 // F1 (spec 2026-05-13 §G.4) — customer-portal twin of the staff helper.
 // Never throws; every failure path collapses to an audit_events row.
+//
+// Current contract:
+// - Expects the submitted order to have a linked quote with quote_items rows.
+// - Uses quote_items.decorations snapshots to carry decoration link ids,
+//   artwork URLs, and decoration snapshot URLs into the v1 proof document.
+// - Maps each decorated order line into proof order rows with catalogue-source
+//   metadata when the decoration link still resolves to a catalogue item.
+// - Creates or reuses one draft design_proof per order in an AM-amendable state:
+//   design_proofs.status='draft' and proof_quality_status='draft_generated'.
+// Known gap: undecorated quote_items are checklist entries rather than proof
+// order rows, because there is no decoration link or artwork to assemble.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadReadyProductsForOrganization } from '@/lib/proofs/load-ready-products'
-import {
-  buildDocumentFromCatalogue,
-  type BuildDocumentSelection,
-} from '@/lib/proofs/build-document-from-catalogue'
+import { loadOrderProofAssembly } from '@/lib/proofs/order-assembly'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { sendProofEmail } from '@/lib/email/send-proof-email'
@@ -34,11 +42,33 @@ export interface AutofillProofResult {
   skipped: AutofillSkipReason
 }
 
+interface ExistingProofRow {
+  id: string
+  current_version_id: string | null
+}
+
 export async function autofillProofForOrder(
   orderRow: AutofillOrderRow,
   admin: SupabaseClient,
 ): Promise<AutofillProofResult> {
   try {
+    const existingProof = await findExistingOrderProof(admin, orderRow.orderId)
+    if (existingProof?.current_version_id) {
+      await safeAuditLog({
+        orgId: orderRow.organizationId,
+        action: AUDIT_ACTIONS.PROOF_AUTOFILL_SKIPPED,
+        targetId: existingProof.id,
+        metadata: {
+          orderId: orderRow.orderId,
+          proofId: existingProof.id,
+          orderRef: orderRow.orderRef,
+          reason: 'already_exists',
+          source: 'customer_portal',
+        },
+      })
+      return { proofId: existingProof.id, skipped: null }
+    }
+
     const ready = await loadReadyProductsForOrganization(admin, orderRow.organizationId)
     const productIdSet = new Set(orderRow.productIds.filter(Boolean))
     const matching = ready.products.filter((p) => productIdSet.has(p.sourceProductId))
@@ -58,12 +88,23 @@ export async function autofillProofForOrder(
       return { proofId: null, skipped: 'no_items' }
     }
 
-    // F1 customer path passes `enabledDecorationIds=undefined` -> emit every
-    // catalogue decoration on the matched products (spec §G.3, §G.4).
-    const selections: BuildDocumentSelection[] = matching.map((p) => ({
-      catalogueItemId: p.catalogueItemId,
-      swatchId: null,
-    }))
+    const assembly = await loadOrderProofAssembly(admin, orderRow.orderId, {
+      name: undefined,
+      email: undefined,
+    })
+    if (assembly.checklist.length > 0) {
+      await safeAuditLog({
+        orgId: orderRow.organizationId,
+        action: AUDIT_ACTIONS.PROOF_AUTOFILL_PARTIAL,
+        targetId: orderRow.orderId,
+        metadata: {
+          orderId: orderRow.orderId,
+          orderRef: orderRow.orderRef,
+          checklist: assembly.checklist,
+          source: 'customer_portal',
+        },
+      })
+    }
 
     const { data: organization, error: orgError } = await admin
       .from('organizations')
@@ -74,46 +115,68 @@ export async function autofillProofForOrder(
     if (orgError) throw new Error(`Organization lookup failed: ${orgError.message}`)
 
     const orgName = organization?.name ?? orderRow.customerName ?? 'Client'
-    const document = buildDocumentFromCatalogue({
-      selections,
-      products: matching,
-      organizationId: orderRow.organizationId,
-      organizationName: orgName,
-      customerName: orderRow.customerName || orgName,
-      customerEmail: orderRow.customerEmail,
-      jobName: orderRow.orderRef,
-    })
-
+    const document = assembly.document
     const sourceCatalogueItemIds = matching.map((p) => p.catalogueItemId)
 
-    const { data: proof, error: proofError } = await admin
-      .from('design_proofs')
-      .insert({
-        organization_id: orderRow.organizationId,
-        order_id: orderRow.orderId,
-        quote_id: orderRow.quoteId,
-        name: orderRow.orderRef,
-        customer_email: orderRow.customerEmail,
-        customer_name: orderRow.customerName,
-        status: 'draft',
-        proof_quality_status: 'draft_generated',
-        // No staff actor on customer-originated submits — staff dashboards
-        // surface these shells regardless via the design_proofs RLS policy.
-        created_by_user_id: null,
-        source_catalogue_item_ids: sourceCatalogueItemIds,
-      })
-      .select('id')
-      .single()
+    let proof = existingProof
+    let createdProof = false
+    if (!proof) {
+      const { data: inserted, error: proofError } = await admin
+        .from('design_proofs')
+        .insert({
+          organization_id: orderRow.organizationId,
+          order_id: orderRow.orderId,
+          quote_id: orderRow.quoteId,
+          name: orderRow.orderRef,
+          customer_email: orderRow.customerEmail,
+          customer_name: orderRow.customerName,
+          status: 'draft',
+          proof_quality_status: 'draft_generated',
+          // No staff actor on customer-originated submits. Staff dashboards
+          // surface these shells regardless via the design_proofs RLS policy.
+          created_by_user_id: null,
+          source_catalogue_item_ids: sourceCatalogueItemIds,
+        })
+        .select('id, current_version_id')
+        .single()
 
-    if (proofError || !proof) {
-      throw new Error(`Proof insert failed: ${proofError?.message ?? 'no row returned'}`)
+      if (proofError || !inserted) {
+        const racedExisting = await findExistingOrderProof(admin, orderRow.orderId)
+        if (!racedExisting) {
+          throw new Error(`Proof insert failed: ${proofError?.message ?? 'no row returned'}`)
+        }
+        proof = racedExisting
+      } else {
+        proof = inserted as ExistingProofRow
+        createdProof = true
+      }
+    } else {
+      await admin
+        .from('design_proofs')
+        .update({ source_catalogue_item_ids: sourceCatalogueItemIds })
+        .eq('id', proof.id)
+    }
+
+    if (proof.current_version_id) {
+      return { proofId: proof.id, skipped: null }
+    }
+
+    const { data: latest, error: latestError } = await admin
+      .from('design_proof_versions')
+      .select('version_number')
+      .eq('proof_id', proof.id)
+      .order('version_number', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (latestError) {
+      throw new Error(`Proof version lookup failed: ${latestError.message}`)
     }
 
     const { data: version, error: versionError } = await admin
       .from('design_proof_versions')
       .insert({
         proof_id: proof.id,
-        version_number: 1,
+        version_number: (latest?.version_number ?? 0) + 1,
         status: 'draft',
         snapshot_data: document,
         change_order_fee_amount: 0,
@@ -123,7 +186,7 @@ export async function autofillProofForOrder(
       .single()
 
     if (versionError || !version) {
-      await admin.from('design_proofs').delete().eq('id', proof.id)
+      if (createdProof) await admin.from('design_proofs').delete().eq('id', proof.id)
       throw new Error(`Proof version insert failed: ${versionError?.message ?? 'no row returned'}`)
     }
 
@@ -133,7 +196,7 @@ export async function autofillProofForOrder(
       .eq('id', proof.id)
     if (updateError) {
       await admin.from('design_proof_versions').delete().eq('id', version.id)
-      await admin.from('design_proofs').delete().eq('id', proof.id)
+      if (createdProof) await admin.from('design_proofs').delete().eq('id', proof.id)
       throw new Error(`Proof current_version_id update failed: ${updateError.message}`)
     }
 
@@ -146,6 +209,8 @@ export async function autofillProofForOrder(
         proofId: proof.id,
         versionId: version.id,
         sourceCatalogueItemIds,
+        assemblyChecklist: assembly.checklist,
+        reusedExistingProof: !createdProof,
         source: 'customer_portal',
       },
     })
@@ -174,6 +239,25 @@ export async function autofillProofForOrder(
     })
     return { proofId: null, skipped: 'creation_failed' }
   }
+}
+
+async function findExistingOrderProof(
+  admin: SupabaseClient,
+  orderId: string,
+): Promise<ExistingProofRow | null> {
+  const { data, error } = await admin
+    .from('design_proofs')
+    .select('id, current_version_id')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Existing proof lookup failed: ${error.message}`)
+  }
+
+  return (data as ExistingProofRow | null) ?? null
 }
 
 async function safeAuditLog(args: {
