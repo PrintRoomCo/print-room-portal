@@ -8,8 +8,8 @@ import {
 } from 'react'
 import { useCompany } from '@/contexts/CompanyContext'
 import {
-  applyUpdatePatch,
   lineSignature,
+  recomputeProductTierPrices,
   type CartLine,
   type CartLineBracket,
   type CartState,
@@ -98,7 +98,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(roleKey, role)
       }
       const raw = localStorage.getItem(storageKey)
-      setState(raw ? normalizePersisted(JSON.parse(raw)) : { lines: [] })
+      const persisted = raw ? normalizePersisted(JSON.parse(raw)) : { lines: [] }
+      // Hydrate stale carts onto the new tier rule. If a line was added
+      // pre-recompute (e.g. before this deploy) and now has a wrong unitPrice
+      // for its product-total qty, bring it back into agreement.
+      setState({ lines: recomputeProductTierPrices(persisted.lines) })
     } catch {
       setState({ lines: [] })
     }
@@ -129,30 +133,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
             lineSignature(l.productId, l.variantId, l.variantLabel, l.decorations) ===
             incomingSig,
         )
-        if (existing) {
-          return {
-            lines: s.lines.map((l) =>
-              l === existing ? { ...l, qty: l.qty + line.qty } : l
-            ),
-          }
-        }
-        return {
-          lines: [
-            ...s.lines,
-            {
-              ...line,
-              decorations: line.decorations ?? [],
-              lineId: crypto.randomUUID(),
-            },
-          ],
-        }
+        const merged: CartLine[] = existing
+          ? s.lines.map((l) =>
+              // Refresh brackets from the incoming add — the new PDP fetch
+              // is the latest source of truth — and let recomputeProduct-
+              // TierPrices below settle unitPrice across every same-product
+              // line at the new total qty.
+              l === existing
+                ? { ...l, qty: l.qty + line.qty, brackets: line.brackets ?? l.brackets }
+                : l,
+            )
+          : [
+              ...s.lines,
+              {
+                ...line,
+                decorations: line.decorations ?? [],
+                lineId: crypto.randomUUID(),
+              },
+            ]
+        return { lines: recomputeProductTierPrices(merged) }
       }),
     updateLine: (lineId, patch) =>
-      setState((s) => ({
-        lines: s.lines.map((l) => (l.lineId === lineId ? applyUpdatePatch(l, patch) : l)),
-      })),
+      setState((s) => {
+        const next = s.lines.map((l) =>
+          l.lineId === lineId ? { ...l, ...patch } : l,
+        )
+        return { lines: recomputeProductTierPrices(next) }
+      }),
     removeLine: (lineId) =>
-      setState((s) => ({ lines: s.lines.filter((l) => l.lineId !== lineId) })),
+      setState((s) => ({
+        lines: recomputeProductTierPrices(s.lines.filter((l) => l.lineId !== lineId)),
+      })),
     setShipTo: (lineId, storeId) =>
       setState((s) => ({
         lines: s.lines.map((l) =>

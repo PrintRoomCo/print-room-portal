@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyUpdatePatch,
   pickBracket,
+  recomputeProductTierPrices,
   type CartLine,
   type CartLineBracket,
 } from './types'
@@ -46,62 +46,89 @@ describe('pickBracket', () => {
   })
 })
 
-function lineAtQty(qty: number, unitPrice: number): CartLine {
+function line(opts: {
+  lineId: string
+  productId: string
+  variantId?: string
+  variantLabel?: string
+  qty: number
+  unitPrice: number
+  brackets?: CartLineBracket[] | undefined
+}): CartLine {
   return {
-    lineId: 'l1',
-    productId: 'p1',
+    lineId: opts.lineId,
+    productId: opts.productId,
     productName: 'Tee',
-    variantId: '',
-    variantLabel: '—',
-    qty,
-    unitPrice,
+    variantId: opts.variantId ?? '',
+    variantLabel: opts.variantLabel ?? '—',
+    qty: opts.qty,
+    unitPrice: opts.unitPrice,
     imageUrl: null,
     decorations: [],
-    brackets,
+    brackets: opts.brackets,
   }
 }
 
-describe('applyUpdatePatch (tier recalc on qty edit)', () => {
-  it('drops to the smaller-tier price when qty falls into a lower bracket', () => {
-    const line = lineAtQty(100, 20) // started at 100+ tier
-    const next = applyUpdatePatch(line, { qty: 24 })
-    expect(next.qty).toBe(24)
-    expect(next.unitPrice).toBe(30) // 1–49 tier
+describe('recomputeProductTierPrices', () => {
+  it('drops a single-line product to the lower tier when qty falls', () => {
+    const before = [line({ lineId: 'l1', productId: 'p1', qty: 24, unitPrice: 20, brackets })]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].unitPrice).toBe(30) // 24 in 1-49
   })
 
-  it('lifts to the larger-tier price when qty climbs', () => {
-    const line = lineAtQty(24, 30)
-    const next = applyUpdatePatch(line, { qty: 60 })
-    expect(next.unitPrice).toBe(25) // 50–99 tier
+  it('lifts a single-line product when qty climbs', () => {
+    const before = [line({ lineId: 'l1', productId: 'p1', qty: 60, unitPrice: 30, brackets })]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].unitPrice).toBe(25) // 60 in 50-99
   })
 
-  it('round-trips between tiers', () => {
-    let line = lineAtQty(100, 20)
-    line = applyUpdatePatch(line, { qty: 24 })
-    expect(line.unitPrice).toBe(30)
-    line = applyUpdatePatch(line, { qty: 100 })
-    expect(line.unitPrice).toBe(20)
+  it('prices multi-size lines off the SUM qty across the same productId', () => {
+    // 1 + 7 + 5 + 110 = 123 -> 100+ bucket -> all four lines $20.
+    const before = [
+      line({ lineId: 'a', productId: 'p1', variantId: 'S', qty: 1, unitPrice: 99, brackets }),
+      line({ lineId: 'b', productId: 'p1', variantId: 'M', qty: 7, unitPrice: 99, brackets }),
+      line({ lineId: 'c', productId: 'p1', variantId: 'L', qty: 5, unitPrice: 99, brackets }),
+      line({ lineId: 'd', productId: 'p1', variantId: 'XL', qty: 110, unitPrice: 99, brackets }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    for (const l of after) expect(l.unitPrice).toBe(20)
   })
 
-  it('does not touch unitPrice when patch has no qty change', () => {
-    const line = lineAtQty(100, 20)
-    const next = applyUpdatePatch(line, { shipToStoreId: 'store-1' })
-    expect(next.unitPrice).toBe(20)
-    expect(next.shipToStoreId).toBe('store-1')
+  it('re-tiers every same-product line when one line edits qty down', () => {
+    // Start: 1+7+5+110 = 123 -> 100+ tier @ $20. User edits XL from 110 -> 26.
+    // New total: 1+7+5+26 = 39 -> 1-49 tier @ $30. All four lines should be $30.
+    const before = [
+      line({ lineId: 'a', productId: 'p1', variantId: 'S', qty: 1, unitPrice: 20, brackets }),
+      line({ lineId: 'b', productId: 'p1', variantId: 'M', qty: 7, unitPrice: 20, brackets }),
+      line({ lineId: 'c', productId: 'p1', variantId: 'L', qty: 5, unitPrice: 20, brackets }),
+      line({ lineId: 'd', productId: 'p1', variantId: 'XL', qty: 26, unitPrice: 20, brackets }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    for (const l of after) expect(l.unitPrice).toBe(30)
   })
 
-  it('respects an explicit unitPrice in the patch (no auto-recalc)', () => {
-    const line = lineAtQty(100, 20)
-    const next = applyUpdatePatch(line, { qty: 24, unitPrice: 99 })
-    expect(next.qty).toBe(24)
-    expect(next.unitPrice).toBe(99)
+  it('does not mix tiers across distinct productIds', () => {
+    // p1 totals 100 -> $20. p2 totals 5 -> $30.
+    const before = [
+      line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 99, brackets }),
+      line({ lineId: 'b', productId: 'p2', qty: 5, unitPrice: 99, brackets }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].unitPrice).toBe(20)
+    expect(after[1].unitPrice).toBe(30)
   })
 
-  it('keeps unitPrice frozen for legacy lines without brackets', () => {
-    const legacy: CartLine = { ...lineAtQty(100, 20), brackets: undefined }
-    const next = applyUpdatePatch(legacy, { qty: 5 })
-    expect(next.qty).toBe(5)
-    expect(next.unitPrice).toBe(20)
+  it('leaves legacy lines without brackets untouched', () => {
+    const before = [
+      line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 99, brackets: undefined }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].unitPrice).toBe(99)
+  })
+
+  it('returns the same line reference when no recalc is needed (referential equality)', () => {
+    const stable = line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 20, brackets })
+    const after = recomputeProductTierPrices([stable])
+    expect(after[0]).toBe(stable)
   })
 })
-

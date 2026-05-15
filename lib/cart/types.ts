@@ -108,17 +108,26 @@ export function pickBracket(
 }
 
 /**
- * Apply a partial patch to a cart line. When the patch changes qty (and does
- * not explicitly set unitPrice), the unit price is re-derived from the line's
- * brackets snapshot so a 100→24 edit drops back to the smaller-tier price.
- * Legacy lines without brackets keep their frozen unitPrice (server still
- * re-prices canonically on submit).
+ * Recompute every line's unitPrice against the qty SUM across every line that
+ * shares its productId. Mirrors the server-side pricing logic in
+ * `submitCustomerOrder` (priceByProductId is summed by product_id so a multi-
+ * size order prices at the total print run, not the per-size qty).
+ *
+ * Called after every cart mutation (add merge / update / remove) so editing
+ * one size's qty correctly re-tiers every same-product line. No-op on lines
+ * that have no brackets snapshot (legacy) or whose total qty falls outside
+ * every bracket.
  */
-export function applyUpdatePatch(line: CartLine, patch: Partial<CartLine>): CartLine {
-  const next: CartLine = { ...line, ...patch }
-  if (patch.qty !== undefined && patch.unitPrice === undefined) {
-    const bracket = pickBracket(line.brackets, next.qty)
-    if (bracket) next.unitPrice = bracket.unitPrice
+export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
+  const totalByProduct = new Map<string, number>()
+  for (const l of lines) {
+    totalByProduct.set(l.productId, (totalByProduct.get(l.productId) ?? 0) + l.qty)
   }
-  return next
+  return lines.map((l) => {
+    if (!l.brackets || l.brackets.length === 0) return l
+    const total = totalByProduct.get(l.productId) ?? l.qty
+    const bracket = pickBracket(l.brackets, total)
+    if (!bracket || bracket.unitPrice === l.unitPrice) return l
+    return { ...l, unitPrice: bracket.unitPrice }
+  })
 }
