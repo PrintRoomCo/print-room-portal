@@ -241,14 +241,21 @@ export function Sidebar({ children, customer }: SidebarProps) {
                         )}
                         {row.id === 'catalogue' && (
                           <>
-                            {/* Paper bag with arched handle — t.e. shop. */}
-                            <path
+                            {/* Tall paper bag with top fold — t.e. shop. */}
+                            <rect
                               className="cls-line"
-                              d="M5,8 H19 L17.5,22 H6.5 Z"
+                              x={8}
+                              y={2}
+                              width={8}
+                              height={20}
+                              rx={0.5}
                             />
-                            <path
+                            <line
                               className="cls-line"
-                              d="M8,8 V5.5 C8,3 16,3 16,5.5 V8"
+                              x1={8}
+                              y1={5.5}
+                              x2={16}
+                              y2={5.5}
                             />
                           </>
                         )}
