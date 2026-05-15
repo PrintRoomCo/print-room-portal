@@ -106,8 +106,12 @@ export function CheckoutClient({
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
   const mixedCustom = anyCustom && !allCustom
-  const customIncomplete =
-    allCustom && (!customAddress.address || !customAddress.city || !customAddress.country)
+  const customAddressErrors = {
+    address: allCustom && !customAddress.address ? 'Street address is required.' : null,
+    city: allCustom && !customAddress.city ? 'City is required.' : null,
+    country: allCustom && !customAddress.country ? 'Country is required.' : null,
+  }
+  const customIncomplete = Object.values(customAddressErrors).some(Boolean)
 
   const pricingCtx = usePricingContext()
   const breakdown = useMemo(
@@ -372,24 +376,58 @@ export function CheckoutClient({
           <h2 className="mb-3 text-sm font-medium text-gray-700">Custom shipping address</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
+              id="custom-shipping-name"
               placeholder="Recipient name"
               value={customAddress.name}
               onChange={(e) => setCustomAddress({ ...customAddress, name: e.target.value })}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
             />
+            <div>
+              <input
+                id="custom-shipping-address"
+                placeholder="Street address"
+                value={customAddress.address}
+                onChange={(e) => setCustomAddress({ ...customAddress, address: e.target.value })}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                aria-invalid={customAddressErrors.address ? true : undefined}
+                aria-describedby={
+                  customAddressErrors.address ? 'custom-shipping-address-error' : undefined
+                }
+              />
+              {customAddressErrors.address && (
+                <p
+                  id="custom-shipping-address-error"
+                  role="alert"
+                  className="mt-1 text-xs text-red-600"
+                >
+                  {customAddressErrors.address}
+                </p>
+              )}
+            </div>
+            <div>
+              <input
+                id="custom-shipping-city"
+                placeholder="City"
+                value={customAddress.city}
+                onChange={(e) => setCustomAddress({ ...customAddress, city: e.target.value })}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                aria-invalid={customAddressErrors.city ? true : undefined}
+                aria-describedby={
+                  customAddressErrors.city ? 'custom-shipping-city-error' : undefined
+                }
+              />
+              {customAddressErrors.city && (
+                <p
+                  id="custom-shipping-city-error"
+                  role="alert"
+                  className="mt-1 text-xs text-red-600"
+                >
+                  {customAddressErrors.city}
+                </p>
+              )}
+            </div>
             <input
-              placeholder="Street address"
-              value={customAddress.address}
-              onChange={(e) => setCustomAddress({ ...customAddress, address: e.target.value })}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="City"
-              value={customAddress.city}
-              onChange={(e) => setCustomAddress({ ...customAddress, city: e.target.value })}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            />
-            <input
+              id="custom-shipping-postal-code"
               placeholder="Postal code"
               value={customAddress.postal_code}
               onChange={(e) =>
@@ -397,14 +435,30 @@ export function CheckoutClient({
               }
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
             />
-            <input
-              placeholder="Country"
-              value={customAddress.country}
-              onChange={(e) =>
-                setCustomAddress({ ...customAddress, country: e.target.value })
-              }
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            />
+            <div>
+              <input
+                id="custom-shipping-country"
+                placeholder="Country"
+                value={customAddress.country}
+                onChange={(e) =>
+                  setCustomAddress({ ...customAddress, country: e.target.value })
+                }
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                aria-invalid={customAddressErrors.country ? true : undefined}
+                aria-describedby={
+                  customAddressErrors.country ? 'custom-shipping-country-error' : undefined
+                }
+              />
+              {customAddressErrors.country && (
+                <p
+                  id="custom-shipping-country-error"
+                  role="alert"
+                  className="mt-1 text-xs text-red-600"
+                >
+                  {customAddressErrors.country}
+                </p>
+              )}
+            </div>
           </div>
         </section>
       )}
