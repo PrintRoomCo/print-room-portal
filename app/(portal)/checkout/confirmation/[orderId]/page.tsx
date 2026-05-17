@@ -1,8 +1,13 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
-import { ConfirmationTotals } from './ConfirmationTotals'
+import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
+import {
+  ConfirmationView,
+  type ConfirmationDecoration,
+  type ConfirmationLine,
+  type ConfirmationAddress,
+} from './ConfirmationView'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,13 +18,79 @@ interface OrderRow {
   status: string | null
   total_price: number | null
   quotes: {
+    id: string
     order_ref: string | null
     monday_item_id: string | null
     organization_id: string | null
     subtotal: number | null
     decoration_cost: number | null
     tax: number | null
+    shipping_address: unknown
+    required_by: string | null
   } | null
+}
+
+interface QuoteItemRow {
+  id: string
+  product_id: string | null
+  product_name: string | null
+  quantity: number | null
+  unit_price: number | null
+  decorations: unknown
+  ship_to_store_id: string | null
+  product_variants:
+    | {
+        image_url: string | null
+        product_color_swatches: { label: string | null } | { label: string | null }[] | null
+        sizes: { label: string | null } | { label: string | null }[] | null
+      }
+    | null
+  products: { image_url: string | null } | null
+}
+
+function pickOne<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+function asAddress(value: unknown): ConfirmationAddress | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const pick = (k: string): string | null =>
+    typeof v[k] === 'string' && (v[k] as string).length > 0 ? (v[k] as string) : null
+  const out: ConfirmationAddress = {
+    name: pick('name'),
+    address: pick('address'),
+    city: pick('city'),
+    state: pick('state'),
+    postal_code: pick('postal_code'),
+    country: pick('country'),
+  }
+  // Treat as null if every field is empty so the UI can show the fallback line.
+  const hasAny = Object.values(out).some((x) => x !== null)
+  return hasAny ? out : null
+}
+
+function asDecorations(value: unknown): ConfirmationDecoration[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((raw): ConfirmationDecoration | null => {
+      if (!raw || typeof raw !== 'object') return null
+      const r = raw as Record<string, unknown>
+      const name = typeof r.name === 'string' ? r.name : null
+      if (!name) return null
+      const unitPrice = Number(r.unitPrice ?? r.unit_price ?? 0)
+      return {
+        linkId: typeof r.linkId === 'string' ? r.linkId : null,
+        name,
+        unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+        snapshotUrl: typeof r.snapshotUrl === 'string' ? r.snapshotUrl : null,
+        artworkUrl: typeof r.artworkUrl === 'string' ? r.artworkUrl : null,
+        positionLabel:
+          typeof r.positionLabel === 'string' ? r.positionLabel : null,
+      }
+    })
+    .filter((x): x is ConfirmationDecoration => x !== null)
 }
 
 export default async function ConfirmationPage({
@@ -36,7 +107,11 @@ export default async function ConfirmationPage({
     .from('orders')
     .select(
       `id, status, total_price,
-       quotes!inner (order_ref, monday_item_id, organization_id, subtotal, decoration_cost, tax)`
+       quotes!inner (
+         id, order_ref, monday_item_id, organization_id,
+         subtotal, decoration_cost, tax,
+         shipping_address, required_by
+       )`,
     )
     .eq('id', orderId)
     .single()
@@ -71,86 +146,74 @@ export default async function ConfirmationPage({
   const gst = storedTax > 0 ? storedTax : Math.round(subtotalExGst * GST_RATE * 100) / 100
   const totalIncGst = Math.round((subtotalExGst + gst) * 100) / 100
 
+  // Line items live on the joined quote. We surface them on the confirmation
+  // card so the customer can scan what they actually placed; if this fetch
+  // fails for any reason we still render the rest of the page.
+  const { data: rawLines } = await admin
+    .from('quote_items')
+    .select(
+      `id, product_id, product_name, quantity, unit_price, decorations, ship_to_store_id,
+       product_variants (
+         image_url,
+         product_color_swatches (label),
+         sizes (label)
+       ),
+       products (image_url)`,
+    )
+    .eq('quote_id', order.quotes.id)
+
+  const lineRows = (rawLines ?? []) as unknown as QuoteItemRow[]
+  const lines: ConfirmationLine[] = lineRows.map((row) => {
+    const variant = row.product_variants
+    const swatch = pickOne(variant?.product_color_swatches ?? null)
+    const size = pickOne(variant?.sizes ?? null)
+    const variantLabel =
+      [swatch?.label, size?.label].filter(Boolean).join(' / ') || null
+    return {
+      id: row.id,
+      productName: row.product_name ?? 'Item',
+      variantLabel,
+      quantity: Number(row.quantity ?? 0),
+      unitPrice: Number(row.unit_price ?? 0),
+      imageUrl: variant?.image_url ?? row.products?.image_url ?? null,
+      decorations: asDecorations(row.decorations),
+    }
+  })
+
+  // Fulfilment label — multi-store split vs single ship-to vs make-to-stock
+  // signals already live on quote_items.ship_to_store_id. We summarise without
+  // re-fetching the store rows: the per-line address detail is implicitly the
+  // order-level shipping_address fallback below.
+  const distinctShipTo = new Set(
+    lineRows.map((r) => r.ship_to_store_id ?? '__custom__'),
+  )
+  const fulfilmentLabel =
+    distinctShipTo.size > 1
+      ? `Split across ${distinctShipTo.size} delivery locations`
+      : 'Single delivery'
+
+  const shippingAddress = asAddress(order.quotes.shipping_address)
+
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
-        <div className="max-w-3xl">
-          <header className="mb-10 md:mb-12">
-            {awaitingApproval && (
-              <span className="mb-4 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-                Awaiting account manager approval
-              </span>
-            )}
-            <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
-              Order received
-            </h1>
-            <p className="mt-3 text-sm text-gray-600">
-              {awaitingApproval
-                ? "Thanks — your order is with our team. We'll notify you once it moves into production."
-                : "Thanks — your order is in our system and we'll be in touch shortly."}
-            </p>
-          </header>
-
-          <div className="rounded-[32px] bg-white p-7 md:p-8">
-            <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-gray-500">
-                  Order reference
-                </dt>
-                <dd className="font-mono text-base text-gray-900">{orderRef}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-gray-500">Status</dt>
-                <dd className="text-gray-900">{order.status ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-gray-500">
-                  Production sync
-                </dt>
-                <dd className="text-gray-900">
-                  {mondaySynced
-                    ? 'Synced to production'
-                    : awaitingApproval
-                      ? 'Will sync once approved'
-                      : 'Syncing to production…'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
-            <h2 className="text-sm font-medium text-gray-700">Order total</h2>
-            <ConfirmationTotals
-              subtotalExGst={subtotalExGst}
-              decorationCost={decorationCost}
-              gst={gst}
-              totalIncGst={totalIncGst}
-              gstRate={GST_RATE}
-            />
-          </div>
-
-          {!mondaySynced && !awaitingApproval && (
-            <p className="mt-3 text-xs text-gray-500">
-              If this takes more than a few minutes our staff will reconcile it from their
-              side — your order is safe.
-            </p>
-          )}
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            <Link
-              href="/order-tracker"
-              className="rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              View in order tracker
-            </Link>
-            <Link
-              href="/catalogue"
-              className="rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              Continue shopping
-            </Link>
-          </div>
-        </div>
+      <SetTopBarContext value={{ kind: 'section', label: 'Order confirmation' }} />
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[var(--portal-topbar-h,76px)] md:px-6 md:pt-[120px]">
+        <ConfirmationView
+          orderRef={orderRef}
+          status={order.status}
+          awaitingApproval={awaitingApproval}
+          mondaySynced={mondaySynced}
+          customerEmail={context.email}
+          shippingAddress={shippingAddress}
+          fulfilmentLabel={fulfilmentLabel}
+          requiredBy={order.quotes.required_by}
+          lines={lines}
+          subtotalExGst={subtotalExGst}
+          decorationCost={decorationCost}
+          gst={gst}
+          totalIncGst={totalIncGst}
+          gstRate={GST_RATE}
+        />
       </div>
     </div>
   )
