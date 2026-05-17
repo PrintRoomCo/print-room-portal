@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useCompany } from '@/contexts/CompanyContext'
 import { getPortalOwnerKey } from '@/lib/portal-owner'
+import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import {
   updateCollectionAction,
   deleteCollectionAction,
@@ -627,6 +628,54 @@ export default function CollectionDetail() {
   )
 }
 
+const LABEL_CAP =
+  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+
+const SUPPORT_MAILTO = 'mailto:hello@theprint-room.co.nz'
+
+interface QuoteItem {
+  id?: string
+  product_name?: string | null
+  productTitle?: string | null
+  quantity?: number | null
+  unit_price?: number | null
+  total_price?: number | null
+  variant_label?: string | null
+  decorations?: Array<{
+    name?: string | null
+    unitPrice?: number | null
+    unit_price?: number | null
+    snapshotUrl?: string | null
+    artworkUrl?: string | null
+  }> | null
+  image_url?: string | null
+}
+
+interface ProofFile {
+  url: string
+  name?: string | null
+}
+
+function QuoteStatusChip({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    draft: { label: 'Draft', cls: 'bg-gray-50 text-gray-700' },
+    submitted: { label: 'Pending review', cls: 'bg-amber-50 text-amber-800' },
+    'awaiting-approval': { label: 'Awaiting approval', cls: 'bg-amber-50 text-amber-800' },
+    approved: { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700' },
+    rejected: { label: 'Changes requested', cls: 'bg-rose-50 text-rose-700' },
+    completed: { label: 'Completed', cls: 'bg-emerald-50 text-emerald-700' },
+    expired: { label: 'Expired', cls: 'bg-gray-50 text-gray-600' },
+  }
+  const entry = map[status] ?? { label: status, cls: 'bg-gray-50 text-gray-700' }
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${entry.cls}`}
+    >
+      {entry.label}
+    </span>
+  )
+}
+
 function QuoteDetail({
   quote,
   linkedCollection,
@@ -636,112 +685,273 @@ function QuoteDetail({
   linkedCollection: CollectionWithDesigns | null
   tracker: JobTracker | null
 }) {
-  const items = Array.isArray(quote.line_items) ? quote.line_items : []
+  const items = (Array.isArray(quote.line_items) ? quote.line_items : []) as QuoteItem[]
   const totals = {
     subtotal: Number(quote.subtotal || 0),
     decoration: Number(quote.decoration_cost || 0),
     shipping: Number(quote.shipping_estimate || 0),
     total: Number(quote.total_amount || 0),
   }
-  const proofFiles = Array.isArray(tracker?.proof_files) ? tracker.proof_files : []
+  const proofFiles = (Array.isArray(tracker?.proof_files)
+    ? tracker.proof_files
+    : []) as ProofFile[]
   const trackerUrl = tracker?.tracker_token ? getTrackerUrl(tracker.tracker_token) : null
+  const currency = quote.currency || 'NZD'
+  const heading =
+    quote.reference || `Order ${quote.id.slice(0, 8).toUpperCase()}`
+  const customerLine =
+    quote.customer_company || quote.customer_name || quote.customer_email
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <SetTopBarContext value={{ kind: 'section', label: 'Order summary' }} />
+      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[var(--portal-topbar-h,76px)] md:px-6 md:pt-[120px]">
+        {/* Hero */}
+        <header className="mb-10 md:mb-14">
           <div className="flex items-center gap-3">
-            <Link href="/my-collections" className="text-gray-500 hover:text-gray-700">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Link
+              href="/my-collections"
+              className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+              aria-label="Back to my quotes"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </Link>
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-              {quote.reference || `Quote ${quote.id.slice(0, 8).toUpperCase()}`}
-            </h1>
-            <StatusBadge status={quote.status} />
+            <p className={LABEL_CAP}>Order #{quote.id.slice(0, 8).toUpperCase()}</p>
           </div>
-          <p className="mt-2 ml-8 text-sm text-gray-500">
-            {new Date(quote.created_at).toLocaleDateString('en-NZ')} &bull;{' '}
-            {quote.customer_company || quote.customer_name || quote.customer_email}
-          </p>
+          <h1 className="mt-4 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
+            {heading}
+          </h1>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <QuoteStatusChip status={quote.status} />
+            <p className="text-sm text-gray-600">
+              {new Date(quote.created_at).toLocaleDateString('en-NZ', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}{' '}
+              &middot; {customerLine}
+            </p>
+          </div>
           {linkedCollection && (
-            <p className="mt-1 ml-8 text-sm text-gray-600">
+            <p className="mt-3 max-w-2xl text-sm text-gray-600">
               Linked design workspace:{' '}
-              <Link href={`/my-collections/${linkedCollection.id}`} className="text-[rgb(var(--color-primary))] hover:underline">
+              <Link
+                href={`/my-collections/${linkedCollection.id}`}
+                className="rounded-full text-gray-900 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+              >
                 {linkedCollection.name}
               </Link>
             </p>
           )}
-        </div>
-        <div className="flex gap-2">
-          {trackerUrl && (
-            <a href={trackerUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-              Open Tracker
-            </a>
-          )}
-        </div>
-      </div>
+        </header>
 
-      {/* Quote Items + Totals */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="overflow-hidden rounded-xl border border-black/10 bg-white lg:col-span-2">
-          <div className="border-b border-black/10 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-black/60">Quote Items</h2>
-          </div>
-          {items.length === 0 ? (
-            <div className="p-6 text-sm text-black/50">No quote items.</div>
-          ) : (
-            <div className="divide-y divide-black/10">
-              {items.map((item: any, index: number) => (
-                <div key={item.id || index} className="flex items-start justify-between gap-4 p-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-black">{item.product_name || item.productTitle || 'Item'}</p>
-                    <p className="mt-1 text-sm text-black/50">
-                      Qty {item.quantity} &times; {formatMoney(item.unit_price || 0, quote.currency)}
-                    </p>
-                  </div>
-                  <p className="font-medium text-black">
-                    {formatMoney(item.total_price || (item.quantity * item.unit_price) || 0, quote.currency)}
-                  </p>
+        {/* Body */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr,420px] lg:gap-12">
+          {/* Left column */}
+          <div className="space-y-6">
+            {/* Order items */}
+            <section className="rounded-[32px] bg-white p-6 md:p-8">
+              <h2 className={`mb-6 ${LABEL_CAP}`}>Order summary</h2>
+              {items.length === 0 ? (
+                <p className="text-sm text-gray-500">No items recorded on this quote.</p>
+              ) : (
+                <div className="space-y-4">
+                  {items.map((item, index) => {
+                    const decorations = Array.isArray(item.decorations) ? item.decorations : []
+                    const decoPerUnit = decorations.reduce(
+                      (s, d) => s + Number(d?.unitPrice ?? d?.unit_price ?? 0),
+                      0,
+                    )
+                    const qty = Number(item.quantity || 0)
+                    const unitPrice = Number(item.unit_price || 0)
+                    const lineTotal =
+                      Number(item.total_price || 0) || (qty * (unitPrice + decoPerUnit))
+                    return (
+                      <article
+                        key={item.id || `line-${index}`}
+                        className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 md:gap-5"
+                      >
+                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
+                          {item.image_url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={item.image_url}
+                              alt={item.product_name || item.productTitle || ''}
+                              className="h-full w-full object-contain p-2"
+                              loading="lazy"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-dm-sans text-base font-medium text-gray-900">
+                            {item.product_name || item.productTitle || 'Item'}
+                          </p>
+                          {item.variant_label && (
+                            <p className={`mt-1 ${LABEL_CAP}`}>{item.variant_label}</p>
+                          )}
+                          {decorations.length > 0 && (
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                              {decorations.map((d, i) => {
+                                const icon = d?.snapshotUrl ?? d?.artworkUrl
+                                const dPrice = Number(d?.unitPrice ?? d?.unit_price ?? 0)
+                                return (
+                                  <span
+                                    key={`${item.id || index}-deco-${i}`}
+                                    className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
+                                  >
+                                    {icon ? (
+                                      /* eslint-disable-next-line @next/next/no-img-element */
+                                      <img
+                                        src={icon}
+                                        alt=""
+                                        className="h-4 w-4 rounded-sm bg-white object-contain"
+                                      />
+                                    ) : null}
+                                    <span className="font-medium">{d?.name || 'Decoration'}</span>
+                                    <span className="tabular-nums text-gray-500">
+                                      +{formatMoney(dPrice, currency)}
+                                    </span>
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          )}
+                          <p className="mt-3 text-sm text-gray-500">
+                            <span className="tabular-nums text-gray-700">{qty}</span>{' '}
+                            ×{' '}
+                            <span className="tabular-nums text-gray-700">
+                              {formatMoney(unitPrice + decoPerUnit, currency)}
+                            </span>
+                          </p>
+                        </div>
+                        <p className="font-dm-sans text-base font-medium tabular-nums text-gray-900">
+                          {formatMoney(lineTotal, currency)}
+                        </p>
+                      </article>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              )}
+            </section>
 
-        <div className="rounded-2xl bg-[#F8F8F8] p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-black/60">Totals</h3>
-          <div className="mt-3 space-y-2 text-sm text-black/60">
-            <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(totals.subtotal, quote.currency)}</span></div>
-            <div className="flex justify-between"><span>Decoration</span><span>{formatMoney(totals.decoration, quote.currency)}</span></div>
-            <div className="flex justify-between"><span>Shipping</span><span>{formatMoney(totals.shipping, quote.currency)}</span></div>
-            <div className="flex justify-between border-t border-black/20 pt-2 text-lg font-bold text-black">
-              <span>Total</span><span>{formatMoney(totals.total, quote.currency)}</span>
-            </div>
+            {/* Notes */}
+            {quote.notes && (
+              <section className="rounded-[24px] bg-white p-6">
+                <h2 className={`mb-3 ${LABEL_CAP}`}>Notes</h2>
+                <p className="whitespace-pre-wrap text-sm text-gray-700">{quote.notes}</p>
+              </section>
+            )}
+
+            {/* Proof files */}
+            {proofFiles.length > 0 && (
+              <section className="rounded-[24px] bg-white p-6">
+                <h2 className={`mb-4 ${LABEL_CAP}`}>Proof files</h2>
+                <div className="flex flex-wrap gap-2">
+                  {proofFiles.map((file, index) => (
+                    <a
+                      key={`${file.url}-${index}`}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                    >
+                      {file.name || `Proof ${index + 1}`}
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
-          {quote.notes && (
-            <div className="mt-4 rounded-lg border border-black/10 bg-white p-3 text-sm text-black/70">
-              {quote.notes}
+
+          {/* Right column — sticky totals */}
+          <aside className="lg:sticky lg:top-[100px] lg:h-fit">
+            <div className="rounded-[32px] bg-white p-6 md:p-8">
+              <h2 className={`mb-5 ${LABEL_CAP}`}>Order total</h2>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="tabular-nums text-gray-900">
+                    {formatMoney(totals.subtotal, currency)}
+                  </span>
+                </div>
+                {totals.decoration > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span className="pl-3">Decoration</span>
+                    <span className="tabular-nums">{formatMoney(totals.decoration, currency)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-gray-100 pt-2.5">
+                  <span className="text-gray-600">Shipping</span>
+                  <span className="tabular-nums text-gray-900">
+                    {totals.shipping > 0
+                      ? formatMoney(totals.shipping, currency)
+                      : 'Calculated separately'}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline justify-between border-t border-gray-100 pt-3">
+                  <span className="font-dm-sans text-base font-medium text-gray-900">Total</span>
+                  <span className="font-dm-sans text-xl font-medium tabular-nums text-gray-900">
+                    {formatMoney(totals.total, currency)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-7 space-y-3">
+                {trackerUrl ? (
+                  <a
+                    href={trackerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+                  >
+                    Open tracker
+                  </a>
+                ) : (
+                  <Link
+                    href="/order-tracker"
+                    className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+                  >
+                    View order tracker
+                  </Link>
+                )}
+                <Link
+                  href="/my-collections"
+                  className="flex w-full items-center justify-center rounded-full bg-gray-50 px-6 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2"
+                >
+                  Back to my quotes
+                </Link>
+              </div>
+
+              <p className="mt-6 text-xs text-gray-500">
+                Need to change something on this order?{' '}
+                <a
+                  href={SUPPORT_MAILTO}
+                  className="rounded-full text-gray-700 underline-offset-2 hover:text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                >
+                  Email us
+                </a>{' '}
+                and we&rsquo;ll pick it up.
+              </p>
             </div>
-          )}
+          </aside>
         </div>
       </div>
-
-      {/* Proof Files */}
-      {proofFiles.length > 0 && (
-        <div className="card-elevated p-4">
-          <h3 className="text-sm font-medium text-gray-700">Proof Files</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {proofFiles.map((file: any, index: number) => (
-              <a key={`${file.url}-${index}`} href={file.url} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-                {file.name || `Proof ${index + 1}`}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
