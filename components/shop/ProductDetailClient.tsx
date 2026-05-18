@@ -16,6 +16,8 @@ import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
+type CustomerRole = 'org_admin' | 'buyer'
+type OrderIntent = 'inventory' | 'bulk'
 
 interface ProductData {
   id: string
@@ -58,6 +60,7 @@ interface Props {
   /** variant_id → available_qty, only populated for variants the org stocks. */
   availability: Record<string, number>
   organizationId: string
+  customerRole: CustomerRole
   images: GalleryImage[]
   decorations: DecorationOption[]
   /**
@@ -73,6 +76,7 @@ export function ProductDetailClient({
   variants,
   brackets,
   availability,
+  customerRole,
   images,
   decorations,
   effectiveMoq,
@@ -91,6 +95,7 @@ export function ProductDetailClient({
   // composition is intentional 2026-05-14 — the order-summary panel below
   // surfaces everything that's been touched.
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
+  const [orderIntent, setOrderIntent] = useState<OrderIntent>('inventory')
 
   type SizingMode = 'multi_size_with_variants' | 'multi_size_variantless' | 'one_size'
 
@@ -168,6 +173,17 @@ export function ProductDetailClient({
       })
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
   }, [variants, colorSwatchId, availability])
+
+  const currentSelectionHasInventory = useMemo(() => {
+    if (sizingMode === 'multi_size_with_variants') {
+      return sizeRowsForColour.some((row) => (row.available ?? 0) > 0)
+    }
+    if (!selectedVariant) return false
+    return (availability[selectedVariant.variant_id] ?? 0) > 0
+  }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
+
+  const canChooseOrderIntent =
+    customerRole === 'org_admin' && currentSelectionHasInventory
 
   // Grand total across every colour the user has touched in this session,
   // not just the currently-displayed colour. Drives pricing tier + Add to cart.
@@ -426,8 +442,13 @@ export function ProductDetailClient({
           [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
         const tracked = availability[variant.variant_id] !== undefined
         const available = availability[variant.variant_id] ?? 0
-        const fulfilmentType: 'stocked' | 'make_to_stock' =
-          tracked && lineQty > available ? 'make_to_stock' : 'stocked'
+        const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+          ? orderIntent === 'bulk'
+            ? 'make_to_stock'
+            : 'stocked'
+          : tracked && lineQty > available
+            ? 'make_to_stock'
+            : 'stocked'
         cart.addLine({
           productId: product.id,
           productName: product.name,
