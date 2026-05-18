@@ -17,6 +17,7 @@ import {
   readCheckoutReviewState,
   type CheckoutReviewState,
 } from './checkoutReviewState'
+import { SplitOrderConfirmModal } from './SplitOrderConfirmModal'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -44,6 +45,7 @@ export function CheckoutReviewClient({
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
+  const [splitConfirmOpen, setSplitConfirmOpen] = useState(false)
 
   useEffect(() => {
     setReviewState(readCheckoutReviewState())
@@ -102,6 +104,14 @@ export function CheckoutReviewClient({
     [inventoryCartLines],
   )
   const grandTotal = customerSubtotal + inventorySubtotal
+  const customerUnitCount = useMemo(
+    () => customerCartLines.reduce((sum, l) => sum + l.qty, 0),
+    [customerCartLines],
+  )
+  const inventoryUnitCount = useMemo(
+    () => inventoryCartLines.reduce((sum, l) => sum + l.qty, 0),
+    [inventoryCartLines],
+  )
 
   // One-line summary of the destination for the customer-bucket heading.
   // For the split case we lean on the existing address-render logic: when
@@ -629,13 +639,36 @@ export function CheckoutReviewClient({
         </button>
         <button
           type="button"
-          onClick={confirmOrder}
+          onClick={() => {
+            // Split submits go through a confirmation modal so the customer
+            // explicitly acknowledges two orders are being placed. Single-
+            // intent submits skip the modal entirely.
+            if (isSplit) {
+              setSplitConfirmOpen(true)
+            } else {
+              void confirmOrder()
+            }
+          }}
           disabled={submitting || !customerCode}
           className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? 'Placing order...' : 'Confirm & place order'}
         </button>
       </div>
+
+      <SplitOrderConfirmModal
+        open={splitConfirmOpen}
+        customerUnitCount={customerUnitCount}
+        inventoryUnitCount={inventoryUnitCount}
+        customerAddress={customerAddressSummary}
+        customerTotal={format(customerSubtotal)}
+        inventoryTotal={format(inventorySubtotal)}
+        onCancel={() => setSplitConfirmOpen(false)}
+        onConfirm={() => {
+          setSplitConfirmOpen(false)
+          void confirmOrder()
+        }}
+      />
         </div>
       </div>
     </div>
