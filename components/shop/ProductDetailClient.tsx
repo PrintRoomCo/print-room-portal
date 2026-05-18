@@ -183,7 +183,8 @@ export function ProductDetailClient({
   }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
 
   const canChooseOrderIntent =
-    customerRole === 'org_admin' && currentSelectionHasInventory
+    customerRole === 'org_admin' &&
+    (currentSelectionHasInventory || product.fulfilment_type === 'mixed')
 
   // Grand total across every colour the user has touched in this session,
   // not just the currently-displayed colour. Drives pricing tier + Add to cart.
@@ -533,7 +534,11 @@ export function ProductDetailClient({
           Number.isInteger(qty) && meetsMoq && pricingOk
 
   let inventoryIntentShortfall: { label: string; available: number } | null = null
-  if (canChooseOrderIntent && orderIntent === 'inventory') {
+  if (
+    canChooseOrderIntent &&
+    orderIntent === 'inventory' &&
+    product.fulfilment_type === 'stocked'
+  ) {
     if (sizingMode === 'multi_size_with_variants') {
       for (const variant of variants) {
         const requested = variantQuantities[variant.variant_id] ?? 0

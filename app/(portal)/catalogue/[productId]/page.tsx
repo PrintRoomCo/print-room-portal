@@ -83,7 +83,7 @@ const loadProductDetailPageData = cache(async (
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, image_url, moq_override, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, image_url, moq_override, fulfilment_type_override, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -253,6 +253,7 @@ const loadProductDetailPageData = cache(async (
     description: string | null
     image_url: string | null
     moq_override: number | null
+    fulfilment_type_override: FulfilmentType | null
   } | null
 
   const displayProduct = {
@@ -287,7 +288,10 @@ const loadProductDetailPageData = cache(async (
         supports_labels: displayProduct.supports_labels,
         garment_family: displayProduct.garment_family,
         default_sizes: displayProduct.default_sizes,
-        fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
+        fulfilment_type:
+          catItemForked?.fulfilment_type_override ??
+          displayProduct.fulfilment_type ??
+          'made_to_order',
         brand_name: brandName,
         category_name: categoryName,
       },
