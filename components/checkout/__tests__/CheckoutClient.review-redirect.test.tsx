@@ -78,7 +78,6 @@ describe('CheckoutClient review step', () => {
     expect(JSON.parse(raw ?? '{}')).toMatchObject({
       requiredBy: '',
       notes: '',
-      intent: 'customer',
       perLineShipTo: { 'line-1': 'store-1' },
     })
   })

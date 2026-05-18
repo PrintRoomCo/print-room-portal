@@ -124,11 +124,9 @@ export function CheckoutClient({
   )
   const isMixedIntent = customerLineCount > 0 && inventoryLineCount > 0
   const isInventoryOnly = customerLineCount === 0 && inventoryLineCount > 0
-  // Persisted `intent` is derived from the split: 'inventory' only when the
-  // ENTIRE cart routes to inventory (no customer lines). Mixed-intent carts
-  // are written as 'customer' here; cluster 2.10 (submit pipeline) will switch
-  // to reading the per-line flag instead of this order-level intent.
-  const intent: 'customer' | 'inventory' = isInventoryOnly ? 'inventory' : 'customer'
+  // Routing is now per-line (`CartLine.routeToInventory`) — there's no order-
+  // level `intent` to persist. The submit pipeline derives the intent from the
+  // bucket split on the server side (cluster 2.10).
 
   useEffect(() => {
     setPerLineShipTo((prev) => {
@@ -191,7 +189,6 @@ export function CheckoutClient({
         idempotencyKey: idempotencyKey.current,
         requiredBy,
         notes,
-        intent,
         perLineShipTo,
         customAddress,
         createdAt: new Date().toISOString(),

@@ -92,6 +92,11 @@ export async function POST(request: Request) {
   }
 
   try {
+    // NOTE: legacy `intent` field is dropped from CheckoutInput as of cluster
+    // 2.10 — the submit pipeline derives intent from per-line `route_to_inventory`
+    // (split paths invoke submit_b2b_split_order). Body-level `intent`/route
+    // gating is fully refactored in cluster 2.11.
+    void intent
     const result = await submitCustomerOrder(auth.admin, {
       context: auth.context,
       idempotency_key: body.idempotency_key,
@@ -100,7 +105,6 @@ export async function POST(request: Request) {
       internal_notes: null,
       lines: body.lines,
       custom_shipping_address: body.custom_shipping_address ?? null,
-      intent,
     })
     return NextResponse.json(result)
   } catch (e) {

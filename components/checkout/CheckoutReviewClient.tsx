@@ -26,10 +26,22 @@ interface CheckoutReviewClientProps {
   defaultDepositPercent: number | null
 }
 
-interface CheckoutResponse {
-  order_id: string
-  order_ref: string
-}
+type CheckoutResponse =
+  | {
+      kind?: 'single' | undefined
+      order_id: string
+      order_ref: string
+    }
+  | {
+      kind: 'split'
+      customer_order_id: string
+      customer_order_ref: string
+      customer_quote_id: string
+      inventory_order_id: string
+      inventory_order_ref: string
+      inventory_quote_id: string
+      cart_submission_id: string
+    }
 
 export function CheckoutReviewClient({
   stores,
@@ -165,17 +177,12 @@ export function CheckoutReviewClient({
     setBanner(null)
     try {
       // Per-line `route_to_inventory` is the source of truth for split routing
-      // (PDP toggle + cart-level fast-path both write to it). At this point
-      // the order-level admin "send entire order to inventory" is fully
-      // retired, so root-level `route_entire_order_to_inventory` is hard-
-      // false. Cluster F (submit pipeline) will eventually drop the legacy
-      // root `intent` field and read per-line — until then we keep `intent`
-      // set to a sensible value so the existing server route doesn't see a
-      // missing field: 'inventory' only when the entire cart is inventory-
-      // routed, otherwise 'customer' (true for whole-customer AND mixed).
-      const allInventory =
-        cart.lines.length > 0 && cart.lines.every((l) => l.routeToInventory === true)
-      const wireIntent: 'customer' | 'inventory' = allInventory ? 'inventory' : 'customer'
+      // (PDP toggle + cart-level fast-path both write to it). The server bucket-
+      // splits and derives intent per bucket; the legacy order-level `intent`
+      // field has been dropped from the wire. `route_entire_order_to_inventory`
+      // is hard-false here because the order-level admin "send entire order to
+      // inventory" toggle has been retired (cluster 2.5) — kept in the wire
+      // type to document the API surface for future admin tooling.
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,7 +190,6 @@ export function CheckoutReviewClient({
           idempotency_key: reviewState.idempotencyKey,
           required_by: reviewState.requiredBy || null,
           notes: reviewState.notes || null,
-          intent: wireIntent,
           route_entire_order_to_inventory: false,
           lines: cart.lines.map((line) => ({
             product_id: line.productId,
@@ -307,7 +313,12 @@ export function CheckoutReviewClient({
       const result = (await res.json()) as CheckoutResponse
       clearCheckoutReviewState()
       cart.clear()
-      router.push(`/checkout/confirmation/${result.order_id}`)
+      // Split submits land on the customer-bucket order's confirmation page
+      // (the customer-facing sibling); the inventory child is staff-facing and
+      // surfaces through the staff portal.
+      const confirmationOrderId =
+        result.kind === 'split' ? result.customer_order_id : result.order_id
+      router.push(`/checkout/confirmation/${confirmationOrderId}`)
     } catch (error) {
       setBanner({ kind: 'error', msg: (error as Error).message })
     } finally {
@@ -560,7 +571,11 @@ export function CheckoutReviewClient({
           <div className="flex justify-between gap-4">
             <dt className="text-gray-500">Order routing</dt>
             <dd className="text-right text-gray-900">
-              {reviewState.intent === 'inventory' ? 'Add to my inventory' : 'Ship to customer'}
+              {isSplit
+                ? 'Split: ship to customer + inventory'
+                : inventoryCartLines.length > 0
+                  ? 'Add to my inventory'
+                  : 'Ship to customer'}
             </dd>
           </div>
           {allCustom ? (

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
@@ -7,6 +8,7 @@ import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
+import { splitCartByIntent } from '@/lib/checkout/split-cart-by-intent'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -50,14 +52,27 @@ export interface CheckoutInput {
   internal_notes?: string | null
   lines: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
-  /** Slice 4: 'inventory' routes the order into the org's stock shelf; 'customer' (default) is the existing delivery path. */
-  intent?: 'customer' | 'inventory'
+  /**
+   * Cart-level fast-path: when true, every line is routed to inventory regardless
+   * of its per-line `route_to_inventory` flag. Gated upstream by the API route to
+   * org_admin on studio_plus_inventory / franchise tenants. When false (default),
+   * routing is decided per-line via `CheckoutLineInput.route_to_inventory`.
+   */
+  route_entire_order_to_inventory?: boolean
 }
 
-export interface CheckoutResult {
-  order_id: string
-  order_ref: string
-}
+export type CheckoutResult =
+  | { kind: 'single'; order_id: string; order_ref: string; quote_id: string }
+  | {
+      kind: 'split'
+      customer_order_id: string
+      customer_order_ref: string
+      customer_quote_id: string
+      inventory_order_id: string
+      inventory_order_ref: string
+      inventory_quote_id: string
+      cart_submission_id: string
+    }
 
 export interface DecorationDrift {
   cartLineId: string | null
@@ -160,6 +175,15 @@ interface SubmitB2BOrderRow {
   quote_id: string
   order_id: string
   order_ref: string
+}
+
+interface SubmitB2BSplitOrderRow {
+  customer_quote_id: string
+  customer_order_id: string
+  customer_order_ref: string
+  inventory_quote_id: string
+  inventory_order_id: string
+  inventory_order_ref: string
 }
 
 interface StoreRow {
@@ -369,52 +393,85 @@ export async function submitCustomerOrder(
   // Without this, 6S + 6M + 6L + 6XL = 24 each line would price at the 6-tier
   // instead of the 24-tier. Same fix path as the decoration totalQtyByLinkId
   // pattern below.
-  const priceByProductId = new Map<string, number>()
-  await Promise.all(
-    Array.from(totalQtyByProductId.entries()).map(async ([productId, totalQty]) => {
-      const { data: unit } = await admin.rpc('effective_unit_price', {
-        p_product_id: productId,
-        p_org_id: input.context.organizationId,
-        p_qty: totalQty,
-      })
-      priceByProductId.set(productId, Number(unit ?? 0))
-    }),
-  )
+  //
+  // Split-cart aware (2026-05-18): when the cart splits into customer + inventory
+  // buckets, each bucket is its own production run and tiers independently.
+  // `recomputeBucketPrices` re-totals qty per product within a given bucket and
+  // calls effective_unit_price with that smaller total — so a 60+40 split that
+  // would have priced at tier-100 in the cart re-tiers as tier-60 + tier-40.
+  async function recomputeBucketPrices(
+    bucketLines: CheckoutLineInput[],
+  ): Promise<Map<string, number>> {
+    const bucketTotals = new Map<string, number>()
+    for (const line of bucketLines) {
+      bucketTotals.set(
+        line.product_id,
+        (bucketTotals.get(line.product_id) ?? 0) + line.qty,
+      )
+    }
+    const byProductId = new Map<string, number>()
+    await Promise.all(
+      Array.from(bucketTotals.entries()).map(async ([productId, totalQty]) => {
+        const { data: unit } = await admin.rpc('effective_unit_price', {
+          p_product_id: productId,
+          p_org_id: input.context.organizationId,
+          p_qty: totalQty,
+        })
+        byProductId.set(productId, Number(unit ?? 0))
+      }),
+    )
+    return byProductId
+  }
 
-  const repriced = input.lines.map(l => ({
-    ...l,
-    unit_price: priceByProductId.get(l.product_id) ?? 0,
-  }))
+  // Initial whole-cart repricing — used for the drift guard below + the single-
+  // intent path. Split path will recompute per bucket inside the split branch.
+  const priceByProductId = await recomputeBucketPrices(input.lines)
 
-  // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
+  // 2a. Decide whether this submission splits across two RPC calls. Source of
+  //     truth: per-line `route_to_inventory`. Fast-path overrides every line.
+  const split = splitCartByIntent({
+    lines: input.lines,
+    fastPathEntireOrderToInventory: input.route_entire_order_to_inventory === true,
+  })
+  const isSplit = split.customer.length > 0 && split.inventory.length > 0
+
+  // 2b. Defensive unit-price drift guard. Only kicks in when the cart carried
   //     a brackets snapshot (post-2026-05-15) — for legacy carts (no
   //     has_brackets flag) we keep the historical silent re-price path. The
   //     cart already re-derives unitPrice from its bracket snapshot on every
   //     qty edit (CartProvider.updateLine + pickBracket), so a mismatch here
   //     means the snapshot diverged from the live tier (e.g. AM changed
   //     pricing while the customer was checking out).
-  const PRICE_DRIFT_TOLERANCE = 0.005
-  const unitPriceDrift: UnitPriceDrift[] = []
-  for (const line of input.lines) {
-    if (!line.has_brackets) continue
-    if (typeof line.claimed_unit_price !== 'number') continue
-    const canonical = priceByProductId.get(line.product_id) ?? 0
-    if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
-      unitPriceDrift.push({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        productName: line.product_name,
-        qty: line.qty,
-        claimedUnitPrice: line.claimed_unit_price,
-        canonicalUnitPrice: canonical,
-      })
+  //
+  //     SKIPPED for split-cart submits: each bucket re-tiers independently
+  //     (a 60+40 split prices at tier-60 and tier-40 instead of tier-100),
+  //     so the cart-snapshot price WILL differ from the per-bucket canonical
+  //     price by design. The customer was warned via the review-page banner
+  //     + the SplitOrderConfirmModal before they hit confirm.
+  if (!isSplit) {
+    const PRICE_DRIFT_TOLERANCE = 0.005
+    const unitPriceDrift: UnitPriceDrift[] = []
+    for (const line of input.lines) {
+      if (!line.has_brackets) continue
+      if (typeof line.claimed_unit_price !== 'number') continue
+      const canonical = priceByProductId.get(line.product_id) ?? 0
+      if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
+        unitPriceDrift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          productName: line.product_name,
+          qty: line.qty,
+          claimedUnitPrice: line.claimed_unit_price,
+          canonicalUnitPrice: canonical,
+        })
+      }
+    }
+    if (unitPriceDrift.length > 0) {
+      throw new UnitPriceDriftError(unitPriceDrift)
     }
   }
-  if (unitPriceDrift.length > 0) {
-    throw new UnitPriceDriftError(unitPriceDrift)
-  }
 
-  // 2b. Re-validate every selected decoration on every line. Server-side
+  // 2c. Re-validate every selected decoration on every line. Server-side
   //     read of the link table + org_decoration; reject on cross-org reuse,
   //     unattached link, inactive decoration, mismatched catalogue item, or
   //     price drift greater than zero (per Decision #3 — no tolerance, AM
@@ -597,21 +654,436 @@ export async function submitCustomerOrder(
     throw new DecorationDriftError(drift)
   }
 
-  // 3. Call the shared submit_b2b_order RPC. We fold the per-unit decoration
-  //    cost into unit_price so the stored subtotal / total_amount / Monday
-  //    subitems / order-confirmation email all match what the cart UI showed
-  //    (cart's PriceBreakdown rolls decoration into the per-unit line).
-  //    Without this, the quote would store garment-only and we'd under-bill
-  //    the customer for the decoration they ordered.
-  const decorationCostByLineKey = new Map<string, number>()
-  let totalDecorationRevenue = 0
-  for (const l of repriced) {
-    const validated =
-      validatedByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? []
-    const perUnit = validated.reduce((s, d) => s + d.unitPrice, 0)
-    decorationCostByLineKey.set(makeLineKey(l.product_id, l.variant_id ?? null), perUnit)
-    totalDecorationRevenue += perUnit * l.qty
+  // 3. Build the per-bucket RPC payload + per-child post-RPC fixup. The single-
+  //    intent path keeps the existing behaviour; the split path runs everything
+  //    twice — once per child quote — after the atomic split RPC.
+  function buildBucketRpcLines(
+    bucketLines: CheckoutLineInput[],
+    priceMap: Map<string, number>,
+  ): {
+    rpcLines: Array<{
+      product_id: string
+      product_name: string
+      quantity: number
+      unit_price: number
+      variant_id: string | null
+    }>
+    decorationRevenue: number
+    decorationCostByLineKey: Map<string, number>
+  } {
+    const decorationCostByLineKey = new Map<string, number>()
+    let decorationRevenue = 0
+    for (const l of bucketLines) {
+      const validated =
+        validatedByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? []
+      const perUnit = validated.reduce((s, d) => s + d.unitPrice, 0)
+      decorationCostByLineKey.set(
+        makeLineKey(l.product_id, l.variant_id ?? null),
+        perUnit,
+      )
+      decorationRevenue += perUnit * l.qty
+    }
+    const rpcLines = bucketLines.map((l) => {
+      const unit = priceMap.get(l.product_id) ?? 0
+      const perUnitDeco =
+        decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? 0
+      return {
+        product_id: l.product_id,
+        product_name: l.product_name,
+        quantity: l.qty,
+        unit_price: unit + perUnitDeco,
+        variant_id: l.variant_id ?? null,
+      }
+    })
+    return { rpcLines, decorationRevenue, decorationCostByLineKey }
   }
+
+  // Per-child post-RPC fixup: writes ship_to + decoration snapshots back onto
+  // the quote_items the RPC created, flips order status to awaiting-approval,
+  // fires the proof autofill, and sends the order-confirmation email. Identical
+  // logic to the original single-path tail — factored out so the split path can
+  // run it twice (once per child quote). Bucket-scoped: only the lines + price
+  // map for THIS child's bucket are passed in.
+  async function postRpcFixup(args: {
+    quoteId: string
+    orderId: string
+    orderRef: string
+    bucketLines: CheckoutLineInput[]
+    bucketPriceMap: Map<string, number>
+    decorationRevenue: number
+  }): Promise<void> {
+    const { quoteId, orderId, orderRef, bucketLines, bucketPriceMap, decorationRevenue } = args
+
+    // Record decoration revenue separately on the quote so finance can split
+    // garment vs decoration without parsing quote_items.decorations jsonb.
+    if (decorationRevenue > 0) {
+      await admin
+        .from('quotes')
+        .update({ decoration_cost: decorationRevenue })
+        .eq('id', quoteId)
+    }
+
+    // 4. Apply per-line ship_to_store_id and the decorations snapshot. The RPC
+    //    creates quote_items without ship-to or decorations; we set both here.
+    const { data: newLines } = await admin
+      .from('quote_items')
+      .select('id, product_id, variant_id, product_name')
+      .eq('quote_id', quoteId)
+    if (newLines) {
+      const rows = newLines as QuoteItemRow[]
+      const consumed = new Set<string>()
+      for (const inLine of bucketLines) {
+        const match = rows.find(
+          (x) =>
+            !consumed.has(x.id) &&
+            x.product_id === inLine.product_id &&
+            (x.variant_id ?? null) === (inLine.variant_id ?? null) &&
+            x.product_name === inLine.product_name,
+        )
+        if (!match) continue
+        consumed.add(match.id)
+        const update: Record<string, unknown> = {}
+        if (inLine.ship_to_store_id !== undefined) {
+          update.ship_to_store_id = inLine.ship_to_store_id ?? null
+        }
+        const validated =
+          validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null)) ?? []
+        update.decorations = validated
+        if (Object.keys(update).length > 0) {
+          await admin.from('quote_items').update(update).eq('id', match.id)
+        }
+      }
+    }
+
+    // 5. Hold the order for AM approval. Monday push is no longer fired here —
+    //    moved to the staff approve route so an account manager confirms pricing
+    //    + decoration before production starts. RPC hardcodes 'awaiting-production'
+    //    in its insert (shared with legacy callers); we flip it to 'awaiting-approval'
+    //    immediately after.
+    await admin
+      .from('orders')
+      .update({ status: 'awaiting-approval' })
+      .eq('id', orderId)
+
+    // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards
+    //     populate with customer-originated drafts. Helper never throws.
+    try {
+      const { data: quote, error: quoteError } = await admin
+        .from('quotes')
+        .select('id, organization_id, customer_name, customer_email, order_ref')
+        .eq('id', quoteId)
+        .single<{
+          id: string
+          organization_id: string | null
+          customer_name: string | null
+          customer_email: string | null
+          order_ref: string | null
+        }>()
+      if (quoteError) {
+        throw new Error(`Autofill quote lookup failed: ${quoteError.message}`)
+      }
+
+      const { data: lineRows, error: lineRowsError } = await admin
+        .from('quote_items')
+        .select('product_id')
+        .eq('quote_id', quoteId)
+      if (lineRowsError) {
+        throw new Error(`Autofill quote item lookup failed: ${lineRowsError.message}`)
+      }
+
+      const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
+        .map((r) => r.product_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+      if (quote?.organization_id && quote.order_ref) {
+        await autofillProofForOrder(
+          {
+            orderId,
+            quoteId,
+            organizationId: quote.organization_id,
+            customerName: quote.customer_name ?? input.context.organizationName,
+            customerEmail: quote.customer_email ?? input.context.email ?? '',
+            orderRef: quote.order_ref,
+            productIds,
+          },
+          admin,
+        )
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
+        orderId,
+        err: message,
+      })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.PROOF_AUTOFILL_FAILED,
+            targetType: 'order',
+            targetId: orderId,
+            metadata: {
+              order_ref: orderRef,
+              quote_id: quoteId,
+              error: message,
+              source: 'checkout_submit_outer_catch',
+            },
+          },
+          admin,
+        )
+      } catch (auditErr) {
+        console.error('[Checkout] proof autofill failure audit threw (swallowed)', {
+          orderId,
+          err: auditErr instanceof Error ? auditErr.message : String(auditErr),
+        })
+      }
+    }
+
+    // Order-confirmation email. Fetch payload from quotes/quote_items. Failure
+    // here must not roll back the order.
+    let emailLines: OrderConfirmationLine[] = []
+    let emailTotalAmount: number | null = null
+    let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
+    let emailRequiredBy: string | null = input.required_by ?? null
+    let emailCustomerName = input.context.organizationName
+    try {
+      const { data: q } = await admin
+        .from('quotes')
+        .select('customer_name, total_amount, required_by, payment_terms')
+        .eq('id', quoteId)
+        .single()
+      const quote = q as QuoteRowForEmail | null
+      if (quote) {
+        emailTotalAmount = Number(quote.total_amount)
+        emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
+        emailRequiredBy = quote.required_by ?? emailRequiredBy
+        emailCustomerName = quote.customer_name
+      }
+
+      const { data: lines } = await admin
+        .from('quote_items')
+        .select(
+          `product_name, quantity, unit_price,
+           product_variants (
+             product_color_swatches (label),
+             sizes (label)
+           )`,
+        )
+        .eq('quote_id', quoteId)
+      const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
+      emailLines = lineRows.map((l) => {
+        const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
+        const size = pickOne(l.product_variants?.sizes ?? null)
+        const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
+        return {
+          productName: l.product_name,
+          variantLabel,
+          quantity: l.quantity,
+          unitPrice: Number(l.unit_price),
+        }
+      })
+    } catch {
+      // Email payload fetch failure shouldn't block the order.
+    }
+
+    try {
+      if (input.context.email) {
+        const fallbackLines =
+          emailLines.length > 0
+            ? emailLines
+            : bucketLines.map((line) => ({
+                productName: line.product_name,
+                variantLabel: '-',
+                quantity: line.qty,
+                unitPrice: bucketPriceMap.get(line.product_id) ?? 0,
+              }))
+        const fallbackTotal =
+          emailTotalAmount ??
+          bucketLines.reduce(
+            (total, line) => total + (bucketPriceMap.get(line.product_id) ?? 0) * line.qty,
+            0,
+          )
+
+        const result = await sendOrderConfirmation({
+          to: input.context.email,
+          customerName: emailCustomerName,
+          orderId,
+          orderRef,
+          totalAmount: fallbackTotal,
+          paymentTerms: emailPaymentTerms,
+          contractNotes: input.context.contractNotes,
+          requiredBy: emailRequiredBy,
+          lines: fallbackLines,
+        })
+        if (!result.success) {
+          console.error(
+            '[Checkout] Order-confirmation email failed:',
+            result.error ?? 'Unknown error',
+          )
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error'
+      console.error('[Checkout] Order-confirmation email failed:', message)
+    }
+  }
+
+  // Shared error mapping for INSUFFICIENT_STOCK / NO_INVENTORY thrown by either
+  // RPC. Split RPC wraps two internal `submit_b2b_order` calls — same error
+  // shape bubbles out.
+  function mapRpcError(error: { message: string; details?: string | null }): Error {
+    if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {
+      let parsed: Partial<StockShortfallDetail> = {}
+      try {
+        parsed = JSON.parse(error.details ?? '{}')
+      } catch {
+        // fall through with empty detail
+      }
+      return new StockShortfallError({
+        code: error.message === 'INSUFFICIENT_STOCK' ? 'insufficient_stock' : 'no_inventory',
+        product_id: parsed.product_id ?? null,
+        variant_id: parsed.variant_id ?? null,
+        available: parsed.available,
+        requested: parsed.requested,
+      })
+    }
+    return new Error(error.message)
+  }
+
+  // ---- SPLIT PATH ---------------------------------------------------------
+  if (isSplit) {
+    // Re-tier per bucket. Customer bucket prices at customer-bucket totals,
+    // inventory bucket prices at inventory-bucket totals — a 60+40 split that
+    // would have priced as tier-100 in the cart now prices as tier-60 +
+    // tier-40 (the production-run reality after split). Both happen in-memory
+    // before the RPC call so the atomic transaction sees final shapes.
+    const [customerPriceMap, inventoryPriceMap] = await Promise.all([
+      recomputeBucketPrices(split.customer),
+      recomputeBucketPrices(split.inventory),
+    ])
+
+    const customerBuilt = buildBucketRpcLines(split.customer, customerPriceMap)
+    const inventoryBuilt = buildBucketRpcLines(split.inventory, inventoryPriceMap)
+
+    // Mint the group key here so retries on a flaky network share it. The
+    // inner per-child idem keys (`{key}:customer` / `{key}:inventory`) wrapped
+    // by the RPC make retries safe at the inner-RPC layer; the outer
+    // cart_submission_id is only the grouping signal. Generating it server-
+    // side per call is acceptable (Phase 1 subagent's "small risk" note) —
+    // the inner idem dedupe is sufficient.
+    const cartSubmissionId = randomUUID()
+
+    const routeTrigger =
+      input.route_entire_order_to_inventory === true ? 'admin_toggle_cart' : 'per_line_flag'
+
+    const { data, error } = await admin.rpc('submit_b2b_split_order', {
+      p_idempotency_key: input.idempotency_key,
+      p_organization_id: input.context.organizationId,
+      p_customer_code: input.context.customerCode!,
+      p_customer_name: input.context.organizationName,
+      p_customer_email: input.context.email,
+      p_customer_phone: null,
+      p_shipping_address: shippingAddress,
+      p_payment_terms: input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK,
+      p_required_by: input.required_by ?? null,
+      p_notes: input.notes ?? null,
+      p_internal_notes: input.internal_notes ?? null,
+      p_customer_lines: customerBuilt.rpcLines,
+      p_inventory_lines: inventoryBuilt.rpcLines,
+      p_cart_submission_id: cartSubmissionId,
+    })
+    if (error) {
+      throw mapRpcError(error as { message: string; details?: string | null })
+    }
+    const rowRaw = Array.isArray(data) ? data[0] : data
+    const row = rowRaw as SubmitB2BSplitOrderRow | null
+    if (!row) throw new Error('submit_b2b_split_order returned no row')
+
+    // Audit BOTH children. Mirrors the single-path audit shape but with
+    // cart_submission_id + route_trigger so finance can group sibling orders.
+    await recordAuditEvent(
+      {
+        orgId: input.context.organizationId,
+        actorUserId: input.context.userId,
+        action: AUDIT_ACTIONS.ORDER_SUBMIT,
+        targetType: 'order',
+        targetId: row.customer_order_id,
+        metadata: {
+          order_ref: row.customer_order_ref,
+          quote_id: row.customer_quote_id,
+          line_count: split.customer.length,
+          total_qty: split.customer.reduce((acc, l) => acc + l.qty, 0),
+          idempotency_key: input.idempotency_key,
+          cart_submission_id: cartSubmissionId,
+          route_trigger: routeTrigger,
+          sibling_order_id: row.inventory_order_id,
+          bucket: 'customer',
+        },
+      },
+      admin,
+    )
+    await recordAuditEvent(
+      {
+        orgId: input.context.organizationId,
+        actorUserId: input.context.userId,
+        action: AUDIT_ACTIONS.ORDER_SUBMIT,
+        targetType: 'order',
+        targetId: row.inventory_order_id,
+        metadata: {
+          order_ref: row.inventory_order_ref,
+          quote_id: row.inventory_quote_id,
+          line_count: split.inventory.length,
+          total_qty: split.inventory.reduce((acc, l) => acc + l.qty, 0),
+          idempotency_key: input.idempotency_key,
+          cart_submission_id: cartSubmissionId,
+          route_trigger: routeTrigger,
+          sibling_order_id: row.customer_order_id,
+          bucket: 'inventory',
+        },
+      },
+      admin,
+    )
+
+    // Post-RPC fixup runs per child. Sequential so a failure on the first
+    // child's email/proof doesn't race the second's.
+    await postRpcFixup({
+      quoteId: row.customer_quote_id,
+      orderId: row.customer_order_id,
+      orderRef: row.customer_order_ref,
+      bucketLines: split.customer,
+      bucketPriceMap: customerPriceMap,
+      decorationRevenue: customerBuilt.decorationRevenue,
+    })
+    await postRpcFixup({
+      quoteId: row.inventory_quote_id,
+      orderId: row.inventory_order_id,
+      orderRef: row.inventory_order_ref,
+      bucketLines: split.inventory,
+      bucketPriceMap: inventoryPriceMap,
+      decorationRevenue: inventoryBuilt.decorationRevenue,
+    })
+
+    return {
+      kind: 'split',
+      customer_order_id: row.customer_order_id,
+      customer_order_ref: row.customer_order_ref,
+      customer_quote_id: row.customer_quote_id,
+      inventory_order_id: row.inventory_order_id,
+      inventory_order_ref: row.inventory_order_ref,
+      inventory_quote_id: row.inventory_quote_id,
+      cart_submission_id: cartSubmissionId,
+    }
+  }
+
+  // ---- SINGLE-INTENT PATH -------------------------------------------------
+  // Derive `intent` from which bucket has lines. With the order-level toggle
+  // retired, mixed-intent goes through the split path above; single-intent
+  // here means ALL lines route to one destination.
+  const singleIntent: 'customer' | 'inventory' =
+    split.inventory.length > 0 && split.customer.length === 0 ? 'inventory' : 'customer'
+  const singleBucket = singleIntent === 'inventory' ? split.inventory : split.customer
+  const singleBuilt = buildBucketRpcLines(singleBucket, priceByProductId)
 
   const { data, error } = await admin.rpc('submit_b2b_order', {
     p_idempotency_key: input.idempotency_key,
@@ -625,52 +1097,17 @@ export async function submitCustomerOrder(
     p_required_by: input.required_by ?? null,
     p_notes: input.notes ?? null,
     p_internal_notes: input.internal_notes ?? null,
-    p_lines: repriced.map((l) => {
-      const perUnitDeco =
-        decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? 0
-      return {
-        product_id: l.product_id,
-        product_name: l.product_name,
-        quantity: l.qty,
-        unit_price: l.unit_price + perUnitDeco,
-        variant_id: l.variant_id ?? null,
-      }
-    }),
-    p_intent: input.intent ?? 'customer',
+    p_lines: singleBuilt.rpcLines,
+    p_intent: singleIntent,
   })
   if (error) {
-    if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {
-      let parsed: Partial<StockShortfallDetail> = {}
-      try {
-        parsed = JSON.parse((error as { details?: string | null }).details ?? '{}')
-      } catch {
-        // fall through with empty detail
-      }
-      throw new StockShortfallError({
-        code: error.message === 'INSUFFICIENT_STOCK' ? 'insufficient_stock' : 'no_inventory',
-        product_id: parsed.product_id ?? null,
-        variant_id: parsed.variant_id ?? null,
-        available: parsed.available,
-        requested: parsed.requested,
-      })
-    }
-    throw new Error(error.message)
+    throw mapRpcError(error as { message: string; details?: string | null })
   }
 
   const rowRaw = Array.isArray(data) ? data[0] : data
   const row = rowRaw as SubmitB2BOrderRow | null
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
-
-  // Record decoration revenue separately on the quote so finance can split
-  // garment vs decoration without parsing quote_items.decorations jsonb.
-  // total_amount already includes decoration via the folded unit_price above.
-  if (totalDecorationRevenue > 0) {
-    await admin
-      .from('quotes')
-      .update({ decoration_cost: totalDecorationRevenue })
-      .eq('id', quote_id)
-  }
 
   await recordAuditEvent(
     {
@@ -682,223 +1119,23 @@ export async function submitCustomerOrder(
       metadata: {
         order_ref,
         quote_id,
-        line_count: input.lines.length,
-        total_qty: input.lines.reduce((acc, l) => acc + l.qty, 0),
+        line_count: singleBucket.length,
+        total_qty: singleBucket.reduce((acc, l) => acc + l.qty, 0),
         idempotency_key: input.idempotency_key,
+        intent: singleIntent,
       },
     },
     admin,
   )
 
-  // 4. Apply per-line ship_to_store_id and the decorations snapshot. The RPC
-  //    creates quote_items without ship-to or decorations; we set both here.
-  const { data: newLines } = await admin
-    .from('quote_items')
-    .select('id, product_id, variant_id, product_name')
-    .eq('quote_id', quote_id)
-  if (newLines) {
-    const rows = newLines as QuoteItemRow[]
-    const consumed = new Set<string>()
-    for (const inLine of input.lines) {
-      const match = rows.find(
-        (x) =>
-          !consumed.has(x.id) &&
-          x.product_id === inLine.product_id &&
-          (x.variant_id ?? null) === (inLine.variant_id ?? null) &&
-          x.product_name === inLine.product_name,
-      )
-      if (!match) continue
-      consumed.add(match.id)
-      const update: Record<string, unknown> = {}
-      if (inLine.ship_to_store_id !== undefined) {
-        update.ship_to_store_id = inLine.ship_to_store_id ?? null
-      }
-      const validated =
-        validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null)) ?? []
-      update.decorations = validated
-      if (Object.keys(update).length > 0) {
-        await admin.from('quote_items').update(update).eq('id', match.id)
-      }
-    }
-  }
+  await postRpcFixup({
+    quoteId: quote_id,
+    orderId: order_id,
+    orderRef: order_ref,
+    bucketLines: singleBucket,
+    bucketPriceMap: priceByProductId,
+    decorationRevenue: singleBuilt.decorationRevenue,
+  })
 
-  // 5. Hold the order for AM approval. Monday push is no longer fired here —
-  //    moved to the staff approve route so an account manager confirms pricing
-  //    + decoration before production starts. RPC hardcodes 'awaiting-production'
-  //    in its insert (shared with legacy callers); we flip it to 'awaiting-approval'
-  //    immediately after.
-  await admin
-    .from('orders')
-    .update({ status: 'awaiting-approval' })
-    .eq('id', order_id)
-
-  // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards
-  //     populate with customer-originated drafts the same way they do for staff-
-  //     originated B2B submits. Pulls org/customer/order_ref from the quote
-  //     because `orders` itself carries none of those signals (schema reality
-  //     check — see §F.1). The helper never throws; failure paths collapse to
-  //     an audit_events row so the order submit always succeeds.
-  try {
-    const { data: quote, error: quoteError } = await admin
-      .from('quotes')
-      .select('id, organization_id, customer_name, customer_email, order_ref')
-      .eq('id', quote_id)
-      .single<{
-        id: string
-        organization_id: string | null
-        customer_name: string | null
-        customer_email: string | null
-        order_ref: string | null
-      }>()
-    if (quoteError) {
-      throw new Error(`Autofill quote lookup failed: ${quoteError.message}`)
-    }
-
-    const { data: lineRows, error: lineRowsError } = await admin
-      .from('quote_items')
-      .select('product_id')
-      .eq('quote_id', quote_id)
-    if (lineRowsError) {
-      throw new Error(`Autofill quote item lookup failed: ${lineRowsError.message}`)
-    }
-
-    const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
-      .map((r) => r.product_id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
-
-    if (quote?.organization_id && quote.order_ref) {
-      await autofillProofForOrder(
-        {
-          orderId: order_id,
-          quoteId: quote_id,
-          organizationId: quote.organization_id,
-          customerName: quote.customer_name ?? input.context.organizationName,
-          customerEmail: quote.customer_email ?? input.context.email ?? '',
-          orderRef: quote.order_ref,
-          productIds,
-        },
-        admin,
-      )
-    }
-  } catch (e) {
-    // Defence-in-depth — the helper is contracted never to throw, but a
-    // failure here must NEVER bubble out of submit and break the order.
-    const message = e instanceof Error ? e.message : String(e)
-    console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
-      orderId: order_id,
-      err: message,
-    })
-    try {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.PROOF_AUTOFILL_FAILED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: {
-            order_ref,
-            quote_id,
-            error: message,
-            source: 'checkout_submit_outer_catch',
-          },
-        },
-        admin,
-      )
-    } catch (auditErr) {
-      console.error('[Checkout] proof autofill failure audit threw (swallowed)', {
-        orderId: order_id,
-        err: auditErr instanceof Error ? auditErr.message : String(auditErr),
-      })
-    }
-  }
-
-  // Fetch the email payload from quotes/quote_items for the confirmation email below.
-  let emailLines: OrderConfirmationLine[] = []
-  let emailTotalAmount: number | null = null
-  let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
-  let emailRequiredBy: string | null = input.required_by ?? null
-  let emailCustomerName = input.context.organizationName
-  try {
-    const { data: q } = await admin
-      .from('quotes')
-      .select('customer_name, total_amount, required_by, payment_terms')
-      .eq('id', quote_id)
-      .single()
-    const quote = q as QuoteRowForEmail | null
-    if (quote) {
-      emailTotalAmount = Number(quote.total_amount)
-      emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
-      emailRequiredBy = quote.required_by ?? emailRequiredBy
-      emailCustomerName = quote.customer_name
-    }
-
-    const { data: lines } = await admin
-      .from('quote_items')
-      .select(
-        `product_name, quantity, unit_price,
-         product_variants (
-           product_color_swatches (label),
-           sizes (label)
-         )`
-      )
-      .eq('quote_id', quote_id)
-    const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
-    emailLines = lineRows.map((l) => {
-      const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
-      const size = pickOne(l.product_variants?.sizes ?? null)
-      const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
-      return {
-        productName: l.product_name,
-        variantLabel,
-        quantity: l.quantity,
-        unitPrice: Number(l.unit_price),
-      }
-    })
-  } catch {
-    // Email payload fetch failure shouldn't block the order; fall through to
-    // the fallback shape built from `repriced` in step 6.
-  }
-
-  // 6. Order-confirmation email. Failure here must not roll back the order or
-  //    depend on the Monday push result.
-  try {
-    if (input.context.email) {
-      const fallbackLines =
-        emailLines.length > 0
-          ? emailLines
-          : repriced.map((line) => ({
-              productName: line.product_name,
-              variantLabel: '-',
-              quantity: line.qty,
-              unitPrice: line.unit_price,
-            }))
-      const fallbackTotal =
-        emailTotalAmount ??
-        repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
-
-      const result = await sendOrderConfirmation({
-        to: input.context.email,
-        customerName: emailCustomerName,
-        orderId: order_id,
-        orderRef: order_ref,
-        totalAmount: fallbackTotal,
-        paymentTerms: emailPaymentTerms,
-        contractNotes: input.context.contractNotes,
-        requiredBy: emailRequiredBy,
-        lines: fallbackLines,
-      })
-      if (!result.success) {
-        console.error(
-          '[Checkout] Order-confirmation email failed:',
-          result.error ?? 'Unknown error'
-        )
-      }
-    }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error'
-    console.error('[Checkout] Order-confirmation email failed:', message)
-  }
-
-  return { order_id, order_ref }
+  return { kind: 'single', order_id, order_ref, quote_id }
 }

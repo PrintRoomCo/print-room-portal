@@ -12,7 +12,6 @@ export interface CheckoutReviewState {
   idempotencyKey: string
   requiredBy: string
   notes: string
-  intent: 'customer' | 'inventory'
   perLineShipTo: Record<string, string | null>
   customAddress: CustomAddress
   createdAt: string
@@ -45,7 +44,6 @@ export function readCheckoutReviewState(): CheckoutReviewState | null {
       idempotencyKey: parsed.idempotencyKey,
       requiredBy: parsed.requiredBy ?? '',
       notes: parsed.notes ?? '',
-      intent: parsed.intent === 'inventory' ? 'inventory' : 'customer',
       perLineShipTo: parsed.perLineShipTo,
       customAddress: {
         ...EMPTY_CUSTOM_ADDRESS,
