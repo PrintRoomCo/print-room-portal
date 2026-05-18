@@ -38,6 +38,12 @@ export interface CheckoutLineInput {
   claimed_unit_price?: number
   /** True iff the cart carried a brackets snapshot for this line. */
   has_brackets?: boolean
+  /**
+   * Per-line fulfilment from the PDP order-mode toggle. 'stocked' lines draw
+   * down existing inventory and are exempt from MOQ — the stock is already
+   * made. Absent on legacy carts; treated as MOQ-applicable (conservative).
+   */
+  fulfilment_type?: 'stocked' | 'make_to_stock'
 }
 
 export interface CheckoutInput {
@@ -312,6 +318,20 @@ export async function submitCustomerOrder(
     )
   }
 
+  // Qty per product destined for a NEW production run — i.e. excluding lines
+  // fulfilled from existing stock. MOQ is checked against this, not the grand
+  // total: stock that has already been made carries no minimum. A line only
+  // escapes MOQ when it explicitly declares fulfilment_type 'stocked'; an
+  // absent value (legacy carts) conservatively still counts toward MOQ.
+  const productionQtyByProductId = new Map<string, number>()
+  for (const line of input.lines) {
+    if (line.fulfilment_type === 'stocked') continue
+    productionQtyByProductId.set(
+      line.product_id,
+      (productionQtyByProductId.get(line.product_id) ?? 0) + line.qty,
+    )
+  }
+
   const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
     admin
       .from('products')
@@ -337,7 +357,9 @@ export async function submitCustomerOrder(
   const moqViolations: MoqViolation[] = []
   // Report a violation per offending line (not per product) so the cart UI
   // can highlight every row affected, consistent with DecorationDriftError.
+  // Stock-fulfilled lines are skipped — already-made stock has no MOQ.
   for (const line of input.lines) {
+    if (line.fulfilment_type === 'stocked') continue
     const effectiveMoq = getEffectiveMoq(
       { moq: productMoqById.get(line.product_id) ?? null },
       overrideByProductId.has(line.product_id)
@@ -345,7 +367,7 @@ export async function submitCustomerOrder(
         : null,
       { orgMoqExempt: input.context.moqExempt },
     )
-    const totalQty = totalQtyByProductId.get(line.product_id) ?? line.qty
+    const totalQty = productionQtyByProductId.get(line.product_id) ?? line.qty
     if (effectiveMoq > 1 && totalQty < effectiveMoq) {
       moqViolations.push({
         cartLineId: line.cart_line_id ?? null,
