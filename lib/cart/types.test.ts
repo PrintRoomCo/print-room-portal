@@ -5,6 +5,7 @@ import {
   type CartLine,
   type CartLineBracket,
 } from './types'
+import { normalizePersisted } from '@/components/cart/CartProvider'
 
 const brackets: CartLineBracket[] = [
   { minQty: 1, maxQty: 49, unitPrice: 30 },
@@ -130,5 +131,26 @@ describe('recomputeProductTierPrices', () => {
     const stable = line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 20, brackets })
     const after = recomputeProductTierPrices([stable])
     expect(after[0]).toBe(stable)
+  })
+})
+
+describe('normalizePersisted routeToInventory round-trip', () => {
+  it('preserves routeToInventory=true through serialize → normalize', () => {
+    const original: CartLine = {
+      lineId: 'l1',
+      productId: 'p1',
+      productName: 'Tee',
+      variantId: 'v1',
+      variantLabel: 'M',
+      qty: 5,
+      unitPrice: 30,
+      imageUrl: null,
+      decorations: [],
+      routeToInventory: true,
+    }
+    const raw = JSON.parse(JSON.stringify({ lines: [original] }))
+    const { lines } = normalizePersisted(raw)
+    expect(lines).toHaveLength(1)
+    expect(lines[0].routeToInventory).toBe(true)
   })
 })

@@ -40,7 +40,7 @@ function normalizeBrackets(raw: unknown): CartLineBracket[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
-function normalizePersisted(raw: unknown): CartState {
+export function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
   const lines = (raw as { lines?: unknown }).lines
   if (!Array.isArray(lines)) return { lines: [] }
@@ -63,6 +63,8 @@ function normalizePersisted(raw: unknown): CartState {
           ? (l.shipToStoreId ?? null)
           : null,
       decorations: Array.isArray(l.decorations) ? l.decorations : [],
+      routeToInventory:
+        typeof l.routeToInventory === 'boolean' ? l.routeToInventory : undefined,
       brackets: normalizeBrackets(l.brackets),
     })
   }
