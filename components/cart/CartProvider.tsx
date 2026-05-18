@@ -63,6 +63,10 @@ function normalizePersisted(raw: unknown): CartState {
           ? (l.shipToStoreId ?? null)
           : null,
       decorations: Array.isArray(l.decorations) ? l.decorations : [],
+      fulfilmentType:
+        l.fulfilmentType === 'make_to_stock' || l.fulfilmentType === 'stocked'
+          ? l.fulfilmentType
+          : undefined,
       brackets: normalizeBrackets(l.brackets),
     })
   }
@@ -127,10 +131,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
           line.variantId,
           line.variantLabel,
           line.decorations ?? [],
+          line.fulfilmentType,
         )
         const existing = s.lines.find(
           (l) =>
-            lineSignature(l.productId, l.variantId, l.variantLabel, l.decorations) ===
+            lineSignature(
+              l.productId,
+              l.variantId,
+              l.variantLabel,
+              l.decorations,
+              l.fulfilmentType,
+            ) ===
             incomingSig,
         )
         const merged: CartLine[] = existing

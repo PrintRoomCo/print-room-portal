@@ -25,4 +25,9 @@ describe('lineSignature', () => {
     expect(lineSignature('p1', 'v1', '—', a))
       .not.toBe(lineSignature('p1', 'v1', '—', b))
   })
+
+  it('differs when fulfilment type differs', () => {
+    expect(lineSignature('p1', 'v1', 'Black / M', noDeco, 'stocked'))
+      .not.toBe(lineSignature('p1', 'v1', 'Black / M', noDeco, 'make_to_stock'))
+  })
 })

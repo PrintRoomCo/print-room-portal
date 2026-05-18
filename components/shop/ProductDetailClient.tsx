@@ -215,8 +215,13 @@ export function ProductDetailClient({
         const qtyLine = variantQuantities[v.variant_id] ?? 0
         const tracked = availability[v.variant_id] !== undefined
         const stocked = tracked ? (availability[v.variant_id] ?? 0) : 0
-        const inStock = tracked ? Math.min(qtyLine, stocked) : 0
-        const toBeMade = tracked ? Math.max(0, qtyLine - stocked) : qtyLine
+        const forceBulkOrder = canChooseOrderIntent && orderIntent === 'bulk'
+        const inStock = forceBulkOrder ? 0 : tracked ? Math.min(qtyLine, stocked) : 0
+        const toBeMade = forceBulkOrder
+          ? qtyLine
+          : tracked
+            ? Math.max(0, qtyLine - stocked)
+            : qtyLine
         return {
           variantId: v.variant_id,
           colourLabel: v.color_label ?? '',
@@ -227,7 +232,7 @@ export function ProductDetailClient({
           tracked,
         }
       })
-  }, [variants, variantQuantities, availability])
+  }, [variants, variantQuantities, availability, canChooseOrderIntent, orderIntent])
 
   const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
@@ -527,6 +532,33 @@ export function ProductDetailClient({
         : // one_size: no variant selection required
           Number.isInteger(qty) && meetsMoq && pricingOk
 
+  let inventoryIntentShortfall: { label: string; available: number } | null = null
+  if (canChooseOrderIntent && orderIntent === 'inventory') {
+    if (sizingMode === 'multi_size_with_variants') {
+      for (const variant of variants) {
+        const requested = variantQuantities[variant.variant_id] ?? 0
+        if (requested <= 0) continue
+        const available = availability[variant.variant_id] ?? 0
+        if (requested > available) {
+          const label =
+            [variant.color_label, variant.size_label].filter(Boolean).join(' / ') ||
+            'selected variant'
+          inventoryIntentShortfall = {
+            label,
+            available,
+          }
+          break
+        }
+      }
+    } else if (selectedVariant && qty > (availableQty ?? 0)) {
+      inventoryIntentShortfall = {
+        label: 'selected variant',
+        available: availableQty ?? 0,
+      }
+    }
+  }
+  const canSubmitSelection = canAddToCart && inventoryIntentShortfall == null
+
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 motion-safe:animate-portal-enter md:px-6 md:pt-4">
@@ -604,6 +636,10 @@ export function ProductDetailClient({
 
           {decorations.length > 0 && (
             <DecorationSwatchPicker decorations={decorations} />
+          )}
+
+          {canChooseOrderIntent && (
+            <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
 
           {brackets.length > 0 && (
@@ -847,11 +883,17 @@ export function ProductDetailClient({
             <button
               type="button"
               onClick={handleAddToCart}
-              disabled={!canAddToCart || pricingLoading}
+              disabled={!canSubmitSelection || pricingLoading}
               className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pricingLoading ? 'Checking price...' : 'Add to cart'}
             </button>
+            {inventoryIntentShortfall && (
+              <p className="mt-3 text-xs text-amber-700">
+                Only {inventoryIntentShortfall.available} available for{' '}
+                {inventoryIntentShortfall.label}. Choose Bulk order or reduce quantity.
+              </p>
+            )}
           </section>
           </div>
         </div>
@@ -868,6 +910,41 @@ export function ProductDetailClient({
 
 function formatSpecKey(key: string): string {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function OrderIntentToggle({
+  value,
+  onChange,
+}: {
+  value: OrderIntent
+  onChange: (value: OrderIntent) => void
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Order mode"
+      className="grid h-9 w-full grid-cols-2 overflow-hidden rounded-full border border-gray-300 bg-white text-xs font-medium text-gray-700 sm:w-[200px]"
+    >
+      {(['inventory', 'bulk'] as const).map((mode) => {
+        const selected = value === mode
+        return (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(mode)}
+            className={`min-w-0 px-3 transition-colors ${
+              selected
+                ? 'bg-gray-100 text-gray-950'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-950'
+            } ${mode === 'bulk' ? 'border-l border-gray-300' : ''}`}
+          >
+            {mode === 'inventory' ? 'Stock request' : 'Bulk order'}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // Condensed details rail rendered directly under the product description.

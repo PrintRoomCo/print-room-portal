@@ -295,6 +295,7 @@ const loadProductDetailPageData = cache(async (
       brackets: bracketRows,
       availability,
       organizationId: context.organizationId,
+      customerRole: context.role,
       images,
       decorations,
       effectiveMoq,

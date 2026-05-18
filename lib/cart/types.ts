@@ -47,7 +47,7 @@ export interface CartLine {
    * lands in the org's inventory shelf (not direct ship). Absent on legacy
    * persisted lines; treat as 'stocked' when undefined.
    */
-  fulfilmentType?: 'stocked' | 'make_to_stock'
+  fulfilmentType?: CartLineFulfilmentType
   /**
    * Volume-tier brackets snapshotted at add-time. Used by CartProvider to
    * re-derive unitPrice when qty changes (so a 100→24 edit drops back to the
@@ -56,6 +56,8 @@ export interface CartLine {
    */
   brackets?: CartLineBracket[]
 }
+
+export type CartLineFulfilmentType = 'stocked' | 'make_to_stock'
 
 export interface CartState {
   lines: CartLine[]
@@ -79,15 +81,17 @@ export function decorationSignature(decorations: CartLineDecoration[]): string {
 /**
  * Stable signature for matching cart lines on add. Same product + variant +
  * variantLabel + decoration set merges quantity. Includes variantLabel so
- * variantless lines (variantId = '') with different sizes stay separate.
+ * variantless lines (variantId = '') with different sizes stay separate, and
+ * fulfilment type so stock and bulk-mode lines remain independently editable.
  */
 export function lineSignature(
   productId: string,
   variantId: string,
   variantLabel: string,
   decorations: CartLineDecoration[],
+  fulfilmentType: CartLineFulfilmentType = 'stocked',
 ): string {
-  return `${productId}::${variantId}::${variantLabel}::${decorationSignature(decorations)}`
+  return `${productId}::${variantId}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
 }
 
 /**
