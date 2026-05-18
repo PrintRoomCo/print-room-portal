@@ -182,8 +182,24 @@ export function ProductDetailClient({
     return (availability[selectedVariant.variant_id] ?? 0) > 0
   }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
 
+  // The order-mode toggle is offered ONLY to an org_admin looking at a product
+  // that BOTH has stock for the current selection AND has volume tiers. With no
+  // tiers there is nothing to "Made to Order" against; buyers can only ever
+  // draw from stock by role — neither case shows a toggle.
   const canChooseOrderIntent =
-    customerRole === 'org_admin' && currentSelectionHasInventory
+    customerRole === 'org_admin' &&
+    currentSelectionHasInventory &&
+    brackets.length > 0
+
+  // True whenever this order will be fulfilled from existing stock rather than
+  // a new production run: a buyer (stock-only by role), a stocked product with
+  // no volume tiers, or an org_admin who has toggled to "From Stock". In every
+  // case the PDP hides bulk-order artefacts (volume pricing + lead time) and
+  // the Add-to-cart guard blocks ordering beyond available stock.
+  const isInventoryMode =
+    customerRole === 'buyer' ||
+    (currentSelectionHasInventory && brackets.length === 0) ||
+    (canChooseOrderIntent && orderIntent === 'inventory')
 
   // Grand total across every colour the user has touched in this session,
   // not just the currently-displayed colour. Drives pricing tier + Add to cart.
@@ -505,7 +521,16 @@ export function ProductDetailClient({
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant.
+    // Mode 3: one_size — single cart line, no variant. When the order-mode
+    // toggle is available the customer's choice drives fulfilment (matching
+    // Mode 1); otherwise fall back to stock-vs-shortfall like the variant path.
+    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+      ? orderIntent === 'bulk'
+        ? 'make_to_stock'
+        : 'stocked'
+      : tracksThisVariant && qty > (availableQty ?? 0)
+        ? 'make_to_stock'
+        : 'stocked'
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -515,7 +540,7 @@ export function ProductDetailClient({
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
       decorations: cartLineDecorations,
-      fulfilmentType: 'make_to_stock',
+      fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
     })
     showToast('Added to cart')
@@ -533,7 +558,7 @@ export function ProductDetailClient({
           Number.isInteger(qty) && meetsMoq && pricingOk
 
   let inventoryIntentShortfall: { label: string; available: number } | null = null
-  if (canChooseOrderIntent && orderIntent === 'inventory') {
+  if (isInventoryMode) {
     if (sizingMode === 'multi_size_with_variants') {
       for (const variant of variants) {
         const requested = variantQuantities[variant.variant_id] ?? 0
@@ -627,7 +652,7 @@ export function ProductDetailClient({
             <AvailabilityBadge
               availableQty={multiSize ? colourTotalAvailable : availableQty}
             />
-            {product.lead_time_days != null && (
+            {product.lead_time_days != null && !isInventoryMode && (
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
               </span>
@@ -642,7 +667,7 @@ export function ProductDetailClient({
             <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
 
-          {brackets.length > 0 && (
+          {brackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
                 Volume pricing
@@ -891,7 +916,10 @@ export function ProductDetailClient({
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">
                 Only {inventoryIntentShortfall.available} available for{' '}
-                {inventoryIntentShortfall.label}. Choose Bulk order or reduce quantity.
+                {inventoryIntentShortfall.label}.{' '}
+                {canChooseOrderIntent
+                  ? 'Switch to Made to Order or reduce quantity.'
+                  : 'Reduce quantity to order from stock.'}
               </p>
             )}
           </section>
@@ -939,7 +967,7 @@ function OrderIntentToggle({
                 : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-950'
             } ${mode === 'bulk' ? 'border-l border-gray-300' : ''}`}
           >
-            {mode === 'inventory' ? 'Stock request' : 'Bulk order'}
+            {mode === 'inventory' ? 'From Stock' : 'Made to Order'}
           </button>
         )
       })}
