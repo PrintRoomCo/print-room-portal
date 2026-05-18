@@ -120,6 +120,7 @@ export function CheckoutReviewClient({
             decorations: line.decorations,
             claimed_unit_price: line.unitPrice,
             has_brackets: Array.isArray(line.brackets) && line.brackets.length > 0,
+            fulfilment_type: line.fulfilmentType,
           })),
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),

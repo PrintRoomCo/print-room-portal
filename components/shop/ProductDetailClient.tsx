@@ -201,6 +201,13 @@ export function ProductDetailClient({
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
+  // MOQ exists to make a new production run economical — it does not apply when
+  // drawing down stock that has already been made. In inventory mode the only
+  // ceiling is available stock (enforced by the shortfall guard), so the
+  // effective minimum drops to 1. `effectiveMoq` (the product's MOQ) is left
+  // intact and still applies the moment the order becomes Made to Order.
+  const activeMoq = isInventoryMode ? 1 : effectiveMoq
+
   // Grand total across every colour the user has touched in this session,
   // not just the currently-displayed colour. Drives pricing tier + Add to cart.
   const multiSizeTotalQty = useMemo(() => {
@@ -250,7 +257,7 @@ export function ProductDetailClient({
       })
   }, [variants, variantQuantities, availability, canChooseOrderIntent, orderIntent])
 
-  const defaultMinQty = effectiveMoq
+  const defaultMinQty = activeMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
   const qty =
     sizingMode === 'multi_size_with_variants'
@@ -547,7 +554,7 @@ export function ProductDetailClient({
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'
-  const meetsMoq = qty >= effectiveMoq
+  const meetsMoq = qty >= activeMoq
   const pricingOk = pricing != null && pricing.status === 'ok' && !priceMissing
   const canAddToCart =
     sizingMode === 'multi_size_with_variants'
@@ -786,14 +793,14 @@ export function ProductDetailClient({
             />
           )}
 
-          {effectiveMoq > 1 && (
+          {activeMoq > 1 && (
             <div className="rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
               Minimum order:{' '}
-              <span className="font-semibold">{effectiveMoq} units</span>
+              <span className="font-semibold">{activeMoq} units</span>
               {sizingMode !== 'one_size' ? ' across all sizes' : ''}.
-              {sizingMode !== 'one_size' && qty > 0 && qty < effectiveMoq ? (
+              {sizingMode !== 'one_size' && qty > 0 && qty < activeMoq ? (
                 <span className="ml-2 font-medium">
-                  Currently {qty} — add {effectiveMoq - qty} more.
+                  Currently {qty} — add {activeMoq - qty} more.
                 </span>
               ) : null}
             </div>
