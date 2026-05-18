@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
+import { useCompany } from '@/contexts/CompanyContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { CartTable } from './CartTable'
 import { useCart } from './useCart'
@@ -17,8 +18,20 @@ export function CartDrawer() {
   const pathname = usePathname()
   const router = useRouter()
   const { format } = useCurrency()
+  const { access } = useCompany()
   const [oversell, setOversell] = useState(false)
   const [moqShort, setMoqShort] = useState(false)
+
+  // Mixed-intent split, cluster 2.6 — cart-level fast-path. Mirror the
+  // PDP toggle gate (`role === 'org_admin' && tenant tracks inventory`),
+  // which is equivalent to CheckoutClient's `!isBuyer && ...` because
+  // the role field is binary. Hidden for studio tenants and buyers.
+  const canRouteAllToInventory =
+    access?.role === 'org_admin' &&
+    (access.tenantType === 'studio_plus_inventory' ||
+      access.tenantType === 'franchise')
+  const allLinesToInventory =
+    cart.lines.length > 0 && cart.lines.every((l) => l.routeToInventory === true)
 
   useEffect(() => {
     drawer.setOpen(false)
@@ -90,6 +103,26 @@ export function CartDrawer() {
           <div className="sticky bottom-0 border-t border-gray-200/70 bg-white px-5 py-4">
             {cart.lines.length > 0 ? (
               <>
+                {canRouteAllToInventory && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      cart.setAllLinesRouteToInventory(!allLinesToInventory)
+                    }
+                    aria-pressed={allLinesToInventory ? 'true' : 'false'}
+                    className={
+                      'mb-3 flex w-full items-center justify-between rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.08em] transition-colors ' +
+                      (allLinesToInventory
+                        ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+                    }
+                  >
+                    <span>Send entire order to my inventory</span>
+                    <span className="text-[11px]">
+                      {allLinesToInventory ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-sm text-gray-500">Total</span>
                   <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
