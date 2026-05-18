@@ -8,7 +8,7 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
-import { decorationPerUnit, type CartLine } from '@/lib/cart/types'
+import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import type { StoreOption } from './ShipToRow'
 import {
@@ -17,7 +17,6 @@ import {
   readCheckoutReviewState,
   type CheckoutReviewState,
 } from './checkoutReviewState'
-import { SplitOrderConfirmModal } from './SplitOrderConfirmModal'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -26,22 +25,10 @@ interface CheckoutReviewClientProps {
   defaultDepositPercent: number | null
 }
 
-type CheckoutResponse =
-  | {
-      kind?: 'single' | undefined
-      order_id: string
-      order_ref: string
-    }
-  | {
-      kind: 'split'
-      customer_order_id: string
-      customer_order_ref: string
-      customer_quote_id: string
-      inventory_order_id: string
-      inventory_order_ref: string
-      inventory_quote_id: string
-      cart_submission_id: string
-    }
+interface CheckoutResponse {
+  order_id: string
+  order_ref: string
+}
 
 export function CheckoutReviewClient({
   stores,
@@ -57,7 +44,6 @@ export function CheckoutReviewClient({
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  const [splitConfirmOpen, setSplitConfirmOpen] = useState(false)
 
   useEffect(() => {
     setReviewState(readCheckoutReviewState())
@@ -88,66 +74,6 @@ export function CheckoutReviewClient({
   const allCustom =
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
 
-  // Mixed-intent split. Mirrors the partitioning done in CheckoutClient via
-  // splitCartByIntent — kept inline here as a CartLine-typed partition because
-  // the review render needs the full CartLine (productName, decorations, qty,
-  // unitPrice…), not the trimmed CheckoutLineInput shape the helper consumes.
-  // Same predicate (`routeToInventory === true`); no fast-path on review,
-  // because the order-level admin toggle has been retired (cluster 2.5).
-  const customerCartLines = useMemo<CartLine[]>(
-    () => cart.lines.filter((l) => l.routeToInventory !== true),
-    [cart.lines],
-  )
-  const inventoryCartLines = useMemo<CartLine[]>(
-    () => cart.lines.filter((l) => l.routeToInventory === true),
-    [cart.lines],
-  )
-  const isSplit = customerCartLines.length > 0 && inventoryCartLines.length > 0
-
-  function lineTotal(line: CartLine): number {
-    return line.qty * (line.unitPrice + decorationPerUnit(line))
-  }
-  const customerSubtotal = useMemo(
-    () => customerCartLines.reduce((sum, l) => sum + lineTotal(l), 0),
-    [customerCartLines],
-  )
-  const inventorySubtotal = useMemo(
-    () => inventoryCartLines.reduce((sum, l) => sum + lineTotal(l), 0),
-    [inventoryCartLines],
-  )
-  const grandTotal = customerSubtotal + inventorySubtotal
-  const customerUnitCount = useMemo(
-    () => customerCartLines.reduce((sum, l) => sum + l.qty, 0),
-    [customerCartLines],
-  )
-  const inventoryUnitCount = useMemo(
-    () => inventoryCartLines.reduce((sum, l) => sum + l.qty, 0),
-    [inventoryCartLines],
-  )
-
-  // One-line summary of the destination for the customer-bucket heading.
-  // For the split case we lean on the existing address-render logic: when
-  // every line uses a custom address, show that; otherwise show the first
-  // customer line's store (every customer line in a split shares a store-
-  // or-mix UX the user already saw on /checkout). We deliberately keep this
-  // concise — the per-line ship-to table below repeats the detail.
-  function summariseAddress(): string {
-    if (!reviewState) return ''
-    if (allCustom) {
-      const a = reviewState.customAddress
-      return [a.name, a.address, a.city, a.postal_code, a.country]
-        .filter(Boolean)
-        .join(', ')
-    }
-    const firstCustomerLine = customerCartLines[0]
-    if (!firstCustomerLine) return ''
-    const storeId = reviewState.perLineShipTo[firstCustomerLine.lineId]
-    const store = storeId ? storeById.get(storeId) : null
-    if (!store) return 'your selected store'
-    return `${store.name ?? 'Store'}${store.city ? ` — ${store.city}` : ''}`
-  }
-  const customerAddressSummary = summariseAddress()
-
   async function confirmOrder() {
     if (!reviewState || cart.lines.length === 0) return
 
@@ -176,13 +102,6 @@ export function CheckoutReviewClient({
     setSubmitting(true)
     setBanner(null)
     try {
-      // Per-line `route_to_inventory` is the source of truth for split routing
-      // (PDP toggle + cart-level fast-path both write to it). The server bucket-
-      // splits and derives intent per bucket; the legacy order-level `intent`
-      // field has been dropped from the wire. `route_entire_order_to_inventory`
-      // is hard-false here because the order-level admin "send entire order to
-      // inventory" toggle has been retired (cluster 2.5) — kept in the wire
-      // type to document the API surface for future admin tooling.
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,7 +109,7 @@ export function CheckoutReviewClient({
           idempotency_key: reviewState.idempotencyKey,
           required_by: reviewState.requiredBy || null,
           notes: reviewState.notes || null,
-          route_entire_order_to_inventory: false,
+          intent: reviewState.intent,
           lines: cart.lines.map((line) => ({
             product_id: line.productId,
             product_name: line.productName,
@@ -201,7 +120,6 @@ export function CheckoutReviewClient({
             decorations: line.decorations,
             claimed_unit_price: line.unitPrice,
             has_brackets: Array.isArray(line.brackets) && line.brackets.length > 0,
-            route_to_inventory: line.routeToInventory === true,
           })),
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),
@@ -307,23 +225,13 @@ export function CheckoutReviewClient({
 
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }
-        if (res.status === 403 && data?.error === 'ROUTE_TO_INVENTORY_NOT_ALLOWED') {
-          throw new Error(
-            "Your role doesn't permit routing items to inventory. Contact your account manager.",
-          )
-        }
         throw new Error(data.error ?? `Request failed (${res.status})`)
       }
 
       const result = (await res.json()) as CheckoutResponse
       clearCheckoutReviewState()
       cart.clear()
-      // Split submits land on the customer-bucket order's confirmation page
-      // (the customer-facing sibling); the inventory child is staff-facing and
-      // surfaces through the staff portal.
-      const confirmationOrderId =
-        result.kind === 'split' ? result.customer_order_id : result.order_id
-      router.push(`/checkout/confirmation/${confirmationOrderId}`)
+      router.push(`/checkout/confirmation/${result.order_id}`)
     } catch (error) {
       setBanner({ kind: 'error', msg: (error as Error).message })
     } finally {
@@ -430,144 +338,37 @@ export function CheckoutReviewClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        {isSplit ? (
-          <>
-            <h2 className="text-sm font-medium text-gray-700">Items</h2>
-            <p className="mt-1 text-xs text-gray-500">
-              This order will split into two — priced as separate production runs.
-            </p>
-            <div className="mt-4 divide-y divide-gray-200">
-              <div className="pb-5">
-                <h3 className="text-base font-semibold text-gray-900">
-                  Shipping to {customerAddressSummary}
-                </h3>
-                <div className="mt-3 divide-y divide-gray-100">
-                  {customerCartLines.map((line) => (
-                    <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{line.productName}</h4>
-                          <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
-                            {line.variantLabel} · qty {line.qty}
-                          </p>
-                          {line.decorations.length > 0 && (
-                            <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                              {line.decorations.map((decoration) => (
-                                <li key={decoration.linkId}>
-                                  {decoration.name} +{format(decoration.unitPrice)} / unit
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                        <div className="text-right text-sm">
-                          <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {format(lineTotal(line))}
-                          </p>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-between border-t border-gray-100 pt-3 text-sm">
-                  <span className="text-gray-500">Customer-ship subtotal</span>
-                  <span className="font-semibold text-gray-900 tabular-nums">
-                    {format(customerSubtotal)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-5">
-                <h3 className="text-base font-semibold text-gray-900">
-                  Adding to your inventory shelf
-                </h3>
-                <div className="mt-3 divide-y divide-gray-100">
-                  {inventoryCartLines.map((line) => (
-                    <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{line.productName}</h4>
-                          <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
-                            {line.variantLabel} · qty {line.qty}
-                          </p>
-                          <p className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700">
-                            → INVENTORY
-                          </p>
-                          {line.decorations.length > 0 && (
-                            <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                              {line.decorations.map((decoration) => (
-                                <li key={decoration.linkId}>
-                                  {decoration.name} +{format(decoration.unitPrice)} / unit
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                        <div className="text-right text-sm">
-                          <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {format(lineTotal(line))}
-                          </p>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-between border-t border-gray-100 pt-3 text-sm">
-                  <span className="text-gray-500">Inventory subtotal</span>
-                  <span className="font-semibold text-gray-900 tabular-nums">
-                    {format(inventorySubtotal)}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 flex justify-between border-t border-gray-200 pt-4 text-base">
-              <span className="font-semibold text-gray-900">Grand total</span>
-              <span className="font-semibold text-gray-900 tabular-nums">
-                {format(grandTotal)}
-              </span>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="text-sm font-medium text-gray-700">Items</h2>
-            <div className="mt-3 divide-y divide-gray-100">
-              {cart.lines.map((line) => (
-                <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{line.productName}</h3>
-                      <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
-                        {line.variantLabel} · qty {line.qty}
-                      </p>
-                      {line.routeToInventory === true && (
-                        <p className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700">
-                          → INVENTORY
-                        </p>
-                      )}
-                      {line.decorations.length > 0 && (
-                        <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                          {line.decorations.map((decoration) => (
-                            <li key={decoration.linkId}>
-                              {decoration.name} +{format(decoration.unitPrice)} / unit
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div className="text-right text-sm">
-                      <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
-                      <p className="mt-1 font-semibold text-gray-900">
-                        {format(lineTotal(line))}
-                      </p>
-                    </div>
+        <h2 className="text-sm font-medium text-gray-700">Items</h2>
+        <div className="mt-3 divide-y divide-gray-100">
+          {cart.lines.map((line) => {
+            const lineTotal = line.qty * (line.unitPrice + decorationPerUnit(line))
+            return (
+              <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{line.productName}</h3>
+                    <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
+                      {line.variantLabel} · qty {line.qty}
+                    </p>
+                    {line.decorations.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                        {line.decorations.map((decoration) => (
+                          <li key={decoration.linkId}>
+                            {decoration.name} +{format(decoration.unitPrice)} / unit
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                </article>
-              ))}
-            </div>
-          </>
-        )}
+                  <div className="text-right text-sm">
+                    <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
+                    <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
       </section>
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
@@ -576,11 +377,7 @@ export function CheckoutReviewClient({
           <div className="flex justify-between gap-4">
             <dt className="text-gray-500">Order routing</dt>
             <dd className="text-right text-gray-900">
-              {isSplit
-                ? 'Split: ship to customer + inventory'
-                : inventoryCartLines.length > 0
-                  ? 'Add to my inventory'
-                  : 'Ship to customer'}
+              {reviewState.intent === 'inventory' ? 'Add to my inventory' : 'Ship to customer'}
             </dd>
           </div>
           {allCustom ? (
@@ -659,36 +456,13 @@ export function CheckoutReviewClient({
         </button>
         <button
           type="button"
-          onClick={() => {
-            // Split submits go through a confirmation modal so the customer
-            // explicitly acknowledges two orders are being placed. Single-
-            // intent submits skip the modal entirely.
-            if (isSplit) {
-              setSplitConfirmOpen(true)
-            } else {
-              void confirmOrder()
-            }
-          }}
+          onClick={confirmOrder}
           disabled={submitting || !customerCode}
           className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? 'Placing order...' : 'Confirm & place order'}
         </button>
       </div>
-
-      <SplitOrderConfirmModal
-        open={splitConfirmOpen}
-        customerUnitCount={customerUnitCount}
-        inventoryUnitCount={inventoryUnitCount}
-        customerAddress={customerAddressSummary}
-        customerTotal={format(customerSubtotal)}
-        inventoryTotal={format(inventorySubtotal)}
-        onCancel={() => setSplitConfirmOpen(false)}
-        onConfirm={() => {
-          setSplitConfirmOpen(false)
-          void confirmOrder()
-        }}
-      />
         </div>
       </div>
     </div>

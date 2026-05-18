@@ -66,14 +66,6 @@ interface Props {
    * "stocked = no MOQ" was an unintentional collapse pre-2026-05-22.
    */
   effectiveMoq: number
-  /**
-   * Buyer Roles step 6 — gates the "Make for inventory" PDP toggle (org_admin only).
-   */
-  role: 'org_admin' | 'buyer'
-  /**
-   * b2b_accounts.tenant_type. Toggle only renders for franchise + studio_plus_inventory.
-   */
-  tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
 }
 
 export function ProductDetailClient({
@@ -84,8 +76,6 @@ export function ProductDetailClient({
   images,
   decorations,
   effectiveMoq,
-  role,
-  tenantType,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -101,21 +91,6 @@ export function ProductDetailClient({
   // composition is intentional 2026-05-14 — the order-summary panel below
   // surfaces everything that's been touched.
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
-
-  // Slice 4 — per-line "Make for inventory" PDP toggles. Only rendered when the
-  // buyer is org_admin on a tenant that tracks inventory (studio_plus_inventory
-  // or franchise). Mirrors CheckoutClient.canRouteToInventory gate.
-  const canRouteToInventory =
-    role === 'org_admin' &&
-    (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
-  const [routeToInventoryByVariant, setRouteToInventoryByVariant] = useState<
-    Record<string, boolean>
-  >({})
-  // Variantless products always price as make_to_stock, so there's just one
-  // product-level toggle (per-size routing would be meaningless).
-  const [variantlessRouteToInventory, setVariantlessRouteToInventory] = useState(false)
-  // one_size products: single toggle next to qty input.
-  const [oneSizeRouteToInventory, setOneSizeRouteToInventory] = useState(false)
 
   type SizingMode = 'multi_size_with_variants' | 'multi_size_variantless' | 'one_size'
 
@@ -234,10 +209,9 @@ export function ProductDetailClient({
           inStock,
           toBeMade,
           tracked,
-          routeToInventory: routeToInventoryByVariant[v.variant_id] === true,
         }
       })
-  }, [variants, variantQuantities, availability, routeToInventoryByVariant])
+  }, [variants, variantQuantities, availability])
 
   const defaultMinQty = effectiveMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
@@ -452,12 +426,8 @@ export function ProductDetailClient({
           [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
         const tracked = availability[variant.variant_id] !== undefined
         const available = availability[variant.variant_id] ?? 0
-        const routeToInventory = routeToInventoryByVariant[variant.variant_id] === true
-        const fulfilmentType: 'stocked' | 'make_to_stock' = routeToInventory
-          ? 'make_to_stock'
-          : tracked && lineQty > available
-            ? 'make_to_stock'
-            : 'stocked'
+        const fulfilmentType: 'stocked' | 'make_to_stock' =
+          tracked && lineQty > available ? 'make_to_stock' : 'stocked'
         cart.addLine({
           productId: product.id,
           productName: product.name,
@@ -469,13 +439,11 @@ export function ProductDetailClient({
           decorations: cartLineDecorations,
           fulfilmentType,
           brackets: cartLineBrackets,
-          routeToInventory,
         })
         added += lineQty
       }
       if (added > 0) {
         setVariantQuantities({})
-        setRouteToInventoryByVariant({})
         showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
       }
       return
@@ -501,22 +469,17 @@ export function ProductDetailClient({
           decorations: cartLineDecorations,
           fulfilmentType: 'make_to_stock',
           brackets: cartLineBrackets,
-          routeToInventory: variantlessRouteToInventory,
         })
         added += lineQty
       }
       if (added > 0) {
         setVariantlessQtyBySize({})
-        setVariantlessRouteToInventory(false)
         showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
       }
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant. fulfilmentType stays
-    // 'make_to_stock' (existing legacy behaviour); the inventory routing is
-    // captured orthogonally on routeToInventory so splitCartByIntent can
-    // pull it into a sibling order.
+    // Mode 3: one_size — single cart line, no variant.
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -528,9 +491,7 @@ export function ProductDetailClient({
       decorations: cartLineDecorations,
       fulfilmentType: 'make_to_stock',
       brackets: cartLineBrackets,
-      routeToInventory: oneSizeRouteToInventory,
     })
-    setOneSizeRouteToInventory(false)
     showToast('Added to cart')
   }
 
@@ -682,49 +643,27 @@ export function ProductDetailClient({
                           )}
                         </td>
                         <td className="px-5 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {canRouteToInventory && value > 0 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setRouteToInventoryByVariant((prev) => ({
-                                    ...prev,
-                                    [row.variantId]: !(prev[row.variantId] === true),
-                                  }))
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={value || ''}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const n = Number(e.target.value)
+                              setVariantQuantities((prev) => {
+                                const next = { ...prev }
+                                if (!Number.isFinite(n) || n <= 0) {
+                                  delete next[row.variantId]
+                                } else {
+                                  next[row.variantId] = Math.floor(n)
                                 }
-                                aria-pressed={Boolean(routeToInventoryByVariant[row.variantId])}
-                                className={
-                                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ' +
-                                  (routeToInventoryByVariant[row.variantId] === true
-                                    ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
-                                }
-                              >
-                                Make for inventory
-                              </button>
-                            )}
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={value || ''}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const n = Number(e.target.value)
-                                setVariantQuantities((prev) => {
-                                  const next = { ...prev }
-                                  if (!Number.isFinite(n) || n <= 0) {
-                                    delete next[row.variantId]
-                                  } else {
-                                    next[row.variantId] = Math.floor(n)
-                                  }
-                                  return next
-                                })
-                              }}
-                              aria-label={`Quantity for size ${row.sizeLabel}`}
-                              className="w-20 rounded-full bg-gray-50 px-3 py-1.5 text-right text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-                            />
-                          </div>
+                                return next
+                              })
+                            }}
+                            aria-label={`Quantity for size ${row.sizeLabel}`}
+                            className="w-20 rounded-full bg-gray-50 px-3 py-1.5 text-right text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                          />
                         </td>
                       </tr>
                     )
@@ -758,30 +697,11 @@ export function ProductDetailClient({
           )}
 
           {sizingMode === 'multi_size_variantless' && variantlessSizes.length > 0 && (
-            <>
-              {canRouteToInventory && (
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setVariantlessRouteToInventory((v) => !v)}
-                    aria-pressed={Boolean(variantlessRouteToInventory)}
-                    className={
-                      'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ' +
-                      (variantlessRouteToInventory
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
-                    }
-                  >
-                    Make for inventory
-                  </button>
-                </div>
-              )}
-              <VariantlessSizeGrid
-                sizes={variantlessSizes}
-                quantities={variantlessQtyBySize}
-                onChange={setVariantlessQtyBySize}
-              />
-            </>
+            <VariantlessSizeGrid
+              sizes={variantlessSizes}
+              quantities={variantlessQtyBySize}
+              onChange={setVariantlessQtyBySize}
+            />
           )}
 
           {effectiveMoq > 1 && (
@@ -813,32 +733,24 @@ export function ProductDetailClient({
                       <span className="text-gray-800">{label}</span>
                       <span className="text-right text-gray-700">
                         <span className="font-medium tabular-nums">{line.qty}</span>
-                        {line.routeToInventory ? (
-                          <span className="ml-1 text-xs text-amber-700">
-                            ({line.qty} to be made for inventory)
+                        {line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
+                          <span className="ml-1 text-xs text-gray-500">
+                            ({line.inStock} in stock,{' '}
+                            <span className="text-amber-700">
+                              {line.toBeMade} to be made
+                            </span>
+                            )
                           </span>
-                        ) : (
-                          <>
-                            {line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
-                              <span className="ml-1 text-xs text-gray-500">
-                                ({line.inStock} in stock,{' '}
-                                <span className="text-amber-700">
-                                  {line.toBeMade} to be made
-                                </span>
-                                )
-                              </span>
-                            )}
-                            {line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
-                              <span className="ml-1 text-xs text-amber-700">
-                                ({line.toBeMade} to be made)
-                              </span>
-                            )}
-                            {!line.tracked && (
-                              <span className="ml-1 text-xs text-amber-700">
-                                ({line.toBeMade} to be made)
-                              </span>
-                            )}
-                          </>
+                        )}
+                        {line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
+                          <span className="ml-1 text-xs text-amber-700">
+                            ({line.toBeMade} to be made)
+                          </span>
+                        )}
+                        {!line.tracked && (
+                          <span className="ml-1 text-xs text-amber-700">
+                            ({line.toBeMade} to be made)
+                          </span>
                         )}
                       </span>
                     </li>
@@ -859,42 +771,19 @@ export function ProductDetailClient({
                   >
                     Quantity
                   </label>
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      id="qty"
-                      type="number"
-                      min={defaultMinQty}
-                      step={1}
-                      value={qty}
-                      onChange={(e) => setQty(Number(e.target.value))}
-                      className="w-28 rounded-full bg-gray-50 px-4 py-2 text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-                    />
-                    {canRouteToInventory && (
-                      <button
-                        type="button"
-                        onClick={() => setOneSizeRouteToInventory((v) => !v)}
-                        aria-pressed={Boolean(oneSizeRouteToInventory)}
-                        className={
-                          'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ' +
-                          (oneSizeRouteToInventory
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
-                        }
-                      >
-                        Make for inventory
-                      </button>
-                    )}
-                  </div>
-                  {oneSizeRouteToInventory ? (
+                  <input
+                    id="qty"
+                    type="number"
+                    min={defaultMinQty}
+                    step={1}
+                    value={qty}
+                    onChange={(e) => setQty(Number(e.target.value))}
+                    className="mt-2 w-28 rounded-full bg-gray-50 px-4 py-2 text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                  />
+                  {isOutOfStock && (
                     <p className="mt-2 text-xs text-amber-700">
-                      ({qty} to be made for inventory)
+                      Out of stock — {qty} will be made.
                     </p>
-                  ) : (
-                    isOutOfStock && (
-                      <p className="mt-2 text-xs text-amber-700">
-                        Out of stock — {qty} will be made.
-                      </p>
-                    )
                   )}
                 </div>
               )}

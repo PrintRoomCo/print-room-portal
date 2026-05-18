@@ -21,13 +21,6 @@ export interface CartApi {
   updateLine: (lineId: string, patch: Partial<CartLine>) => void
   removeLine: (lineId: string) => void
   setShipTo: (lineId: string, storeId: string | null) => void
-  /**
-   * Bulk-set routeToInventory on every cart line. Backs the cart-level
-   * "Send entire order to my inventory" fast-path toggle. The flag is the
-   * single source of truth — there is no cart-level mirror — so the toggle
-   * derives its ON state from `cart.lines.every(l => l.routeToInventory)`.
-   */
-  setAllLinesRouteToInventory: (flag: boolean) => void
   clear: () => void
 }
 
@@ -47,7 +40,7 @@ function normalizeBrackets(raw: unknown): CartLineBracket[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
-export function normalizePersisted(raw: unknown): CartState {
+function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
   const lines = (raw as { lines?: unknown }).lines
   if (!Array.isArray(lines)) return { lines: [] }
@@ -70,8 +63,6 @@ export function normalizePersisted(raw: unknown): CartState {
           ? (l.shipToStoreId ?? null)
           : null,
       decorations: Array.isArray(l.decorations) ? l.decorations : [],
-      routeToInventory:
-        typeof l.routeToInventory === 'boolean' ? l.routeToInventory : undefined,
       brackets: normalizeBrackets(l.brackets),
     })
   }
@@ -178,10 +169,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         lines: s.lines.map((l) =>
           l.lineId === lineId ? { ...l, shipToStoreId: storeId } : l
         ),
-      })),
-    setAllLinesRouteToInventory: (flag) =>
-      setState((s) => ({
-        lines: s.lines.map((l) => ({ ...l, routeToInventory: flag })),
       })),
     clear: () => setState({ lines: [] }),
   }

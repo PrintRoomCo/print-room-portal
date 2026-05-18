@@ -298,8 +298,6 @@ const loadProductDetailPageData = cache(async (
       images,
       decorations,
       effectiveMoq,
-      role: context.role,
-      tenantType: context.tenantType,
     },
   }
 })

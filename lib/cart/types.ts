@@ -48,8 +48,6 @@ export interface CartLine {
    * persisted lines; treat as 'stocked' when undefined.
    */
   fulfilmentType?: 'stocked' | 'make_to_stock'
-  /** True when the customer flagged this line for inventory routing. */
-  routeToInventory?: boolean
   /**
    * Volume-tier brackets snapshotted at add-time. Used by CartProvider to
    * re-derive unitPrice when qty changes (so a 100→24 edit drops back to the
