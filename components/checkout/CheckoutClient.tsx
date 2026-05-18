@@ -17,7 +17,6 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { splitCartByIntent } from '@/lib/checkout/split-cart-by-intent'
-import type { CheckoutLineInput } from '@/lib/checkout/submit'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 
 interface CheckoutClientProps {
@@ -94,12 +93,9 @@ export function CheckoutClient({
   const { customer: customerLines, inventory: inventoryLines } = useMemo(
     () =>
       splitCartByIntent({
-        lines: cart.lines.map(
-          (l) =>
-            ({
-              route_to_inventory: l.routeToInventory === true,
-            }) as CheckoutLineInput,
-        ),
+        lines: cart.lines.map((l) => ({
+          route_to_inventory: l.routeToInventory === true,
+        })),
         fastPathEntireOrderToInventory: false,
       }),
     [cart.lines],
