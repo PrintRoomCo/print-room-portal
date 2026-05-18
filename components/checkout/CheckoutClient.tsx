@@ -16,6 +16,9 @@ import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { splitCartByIntent } from '@/lib/checkout/split-cart-by-intent'
+import type { CheckoutLineInput } from '@/lib/checkout/submit'
+import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -35,8 +38,14 @@ interface CheckoutClientProps {
    * is set for buyers, but we defend against drift by surfacing a banner.
    */
   isBuyer: boolean
-  /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
-  tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
+  /**
+   * Kept on the prop signature for parent compatibility, but no longer used:
+   * the old order-level "Add to inventory" admin toggle has been retired in
+   * favour of per-line `routeToInventory` flags (set on the PDP and bulk-
+   * editable from the cart drawer). The downstream submit pipeline reads the
+   * per-line flag instead of an order-level intent.
+   */
+  tenantType?: 'franchise' | 'studio_plus_inventory' | 'studio' | null
 }
 
 export function CheckoutClient({
@@ -46,11 +55,11 @@ export function CheckoutClient({
   defaultDepositPercent,
   defaultStoreId: buyerDefaultStoreId,
   isBuyer,
-  tenantType,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
   const { format } = useCurrency()
+  const cartDrawer = useCartDrawer()
 
   const idempotencyKey = useRef<string>(crypto.randomUUID())
 
@@ -74,19 +83,52 @@ export function CheckoutClient({
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'review'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  // Slice 4: admin-only "send this batch to inventory instead of a customer
-  // address" toggle. Only meaningful for orgs that track stock.
-  const canRouteToInventory =
-    !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
-  // Auto-engage when the cart contains make_to_stock lines (customer ordered
-  // beyond available stock on the PDP; those lines need production → inventory
-  // routing, not direct customer delivery).
-  const hasMakeToStockLines = cart.lines.some((l) => l.fulfilmentType === 'make_to_stock')
-  const [routeToInventory, setRouteToInventory] = useState(
-    canRouteToInventory && hasMakeToStockLines,
+
+  // Mixed-intent split preview. Source of truth for the inventory routing
+  // decision is now the per-line `routeToInventory` flag on each cart line
+  // (set on the PDP, bulk-editable from the cart drawer). The pure helper
+  // `splitCartByIntent` partitions lines into customer-ship and inventory
+  // buckets; we render the appropriate banner based on which buckets are
+  // non-empty. The helper only reads `route_to_inventory`, so a minimal
+  // adapter shape is sufficient.
+  const { customer: customerLines, inventory: inventoryLines } = useMemo(
+    () =>
+      splitCartByIntent({
+        lines: cart.lines.map(
+          (l) =>
+            ({
+              route_to_inventory: l.routeToInventory === true,
+            }) as CheckoutLineInput,
+        ),
+        fastPathEntireOrderToInventory: false,
+      }),
+    [cart.lines],
   )
-  const intent: 'customer' | 'inventory' =
-    canRouteToInventory && routeToInventory ? 'inventory' : 'customer'
+  const customerLineCount = customerLines.length
+  const inventoryLineCount = inventoryLines.length
+  const customerUnitCount = useMemo(
+    () =>
+      cart.lines.reduce(
+        (sum, l) => sum + (l.routeToInventory === true ? 0 : l.qty),
+        0,
+      ),
+    [cart.lines],
+  )
+  const inventoryUnitCount = useMemo(
+    () =>
+      cart.lines.reduce(
+        (sum, l) => sum + (l.routeToInventory === true ? l.qty : 0),
+        0,
+      ),
+    [cart.lines],
+  )
+  const isMixedIntent = customerLineCount > 0 && inventoryLineCount > 0
+  const isInventoryOnly = customerLineCount === 0 && inventoryLineCount > 0
+  // Persisted `intent` is derived from the split: 'inventory' only when the
+  // ENTIRE cart routes to inventory (no customer lines). Mixed-intent carts
+  // are written as 'customer' here; cluster 2.10 (submit pipeline) will switch
+  // to reading the per-line flag instead of this order-level intent.
+  const intent: 'customer' | 'inventory' = isInventoryOnly ? 'inventory' : 'customer'
 
   useEffect(() => {
     setPerLineShipTo((prev) => {
@@ -235,40 +277,39 @@ export function CheckoutClient({
         </div>
       )}
 
-      {canRouteToInventory && hasMakeToStockLines && !routeToInventory && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Your cart includes items that exceed your current stock. These will be routed to
-          production and added to your inventory shelf — enable &ldquo;Add to my inventory&rdquo; below
-          before submitting.
+      {isMixedIntent && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p>
+            <span className="font-medium">This order will split into two.</span>{' '}
+            {customerUnitCount} units shipping to your customer + {inventoryUnitCount} units added
+            to your inventory shelf. Each part is priced as its own production run, so your
+            per-unit cost may differ from a single-intent order.
+          </p>
+          <p className="mt-2">
+            <button
+              type="button"
+              onClick={() => cartDrawer.setOpen(true)}
+              className="font-medium underline underline-offset-2 hover:text-amber-950"
+            >
+              Edit destinations
+            </button>
+          </p>
         </div>
       )}
-      {canRouteToInventory && (
-        <section className="rounded-[32px] bg-white p-7 md:p-8">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              checked={routeToInventory}
-              onChange={(e) => setRouteToInventory(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-pr-blue focus:ring-pr-blue/30"
-              disabled={submitting !== false}
-            />
-            <span className="text-sm">
-              <span className="font-medium text-gray-900">Add to my inventory</span>
-              {hasMakeToStockLines ? (
-                <span className="ml-1 text-amber-700">
-                  — auto-selected because your cart contains items over current stock. These will
-                  go into production and land on your inventory shelf; your account manager will
-                  mark them received when stock arrives.
-                </span>
-              ) : (
-                <span className="ml-1 text-gray-500">
-                  — produce these items to restock my shelf, not for a customer. Your account
-                  manager will mark each variant received when stock lands.
-                </span>
-              )}
-            </span>
-          </label>
-        </section>
+
+      {isInventoryOnly && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <span className="font-medium">Routing to your inventory shelf.</span> Every line in this
+          order is flagged for inventory — your account manager will mark each variant received
+          when stock lands.{' '}
+          <button
+            type="button"
+            onClick={() => cartDrawer.setOpen(true)}
+            className="font-medium underline underline-offset-2 hover:text-amber-950"
+          >
+            Edit destinations
+          </button>
+        </div>
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
