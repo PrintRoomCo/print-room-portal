@@ -307,6 +307,11 @@ export function CheckoutReviewClient({
 
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }
+        if (res.status === 403 && data?.error === 'ROUTE_TO_INVENTORY_NOT_ALLOWED') {
+          throw new Error(
+            "Your role doesn't permit routing items to inventory. Contact your account manager.",
+          )
+        }
         throw new Error(data.error ?? `Request failed (${res.status})`)
       }
 
