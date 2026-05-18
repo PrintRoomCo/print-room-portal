@@ -185,6 +185,13 @@ export function ProductDetailClient({
   const canChooseOrderIntent =
     customerRole === 'org_admin' && currentSelectionHasInventory
 
+  // True only when the order-mode toggle is BOTH visible AND set to "Stock
+  // request". In this state the PDP hides bulk-mode artefacts (volume pricing,
+  // lead time) — they mislead when ordering from existing inventory. When the
+  // toggle isn't shown at all (buyers, or org_admin with no stock) this stays
+  // false, so pricing + lead time render normally as before.
+  const isInventoryMode = canChooseOrderIntent && orderIntent === 'inventory'
+
   // Grand total across every colour the user has touched in this session,
   // not just the currently-displayed colour. Drives pricing tier + Add to cart.
   const multiSizeTotalQty = useMemo(() => {
@@ -505,7 +512,16 @@ export function ProductDetailClient({
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant.
+    // Mode 3: one_size — single cart line, no variant. When the order-mode
+    // toggle is available the customer's choice drives fulfilment (matching
+    // Mode 1); otherwise fall back to stock-vs-shortfall like the variant path.
+    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+      ? orderIntent === 'bulk'
+        ? 'make_to_stock'
+        : 'stocked'
+      : tracksThisVariant && qty > (availableQty ?? 0)
+        ? 'make_to_stock'
+        : 'stocked'
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -515,7 +531,7 @@ export function ProductDetailClient({
       unitPrice: pricing.unit_price,
       imageUrl: product.image_url,
       decorations: cartLineDecorations,
-      fulfilmentType: 'make_to_stock',
+      fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
     })
     showToast('Added to cart')
@@ -627,7 +643,7 @@ export function ProductDetailClient({
             <AvailabilityBadge
               availableQty={multiSize ? colourTotalAvailable : availableQty}
             />
-            {product.lead_time_days != null && (
+            {product.lead_time_days != null && !isInventoryMode && (
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
               </span>
@@ -642,7 +658,7 @@ export function ProductDetailClient({
             <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
 
-          {brackets.length > 0 && (
+          {brackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
                 Volume pricing
