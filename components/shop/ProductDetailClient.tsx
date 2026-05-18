@@ -860,7 +860,6 @@ function ProductDetailsCondensed({ product }: { product: ProductData }) {
   if (product.category_name) rows.push({ label: 'Category', value: product.category_name })
   if (product.garment_family) rows.push({ label: 'Garment family', value: product.garment_family.replace(/_/g, ' ') })
   if (product.default_sizes && product.default_sizes.length > 0) rows.push({ label: 'Sizes', value: product.default_sizes.join(', ') })
-  if (product.supports_labels) rows.push({ label: 'Label support', value: 'Yes' })
   if (product.safety_standard) rows.push({ label: 'Safety standard', value: product.safety_standard })
 
   if (product.specs && typeof product.specs === 'object') {
