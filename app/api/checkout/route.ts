@@ -15,10 +15,14 @@ interface CheckoutRequestBody {
   idempotency_key?: string
   required_by?: string | null
   notes?: string | null
-  /** Slice 4: 'inventory' routes the order into the org's stock shelf instead of a customer delivery. */
-  intent?: 'customer' | 'inventory'
   lines?: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
+  /**
+   * Cart-level fast-path: every line routes to inventory regardless of its
+   * per-line `route_to_inventory`. Gated to org_admin on inventory-tracking
+   * tenants — same gate as the per-line flag, enforced below.
+   */
+  route_entire_order_to_inventory?: boolean
 }
 
 export async function POST(request: Request) {
@@ -74,29 +78,31 @@ export async function POST(request: Request) {
     }
   }
 
-  // Slice 4: only org admins on tenants that track stock may route to inventory.
-  // Server enforces gating so a forged buyer/studio POST can't side-step the UI.
-  let intent: 'customer' | 'inventory' = 'customer'
-  if (body.intent === 'inventory') {
+  // Inventory routing gate. Required when ANY line carries
+  // `route_to_inventory === true` OR the cart-level fast-path is set. Same
+  // role+tenant policy whether the routing was per-line (PDP toggle) or
+  // order-level (admin fast-path) — a forged buyer POST mustn't side-step the
+  // UI gate just because it picked a different field.
+  const wantsInventoryRouting =
+    body.route_entire_order_to_inventory === true ||
+    body.lines.some((l) => l.route_to_inventory === true)
+  if (wantsInventoryRouting) {
     const canRoute =
       auth.context.role === 'org_admin' &&
       (auth.context.tenantType === 'studio_plus_inventory' ||
         auth.context.tenantType === 'franchise')
     if (!canRoute) {
       return NextResponse.json(
-        { error: 'Only org admins on inventory-tracking tenants can route orders to inventory' },
+        {
+          error: 'ROUTE_TO_INVENTORY_NOT_ALLOWED',
+          detail: 'Your role or tenant does not permit inventory routing.',
+        },
         { status: 403 },
       )
     }
-    intent = 'inventory'
   }
 
   try {
-    // NOTE: legacy `intent` field is dropped from CheckoutInput as of cluster
-    // 2.10 — the submit pipeline derives intent from per-line `route_to_inventory`
-    // (split paths invoke submit_b2b_split_order). Body-level `intent`/route
-    // gating is fully refactored in cluster 2.11.
-    void intent
     const result = await submitCustomerOrder(auth.admin, {
       context: auth.context,
       idempotency_key: body.idempotency_key,
@@ -105,8 +111,31 @@ export async function POST(request: Request) {
       internal_notes: null,
       lines: body.lines,
       custom_shipping_address: body.custom_shipping_address ?? null,
+      route_entire_order_to_inventory: body.route_entire_order_to_inventory === true,
     })
-    return NextResponse.json(result)
+
+    // Discriminated union response. `kind` is included for both variants so the
+    // client can branch without sniffing for fields. The single-variant shape
+    // remains backwards compatible with existing readers that just pluck
+    // `order_id` + `order_ref` off the top level.
+    if (result.kind === 'split') {
+      return NextResponse.json({
+        kind: 'split',
+        customer_order_id: result.customer_order_id,
+        customer_order_ref: result.customer_order_ref,
+        customer_quote_id: result.customer_quote_id,
+        inventory_order_id: result.inventory_order_id,
+        inventory_order_ref: result.inventory_order_ref,
+        inventory_quote_id: result.inventory_quote_id,
+        cart_submission_id: result.cart_submission_id,
+      })
+    }
+    return NextResponse.json({
+      kind: 'single',
+      order_id: result.order_id,
+      order_ref: result.order_ref,
+      quote_id: result.quote_id,
+    })
   } catch (e) {
     if (e instanceof DecorationDriftError) {
       return NextResponse.json(
