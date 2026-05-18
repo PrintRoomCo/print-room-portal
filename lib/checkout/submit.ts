@@ -2,7 +2,11 @@ import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
-import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
+import {
+  sendOrderConfirmation,
+  sendOrderConfirmationSplit,
+  type OrderConfirmationLine,
+} from '@/lib/email/order-confirmation'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
@@ -222,11 +226,20 @@ interface QuoteItemForEmail {
     | null
 }
 
-interface OrderConfirmationLine {
-  productName: string
-  variantLabel: string
-  quantity: number
-  unitPrice: number
+/**
+ * Email payload assembled per child quote inside `postRpcFixup`. Returned to
+ * the caller so the single path can send one email and the split path can
+ * combine both children's payloads into a single split-email send.
+ */
+interface PostRpcEmailPayload {
+  orderId: string
+  orderRef: string
+  customerName: string
+  paymentTerms: string | null
+  requiredBy: string | null
+  lines: OrderConfirmationLine[]
+  /** Sum of unit_price * quantity from quote_items (matches quotes.total_amount). */
+  subtotal: number
 }
 
 function pickOne<T>(v: T | T[] | null | undefined): T | null {
@@ -700,10 +713,10 @@ export async function submitCustomerOrder(
 
   // Per-child post-RPC fixup: writes ship_to + decoration snapshots back onto
   // the quote_items the RPC created, flips order status to awaiting-approval,
-  // fires the proof autofill, and sends the order-confirmation email. Identical
-  // logic to the original single-path tail — factored out so the split path can
-  // run it twice (once per child quote). Bucket-scoped: only the lines + price
-  // map for THIS child's bucket are passed in.
+  // and fires the proof autofill. Returns the assembled email payload so the
+  // caller can fire ONE confirmation email — single path sends per child,
+  // split path combines both children into a single split email. Bucket-scoped:
+  // only the lines + price map for THIS child's bucket are passed in.
   async function postRpcFixup(args: {
     quoteId: string
     orderId: string
@@ -711,7 +724,7 @@ export async function submitCustomerOrder(
     bucketLines: CheckoutLineInput[]
     bucketPriceMap: Map<string, number>
     decorationRevenue: number
-  }): Promise<void> {
+  }): Promise<PostRpcEmailPayload> {
     const { quoteId, orderId, orderRef, bucketLines, bucketPriceMap, decorationRevenue } = args
 
     // Record decoration revenue separately on the quote so finance can split
@@ -840,8 +853,10 @@ export async function submitCustomerOrder(
       }
     }
 
-    // Order-confirmation email. Fetch payload from quotes/quote_items. Failure
-    // here must not roll back the order.
+    // Assemble email payload from quotes/quote_items. We DO NOT send the email
+    // here — caller decides single-vs-split and fires one sendEmail per cart
+    // submit. Payload-fetch failure must not roll back the order; we fall
+    // through with whatever defaults we have.
     let emailLines: OrderConfirmationLine[] = []
     let emailTotalAmount: number | null = null
     let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
@@ -887,46 +902,40 @@ export async function submitCustomerOrder(
       // Email payload fetch failure shouldn't block the order.
     }
 
-    try {
-      if (input.context.email) {
-        const fallbackLines =
-          emailLines.length > 0
-            ? emailLines
-            : bucketLines.map((line) => ({
-                productName: line.product_name,
-                variantLabel: '-',
-                quantity: line.qty,
-                unitPrice: bucketPriceMap.get(line.product_id) ?? 0,
-              }))
-        const fallbackTotal =
-          emailTotalAmount ??
-          bucketLines.reduce(
-            (total, line) => total + (bucketPriceMap.get(line.product_id) ?? 0) * line.qty,
-            0,
-          )
+    const fallbackLines =
+      emailLines.length > 0
+        ? emailLines
+        : bucketLines.map((line) => ({
+            productName: line.product_name,
+            variantLabel: '-',
+            quantity: line.qty,
+            unitPrice: bucketPriceMap.get(line.product_id) ?? 0,
+          }))
+    const fallbackTotal =
+      emailTotalAmount ??
+      bucketLines.reduce(
+        (total, line) => total + (bucketPriceMap.get(line.product_id) ?? 0) * line.qty,
+        0,
+      )
 
-        const result = await sendOrderConfirmation({
-          to: input.context.email,
-          customerName: emailCustomerName,
-          orderId,
-          orderRef,
-          totalAmount: fallbackTotal,
-          paymentTerms: emailPaymentTerms,
-          contractNotes: input.context.contractNotes,
-          requiredBy: emailRequiredBy,
-          lines: fallbackLines,
-        })
-        if (!result.success) {
-          console.error(
-            '[Checkout] Order-confirmation email failed:',
-            result.error ?? 'Unknown error',
-          )
-        }
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Unknown error'
-      console.error('[Checkout] Order-confirmation email failed:', message)
+    return {
+      orderId,
+      orderRef,
+      customerName: emailCustomerName,
+      paymentTerms: emailPaymentTerms,
+      requiredBy: emailRequiredBy,
+      lines: fallbackLines,
+      subtotal: fallbackTotal,
     }
+  }
+
+  /**
+   * Strip the bucket suffix (`-C` / `-I`) from an order ref to get the base ref
+   * shared by both children in a split. Used for the split-email subject. Falls
+   * back to the input ref if the suffix isn't present (defensive).
+   */
+  function stripBucketSuffix(orderRef: string): string {
+    return orderRef.replace(/-[CI]$/, '')
   }
 
   // Shared error mapping for INSUFFICIENT_STOCK / NO_INVENTORY thrown by either
@@ -1046,8 +1055,10 @@ export async function submitCustomerOrder(
     )
 
     // Post-RPC fixup runs per child. Sequential so a failure on the first
-    // child's email/proof doesn't race the second's.
-    await postRpcFixup({
+    // child's proof autofill doesn't race the second's. Each call returns the
+    // email payload for that child — we hold both and fire ONE combined email
+    // below.
+    const customerEmailPayload = await postRpcFixup({
       quoteId: row.customer_quote_id,
       orderId: row.customer_order_id,
       orderRef: row.customer_order_ref,
@@ -1055,7 +1066,7 @@ export async function submitCustomerOrder(
       bucketPriceMap: customerPriceMap,
       decorationRevenue: customerBuilt.decorationRevenue,
     })
-    await postRpcFixup({
+    const inventoryEmailPayload = await postRpcFixup({
       quoteId: row.inventory_quote_id,
       orderId: row.inventory_order_id,
       orderRef: row.inventory_order_ref,
@@ -1063,6 +1074,48 @@ export async function submitCustomerOrder(
       bucketPriceMap: inventoryPriceMap,
       decorationRevenue: inventoryBuilt.decorationRevenue,
     })
+
+    // ONE combined confirmation email summarising both child orders. Subject
+    // surfaces "(2 parts)" against the shared base ref; body has two sections
+    // (one per child) plus a grand-total footer. Failure must not roll back
+    // either order.
+    try {
+      if (input.context.email) {
+        const baseRef = stripBucketSuffix(row.customer_order_ref)
+        const result = await sendOrderConfirmationSplit({
+          to: input.context.email,
+          customerName: customerEmailPayload.customerName,
+          cartSubmissionId,
+          baseRef,
+          paymentTerms: customerEmailPayload.paymentTerms,
+          contractNotes: input.context.contractNotes,
+          requiredBy: customerEmailPayload.requiredBy,
+          customerSection: {
+            label: 'Customer ship',
+            orderRef: customerEmailPayload.orderRef,
+            orderId: customerEmailPayload.orderId,
+            lines: customerEmailPayload.lines,
+            subtotal: customerEmailPayload.subtotal,
+          },
+          inventorySection: {
+            label: 'Inventory shelf',
+            orderRef: inventoryEmailPayload.orderRef,
+            orderId: inventoryEmailPayload.orderId,
+            lines: inventoryEmailPayload.lines,
+            subtotal: inventoryEmailPayload.subtotal,
+          },
+        })
+        if (!result.success) {
+          console.error(
+            '[Checkout] Split-order-confirmation email failed:',
+            result.error ?? 'Unknown error',
+          )
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error'
+      console.error('[Checkout] Split-order-confirmation email failed:', message)
+    }
 
     return {
       kind: 'split',
@@ -1128,7 +1181,7 @@ export async function submitCustomerOrder(
     admin,
   )
 
-  await postRpcFixup({
+  const singleEmailPayload = await postRpcFixup({
     quoteId: quote_id,
     orderId: order_id,
     orderRef: order_ref,
@@ -1136,6 +1189,33 @@ export async function submitCustomerOrder(
     bucketPriceMap: priceByProductId,
     decorationRevenue: singleBuilt.decorationRevenue,
   })
+
+  // Single-intent confirmation email — existing template, existing behaviour.
+  // Wrapped so a send failure doesn't roll back the order.
+  try {
+    if (input.context.email) {
+      const result = await sendOrderConfirmation({
+        to: input.context.email,
+        customerName: singleEmailPayload.customerName,
+        orderId: singleEmailPayload.orderId,
+        orderRef: singleEmailPayload.orderRef,
+        totalAmount: singleEmailPayload.subtotal,
+        paymentTerms: singleEmailPayload.paymentTerms,
+        contractNotes: input.context.contractNotes,
+        requiredBy: singleEmailPayload.requiredBy,
+        lines: singleEmailPayload.lines,
+      })
+      if (!result.success) {
+        console.error(
+          '[Checkout] Order-confirmation email failed:',
+          result.error ?? 'Unknown error',
+        )
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    console.error('[Checkout] Order-confirmation email failed:', message)
+  }
 
   return { kind: 'single', order_id, order_ref, quote_id }
 }
