@@ -117,7 +117,12 @@ export function CartTable({
     <div className="space-y-3">
       {lines.map((line) => {
         const avail = availability[line.variantId]
+        const isRouteToInventory = line.routeToInventory === true
         const isMakeToStock = line.fulfilmentType === 'make_to_stock'
+        // Suppress the amber "Make to stock" banner when this line is being
+        // routed to inventory — the → INVENTORY badge already conveys that
+        // the units are bound for the inventory shelf.
+        const showMakeToStockBanner = isMakeToStock && !isRouteToInventory
         const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
         const moq = moqByProduct[line.productId]
         const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
@@ -149,6 +154,13 @@ export function CartTable({
                   {line.productName}
                 </p>
                 <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
+                {line.routeToInventory === true && (
+                  <p
+                    className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700"
+                  >
+                    → INVENTORY
+                  </p>
+                )}
                 {line.decorations.length > 0 && (
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     {line.decorations.map((d) => (
@@ -212,9 +224,9 @@ export function CartTable({
             </div>
 
             {/* Inline status messages */}
-            {(isMakeToStock || isOversell || isMoqShort) && (
+            {(showMakeToStockBanner || isOversell || isMoqShort) && (
               <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
-                {isMakeToStock && (
+                {showMakeToStockBanner && (
                   <p className="text-amber-700">
                     <span className="font-medium">Make to stock</span> — this will be
                     added to your inventory shelf.
