@@ -111,6 +111,11 @@ export function ProductDetailClient({
   const [routeToInventoryByVariant, setRouteToInventoryByVariant] = useState<
     Record<string, boolean>
   >({})
+  // Variantless products always price as make_to_stock, so there's just one
+  // product-level toggle (per-size routing would be meaningless).
+  const [variantlessRouteToInventory, setVariantlessRouteToInventory] = useState(false)
+  // one_size products: single toggle next to qty input.
+  const [oneSizeRouteToInventory, setOneSizeRouteToInventory] = useState(false)
 
   type SizingMode = 'multi_size_with_variants' | 'multi_size_variantless' | 'one_size'
 
@@ -496,17 +501,22 @@ export function ProductDetailClient({
           decorations: cartLineDecorations,
           fulfilmentType: 'make_to_stock',
           brackets: cartLineBrackets,
+          routeToInventory: variantlessRouteToInventory,
         })
         added += lineQty
       }
       if (added > 0) {
         setVariantlessQtyBySize({})
+        setVariantlessRouteToInventory(false)
         showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
       }
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant.
+    // Mode 3: one_size — single cart line, no variant. fulfilmentType stays
+    // 'make_to_stock' (existing legacy behaviour); the inventory routing is
+    // captured orthogonally on routeToInventory so splitCartByIntent can
+    // pull it into a sibling order.
     cart.addLine({
       productId: product.id,
       productName: product.name,
@@ -518,7 +528,9 @@ export function ProductDetailClient({
       decorations: cartLineDecorations,
       fulfilmentType: 'make_to_stock',
       brackets: cartLineBrackets,
+      routeToInventory: oneSizeRouteToInventory,
     })
+    setOneSizeRouteToInventory(false)
     showToast('Added to cart')
   }
 
@@ -746,11 +758,30 @@ export function ProductDetailClient({
           )}
 
           {sizingMode === 'multi_size_variantless' && variantlessSizes.length > 0 && (
-            <VariantlessSizeGrid
-              sizes={variantlessSizes}
-              quantities={variantlessQtyBySize}
-              onChange={setVariantlessQtyBySize}
-            />
+            <>
+              {canRouteToInventory && (
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setVariantlessRouteToInventory((v) => !v)}
+                    aria-pressed={Boolean(variantlessRouteToInventory)}
+                    className={
+                      'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ' +
+                      (variantlessRouteToInventory
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+                    }
+                  >
+                    Make for inventory
+                  </button>
+                </div>
+              )}
+              <VariantlessSizeGrid
+                sizes={variantlessSizes}
+                quantities={variantlessQtyBySize}
+                onChange={setVariantlessQtyBySize}
+              />
+            </>
           )}
 
           {effectiveMoq > 1 && (
@@ -828,19 +859,42 @@ export function ProductDetailClient({
                   >
                     Quantity
                   </label>
-                  <input
-                    id="qty"
-                    type="number"
-                    min={defaultMinQty}
-                    step={1}
-                    value={qty}
-                    onChange={(e) => setQty(Number(e.target.value))}
-                    className="mt-2 w-28 rounded-full bg-gray-50 px-4 py-2 text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-                  />
-                  {isOutOfStock && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      id="qty"
+                      type="number"
+                      min={defaultMinQty}
+                      step={1}
+                      value={qty}
+                      onChange={(e) => setQty(Number(e.target.value))}
+                      className="w-28 rounded-full bg-gray-50 px-4 py-2 text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    />
+                    {canRouteToInventory && (
+                      <button
+                        type="button"
+                        onClick={() => setOneSizeRouteToInventory((v) => !v)}
+                        aria-pressed={Boolean(oneSizeRouteToInventory)}
+                        className={
+                          'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ' +
+                          (oneSizeRouteToInventory
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+                        }
+                      >
+                        Make for inventory
+                      </button>
+                    )}
+                  </div>
+                  {oneSizeRouteToInventory ? (
                     <p className="mt-2 text-xs text-amber-700">
-                      Out of stock — {qty} will be made.
+                      ({qty} to be made for inventory)
                     </p>
+                  ) : (
+                    isOutOfStock && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Out of stock — {qty} will be made.
+                      </p>
+                    )
                   )}
                 </div>
               )}
