@@ -38,6 +38,8 @@ export interface CheckoutLineInput {
   claimed_unit_price?: number
   /** True iff the cart carried a brackets snapshot for this line. */
   has_brackets?: boolean
+  /** True when the customer flagged this line for inventory routing. */
+  route_to_inventory?: boolean
 }
 
 export interface CheckoutInput {
