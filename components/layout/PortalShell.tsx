@@ -2,22 +2,13 @@
 
 import { Sidebar } from './Sidebar'
 import { useCompany } from '@/contexts/CompanyContext'
-import { PortalSkeleton } from '@/components/ui/PortalSkeleton'
 import { RoleChangeNotice } from './RoleChangeNotice'
 import { PortalTopBar } from './PortalTopBar'
 import { PortalTopBarProvider } from './PortalTopBarContext'
 import { CartDrawer } from '@/components/cart/CartDrawer'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
-  const { access, loading } = useCompany()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white p-6 md:p-10" suppressHydrationWarning>
-        <PortalSkeleton rows={3} />
-      </div>
-    )
-  }
+  const { access } = useCompany()
 
   if (!access) {
     return (
