@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { ShipToRow, type StoreOption } from './ShipToRow'
 import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
+import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import {
   EMPTY_CUSTOM_ADDRESS,
   writeCheckoutReviewState,
@@ -247,7 +248,7 @@ export function CheckoutClient({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+      <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Checkout
@@ -499,18 +500,15 @@ export function CheckoutClient({
         </div>
       </section>
 
-      <div className="mt-6 flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={proceedToReview}
-          disabled={!canSubmitOrder}
-          className="rounded-full bg-black/[0.85] px-6 py-3 text-sm font-medium text-[#FAFAFA] transition-colors duration-300 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitting === 'review' ? 'Preparing review…' : 'Review order'}
-        </button>
-      </div>
         </div>
       </div>
+      <CheckoutCTAStickyBar
+        itemCount={cart.lines.length}
+        totalLabel={format(breakdown.total)}
+        onSubmit={proceedToReview}
+        disabled={!canSubmitOrder}
+        submitting={submitting === 'review'}
+      />
     </div>
   )
 }
