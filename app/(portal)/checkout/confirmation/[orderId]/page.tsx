@@ -33,6 +33,9 @@ interface OrderRow {
 
 interface QuoteItemRow {
   id: string
+  // `text` in the DB (legacy from Shopify import era) — no FK to products.id,
+  // which is why the master product image is fetched in a separate query
+  // below rather than embedded here.
   product_id: string | null
   product_name: string | null
   quantity: number | null
@@ -43,12 +46,6 @@ interface QuoteItemRow {
     | {
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
         sizes: { label: string | null } | { label: string | null }[] | null
-        // Chained via product_variants → products FK. quote_items has no
-        // direct FK to products, so a top-level `products(image_url)` embed
-        // would return a PostgREST relationship error and silently zero out
-        // the whole result set. product_variants itself has no image_url
-        // column, so the master products.image_url is the only image source.
-        products: { image_url: string | null } | null
       }
     | null
 }
@@ -161,8 +158,7 @@ export default async function ConfirmationPage({
       `id, product_id, product_name, quantity, unit_price, decorations, ship_to_store_id,
        product_variants (
          product_color_swatches (label),
-         sizes (label),
-         products (image_url)
+         sizes (label)
        )`,
     )
     .eq('quote_id', order.quotes.id)
@@ -181,19 +177,52 @@ export default async function ConfirmationPage({
     // always a misconfigured quote join.
     console.error('[confirmation] empty_lines', { orderId, quoteId: order.quotes.id })
   }
+
+  // Master product images. We resolve via a separate fetch keyed by
+  // quote_items.product_id because that column is `text` (legacy) with no FK
+  // to products.id, so PostgREST can't auto-embed it. This is also the only
+  // image path that works for variantless lines (e.g. cap bulk orders, the
+  // BG master-products carve-out from 2026-05-15) — product_variants embeds
+  // resolve to null there.
+  const productIds = Array.from(
+    new Set(
+      lineRows
+        .map((r) => r.product_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  )
+  const productImageById = new Map<string, string | null>()
+  if (productIds.length > 0) {
+    const { data: productImageRows, error: productImageErr } = await admin
+      .from('products')
+      .select('id, image_url')
+      .in('id', productIds)
+    if (productImageErr) {
+      console.error('[confirmation] product_image_lookup_failed', {
+        orderId,
+        message: productImageErr.message,
+      })
+    }
+    for (const row of (productImageRows ?? []) as Array<{ id: string; image_url: string | null }>) {
+      productImageById.set(row.id, row.image_url)
+    }
+  }
+
   const lines: ConfirmationLine[] = lineRows.map((row) => {
     const variant = row.product_variants
     const swatch = pickOne(variant?.product_color_swatches ?? null)
     const size = pickOne(variant?.sizes ?? null)
     const variantLabel =
       [swatch?.label, size?.label].filter(Boolean).join(' / ') || null
+    const productImage =
+      row.product_id ? productImageById.get(row.product_id) ?? null : null
     return {
       id: row.id,
       productName: row.product_name ?? 'Item',
       variantLabel,
       quantity: Number(row.quantity ?? 0),
       unitPrice: Number(row.unit_price ?? 0),
-      imageUrl: variant?.products?.image_url ?? null,
+      imageUrl: productImage,
       decorations: asDecorations(row.decorations),
     }
   })
