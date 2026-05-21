@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
-import { buildReorderDataFromTracker, createReorderItem } from '@/lib/monday/reorder'
+import { buildReorderDataFromTracker, createReorderItem } from '@/lib/monday/deal-item'
 import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
 import {
   REORDER_EDITABLE_LINE_ITEMS,

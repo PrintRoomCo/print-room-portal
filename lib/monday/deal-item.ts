@@ -1,11 +1,16 @@
 /**
- * Monday.com Reorder Integration
+ * Monday.com CRM Deals integration.
  *
- * Creates items on the CRM Deals board when a customer submits a reorder
- * via the portal. Mirrors the quote/wishlist pattern used in
- * print-room-chatbot-api/api/services/monday-quote.ts so that portal
- * reorders land alongside chatbot quote requests in the "New Deals"
- * group and follow the sales/account team's existing workflow.
+ * Creates items on the CRM Deals board (MONDAY_REORDERS_BOARD_ID) for
+ * customer reorders AND customer orders. Items land in the "New Deals"
+ * group where AMs route them into their pipeline.
+ *
+ * Mode-discriminated helpers:
+ *  - 'reorder' — preserved verbatim from the retired lib/monday/reorder.ts.
+ *    No sub-items. Lines packed into long-text breakdown.
+ *  - 'order'   — new for the 2026-05-21 checkout → Monday pipeline.
+ *    Adds sub-items per cart line with design-name-prefixed names.
+ *    Sets deal_source = "Portal - Order".
  */
 
 import { mondayApiCall } from './client'
@@ -18,6 +23,8 @@ import {
   getItemTotalQty,
 } from '@/lib/job-tracker'
 import type { ReorderEditedItem } from '@/lib/config/reorder'
+
+// === Shared board config (was lib/monday/reorder.ts) ===
 
 function getBoardId(): string {
   const id = process.env.MONDAY_REORDERS_BOARD_ID
@@ -46,7 +53,10 @@ const COL_QTY = 'text_mkzjj9j5'
 const COL_IN_HAND_DATE = 'date_mm0p5fzc'
 
 const DEAL_SOURCE_LABEL = 'Portal - Reorder'
+const DEAL_SOURCE_ORDER = 'Portal - Order'
 const DEAL_STAGE_LABEL = 'New'
+
+// === REORDER MODE (preserved verbatim from lib/monday/reorder.ts) ===
 
 export interface ReorderData {
   customerEmail: string
@@ -353,4 +363,167 @@ export function buildReorderDataFromTracker(
     designNamesByInstanceId: tracker.designNamesByInstanceId ?? {},
     editedItems: input.editedItems,
   }
+}
+
+// === ORDER MODE (new) ===
+
+export interface OrderLineForMonday {
+  /** quote_items.id — used as key in returned subitemIds map. */
+  quoteItemId: string
+  productName: string
+  variantLabel: string
+  /**
+   * Decoration name. Defaults to "No decoration" when the line has no
+   * decorations attached (resolved at the caller, not here).
+   */
+  designName: string
+  quantity: number
+}
+
+export interface OrderDealData {
+  customerEmail: string
+  customerName: string
+  customerCompany: string | null
+  orderRef: string
+  inHandDate: string | null
+  notes: string | null
+  totalAmount: number
+  lines: OrderLineForMonday[]
+}
+
+interface MondayCreateSubitemResponse {
+  create_subitem: { id: string }
+}
+
+function buildOrderItemName(data: OrderDealData): string {
+  const company = data.customerCompany ? ` - ${data.customerCompany}` : ''
+  return `${data.customerName}${company} - ${data.orderRef}`
+}
+
+function buildOrderFullFormResponse(data: OrderDealData): string {
+  const lines: string[] = [
+    `Order ref: ${data.orderRef}`,
+    `Customer: ${data.customerName}`,
+    `Email: ${data.customerEmail}`,
+  ]
+  if (data.customerCompany) lines.push(`Company: ${data.customerCompany}`)
+  lines.push(`Total: $${data.totalAmount.toFixed(2)}`)
+  if (data.inHandDate) lines.push(`In-hand: ${data.inHandDate}`)
+  lines.push('')
+  lines.push('--- Lines ---')
+  for (const line of data.lines) {
+    lines.push(
+      `• ${line.designName}: ${line.productName} — ${line.variantLabel} × ${line.quantity}`,
+    )
+  }
+  lines.push('')
+  if (data.notes?.trim()) {
+    lines.push('--- Customer notes ---')
+    lines.push(data.notes.trim())
+    lines.push('')
+  }
+  lines.push(`Source: B2B Portal — Order`)
+  lines.push(`Submitted: ${new Date().toISOString()}`)
+  return lines.join('\n')
+}
+
+function formatOrderProductsCompact(lines: OrderLineForMonday[]): string {
+  if (lines.length === 0) return 'Order — no lines'
+  return lines
+    .map((l) => `${l.designName} / ${l.productName} x${l.quantity}`)
+    .join(', ')
+}
+
+function totalOrderQuantity(lines: OrderLineForMonday[]): number {
+  return lines.reduce((sum, l) => sum + l.quantity, 0)
+}
+
+export async function createOrderDealItem(
+  data: OrderDealData,
+): Promise<{ itemId: string; itemName: string }> {
+  const itemName = buildOrderItemName(data)
+
+  const columnValues: Record<string, unknown> = {
+    [COL_CUSTOMER_NAME]: data.customerName,
+    [COL_EMAIL]: { email: data.customerEmail, text: data.customerEmail },
+    [COL_PRODUCT]: formatOrderProductsCompact(data.lines),
+    [COL_FULL_FORM_RESPONSE]: { text: buildOrderFullFormResponse(data) },
+    [COL_DEAL_STAGE]: { label: DEAL_STAGE_LABEL },
+    [COL_DEAL_SOURCE]: { label: DEAL_SOURCE_ORDER },
+  }
+
+  if (data.customerCompany) columnValues[COL_COMPANY] = data.customerCompany
+  if (data.inHandDate) columnValues[COL_IN_HAND_DATE] = { date: data.inHandDate }
+  const qty = totalOrderQuantity(data.lines)
+  if (qty > 0) columnValues[COL_QTY] = String(qty)
+
+  const mutation = `
+    mutation CreateOrder($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
+      create_item(
+        board_id: $boardId,
+        group_id: $groupId,
+        item_name: $itemName,
+        column_values: $columnValues,
+        create_labels_if_missing: true
+      ) {
+        id
+        name
+      }
+    }
+  `
+
+  const result = await mondayApiCall<MondayCreateItemResponse>(mutation, {
+    boardId: getBoardId(),
+    groupId: DEALS_GROUP_ID,
+    itemName,
+    columnValues: JSON.stringify(columnValues),
+  })
+
+  console.log('[Monday Order] Created item:', result.create_item.id)
+  return { itemId: result.create_item.id, itemName: result.create_item.name }
+}
+
+export async function createOrderDealSubitem(
+  parentItemId: string,
+  line: OrderLineForMonday,
+): Promise<{ subitemId: string }> {
+  const itemName = `${line.designName}: ${line.productName} — ${line.variantLabel} × ${line.quantity}`
+
+  const mutation = `
+    mutation CreateOrderSubitem($parentItemId: ID!, $itemName: String!, $columnValues: JSON) {
+      create_subitem(parent_item_id: $parentItemId, item_name: $itemName, column_values: $columnValues) {
+        id
+      }
+    }
+  `
+
+  const result = await mondayApiCall<MondayCreateSubitemResponse>(mutation, {
+    parentItemId,
+    itemName,
+    columnValues: JSON.stringify({}),
+  })
+  return { subitemId: result.create_subitem.id }
+}
+
+export async function pushOrderDeal(
+  data: OrderDealData,
+): Promise<{ itemId: string; subitemIds: Record<string, string> }> {
+  const { itemId } = await createOrderDealItem(data)
+  const subitemIds: Record<string, string> = {}
+  for (const line of data.lines) {
+    try {
+      const { subitemId } = await createOrderDealSubitem(itemId, line)
+      subitemIds[line.quoteItemId] = subitemId
+    } catch (err) {
+      console.error('[Monday Order] Subitem create failed:', {
+        itemId,
+        quoteItemId: line.quoteItemId,
+        err: err instanceof Error ? err.message : String(err),
+      })
+      // Subitem failure is non-fatal — item exists, AM can add subitems manually.
+      // We DO NOT throw, so partial subitems are preserved on the deal item.
+    }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  return { itemId, subitemIds }
 }
