@@ -53,6 +53,7 @@ export function PortalTopBar() {
   return (
     <header
       role="banner"
+      data-vt-name="topbar"
       className="fixed inset-x-3 top-3 z-30 overflow-visible rounded-2xl border border-gray-200/70 bg-white/75 shadow-sm backdrop-blur-md transition-shadow duration-200"
     >
       <div className="relative z-20 flex h-14 items-center px-3 md:px-4">

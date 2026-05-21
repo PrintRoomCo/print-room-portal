@@ -461,3 +461,69 @@
     color: rgb(43 57 144);
   }
 }
+
+/* ============================================
+ * View transitions + skeleton shimmer
+ * ============================================
+ * Next.js 16 + experimental.viewTransition wires document.startViewTransition()
+ * into route changes. CSS pseudo-elements below give the cross-page fade; the
+ * data-vt-name attributes on Sidebar/TopBar/cart pill let those persistent
+ * shell elements morph rather than crossfade with the page body.
+ */
+
+@keyframes skeleton-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.pr-skeleton::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.65) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-old(root) {
+  animation-name: pr-vt-fade-out;
+}
+
+::view-transition-new(root) {
+  animation-name: pr-vt-fade-in;
+}
+
+@keyframes pr-vt-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes pr-vt-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+[data-vt-name="sidebar"]    { view-transition-name: pr-sidebar; }
+[data-vt-name="topbar"]     { view-transition-name: pr-topbar; }
+[data-vt-name="cart-pill"]  { view-transition-name: pr-cart-pill; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-skeleton::before {
+    animation: none;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}

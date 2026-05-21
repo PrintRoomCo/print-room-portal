@@ -13,6 +13,7 @@ export function TopBarCartPill() {
       onClick={drawer.toggle}
       aria-expanded={drawer.open}
       aria-label={`Cart, ${totalQty} ${totalQty === 1 ? 'item' : 'items'}`}
+      data-vt-name="cart-pill"
       className="inline-flex min-w-[2.25rem] items-center justify-center rounded-full bg-gray-100 px-3 py-1.5 text-sm tabular-nums text-gray-900 transition-colors hover:bg-gray-200"
     >
       {totalQty}

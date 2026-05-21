@@ -4,6 +4,12 @@ const nextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  experimental: {
+    // Enable Next.js integration with the browser View Transitions API so
+    // route navigations animate via CSS ::view-transition-* pseudo-elements.
+    // CSS-only — no React <ViewTransition> usage in this codebase yet.
+    viewTransition: true,
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },

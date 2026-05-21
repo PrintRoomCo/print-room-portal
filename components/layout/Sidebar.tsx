@@ -159,6 +159,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
       <aside
         aria-label="Portal navigation"
         inert={!drawer.open}
+        data-vt-name="sidebar"
         className={`fixed left-3 top-3 bottom-3 z-50 flex w-72 flex-col overflow-hidden rounded-2xl border border-gray-200/70 bg-white/95 shadow-lg backdrop-blur-md transition-transform duration-300 ease-out motion-reduce:transition-none ${
           drawer.open ? 'translate-x-0' : '-translate-x-[calc(100%+12px)]'
         }`}
