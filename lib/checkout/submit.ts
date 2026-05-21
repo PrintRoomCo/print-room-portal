@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
+import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -742,14 +743,103 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5. Hold the order for AM approval. Monday push is no longer fired here —
-  //    moved to the staff approve route so an account manager confirms pricing
-  //    + decoration before production starts. RPC hardcodes 'awaiting-production'
-  //    in its insert (shared with legacy callers); we flip it to 'awaiting-approval'
-  //    immediately after.
+  // 5. Hold the order for staff proof review. Customer-facing portal flow:
+  //    submit → autofill proof + Monday deal + AM email → staff edits → staff
+  //    push-to-customer → customer approves. No more AM-approve gate.
+  //    See spec: 2026-05-21-checkout-monday-proof-pipeline-design.md.
+
+  // 5a. Push to Monday CRM Deals board. Best-effort: if it fails, order still
+  //     commits, audit row records the failure, staff can retry from the order
+  //     detail page (Stage 4 surface).
+  let mondayItemId: string | null = null
+  const subitemIdByQuoteItemId: Record<string, string> = {}
+  try {
+    const { data: dealLines } = await admin
+      .from('quote_items')
+      .select(`
+        id, product_name, quantity, unit_price, decorations,
+        product_variants ( product_color_swatches(label), sizes(label) )
+      `)
+      .eq('quote_id', quote_id)
+
+    const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
+      id: string
+      product_name: string
+      quantity: number
+      unit_price: number
+      decorations: Array<{ name: string }> | null
+      product_variants: {
+        product_color_swatches: { label: string | null } | { label: string | null }[] | null
+        sizes: { label: string | null } | { label: string | null }[] | null
+      } | null
+    }>).map((row) => {
+      const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
+      const size = pickOne(row.product_variants?.sizes ?? null)
+      const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
+      const designName = row.decorations?.[0]?.name ?? 'No decoration'
+      return {
+        quoteItemId: row.id,
+        productName: row.product_name,
+        variantLabel,
+        designName,
+        quantity: row.quantity,
+      }
+    })
+
+    // emailTotalAmount is declared AFTER step 5 in this file, so it's not in
+    // scope here. Compute directly from repriced.
+    const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+    const { itemId, subitemIds } = await pushOrderDeal({
+      customerEmail: input.context.email ?? '',
+      customerName: input.context.organizationName,
+      customerCompany: input.context.organizationName,
+      orderRef: order_ref,
+      inHandDate: input.required_by ?? null,
+      notes: input.notes ?? null,
+      totalAmount,
+      lines,
+    })
+
+    mondayItemId = itemId
+    Object.assign(subitemIdByQuoteItemId, subitemIds)
+
+    // Persist back. Order row gets monday_item_id; each quote_items row gets
+    // its monday_subitem_id so the existing tracker-status webhook can match
+    // inbound Monday updates to portal-side lines.
+    await admin.from('orders').update({ monday_item_id: itemId }).eq('id', order_id)
+    for (const [quoteItemId, subitemId] of Object.entries(subitemIds)) {
+      await admin
+        .from('quote_items')
+        .update({ monday_subitem_id: subitemId })
+        .eq('id', quoteItemId)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[Checkout] Monday push failed (swallowed)', { orderId: order_id, err: message })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_MONDAY_PUSH_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, quote_id, error: message },
+        },
+        admin,
+      )
+    } catch {
+      // truly best-effort
+    }
+  }
+
+  // 5b. Flip status to awaiting-proof-review. Replaces the old
+  //     'awaiting-approval'. Independent of the Monday push result —
+  //     order proceeds even if Monday push failed.
   await admin
     .from('orders')
-    .update({ status: 'awaiting-approval' })
+    .update({ status: 'awaiting-proof-review' })
     .eq('id', order_id)
 
   // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards

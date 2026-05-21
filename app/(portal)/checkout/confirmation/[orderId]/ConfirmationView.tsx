@@ -38,6 +38,7 @@ export interface ConfirmationAddress {
 }
 
 interface ConfirmationViewProps {
+  orderId: string
   orderRef: string
   status: string | null
   awaitingApproval: boolean
@@ -80,7 +81,9 @@ function formatAddress(addr: ConfirmationAddress | null): string[] {
 export function ConfirmationView(props: ConfirmationViewProps) {
   const { format } = useCurrency()
   const {
+    orderId,
     orderRef,
+    status,
     awaitingApproval,
     mondaySynced,
     customerEmail,
@@ -98,22 +101,44 @@ export function ConfirmationView(props: ConfirmationViewProps) {
   const addressLines = formatAddress(shippingAddress)
   const eta = formatRequiredBy(requiredBy)
 
+  // 2026-05-21 — Checkout → Monday → Auto-proof pipeline: replaces the
+  // legacy "Awaiting account manager approval" gate. After staff finish their
+  // proof edits they push it to the customer, flipping status to
+  // 'awaiting-customer-approval' — at which point the next hero line invites
+  // the buyer back into the order to review the proof.
+  const proofReady = status === 'awaiting-customer-approval'
+
   return (
     <>
       {/* Hero */}
       <header className="mb-10 md:mb-14">
         <p className={LABEL_CAP}>Order #{orderRef}</p>
         <h1 className="mt-4 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
-          Thanks, your order is in.
+          Order received — we&rsquo;re preparing your proof.
         </h1>
         <p className="mt-5 max-w-2xl text-base text-gray-600">
           We&rsquo;ve emailed a receipt to {customerEmail} and the Print Room
           team has been notified. We&rsquo;ll be in touch as your order moves
           through proof, production and dispatch.
         </p>
-        {awaitingApproval && (
+        {proofReady && (
+          <div className="mt-5">
+            <Link
+              href={`/orders/${orderId}/proof`}
+              className="inline-flex items-center justify-center rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+            >
+              Your proof is ready — open the order to review
+            </Link>
+          </div>
+        )}
+        {!proofReady && awaitingApproval && (
           <p className="mt-5 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
             Awaiting account manager approval
+          </p>
+        )}
+        {!proofReady && !awaitingApproval && (
+          <p className="mt-5 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+            Awaiting staff proof review
           </p>
         )}
       </header>
