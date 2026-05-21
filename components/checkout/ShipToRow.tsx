@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import type { CartLine } from '@/lib/cart/types'
+import { Switch } from '@/components/ui/Switch'
 
 export interface StoreOption {
   id: string
@@ -20,10 +21,41 @@ interface ShipToRowProps {
   disabled?: boolean
   /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
   allowCustom?: boolean
+  /**
+   * When true, hide the ship-to <select>. Used by CheckoutClient when the
+   * order routes to inventory — the per-line inventory toggle stays
+   * visible so customers can untick individual lines back to customer-route.
+   */
+  hideShipTo?: boolean
+  /**
+   * Per-line "Add to my inventory" toggle state. Pass `undefined` to omit
+   * the toggle entirely (e.g. for buyers or tenants without inventory
+   * tracking).
+   */
+  inventoryEnabled?: boolean
+  onInventoryChange?: (next: boolean) => void
+  /**
+   * When true, the toggle is forced ON and read-only. Used for
+   * `fulfilmentType === 'make_to_stock'` lines — qty exceeds available
+   * stock so they must go to production → inventory.
+   */
+  inventoryToggleForced?: boolean
 }
 
-export function ShipToRow({ line, stores, value, onChange, disabled, allowCustom = true }: ShipToRowProps) {
+export function ShipToRow({
+  line,
+  stores,
+  value,
+  onChange,
+  disabled,
+  allowCustom = true,
+  hideShipTo = false,
+  inventoryEnabled,
+  onInventoryChange,
+  inventoryToggleForced = false,
+}: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
+  const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3 text-sm">
@@ -47,23 +79,48 @@ export function ShipToRow({ line, stores, value, onChange, disabled, allowCustom
           </div>
         </div>
       </div>
-      <label className="flex items-center gap-2">
-        <span className="text-xs text-gray-500">Ship to</span>
-        <select
-          value={selectValue}
-          onChange={(e) => onChange(e.target.value === CUSTOM_SHIP_TO ? null : e.target.value)}
-          disabled={disabled}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100"
-        >
-          {stores.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name ?? 'Store'}
-              {s.city ? ` — ${s.city}` : ''}
-            </option>
-          ))}
-          {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
-        </select>
-      </label>
+      <div className="flex flex-wrap items-center gap-4">
+        {!hideShipTo && (
+          <label className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Ship to</span>
+            <select
+              value={selectValue}
+              onChange={(e) =>
+                onChange(e.target.value === CUSTOM_SHIP_TO ? null : e.target.value)
+              }
+              disabled={disabled}
+              className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-pr-blue focus:outline-none focus:ring-2 focus:ring-pr-blue/30 disabled:bg-gray-100"
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name ?? 'Store'}
+                  {s.city ? ` — ${s.city}` : ''}
+                </option>
+              ))}
+              {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
+            </select>
+          </label>
+        )}
+        {showInventoryToggle && (
+          <div className="flex flex-col items-end gap-0.5">
+            <label className="flex items-center gap-2">
+              <span className="text-xs text-gray-600">Add to inventory</span>
+              <Switch
+                checked={inventoryEnabled}
+                onChange={onInventoryChange}
+                disabled={disabled || inventoryToggleForced}
+                size="sm"
+                ariaLabel={`Add ${line.productName} (${line.variantLabel}) to my inventory`}
+              />
+            </label>
+            {inventoryToggleForced && (
+              <span className="text-[10px] text-amber-700">
+                over current stock — production required
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

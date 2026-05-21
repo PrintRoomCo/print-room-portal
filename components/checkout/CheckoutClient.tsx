@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
 import {
   EMPTY_CUSTOM_ADDRESS,
   writeCheckoutReviewState,
@@ -74,19 +75,24 @@ export function CheckoutClient({
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'review'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  // Slice 4: admin-only "send this batch to inventory instead of a customer
-  // address" toggle. Only meaningful for orgs that track stock.
+  // Admin-only "send this batch to inventory instead of a customer address"
+  // routing. Only meaningful for orgs that track stock; buyers never see the
+  // toggles. Per-line ticks live in `inventoryByLine`; the order-level intent
+  // is derived (all-on / all-off / mixed-blocker).
   const canRouteToInventory =
     !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
-  // Auto-engage when the cart contains make_to_stock lines (customer ordered
-  // beyond available stock on the PDP; those lines need production → inventory
-  // routing, not direct customer delivery).
   const hasMakeToStockLines = cart.lines.some((l) => l.fulfilmentType === 'make_to_stock')
-  const [routeToInventory, setRouteToInventory] = useState(
-    canRouteToInventory && hasMakeToStockLines,
-  )
-  const intent: 'customer' | 'inventory' =
-    canRouteToInventory && routeToInventory ? 'inventory' : 'customer'
+  const [inventoryByLine, setInventoryByLine] = useState<Record<string, boolean>>(() => {
+    const m: Record<string, boolean> = {}
+    if (canRouteToInventory) {
+      // Auto-engage per make_to_stock line: qty exceeded available stock on
+      // the PDP, so those lines must go to production → inventory shelf.
+      for (const l of cart.lines) {
+        m[l.lineId] = l.fulfilmentType === 'make_to_stock'
+      }
+    }
+    return m
+  })
 
   useEffect(() => {
     setPerLineShipTo((prev) => {
@@ -105,7 +111,54 @@ export function CheckoutClient({
     })
   }, [cart.lines, initialStoreId])
 
+  useEffect(() => {
+    if (!canRouteToInventory) return
+    setInventoryByLine((prev) => {
+      let changed = false
+      const next: Record<string, boolean> = {}
+      for (const line of cart.lines) {
+        const forced = line.fulfilmentType === 'make_to_stock'
+        if (Object.prototype.hasOwnProperty.call(prev, line.lineId)) {
+          // Keep prior choice unless the line is now forced-on.
+          next[line.lineId] = forced ? true : prev[line.lineId]
+          if (next[line.lineId] !== prev[line.lineId]) changed = true
+        } else {
+          next[line.lineId] = forced
+          changed = true
+        }
+      }
+      if (Object.keys(prev).length !== Object.keys(next).length) changed = true
+      return changed ? next : prev
+    })
+  }, [cart.lines, canRouteToInventory])
+
+  const inventoryFlags = cart.lines.map((l) => inventoryByLine[l.lineId] ?? false)
+  const allInventory =
+    canRouteToInventory && inventoryFlags.length > 0 && inventoryFlags.every(Boolean)
+  const noneInventory = !canRouteToInventory || inventoryFlags.every((v) => !v)
+  const mixedInventory = canRouteToInventory && !allInventory && !noneInventory
+  const intent: 'customer' | 'inventory' | null = mixedInventory
+    ? null
+    : allInventory
+      ? 'inventory'
+      : 'customer'
   const inventoryMode = intent === 'inventory'
+
+  function setAllInventory(next: boolean) {
+    setInventoryByLine((prev) => {
+      const updated: Record<string, boolean> = {}
+      for (const line of cart.lines) {
+        // make-to-stock lines stay forced ON even when master toggle is off.
+        updated[line.lineId] =
+          line.fulfilmentType === 'make_to_stock' ? true : next
+      }
+      // Preserve any other keys (defensive; shouldn't happen post-effect).
+      for (const k of Object.keys(prev)) {
+        if (!(k in updated)) updated[k] = prev[k]
+      }
+      return updated
+    })
+  }
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
   const mixedCustom = !inventoryMode && anyCustom && !allCustom
@@ -139,10 +192,12 @@ export function CheckoutClient({
     !customerCodeMissing &&
     !mixedCustom &&
     !customIncomplete &&
-    !buyerMisconfigured
+    !buyerMisconfigured &&
+    !mixedInventory &&
+    intent !== null
 
   function proceedToReview() {
-    if (!canSubmitOrder) return
+    if (!canSubmitOrder || intent === null) return
     setSubmitting('review')
     setBanner(null)
     try {
@@ -236,58 +291,25 @@ export function CheckoutClient({
         </div>
       )}
 
-      {canRouteToInventory && hasMakeToStockLines && !routeToInventory && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Your cart includes items that exceed your current stock. These will be routed to
-          production and added to your inventory shelf — enable &ldquo;Add to my inventory&rdquo; below
-          before submitting.
-        </div>
-      )}
-      {canRouteToInventory && (
-        <section className="rounded-[32px] bg-white p-7 md:p-8">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              checked={routeToInventory}
-              onChange={(e) => setRouteToInventory(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-pr-blue focus:ring-pr-blue/30"
-              disabled={submitting !== false}
-            />
-            <span className="text-sm">
-              <span className="font-medium text-gray-900">Add to my inventory</span>
-              {hasMakeToStockLines ? (
-                <span className="ml-1 text-amber-700">
-                  — auto-selected because your cart contains items over current stock. These will
-                  go into production and land on your inventory shelf; your account manager will
-                  mark them received when stock arrives.
-                </span>
-              ) : (
-                <span className="ml-1 text-gray-500">
-                  — produce these items to restock my shelf, not for a customer. Your account
-                  manager will mark each variant received when stock lands.
-                </span>
-              )}
-            </span>
-          </label>
-        </section>
-      )}
-
-      {inventoryMode ? (
-        <section className="rounded-[32px] bg-white p-7 md:p-8">
-          <h2 className="text-sm font-medium text-gray-700">Ship to</h2>
-          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
-            <p className="font-medium text-gray-900">Print Room warehouse</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Stock lands on your inventory shelf at Print Room. Your account manager will
-              mark it received when it arrives.
-            </p>
-          </div>
-        </section>
-      ) : (
-        <section className="rounded-[32px] bg-white p-7 md:p-8">
+      <section className="rounded-[32px] bg-white p-7 md:p-8">
+        {inventoryMode ? (
+          <>
+            <h2 className="text-sm font-medium text-gray-700">Warehouse stock</h2>
+            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
+              <p className="font-medium text-gray-900">Print Room warehouse</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Stock lands on your inventory shelf at Print Room. Your account manager will
+                mark it received when it arrives.
+              </p>
+            </div>
+          </>
+        ) : (
           <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
-          <div className="mt-3 space-y-2">
-            {cart.lines.map((line) => (
+        )}
+        <div className="mt-3 space-y-2">
+          {cart.lines.map((line) => {
+            const forced = line.fulfilmentType === 'make_to_stock'
+            return (
               <ShipToRow
                 key={line.lineId}
                 line={line}
@@ -298,10 +320,45 @@ export function CheckoutClient({
                 }
                 disabled={submitting !== false || lockToBuyerDefault}
                 allowCustom={!isBuyer}
+                hideShipTo={inventoryMode}
+                inventoryEnabled={
+                  canRouteToInventory
+                    ? inventoryByLine[line.lineId] ?? false
+                    : undefined
+                }
+                onInventoryChange={
+                  canRouteToInventory
+                    ? (next) =>
+                        setInventoryByLine((prev) => ({
+                          ...prev,
+                          [line.lineId]: forced ? true : next,
+                        }))
+                    : undefined
+                }
+                inventoryToggleForced={canRouteToInventory && forced}
               />
-            ))}
-          </div>
-        </section>
+            )
+          })}
+        </div>
+      </section>
+
+      {canRouteToInventory && (
+        <AddAllToInventoryToggle
+          checked={allInventory}
+          onChange={setAllInventory}
+          disabled={submitting !== false}
+        />
+      )}
+
+      {mixedInventory && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+        >
+          {hasMakeToStockLines
+            ? 'Some items exceed current stock and must go to production — tick "Add all to my inventory" to continue.'
+            : 'All lines must go to the same destination — either tick "Add all to my inventory" or untick all.'}
+        </div>
       )}
 
       {mixedCustom && (
