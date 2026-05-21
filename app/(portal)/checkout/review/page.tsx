@@ -4,8 +4,6 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutReviewClient } from '@/components/checkout/CheckoutReviewClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
   title: 'Review order',
 }

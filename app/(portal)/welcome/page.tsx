@@ -7,8 +7,6 @@ import { getCompanyAccess } from '@/lib/company'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { WelcomeContinueButton } from '@/components/welcome/WelcomeContinueButton'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
   title: 'Welcome',
 }

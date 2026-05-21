@@ -10,8 +10,6 @@ import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 
-export const dynamic = 'force-dynamic'
-
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
 interface ProductDetail {

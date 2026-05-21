@@ -5,8 +5,6 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { listVisibleProofsForOrg } from '@/lib/proofs/visibility'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
   title: 'Proofs',
 }

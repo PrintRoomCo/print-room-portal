@@ -15,8 +15,6 @@ import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/sh
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
   title: 'Catalogue',
 }

@@ -2,8 +2,6 @@ import type { Metadata } from 'next'
 import { OrderTrackerClient } from './OrderTrackerClient'
 import { getPortalOrderTrackerData } from '@/lib/portal-data'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
   title: 'Order tracker',
 }

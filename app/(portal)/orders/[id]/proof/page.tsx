@@ -6,8 +6,6 @@ import { ProofViewer } from '@/components/proofs/ProofViewer'
 import { coerceProofDocument } from '@/lib/proofs/types'
 import { isProofVisibleToCustomer } from '@/lib/proofs/visibility'
 
-export const dynamic = 'force-dynamic'
-
 const ALLOWED_EDIT_ROLES = new Set(['org_admin', 'buyer'])
 
 interface OrderRow {

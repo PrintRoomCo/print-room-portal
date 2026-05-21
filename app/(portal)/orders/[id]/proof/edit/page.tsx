@@ -5,8 +5,6 @@ import { ProofStagingForm } from '@/components/proofs/ProofStagingForm'
 import { coerceProofDocument } from '@/lib/proofs/types'
 import { getCustomerEditableFields } from '@/lib/proofs/customer-editable-fields'
 
-export const dynamic = 'force-dynamic'
-
 interface OrderRow {
   id: string
   status: string | null

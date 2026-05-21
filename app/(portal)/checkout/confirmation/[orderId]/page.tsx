@@ -9,8 +9,6 @@ import {
   type ConfirmationAddress,
 } from './ConfirmationView'
 
-export const dynamic = 'force-dynamic'
-
 const GST_RATE = 0.15
 
 interface OrderRow {
