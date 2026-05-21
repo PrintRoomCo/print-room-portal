@@ -17,6 +17,7 @@ interface OrderRow {
   id: string
   status: string | null
   total_price: number | null
+  intent: string | null
   quotes: {
     id: string
     order_ref: string | null
@@ -106,7 +107,7 @@ export default async function ConfirmationPage({
   const { data } = await admin
     .from('orders')
     .select(
-      `id, status, total_price,
+      `id, status, total_price, intent,
        quotes!inner (
          id, order_ref, monday_item_id, organization_id,
          subtotal, decoration_cost, tax,
@@ -136,6 +137,7 @@ export default async function ConfirmationPage({
   const orderRef = order.quotes.order_ref ?? '—'
   const awaitingApproval = order.status === 'awaiting-approval'
   const mondaySynced = Boolean(order.quotes.monday_item_id)
+  const isInventoryOrder = order.intent === 'inventory'
 
   // Stored total_amount / total_price is ex-GST (matches Xero invoice convention).
   // Re-derive the inc-GST view the cart showed so the customer doesn't see a
@@ -163,6 +165,12 @@ export default async function ConfirmationPage({
     .eq('quote_id', order.quotes.id)
 
   const lineRows = (rawLines ?? []) as unknown as QuoteItemRow[]
+  if (lineRows.length === 0) {
+    // Surface so we notice — this fallback used to claim items would appear
+    // "once they finish syncing", which was never true. Real cause is almost
+    // always a misconfigured quote join.
+    console.error('[confirmation] empty_lines', { orderId, quoteId: order.quotes.id })
+  }
   const lines: ConfirmationLine[] = lineRows.map((row) => {
     const variant = row.product_variants
     const swatch = pickOne(variant?.product_color_swatches ?? null)
@@ -204,6 +212,7 @@ export default async function ConfirmationPage({
           status={order.status}
           awaitingApproval={awaitingApproval}
           mondaySynced={mondaySynced}
+          isInventoryOrder={isInventoryOrder}
           customerEmail={context.email}
           shippingAddress={shippingAddress}
           fulfilmentLabel={fulfilmentLabel}

@@ -41,8 +41,13 @@ interface ConfirmationViewProps {
   orderId: string
   orderRef: string
   status: string | null
+  // 2026-05-21 — `awaitingApproval` + `mondaySynced` are vestigial after the
+  // auto-approve flow shipped. They still drive the right-rail "Production
+  // sync is still finishing" hint at the bottom of this view; once that hint
+  // is rewritten, both props can be removed on the same branch.
   awaitingApproval: boolean
   mondaySynced: boolean
+  isInventoryOrder: boolean
   customerEmail: string
   shippingAddress: ConfirmationAddress | null
   fulfilmentLabel: string
@@ -86,7 +91,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
     status,
     awaitingApproval,
     mondaySynced,
-    customerEmail,
+    isInventoryOrder,
     shippingAddress,
     fulfilmentLabel,
     requiredBy,
@@ -114,12 +119,10 @@ export function ConfirmationView(props: ConfirmationViewProps) {
       <header className="mb-10 md:mb-14">
         <p className={LABEL_CAP}>Order #{orderRef}</p>
         <h1 className="mt-4 font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
-          Order received — we&rsquo;re preparing your proof.
+          Order received
         </h1>
-        <p className="mt-5 max-w-2xl text-base text-gray-600">
-          We&rsquo;ve emailed a receipt to {customerEmail} and the Print Room
-          team has been notified. We&rsquo;ll be in touch as your order moves
-          through proof, production and dispatch.
+        <p className="mt-4 text-lg text-gray-600">
+          We&rsquo;re preparing your proof.
         </p>
         {proofReady && (
           <div className="mt-5">
@@ -130,16 +133,6 @@ export function ConfirmationView(props: ConfirmationViewProps) {
               Your proof is ready — open the order to review
             </Link>
           </div>
-        )}
-        {!proofReady && awaitingApproval && (
-          <p className="mt-5 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-            Awaiting account manager approval
-          </p>
-        )}
-        {!proofReady && !awaitingApproval && (
-          <p className="mt-5 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-            Awaiting staff proof review
-          </p>
         )}
       </header>
 
@@ -153,7 +146,14 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             <div className="space-y-4">
               {lines.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  Items will appear here once they finish syncing.
+                  No items recorded for this order.{' '}
+                  <a
+                    className="underline underline-offset-2 hover:text-gray-700"
+                    href={SUPPORT_MAILTO}
+                  >
+                    Email us
+                  </a>{' '}
+                  so we can sort it.
                 </p>
               ) : (
                 lines.map((line) => {
@@ -239,9 +239,16 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             <div className="grid grid-cols-1 gap-5 text-sm md:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-medium text-gray-500">
-                  Shipping to
+                  {isInventoryOrder ? 'Stock destination' : 'Shipping to'}
                 </p>
-                {addressLines.length > 0 ? (
+                {isInventoryOrder ? (
+                  <div className="space-y-0.5 text-gray-900">
+                    <p>Print Room warehouse</p>
+                    <p className="text-xs text-gray-500">
+                      Stock lands on your inventory shelf at Print Room.
+                    </p>
+                  </div>
+                ) : addressLines.length > 0 ? (
                   <div className="space-y-0.5 text-gray-900">
                     {addressLines.map((l) => (
                       <p key={l}>{l}</p>

@@ -743,6 +743,92 @@ export async function submitCustomerOrder(
     }
   }
 
+  // 4b. Pre-approved inventory write-through. When the customer ticked "Add
+  //     all to my inventory" at checkout, orders.intent is 'inventory'. The
+  //     RPC sets that flag but does NOT touch stock — stock only lands when
+  //     staff later runs mark_inventory_received post-fulfilment. Jamie
+  //     2026-05-21: at submit, treat each line as pre-approved inventory and
+  //     write the stock immediately so it shows on the staff inventory page
+  //     and the customer PDP availability the moment the order posts.
+  //     Best-effort: a failure here logs + audits but does NOT roll back the
+  //     order (the customer would be left with a successful checkout and no
+  //     visible reason for the failure).
+  //     v1 honours the order-level intent only — mixed mode is not in scope.
+  if ((input.intent ?? 'customer') === 'inventory') {
+    try {
+      // Re-fetch lines from quote_items so we have the persisted variant_id
+      // and the canonical post-decoration-fold unit_price. Avoids drift if
+      // the RPC ever normalises prices further.
+      const { data: invLines, error: invErr } = await admin
+        .from('quote_items')
+        .select('id, variant_id, quantity, unit_price')
+        .eq('quote_id', quote_id)
+      if (invErr) {
+        throw new Error(`pre-approved inventory line lookup failed: ${invErr.message}`)
+      }
+      const rows = (invLines ?? []) as Array<{
+        id: string
+        variant_id: string | null
+        quantity: number | null
+        unit_price: number | null
+      }>
+      const skipped: string[] = []
+      for (const r of rows) {
+        if (!r.variant_id || !r.quantity || r.quantity <= 0) {
+          skipped.push(r.id)
+          continue
+        }
+        const { error: rpcErr } = await admin.rpc('mark_inventory_received', {
+          p_organization_id: input.context.organizationId,
+          p_variant_id: r.variant_id,
+          p_qty: r.quantity,
+          p_prepaid: false,
+          p_unit_value: Number(r.unit_price ?? 0),
+          p_reason: 'pre_approved_inventory',
+          p_note: `Pre-approved at checkout — order ${order_ref}`,
+          p_reference_quote_item_id: r.id,
+        })
+        if (rpcErr) {
+          throw new Error(
+            `mark_inventory_received failed for line ${r.id}: ${rpcErr.message}`,
+          )
+        }
+      }
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_PRE_APPROVED_INVENTORY,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, quote_id, line_count: rows.length, skipped },
+        },
+        admin,
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[Checkout] pre-approved inventory write failed (swallowed)', {
+        orderId: order_id,
+        err: message,
+      })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.ORDER_PRE_APPROVED_INVENTORY_FAILED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: { order_ref, quote_id, error: message },
+          },
+          admin,
+        )
+      } catch {
+        // truly best-effort
+      }
+    }
+  }
+
   // 5. Hold the order for staff proof review. Customer-facing portal flow:
   //    submit → autofill proof + Monday deal + AM email → staff edits → staff
   //    push-to-customer → customer approves. No more AM-approve gate.
