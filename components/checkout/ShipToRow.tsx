@@ -58,7 +58,7 @@ export function ShipToRow({
   const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 bg-white py-4 text-sm first:pt-0 last:pb-0">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-50">
           {line.imageUrl ? (

@@ -252,9 +252,6 @@ export function CheckoutClient({
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Checkout
           </h1>
-          <p className="mt-3 text-sm text-gray-600">
-            Confirm shipping and submit against your account terms.
-          </p>
         </header>
 
         <div className="space-y-6">
@@ -292,21 +289,16 @@ export function CheckoutClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        {inventoryMode ? (
-          <>
-            <h2 className="text-sm font-medium text-gray-700">Warehouse stock</h2>
-            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
-              <p className="font-medium text-gray-900">Print Room warehouse</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Stock lands on your inventory shelf at Print Room. Your account manager will
-                mark it received when it arrives.
-              </p>
-            </div>
-          </>
-        ) : (
-          <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
+        {inventoryMode && (
+          <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
+            <p className="font-medium text-gray-900">Print Room warehouse</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Stock lands on your inventory shelf at Print Room. Your account manager will
+              mark it received when it arrives.
+            </p>
+          </div>
         )}
-        <div className="mt-3 space-y-2">
+        <div className="divide-y divide-gray-100">
           {cart.lines.map((line) => {
             const forced = line.fulfilmentType === 'make_to_stock'
             return (
@@ -340,15 +332,16 @@ export function CheckoutClient({
             )
           })}
         </div>
+        {canRouteToInventory && (
+          <div className="mt-5 flex justify-end">
+            <AddAllToInventoryToggle
+              checked={allInventory}
+              onChange={setAllInventory}
+              disabled={submitting !== false}
+            />
+          </div>
+        )}
       </section>
-
-      {canRouteToInventory && (
-        <AddAllToInventoryToggle
-          checked={allInventory}
-          onChange={setAllInventory}
-          disabled={submitting !== false}
-        />
-      )}
 
       {mixedInventory && (
         <div
@@ -503,7 +496,7 @@ export function CheckoutClient({
           type="button"
           onClick={proceedToReview}
           disabled={!canSubmitOrder}
-          className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-full bg-black/[0.85] px-6 py-3 text-sm font-medium text-[#FAFAFA] transition-colors duration-300 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting === 'review' ? 'Preparing review…' : 'Review order'}
         </button>

@@ -1,7 +1,5 @@
 'use client'
 
-import { Switch } from '@/components/ui/Switch'
-
 interface Props {
   checked: boolean
   onChange: (next: boolean) => void
@@ -9,33 +7,42 @@ interface Props {
 }
 
 /**
- * Master "Add all to my inventory" toggle that flips every per-line
- * inventory tick in CheckoutClient. Rendered as its own card between the
- * line-list section and the Required-by/Notes section.
+ * Compact "Add all to my inventory" pill rendered bottom-right of the
+ * items section on the checkout page. The whole pill is one big
+ * role="switch" button — clicking anywhere on the chip flips state.
  */
 export function AddAllToInventoryToggle({ checked, onChange, disabled }: Props) {
-  const labelId = 'add-all-to-inventory-label'
-  const descId = 'add-all-to-inventory-desc'
-
   return (
-    <section className="rounded-[32px] bg-white p-7 md:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <p id={labelId} className="text-sm font-semibold text-gray-900">
-            Add all to my inventory
-          </p>
-          <p id={descId} className="mt-1 text-xs text-gray-500">
-            Route every line to your inventory shelf instead of shipping to a customer address.
-          </p>
-        </div>
-        <Switch
-          checked={checked}
-          onChange={onChange}
-          disabled={disabled}
-          ariaLabelledBy={labelId}
-          ariaDescribedBy={descId}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label="Add all lines to my inventory"
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={
+        'inline-flex items-center gap-2.5 rounded-full border border-gray-200 ' +
+        'bg-white px-3.5 py-1.5 text-xs font-medium text-gray-800 ' +
+        'transition-colors hover:border-gray-300 ' +
+        'disabled:cursor-not-allowed disabled:opacity-60 ' +
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/50 focus-visible:ring-offset-2'
+      }
+    >
+      <span>Add all to my inventory</span>
+      <span
+        aria-hidden="true"
+        className={
+          'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ' +
+          (checked ? 'bg-gray-900' : 'bg-gray-300')
+        }
+      >
+        <span
+          className={
+            'ml-0.5 inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ' +
+            (checked ? 'translate-x-3' : 'translate-x-0')
+          }
         />
-      </div>
-    </section>
+      </span>
+    </button>
   )
 }
