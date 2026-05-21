@@ -656,6 +656,7 @@ interface ProofFile {
   name?: string | null
 }
 
+// TODO consolidate inline status labels into lib/orders/status-labels.ts
 function QuoteStatusChip({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     draft: { label: 'Draft', cls: 'bg-gray-50 text-gray-700' },
