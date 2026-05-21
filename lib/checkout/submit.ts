@@ -751,6 +751,11 @@ export async function submitCustomerOrder(
   // 5a. Push to Monday CRM Deals board. Best-effort: if it fails, order still
   //     commits, audit row records the failure, staff can retry from the order
   //     detail page (Stage 4 surface).
+  //
+  // TODO(2026-05-21): this data-build block is duplicated in
+  //   print-room-staff-portal/src/app/api/orders/[id]/retry-monday-push/route.ts.
+  //   Extract to lib/orders/build-monday-payload.ts when a 3rd caller appears.
+  //   Stage 4 deliberately kept the duplicate to avoid re-touching submit.ts.
   let mondayItemId: string | null = null
   const subitemIdByQuoteItemId: Record<string, string> = {}
   try {
