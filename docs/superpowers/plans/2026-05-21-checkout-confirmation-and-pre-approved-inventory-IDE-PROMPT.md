@@ -300,7 +300,111 @@ Add `isInventoryOrder: boolean` to `ConfirmationViewProps`. In the Delivery sect
 
 ---
 
-## Stage 4 — Tests + sprint doc
+## Stage 4 — Review page: fold per-line ship-to into the line cards
+
+**File:** `print-room-portal/components/checkout/CheckoutReviewClient.tsx`
+
+**Problem:** Lines 427-479 render a flat `<dl>` listing every line's ship-to as its own row ("Classic Logo Tee → 10B Orion Place - Wānaka" repeated 7×). When N lines all ship to the same store, this is wall-of-noise. The store name belongs **inside** each line card so the customer reads "product + qty + price + ship-to" in one block, and the "Shipping and options" section reduces to non-line-specific facts (routing, custom address if used, required-by, notes).
+
+### 4.1 Add ship-to to the line card (right column, under the line total)
+
+In the per-line `<article>` block (lines ~350-388), the right-hand price column at line ~382-385 currently renders:
+
+```tsx
+<div className="text-right text-sm">
+  <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
+  <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
+</div>
+```
+
+Add the ship-to **below the line total** in that same right-aligned column:
+
+```tsx
+<div className="text-right text-sm">
+  <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
+  <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
+  {(() => {
+    if (reviewState.intent === 'inventory') {
+      return (
+        <p className="mt-2 text-xs text-gray-500">
+          → Print Room warehouse
+        </p>
+      )
+    }
+    if (allCustom) {
+      // Single custom address rendered once in the section below — skip
+      // per-line repetition.
+      return null
+    }
+    const storeId = reviewState.perLineShipTo[line.lineId]
+    const store = storeId ? storeById.get(storeId) : null
+    return (
+      <p className="mt-2 text-xs text-gray-500">
+        → {store ? `${store.name ?? 'Store'}${store.city ? ` - ${store.city}` : ''}` : 'Not selected'}
+      </p>
+    )
+  })()}
+</div>
+```
+
+Visual intent: the destination sits directly under the line price, right-aligned, in muted secondary text. Customer's eye reads top-to-bottom in the right column: unit → total → where it ships. (Keep the IIFE inline — three branches don't warrant a named helper. If a reader objects, lift to a `renderLineShipTo(line)` arrow defined just above the `return`.)
+
+### 4.2 Trim the "Shipping and options" section
+
+Replace the section body (lines ~427-479) with a list that no longer iterates lines:
+
+```tsx
+<section className="mt-6">
+  <h2 className="text-sm font-medium text-gray-700">Order details</h2>
+  <dl className="mt-3 space-y-3 text-sm">
+    <div className="flex justify-between gap-4">
+      <dt className="text-gray-500">Order routing</dt>
+      <dd className="text-right text-gray-900">
+        {reviewState.intent === 'inventory' ? 'Add to my inventory' : 'Ship to customer'}
+      </dd>
+    </div>
+    {reviewState.intent !== 'inventory' && allCustom && (
+      <div>
+        <dt className="text-gray-500">Custom shipping address</dt>
+        <dd className="mt-1 text-gray-900">
+          {[
+            reviewState.customAddress.name,
+            reviewState.customAddress.address,
+            reviewState.customAddress.city,
+            reviewState.customAddress.postal_code,
+            reviewState.customAddress.country,
+          ]
+            .filter(Boolean)
+            .join(', ')}
+        </dd>
+      </div>
+    )}
+    <div className="flex justify-between gap-4">
+      <dt className="text-gray-500">Required by</dt>
+      <dd className="text-right text-gray-900">{reviewState.requiredBy || 'Not specified'}</dd>
+    </div>
+    <div>
+      <dt className="text-gray-500">Notes</dt>
+      <dd className="mt-1 text-gray-900">{reviewState.notes || 'None'}</dd>
+    </div>
+  </dl>
+</section>
+```
+
+Section heading renamed `"Shipping and options"` → `"Order details"` (since shipping now lives on the cards). The per-line `cart.lines.map(...)` block is gone — that data is already in the cards above.
+
+### 4.3 Acceptance
+
+- 7 lines all shipping to the same store:
+  - Each line card shows "Ships to: 10B Orion Place - Wānaka" once, inline with qty.
+  - Order details section shows: Order routing / Required by / Notes (3 rows total).
+- 1 line to store A, 1 to store B: each card shows its own destination; Order details section unchanged (no per-line repetition).
+- Inventory intent: each card shows "Ships to: Print Room warehouse"; Order details section just shows Order routing / Required by / Notes.
+- All-custom address: cards skip the per-line ship-to (would be redundant), Order details section shows the single custom address block as before.
+
+---
+
+## Stage 5 — Tests + sprint doc
 
 1. Run `pnpm typecheck` + `pnpm test` in `print-room-portal`. All green.
 2. If Stage 1 added a staff migration, run the staff repo's typecheck too (`npm run typecheck`).
