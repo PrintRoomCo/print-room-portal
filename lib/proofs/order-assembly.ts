@@ -105,6 +105,15 @@ export interface DecorationLinkDetail {
     name: string | null
     width_mm: number | string | null
     height_mm: number | string | null
+    // Internal — populated by PostgREST from the chained product_images
+    // embed. `view` lives on product_images, not product_print_areas itself.
+    // The normalizer flattens image.view onto the outer `view` field and
+    // drops this property, so downstream consumers keep reading
+    // `print_area.view` as before.
+    image?:
+      | { view: string | null }
+      | { view: string | null }[]
+      | null
   } | null
 }
 
@@ -754,10 +763,12 @@ async function fetchDecorationLinks(admin: SupabaseClient, linkIds: string[]) {
       ),
       print_area:product_print_areas!b2b_catalogue_item_decorations_print_area_id_fkey (
         id,
-        view,
         name,
         width_mm,
-        height_mm
+        height_mm,
+        image:product_images!product_print_areas_image_id_fkey (
+          view
+        )
       )
     `)
     .in('id', linkIds)
@@ -846,10 +857,19 @@ async function fetchProductBrandInfo(
 }
 
 function normalizeDecorationLink(link: DecorationLinkDetail): DecorationLinkDetail {
+  const printArea = pickOne(link.print_area)
   return {
     ...link,
     decoration: pickOne(link.decoration) ?? null,
-    print_area: pickOne(link.print_area) ?? null,
+    print_area: printArea
+      ? {
+          id: printArea.id,
+          view: pickOne(printArea.image)?.view ?? printArea.view ?? null,
+          name: printArea.name,
+          width_mm: printArea.width_mm,
+          height_mm: printArea.height_mm,
+        }
+      : null,
   }
 }
 
