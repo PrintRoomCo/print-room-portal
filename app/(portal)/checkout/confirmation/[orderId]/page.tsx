@@ -41,12 +41,16 @@ interface QuoteItemRow {
   ship_to_store_id: string | null
   product_variants:
     | {
-        image_url: string | null
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
         sizes: { label: string | null } | { label: string | null }[] | null
+        // Chained via product_variants → products FK. quote_items has no
+        // direct FK to products, so a top-level `products(image_url)` embed
+        // would return a PostgREST relationship error and silently zero out
+        // the whole result set. product_variants itself has no image_url
+        // column, so the master products.image_url is the only image source.
+        products: { image_url: string | null } | null
       }
     | null
-  products: { image_url: string | null } | null
 }
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -151,18 +155,25 @@ export default async function ConfirmationPage({
   // Line items live on the joined quote. We surface them on the confirmation
   // card so the customer can scan what they actually placed; if this fetch
   // fails for any reason we still render the rest of the page.
-  const { data: rawLines } = await admin
+  const { data: rawLines, error: linesError } = await admin
     .from('quote_items')
     .select(
       `id, product_id, product_name, quantity, unit_price, decorations, ship_to_store_id,
        product_variants (
          image_url,
          product_color_swatches (label),
-         sizes (label)
-       ),
-       products (image_url)`,
+         sizes (label),
+         products (image_url)
+       )`,
     )
     .eq('quote_id', order.quotes.id)
+  if (linesError) {
+    console.error('[confirmation] lines_query_failed', {
+      orderId,
+      quoteId: order.quotes.id,
+      message: linesError.message,
+    })
+  }
 
   const lineRows = (rawLines ?? []) as unknown as QuoteItemRow[]
   if (lineRows.length === 0) {
@@ -183,7 +194,7 @@ export default async function ConfirmationPage({
       variantLabel,
       quantity: Number(row.quantity ?? 0),
       unitPrice: Number(row.unit_price ?? 0),
-      imageUrl: variant?.image_url ?? row.products?.image_url ?? null,
+      imageUrl: variant?.products?.image_url ?? null,
       decorations: asDecorations(row.decorations),
     }
   })
