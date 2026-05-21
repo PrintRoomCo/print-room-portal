@@ -21,8 +21,9 @@ interface PriceBreakdownProps {
  * Full-order breakdown: gross subtotal → decoration (if any) → GST → total.
  * Catalogue prices are absolute — no tier-discount line.
  */
-export function PriceBreakdown({ breakdown, format }: PriceBreakdownProps) {
+export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownProps) {
   const showDecoration = breakdown.decorationTotal > 0
+  const showShipping = variant === 'cart-totals' || variant === 'checkout-review'
   const fmt = format ?? formatPrice
 
   return (
@@ -30,6 +31,12 @@ export function PriceBreakdown({ breakdown, format }: PriceBreakdownProps) {
       <Row label="Subtotal" value={breakdown.grossSubtotal} format={fmt} />
       {showDecoration && (
         <Row label="Decoration" value={breakdown.decorationTotal} format={fmt} />
+      )}
+      {showShipping && (
+        <div className="flex items-baseline justify-between">
+          <span className="text-gray-700">Shipping</span>
+          <span className="font-medium text-gray-900">Included</span>
+        </div>
       )}
       <Row
         label={`GST (${Math.round(breakdown.gstRate * 100)}%)`}

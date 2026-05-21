@@ -296,9 +296,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
               )}
               <div className="flex justify-between border-t border-gray-100 pt-2.5">
                 <span className="text-gray-600">Shipping</span>
-                <span className="tabular-nums text-gray-500">
-                  Calculated separately
-                </span>
+                <span className="text-gray-900">Included</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">
