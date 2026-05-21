@@ -7,6 +7,7 @@ import { useCart } from '@/components/cart/useCart'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
+import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { decorationPerUnit } from '@/lib/cart/types'
@@ -244,7 +245,7 @@ export function CheckoutReviewClient({
   if (cart.lines.length === 0) {
     return (
       <div className="min-h-screen bg-[#FAFAFA]">
-        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <header className="mb-10 md:mb-12">
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
               Review order
@@ -267,7 +268,7 @@ export function CheckoutReviewClient({
   if (hydrated && !reviewState) {
     return (
       <div className="min-h-screen bg-[#FAFAFA]">
-        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <header className="mb-10 md:mb-12">
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
               Review order
@@ -297,7 +298,7 @@ export function CheckoutReviewClient({
   if (!reviewState) {
     return (
       <div className="min-h-screen bg-[#FAFAFA]">
-        <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
+        <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <div className="rounded-[32px] bg-white p-7 text-sm text-gray-600 md:p-8">
             Loading review...
           </div>
@@ -308,14 +309,22 @@ export function CheckoutReviewClient({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
-        <header className="mb-10 md:mb-12">
+      <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
+        <header className="mb-6 md:mb-8">
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Review order
           </h1>
           <p className="mt-3 text-sm text-gray-600">
             Check shipping, options, and totals before placing the order.
           </p>
+          <button
+            type="button"
+            onClick={() => router.push('/checkout')}
+            className="mt-4 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+          >
+            <span aria-hidden="true">←</span>
+            <span>Back to edit</span>
+          </button>
         </header>
 
         <div className="space-y-6">
@@ -340,31 +349,34 @@ export function CheckoutReviewClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <h2 className="text-sm font-medium text-gray-700">Items</h2>
-        <div className="mt-3 divide-y divide-gray-100">
+        <div className="mb-4 flex justify-end">
+          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+        </div>
+        <div className="divide-y divide-gray-100">
           {cart.lines.map((line) => {
             const lineTotal = line.qty * (line.unitPrice + decorationPerUnit(line))
             return (
-              <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+              <article key={line.lineId} className="py-5 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
                       {line.imageUrl ? (
                         <Image
                           src={line.imageUrl}
                           alt=""
                           fill
-                          sizes="56px"
+                          sizes="80px"
                           className="object-contain p-1"
                           unoptimized
                         />
                       ) : null}
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-medium text-gray-900">{line.productName}</h3>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
                       <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
-                        {line.variantLabel} · qty {line.qty}
+                        {line.variantLabel}
                       </p>
+                      <p className="text-xs text-gray-500">qty {line.qty}</p>
                       {line.decorations.length > 0 && (
                         <ul className="mt-2 space-y-1 text-xs text-gray-600">
                           {line.decorations.map((decoration) => (
@@ -385,9 +397,43 @@ export function CheckoutReviewClient({
             )
           })}
         </div>
+
+        <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
+          <span className="text-base font-medium text-gray-900">Total</span>
+          <span className="text-xl font-medium text-gray-900">{format(breakdown.total)}</span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">incl. GST · billed per account terms</p>
+
+        <details open className="mt-3">
+          <summary className="cursor-pointer select-none text-xs text-gray-500 hover:text-gray-700">
+            Show breakdown
+          </summary>
+          <div className="mt-3">
+            <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
+          </div>
+        </details>
+
+        {(depositPct > 0 || paymentTerms) && (
+          <div className="mt-4 space-y-1 text-xs text-gray-500">
+            {paymentTerms && (
+              <p>
+                Payment terms:{' '}
+                <span className="font-medium text-gray-700">{paymentTerms}</span>
+              </p>
+            )}
+            {depositPct > 0 && (
+              <p>
+                Expected deposit ({depositPct}%):{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {format(depositAmount)}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
-      <section className="rounded-[32px] bg-white p-7 md:p-8">
+      <section className="mt-6">
         <h2 className="text-sm font-medium text-gray-700">Shipping and options</h2>
         <dl className="mt-3 space-y-3 text-sm">
           <div className="flex justify-between gap-4">
@@ -440,52 +486,18 @@ export function CheckoutReviewClient({
           </div>
         </dl>
       </section>
-
-      <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-sm text-gray-700">Pricing for</span>
-          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-        </div>
-        <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
-        {(depositPct > 0 || paymentTerms) && (
-          <div className="mt-4 space-y-1 text-xs text-gray-500">
-            {paymentTerms && (
-              <p>
-                Payment terms:{' '}
-                <span className="font-medium text-gray-700">{paymentTerms}</span>
-              </p>
-            )}
-            {depositPct > 0 && (
-              <p>
-                Expected deposit ({depositPct}%):{' '}
-                <span className="font-medium text-gray-900 tabular-nums">
-                  {format(depositAmount)}
-                </span>
-              </p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => router.push('/checkout')}
-          className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
-        >
-          Back to edit
-        </button>
-        <button
-          type="button"
-          onClick={confirmOrder}
-          disabled={submitting || !customerCode}
-          className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitting ? 'Placing order...' : 'Confirm & place order'}
-        </button>
-      </div>
         </div>
       </div>
+
+      <CheckoutCTAStickyBar
+        itemCount={cart.lines.length}
+        totalLabel={format(breakdown.total)}
+        onSubmit={confirmOrder}
+        disabled={!customerCode}
+        submitting={submitting}
+        submitLabel="Confirm & place order"
+        submittingLabel="Placing order…"
+      />
     </div>
   )
 }

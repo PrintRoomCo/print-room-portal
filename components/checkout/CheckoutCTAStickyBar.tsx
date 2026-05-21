@@ -7,11 +7,15 @@ interface CheckoutCTAStickyBarProps {
   onSubmit: () => void
   disabled: boolean
   submitting: boolean
+  submitLabel?: string
+  submittingLabel?: string
 }
 
 /**
  * Full-width fixed bottom CTA bar — House of Miracles pass 2 signature element.
- * OEM black (Q1=A). Left: cart count + total. Right: "Review order" pill.
+ * OEM black (Q1=A). Left: cart count + total. Right: CTA pill (defaults to
+ * "Review order" for the /checkout page; the /checkout/review page overrides
+ * to "Confirm & place order").
  *
  * The page container must reserve `pb-[120px] md:pb-[96px]` so this bar never
  * covers the bottom of the items card on short viewports. iOS safe-area is
@@ -23,6 +27,8 @@ export function CheckoutCTAStickyBar({
   onSubmit,
   disabled,
   submitting,
+  submitLabel = 'Review order',
+  submittingLabel = 'Submitting…',
 }: CheckoutCTAStickyBarProps) {
   return (
     <div
@@ -43,7 +49,7 @@ export function CheckoutCTAStickyBar({
           disabled={disabled || submitting}
           className="rounded-full bg-white px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? 'Submitting…' : 'Review order'}
+          {submitting ? submittingLabel : submitLabel}
         </button>
       </div>
     </div>
