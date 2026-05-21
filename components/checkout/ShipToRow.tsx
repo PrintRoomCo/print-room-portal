@@ -56,30 +56,35 @@ export function ShipToRow({
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
   const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
+  const decorationCount = line.decorations.length
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 bg-white py-4 text-sm first:pt-0 last:pb-0">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+    <div className="flex flex-wrap items-start justify-between gap-4 bg-white py-5 text-sm first:pt-0 last:pb-0">
+      <div className="flex min-w-0 flex-1 items-start gap-4">
+        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
           {line.imageUrl ? (
             <Image
               src={line.imageUrl}
               alt=""
               fill
-              sizes="48px"
+              sizes="80px"
               className="object-contain p-1"
               unoptimized
             />
           ) : null}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-gray-900">{line.productName}</div>
-          <div className="truncate text-xs text-gray-500">
-            {line.variantLabel} · qty {line.qty}
-          </div>
+          <div className="text-base font-medium text-gray-900">{line.productName}</div>
+          <div className="text-xs text-gray-500">{line.variantLabel}</div>
+          <div className="text-xs text-gray-500">qty {line.qty}</div>
+          {decorationCount > 0 && (
+            <div className="text-xs text-gray-500">
+              {decorationCount === 1 ? '1 decoration' : `${decorationCount} decorations`}
+            </div>
+          )}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-col items-end gap-2">
         {!hideShipTo && (
           <label className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Ship to</span>
