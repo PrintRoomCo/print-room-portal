@@ -199,6 +199,7 @@ export default async function ConfirmationPage({
       <SetTopBarContext value={{ kind: 'section', label: 'Order confirmation' }} />
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[var(--portal-topbar-h,76px)] md:px-6 md:pt-[120px]">
         <ConfirmationView
+          orderId={order.id}
           orderRef={orderRef}
           status={order.status}
           awaitingApproval={awaitingApproval}

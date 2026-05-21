@@ -297,6 +297,14 @@ function resolveStaffPortalUrl(): string | null {
   return raw ? raw.replace(/\/+$/, '') : null
 }
 
+function resolveMondayItemUrl(itemId: string | null): string | null {
+  if (!itemId) return null
+  const prefix = process.env.MONDAY_BOARD_URL_PREFIX || 'https://theprint-room-group.monday.com'
+  const boardId = process.env.MONDAY_REORDERS_BOARD_ID
+  if (!boardId) return null
+  return `${prefix.replace(/\/+$/, '')}/boards/${boardId}/pulses/${itemId}`
+}
+
 function extractFirstName(meta: unknown): string | null {
   if (!meta || typeof meta !== 'object') return null
   const m = meta as Record<string, unknown>
@@ -353,11 +361,15 @@ function buildAmEmailHtml(args: {
   orgName: string | null
   lineCount: number | null
   proofLink: string | null
+  mondayLink: string | null
 }): string {
   const greeting = args.firstName?.trim() || 'there'
   const customer = args.orgName?.trim() || 'a B2B customer'
   const linesLi =
     args.lineCount != null ? `  <li><strong>Lines:</strong> ${args.lineCount} item(s)</li>\n` : ''
+  const mondayLine = args.mondayLink
+    ? `<p><a href="${args.mondayLink}" style="color:#000;text-decoration:underline">Open in Monday</a></p>\n`
+    : ''
   if (args.proofLink) {
     return (
       `<p>Hi ${greeting},</p>\n` +
@@ -368,6 +380,7 @@ function buildAmEmailHtml(args: {
       linesLi +
       `</ul>\n` +
       `<p><a href="${args.proofLink}" style="display:inline-block;padding:10px 16px;background:#000;color:#fff;text-decoration:none;border-radius:4px">Open proof in staff portal</a></p>\n` +
+      mondayLine +
       `<p>— Auto-fill via the Print Room customer portal</p>`
     )
   }
@@ -379,7 +392,8 @@ function buildAmEmailHtml(args: {
     `  <li><strong>Customer:</strong> ${customer}</li>\n` +
     linesLi +
     `</ul>\n` +
-    `<p>Open the staff portal to review.</p>`
+    `<p>Open the staff portal to review.</p>\n` +
+    mondayLine
   )
 }
 
@@ -389,6 +403,7 @@ function buildAmEmailText(args: {
   orgName: string | null
   lineCount: number | null
   proofLink: string | null
+  mondayLink: string | null
 }): string {
   const greeting = args.firstName?.trim() || 'there'
   const customer = args.orgName?.trim() || 'a B2B customer'
@@ -404,10 +419,15 @@ function buildAmEmailText(args: {
   lines.push('')
   if (args.proofLink) {
     lines.push(`Open proof in staff portal: ${args.proofLink}`)
+    if (args.mondayLink) lines.push(`Open in Monday: ${args.mondayLink}`)
     lines.push('')
     lines.push('— Auto-fill via the Print Room customer portal')
   } else {
     lines.push('Open the staff portal to review.')
+    if (args.mondayLink) {
+      lines.push('')
+      lines.push(`Open in Monday: ${args.mondayLink}`)
+    }
   }
   return lines.join('\n')
 }
@@ -443,6 +463,23 @@ async function notifyAmBestEffort(args: {
     const staffPortalUrl = resolveStaffPortalUrl()
     const proofLink = staffPortalUrl ? `${staffPortalUrl}/proofs/${proofId}` : null
 
+    // Best-effort fetch of orders.monday_item_id so the AM can jump straight
+    // into the Deals board. Null when the Monday push at checkout failed or
+    // the env var is unset; resolveMondayItemUrl returns null in either case.
+    let mondayItemId: string | null = null
+    try {
+      const { data: orderMondayRow } = await admin
+        .from('orders')
+        .select('monday_item_id')
+        .eq('id', orderRow.orderId)
+        .maybeSingle()
+      mondayItemId =
+        (orderMondayRow as { monday_item_id: string | null } | null)?.monday_item_id ?? null
+    } catch {
+      // Missing column / read failure stays a non-event; email still goes out.
+    }
+    const mondayLink = resolveMondayItemUrl(mondayItemId)
+
     const subject = `New B2B order needs a proof — Order #${orderRow.orderRef}`
     const html = buildAmEmailHtml({
       firstName: recipient.firstName,
@@ -450,6 +487,7 @@ async function notifyAmBestEffort(args: {
       orgName,
       lineCount,
       proofLink,
+      mondayLink,
     })
     const text = buildAmEmailText({
       firstName: recipient.firstName,
@@ -457,6 +495,7 @@ async function notifyAmBestEffort(args: {
       orgName,
       lineCount,
       proofLink,
+      mondayLink,
     })
 
     let result
