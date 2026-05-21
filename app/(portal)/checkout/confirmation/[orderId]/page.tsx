@@ -160,7 +160,6 @@ export default async function ConfirmationPage({
     .select(
       `id, product_id, product_name, quantity, unit_price, decorations, ship_to_store_id,
        product_variants (
-         image_url,
          product_color_swatches (label),
          sizes (label),
          products (image_url)
