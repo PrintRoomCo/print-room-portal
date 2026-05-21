@@ -250,9 +250,6 @@ export function CheckoutReviewClient({
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
               Review order
             </h1>
-            <p className="mt-3 text-sm text-gray-600">
-              Check shipping, options, and totals before placing the order.
-            </p>
           </header>
           <PortalEmptyState
             title="Review is ready when your cart is"
@@ -273,9 +270,6 @@ export function CheckoutReviewClient({
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
               Review order
             </h1>
-            <p className="mt-3 text-sm text-gray-600">
-              Check shipping, options, and totals before placing the order.
-            </p>
           </header>
         <div className="space-y-6">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
@@ -310,21 +304,18 @@ export function CheckoutReviewClient({
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
       <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
-        <header className="mb-6 md:mb-8">
+        <button
+          type="button"
+          onClick={() => router.push('/checkout')}
+          className="mb-6 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <span aria-hidden="true">←</span>
+          <span>Back to edit</span>
+        </button>
+        <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
             Review order
           </h1>
-          <p className="mt-3 text-sm text-gray-600">
-            Check shipping, options, and totals before placing the order.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push('/checkout')}
-            className="mt-4 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
-          >
-            <span aria-hidden="true">←</span>
-            <span>Back to edit</span>
-          </button>
         </header>
 
         <div className="space-y-6">
