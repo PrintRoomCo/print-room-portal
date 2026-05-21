@@ -8,6 +8,7 @@ import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
+import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -829,6 +830,56 @@ export async function submitCustomerOrder(
     }
   }
 
+  // 4c. Auto-create a job_trackers shell row scoped to the customer's
+  //     user_id so /order-tracker surfaces the order the moment they land on
+  //     the confirmation page. monday_item_id starts NULL; step 5a stamps it
+  //     after the Monday push succeeds. Best-effort: a failure here logs +
+  //     audits but does NOT roll back the order — same contract as the
+  //     Monday push and pre-approved-inventory paths.
+  try {
+    await createJobTrackerShellForOrder(admin, {
+      quoteId: quote_id,
+      orderRef: order_ref,
+      organizationId: input.context.organizationId,
+      userId: input.context.userId,
+      customerEmail: input.context.email ?? null,
+      customerName: input.context.organizationName,
+      requiredBy: input.required_by ?? null,
+    })
+    await recordAuditEvent(
+      {
+        orgId: input.context.organizationId,
+        actorUserId: input.context.userId,
+        action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_CREATED,
+        targetType: 'order',
+        targetId: order_id,
+        metadata: { order_ref, quote_id },
+      },
+      admin,
+    )
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[Checkout] job tracker shell create failed (swallowed)', {
+      orderId: order_id,
+      err: message,
+    })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_CREATE_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, quote_id, error: message },
+        },
+        admin,
+      )
+    } catch {
+      // truly best-effort
+    }
+  }
+
   // 5. Hold the order for staff proof review. Customer-facing portal flow:
   //    submit → autofill proof + Monday deal + AM email → staff edits → staff
   //    push-to-customer → customer approves. No more AM-approve gate.
@@ -904,6 +955,42 @@ export async function submitCustomerOrder(
         .from('quote_items')
         .update({ monday_subitem_id: subitemId })
         .eq('id', quoteItemId)
+    }
+
+    // Stamp the same Monday item id onto the job_trackers shell created in
+    // step 4c. Webhook-driven status updates from Monday already key off
+    // monday_item_id (job_tracker_webhook_logs) so this enables inbound
+    // status sync. Best-effort: failure audits but does NOT roll back.
+    try {
+      const { error: tErr } = await admin
+        .from('job_trackers')
+        .update({
+          monday_item_id: Number(itemId),
+          last_synced_at: new Date().toISOString(),
+        })
+        .eq('quote_id', quote_id)
+      if (tErr) throw new Error(tErr.message)
+    } catch (tErr) {
+      const tMsg = tErr instanceof Error ? tErr.message : String(tErr)
+      console.error('[Checkout] job tracker monday_item_id stamp failed (swallowed)', {
+        orderId: order_id,
+        err: tMsg,
+      })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_MONDAY_LINK_FAILED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: { order_ref, quote_id, monday_item_id: itemId, error: tMsg },
+          },
+          admin,
+        )
+      } catch {
+        // truly best-effort
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
