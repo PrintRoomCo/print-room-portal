@@ -1,5 +1,7 @@
+import { Skeleton } from './Skeleton'
+
 function SkeletonLine({ className }: { className: string }) {
-  return <div className={`animate-pulse rounded-full bg-gray-100 ${className}`} />
+  return <Skeleton className={className} />
 }
 
 function ProductCardSkeleton() {
