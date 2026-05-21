@@ -289,6 +289,9 @@ export function CheckoutClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
+        <div className="mb-4 flex justify-end">
+          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
+        </div>
         {inventoryMode && (
           <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
             <p className="font-medium text-gray-900">Print Room warehouse</p>
@@ -341,6 +344,19 @@ export function CheckoutClient({
             />
           </div>
         )}
+        <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
+          <span className="text-base font-medium text-gray-900">Total</span>
+          <span className="text-xl font-medium text-gray-900">{format(breakdown.total)}</span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">incl. GST · billed per account terms</p>
+        <details className="mt-3">
+          <summary className="cursor-pointer select-none text-xs text-gray-500 hover:text-gray-700">
+            Show breakdown
+          </summary>
+          <div className="mt-3">
+            <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
+          </div>
+        </details>
       </section>
 
       {mixedInventory && (
@@ -363,7 +379,7 @@ export function CheckoutClient({
       )}
 
       {!inventoryMode && allCustom && (
-        <section className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
+        <section className="mt-4">
           <h2 className="mb-3 text-sm font-medium text-gray-700">Custom shipping address</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
@@ -454,7 +470,7 @@ export function CheckoutClient({
         </section>
       )}
 
-      <section className="grid grid-cols-1 gap-4 rounded-[32px] bg-white p-7 md:grid-cols-2 md:p-8">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label htmlFor="required-by" className="block text-sm font-medium text-gray-700">
             Required by (optional)
@@ -481,14 +497,6 @@ export function CheckoutClient({
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400"
           />
         </div>
-      </section>
-
-      <section className="mt-6 rounded-[32px] bg-white p-7 md:p-8">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-sm text-gray-700">Pricing for</span>
-          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-        </div>
-        <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
       </section>
 
       <div className="mt-6 flex flex-wrap justify-end gap-2">
