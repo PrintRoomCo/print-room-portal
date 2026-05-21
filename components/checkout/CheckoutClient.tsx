@@ -105,13 +105,14 @@ export function CheckoutClient({
     })
   }, [cart.lines, initialStoreId])
 
+  const inventoryMode = intent === 'inventory'
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
-  const mixedCustom = anyCustom && !allCustom
+  const mixedCustom = !inventoryMode && anyCustom && !allCustom
   const customAddressErrors = {
-    address: allCustom && !customAddress.address ? 'Street address is required.' : null,
-    city: allCustom && !customAddress.city ? 'City is required.' : null,
-    country: allCustom && !customAddress.country ? 'Country is required.' : null,
+    address: !inventoryMode && allCustom && !customAddress.address ? 'Street address is required.' : null,
+    city: !inventoryMode && allCustom && !customAddress.city ? 'City is required.' : null,
+    country: !inventoryMode && allCustom && !customAddress.country ? 'Country is required.' : null,
   }
   const customIncomplete = Object.values(customAddressErrors).some(Boolean)
 
@@ -271,24 +272,37 @@ export function CheckoutClient({
         </section>
       )}
 
-      <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
-        <div className="mt-3 space-y-2">
-          {cart.lines.map((line) => (
-            <ShipToRow
-              key={line.lineId}
-              line={line}
-              stores={stores}
-              value={perLineShipTo[line.lineId] ?? null}
-              onChange={(next) =>
-                setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
-              }
-              disabled={submitting !== false || lockToBuyerDefault}
-              allowCustom={!isBuyer}
-            />
-          ))}
-        </div>
-      </section>
+      {inventoryMode ? (
+        <section className="rounded-[32px] bg-white p-7 md:p-8">
+          <h2 className="text-sm font-medium text-gray-700">Ship to</h2>
+          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
+            <p className="font-medium text-gray-900">Print Room warehouse</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Stock lands on your inventory shelf at Print Room. Your account manager will
+              mark it received when it arrives.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-[32px] bg-white p-7 md:p-8">
+          <h2 className="text-sm font-medium text-gray-700">Shipping — per line</h2>
+          <div className="mt-3 space-y-2">
+            {cart.lines.map((line) => (
+              <ShipToRow
+                key={line.lineId}
+                line={line}
+                stores={stores}
+                value={perLineShipTo[line.lineId] ?? null}
+                onChange={(next) =>
+                  setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+                }
+                disabled={submitting !== false || lockToBuyerDefault}
+                allowCustom={!isBuyer}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {mixedCustom && (
         <p className="mt-3 text-sm text-red-600">
@@ -298,7 +312,7 @@ export function CheckoutClient({
         </p>
       )}
 
-      {allCustom && (
+      {!inventoryMode && allCustom && (
         <section className="mt-4 rounded-[32px] bg-white p-7 md:p-8">
           <h2 className="mb-3 text-sm font-medium text-gray-700">Custom shipping address</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -412,7 +426,9 @@ export function CheckoutClient({
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            placeholder="e.g. Purchase order"
+            aria-label="Order notes, e.g. Purchase order"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400"
           />
         </div>
       </section>

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
@@ -346,20 +347,34 @@ export function CheckoutReviewClient({
             return (
               <article key={line.lineId} className="py-3 first:pt-0 last:pb-0">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{line.productName}</h3>
-                    <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
-                      {line.variantLabel} · qty {line.qty}
-                    </p>
-                    {line.decorations.length > 0 && (
-                      <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                        {line.decorations.map((decoration) => (
-                          <li key={decoration.linkId}>
-                            {decoration.name} +{format(decoration.unitPrice)} / unit
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+                      {line.imageUrl ? (
+                        <Image
+                          src={line.imageUrl}
+                          alt=""
+                          fill
+                          sizes="56px"
+                          className="object-contain p-1"
+                          unoptimized
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-medium text-gray-900">{line.productName}</h3>
+                      <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
+                        {line.variantLabel} · qty {line.qty}
+                      </p>
+                      {line.decorations.length > 0 && (
+                        <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                          {line.decorations.map((decoration) => (
+                            <li key={decoration.linkId}>
+                              {decoration.name} +{format(decoration.unitPrice)} / unit
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right text-sm">
                     <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
@@ -381,7 +396,12 @@ export function CheckoutReviewClient({
               {reviewState.intent === 'inventory' ? 'Add to my inventory' : 'Ship to customer'}
             </dd>
           </div>
-          {allCustom ? (
+          {reviewState.intent === 'inventory' ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-gray-500">Ship to</dt>
+              <dd className="text-right text-gray-900">Print Room warehouse</dd>
+            </div>
+          ) : allCustom ? (
             <div>
               <dt className="text-gray-500">Custom shipping address</dt>
               <dd className="mt-1 text-gray-900">

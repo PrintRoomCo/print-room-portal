@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import type { CartLine } from '@/lib/cart/types'
 
 export interface StoreOption {
@@ -26,10 +27,24 @@ export function ShipToRow({ line, stores, value, onChange, disabled, allowCustom
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3 text-sm">
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-gray-900">{line.productName}</div>
-        <div className="truncate text-xs text-gray-500">
-          {line.variantLabel} · qty {line.qty}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+          {line.imageUrl ? (
+            <Image
+              src={line.imageUrl}
+              alt=""
+              fill
+              sizes="48px"
+              className="object-contain p-1"
+              unoptimized
+            />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-gray-900">{line.productName}</div>
+          <div className="truncate text-xs text-gray-500">
+            {line.variantLabel} · qty {line.qty}
+          </div>
         </div>
       </div>
       <label className="flex items-center gap-2">
