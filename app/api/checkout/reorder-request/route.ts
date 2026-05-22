@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { createReorderRequest } from '@/lib/checkout/reorder-request'
+import { cacheTags } from '@/lib/cache/tags'
 
 export async function POST(request: Request) {
   const auth = await requireB2BCustomerApi()
@@ -31,6 +33,9 @@ export async function POST(request: Request) {
       requested_qty: body.requested_qty,
       note: body.note,
     })
+    // New reorder request → quotes/orders surfaces stale.
+    revalidateTag(cacheTags.accountData, { expire: 0 })
+    revalidateTag(cacheTags.orderTracker, { expire: 0 })
     return NextResponse.json({ ok: true, id: row.id })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })

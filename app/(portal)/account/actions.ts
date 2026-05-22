@@ -1,8 +1,10 @@
 'use server'
 
+import { revalidateTag } from 'next/cache'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { changePassword } from '@/lib/supabase-auth'
+import { cacheTags } from '@/lib/cache/tags'
 
 const NZ_REGIONS = [
   { code: 'AUK', name: 'Auckland' },
@@ -155,6 +157,9 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
     console.error('[Account] Create location error:', error)
     return { success: false, errors: ['Failed to create store location.'] }
   }
+
+  // Store list lives in getPortalAccountData → bust the account-data cache.
+  revalidateTag(cacheTags.accountData, { expire: 0 })
 
   return { success: true, message: `Store "${storeName}" has been created successfully!` }
 }

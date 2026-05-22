@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { getSupabaseServer } from '@/lib/supabase'
+import { cacheTags } from '@/lib/cache/tags'
 import {
   mapMondayToCollectionStatus,
   mapMondayToTrackerStatus,
@@ -149,6 +151,7 @@ async function handleCollectionStatusChange(
       .update({ status: 'approved', reviewed_at: new Date().toISOString() })
       .eq('collection_id', collection.id)
 
+    revalidateTag(cacheTags.accountData, { expire: 0 })
     return NextResponse.json({ success: true, message: 'Collection approved' })
   }
 
@@ -162,6 +165,7 @@ async function handleCollectionStatusChange(
       })
       .eq('id', collection.id)
 
+    revalidateTag(cacheTags.accountData, { expire: 0 })
     return NextResponse.json({ success: true, message: 'Collection rejected' })
   }
 
@@ -199,6 +203,7 @@ async function handleDesignStatusChange(
       })
       .eq('id', submission.id)
 
+    revalidateTag(cacheTags.accountData, { expire: 0 })
     return NextResponse.json({ success: true, message: 'Design approved' })
   }
 
@@ -213,6 +218,7 @@ async function handleDesignStatusChange(
       })
       .eq('id', submission.id)
 
+    revalidateTag(cacheTags.accountData, { expire: 0 })
     return NextResponse.json({ success: true, message: 'Design rejected' })
   }
 
@@ -333,6 +339,10 @@ async function handleTrackerStatusChange(
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
 
+  // Tracker status flipped → portal order-tracker + account quote-status overlay both stale.
+  revalidateTag(cacheTags.orderTracker, { expire: 0 })
+  revalidateTag(cacheTags.accountData, { expire: 0 })
+
   if (tracker.customer_email) {
     const trackingInfo = (tracker.tracking_info as TrackingInfo | null) ?? null
     const trackingUrl = trackingInfo?.url || null
@@ -404,6 +414,8 @@ async function handleTrackerDateChange(
     console.error('[TrackerWebhook] Date update failed:', error)
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
+
+  revalidateTag(cacheTags.orderTracker, { expire: 0 })
 
   return NextResponse.json({
     success: true,

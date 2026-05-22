@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { buildReorderDataFromTracker, createReorderItem } from '@/lib/monday/deal-item'
@@ -11,6 +12,7 @@ import {
   MAX_SIZE_LABEL_LENGTH,
   MAX_SIZE_QTY,
 } from '@/lib/config/reorder'
+import { cacheTags } from '@/lib/cache/tags'
 
 interface ReorderBody {
   trackerId: number | string
@@ -259,6 +261,9 @@ export async function POST(request: Request) {
       })
     }
 
+    // Reorder accepted → quotes + order-tracker views go stale.
+    revalidateTag(cacheTags.accountData, { expire: 0 })
+    revalidateTag(cacheTags.orderTracker, { expire: 0 })
     return NextResponse.json({ success: true, mondayItemId: result.itemId })
   } catch (err) {
     console.error('[Reorder API] Failed to create Monday item:', err)

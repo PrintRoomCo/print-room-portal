@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import {
   BuyerScopeError,
@@ -10,6 +11,7 @@ import {
   submitCustomerOrder,
   type CheckoutLineInput,
 } from '@/lib/checkout/submit'
+import { cacheTags } from '@/lib/cache/tags'
 
 interface CheckoutRequestBody {
   idempotency_key?: string
@@ -102,6 +104,9 @@ export async function POST(request: Request) {
       custom_shipping_address: body.custom_shipping_address ?? null,
       intent,
     })
+    // New order → both portal-data caches (account quotes, order-tracker) stale.
+    revalidateTag(cacheTags.accountData, { expire: 0 })
+    revalidateTag(cacheTags.orderTracker, { expire: 0 })
     return NextResponse.json(result)
   } catch (e) {
     if (e instanceof DecorationDriftError) {
