@@ -1,3 +1,9 @@
+/* Vendored @printroom/onboarding styles. Must precede @tailwind directives
+ * because Tailwind expands inline and CSS @import must come before all
+ * other rules. Token references (--duration-fast / --duration-hover /
+ * --ease-standard) resolve from the :root block below. */
+@import '../vendor/print-room-onboarding/src/styles.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -66,6 +72,13 @@
     --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
     --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
     --shadow-xl: 0 16px 48px rgba(0,0,0,0.12);
+
+    /* Onboarding motion tokens — aliased to match staff portal so
+     * @printroom/onboarding styles render consistently across portals.
+     * Easing matches the .btn-* transition-timing-function already in use. */
+    --duration-fast: 150ms;
+    --duration-hover: 220ms;
+    --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   *,
