@@ -37,6 +37,8 @@
   ],
   "exclude": [
     "node_modules",
-    "b2b-portal"
+    "b2b-portal",
+    "vendor/print-room-onboarding/playwright",
+    "vendor/print-room-onboarding/tests"
   ]
 }
