@@ -1,0 +1,175 @@
+/* Onboarding package styles — all tokens reference globals.css. */
+
+/* Help button */
+.oonb-help-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    transform 80ms var(--ease-standard);
+  z-index: 60;
+}
+.oonb-help-button:hover { background: #000; }
+.oonb-help-button:active { transform: scale(0.98); }
+.oonb-help-button:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.4);
+  outline-offset: 2px;
+}
+
+/* Help panel */
+.oonb-help-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 300px;
+  max-height: 60vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid rgb(243, 244, 246); /* gray-100 */
+  border-radius: 1rem; /* rounded-2xl */
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  z-index: 61;
+}
+.oonb-help-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgb(243, 244, 246);
+  font-size: 13px;
+}
+.oonb-help-section-label {
+  padding: 10px 14px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 600;
+}
+.oonb-help-list { list-style: none; margin: 0; padding: 0 6px 10px; }
+.oonb-help-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.oonb-help-row:hover { background: rgba(0, 0, 0, 0.05); }
+.oonb-help-row:active { transform: scale(0.98); }
+.oonb-help-row:focus-visible { outline: 2px solid rgba(0, 0, 0, 0.4); outline-offset: 1px; }
+.oonb-help-row-meta { display: flex; gap: 6px; align-items: center; color: rgba(0, 0, 0, 0.6); font-size: 11px; }
+.oonb-help-close {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* Checklist badge */
+.oonb-checklist-badge {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 200px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid rgb(243, 244, 246);
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  z-index: 59;
+  text-align: left;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    transform 80ms var(--ease-standard);
+}
+.oonb-checklist-badge:active { transform: scale(0.98); }
+.oonb-checklist-badge:focus-visible { outline: 2px solid rgba(0, 0, 0, 0.4); outline-offset: 2px; }
+.oonb-checklist-badge-text { display: flex; flex-direction: column; font-size: 13px; }
+.oonb-checklist-badge-text span:last-child { color: rgba(0, 0, 0, 0.6); font-size: 11px; }
+
+/* Checklist panel */
+.oonb-checklist-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 260px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid rgb(243, 244, 246);
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 60;
+  font-size: 13px;
+}
+.oonb-checklist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.oonb-checklist-bar { height: 4px; background: rgba(0, 0, 0, 0.08); border-radius: 2px; margin-bottom: 12px; }
+.oonb-checklist-bar-fill { height: 100%; background: rgba(43, 57, 144, 1); border-radius: 2px; transition: width var(--duration-hover) var(--ease-standard); }
+.oonb-checklist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.oonb-checklist-list li { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.oonb-checklist-list li.is-done { color: rgba(0, 0, 0, 0.5); text-decoration: line-through; }
+.oonb-checklist-footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgb(243, 244, 246); font-size: 11px; color: rgba(0, 0, 0, 0.6); }
+
+/* First-login modal */
+.oonb-first-login-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.oonb-first-login-modal {
+  background: #fff;
+  border: 1px solid rgb(243, 244, 246);
+  border-radius: 1rem;
+  padding: 24px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+.oonb-first-login-modal h2 { margin: 0 0 6px; font-size: 18px; }
+.oonb-first-login-modal p { margin: 0 0 16px; font-size: 13px; color: rgba(0, 0, 0, 0.7); line-height: 1.5; }
+.oonb-first-login-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.oonb-label { font-size: 11px; letter-spacing: 0.5px; color: rgba(43, 57, 144, 1); font-weight: 600; margin: 0 0 6px; }
+
+/* Video modal */
+.oonb-video-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.oonb-video-modal { background: #fff; border-radius: 1rem; width: 640px; max-width: calc(100vw - 32px); overflow: hidden; }
+.oonb-video-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgb(243, 244, 246); font-size: 13px; }
+.oonb-video-stale { padding: 8px 14px; background: rgba(245, 166, 35, 0.1); color: rgba(154, 86, 0, 1); font-size: 12px; }
+.oonb-video-frame { position: relative; padding-bottom: 56.25%; height: 0; }
+.oonb-video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Aside inside Driver.js tooltip */
+.oonb-aside { margin-top: 8px; padding: 6px 8px; background: rgba(0, 0, 0, 0.04); border-radius: 6px; font-size: 12px; color: rgba(0, 0, 0, 0.7); }
+
+@media (prefers-reduced-motion: reduce) {
+  .oonb-help-button,
+  .oonb-help-row,
+  .oonb-checklist-badge,
+  .oonb-checklist-bar-fill {
+    transition: none !important;
+  }
+}
