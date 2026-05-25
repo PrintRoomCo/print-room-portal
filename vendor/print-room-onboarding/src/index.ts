@@ -3,6 +3,8 @@ export type {
   Placement,
   Step,
   TourDefinition,
+  TourStyle,
+  AutoAdvanceOptions,
   ChecklistItem,
   UserOnboardingProgress,
   TourVideo,

@@ -45,4 +45,35 @@ describe('defineTour', () => {
     const bad = { ...baseTour, steps: [{ target: '.my-button', title: 'X', body: 'Y' }] };
     expect(() => defineTour(bad)).toThrow(/data-tour/);
   });
+
+  it('accepts style: "popover" (default)', () => {
+    const t = defineTour({ ...baseTour, style: 'popover' });
+    expect(t.style).toBe('popover');
+  });
+
+  it('accepts style: "spotlight"', () => {
+    const t = defineTour({ ...baseTour, style: 'spotlight' });
+    expect(t.style).toBe('spotlight');
+  });
+
+  it('rejects style not in enum', () => {
+    expect(() =>
+      // @ts-expect-error — testing runtime validation
+      defineTour({ ...baseTour, style: 'flashlight' })
+    ).toThrow(/style/);
+  });
+
+  it('accepts autoAdvance with positive intervalMs', () => {
+    const t = defineTour({ ...baseTour, autoAdvance: { intervalMs: 4500 } });
+    expect(t.autoAdvance?.intervalMs).toBe(4500);
+  });
+
+  it('rejects autoAdvance with non-positive intervalMs', () => {
+    expect(() =>
+      defineTour({ ...baseTour, autoAdvance: { intervalMs: 0 } })
+    ).toThrow(/autoAdvance/);
+    expect(() =>
+      defineTour({ ...baseTour, autoAdvance: { intervalMs: -100 } })
+    ).toThrow(/autoAdvance/);
+  });
 });

@@ -1,3 +1,5 @@
+@import "driver.js/dist/driver.css";
+
 /* Onboarding package styles — all tokens reference globals.css. */
 
 /* Help button */
@@ -18,7 +20,7 @@
   transition:
     background-color var(--duration-fast) var(--ease-standard),
     transform 80ms var(--ease-standard);
-  z-index: 60;
+  z-index: 1000;
 }
 .oonb-help-button:hover { background: #000; }
 .oonb-help-button:active { transform: scale(0.98); }
@@ -33,13 +35,14 @@
   bottom: 80px;
   right: 20px;
   width: 300px;
+  max-width: calc(100vw - 32px);
   max-height: 60vh;
   overflow: auto;
   background: #fff;
   border: 1px solid rgb(243, 244, 246); /* gray-100 */
   border-radius: 1rem; /* rounded-2xl */
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-  z-index: 61;
+  z-index: 1001;
 }
 .oonb-help-panel-header {
   display: flex;
@@ -99,7 +102,7 @@
   border-radius: 1rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  z-index: 59;
+  z-index: 999;
   text-align: left;
   transition:
     background-color var(--duration-fast) var(--ease-standard),
@@ -121,7 +124,7 @@
   border: 1px solid rgb(243, 244, 246);
   border-radius: 1rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  z-index: 60;
+  z-index: 1000;
   font-size: 13px;
 }
 .oonb-checklist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -165,11 +168,144 @@
 /* Aside inside Driver.js tooltip */
 .oonb-aside { margin-top: 8px; padding: 6px 8px; background: rgba(0, 0, 0, 0.04); border-radius: 6px; font-size: 12px; color: rgba(0, 0, 0, 0.7); }
 
+/* Driver.js tour chrome. Keep these global because Driver renders into document.body. */
+.driver-popover {
+  max-width: min(320px, calc(100vw - 32px));
+  border: 1px solid rgb(243, 244, 246);
+  border-radius: 1rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  color: rgba(0, 0, 0, 0.86);
+  font-family: var(--font-dm-sans), "Söhne", "Inter", system-ui, sans-serif;
+  z-index: 1000000000;
+}
+.driver-popover * {
+  font-family: inherit;
+}
+.driver-popover-title {
+  color: rgba(0, 0, 0, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.driver-popover-description {
+  color: rgba(0, 0, 0, 0.72);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.driver-popover-footer button {
+  min-height: 30px;
+  border-radius: 9999px;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+  text-shadow: none;
+  font-size: 12px;
+}
+.driver-popover-footer button:hover,
+.driver-popover-footer button:focus {
+  background: rgba(0, 0, 0, 0.05);
+}
+.driver-popover-arrow {
+  border-color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .oonb-help-button,
   .oonb-help-row,
   .oonb-checklist-badge,
-  .oonb-checklist-bar-fill {
+  .oonb-checklist-bar-fill,
+  .driver-overlay,
+  .driver-stage,
+  .oonb-spotlight-dot {
     transition: none !important;
   }
+}
+
+/* === Spotlight tour overrides === */
+
+.oonb-spotlight-driver-popover {
+  display: none !important;
+}
+
+.driver-overlay {
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.driver-stage {
+  transition: all 350ms var(--ease-standard);
+}
+
+/* === SpotlightChrome === */
+
+.oonb-spotlight-chrome {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000000001;
+  font-family: var(--font-dm-sans), "Söhne", "Inter", system-ui, sans-serif;
+}
+
+.oonb-spotlight-progress {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+}
+.oonb-spotlight-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.15);
+  /* Framer Motion drives scale + backgroundColor — no CSS transition here. */
+}
+.oonb-spotlight-dot.is-active {
+  /* Active state animated via framer; class kept for selector specificity. */
+}
+
+.oonb-spotlight-actions {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.oonb-spotlight-actions .pill {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.oonb-spotlight-actions .pill:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.4);
+  outline-offset: 2px;
+}
+
+.oonb-spotlight-label {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 280px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid rgb(243, 244, 246);
+  border-radius: 1rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+.oonb-spotlight-label h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.9);
+}
+.oonb-spotlight-label p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.72);
 }

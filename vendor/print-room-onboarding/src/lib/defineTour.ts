@@ -32,5 +32,21 @@ export function defineTour(tour: TourDefinition): TourDefinition {
       );
     }
   });
+  const STYLES = ['popover', 'spotlight'] as const;
+  if (tour.style !== undefined && !STYLES.includes(tour.style)) {
+    throw new Error(
+      `defineTour: style "${tour.style}" must be one of ${STYLES.join(', ')}`
+    );
+  }
+  if (tour.autoAdvance !== undefined) {
+    if (
+      typeof tour.autoAdvance.intervalMs !== 'number' ||
+      tour.autoAdvance.intervalMs <= 0
+    ) {
+      throw new Error(
+        `defineTour: autoAdvance.intervalMs must be a positive number, got ${tour.autoAdvance.intervalMs}`
+      );
+    }
+  }
   return tour;
 }

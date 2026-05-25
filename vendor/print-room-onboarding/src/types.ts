@@ -2,6 +2,13 @@ export type Audience = 'staff' | 'org_admin' | 'buyer';
 
 export type Placement = 'top' | 'right' | 'bottom' | 'left';
 
+export type TourStyle = 'popover' | 'spotlight';
+
+export interface AutoAdvanceOptions {
+  /** Time in ms between auto-advances. Paused by any manual user interaction. */
+  intervalMs: number;
+}
+
 export interface Step {
   target: string;
   title: string;
@@ -19,6 +26,10 @@ export interface TourDefinition {
   route?: string;
   videoUrl?: string;
   checklistKey?: string;
+  /** Renderer style. Defaults to 'popover' (existing click-through). */
+  style?: TourStyle;
+  /** Auto-advance pacing. Only honoured when style === 'spotlight'. */
+  autoAdvance?: AutoAdvanceOptions;
   prerequisite?: () => boolean | Promise<boolean>;
   steps: Step[];
 }

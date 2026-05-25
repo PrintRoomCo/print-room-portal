@@ -94,8 +94,7 @@ const ITEM_SELECT = `
     ),
     print_area:product_print_areas!b2b_catalogue_item_decorations_print_area_id_fkey(
       id,
-      name,
-      view
+      name
     )
   ),
   colors:b2b_catalogue_item_colors(
