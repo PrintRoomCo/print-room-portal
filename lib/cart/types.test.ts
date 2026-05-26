@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cartLineDisplayImageUrl,
   pickBracket,
   recomputeProductTierPrices,
   type CartLine,
@@ -130,5 +131,16 @@ describe('recomputeProductTierPrices', () => {
     const stable = line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 20, brackets })
     const after = recomputeProductTierPrices([stable])
     expect(after[0]).toBe(stable)
+  })
+})
+
+describe('cartLineDisplayImageUrl', () => {
+  it('prefers the designer snapshot over the stored blank product image', () => {
+    expect(
+      cartLineDisplayImageUrl({
+        imageUrl: 'https://cdn.example/blank-tee.jpg',
+        decorations: [{ snapshotUrl: 'https://cdn.example/designer-snapshot.png' }],
+      }),
+    ).toBe('https://cdn.example/designer-snapshot.png')
   })
 })

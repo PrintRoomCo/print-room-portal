@@ -2,7 +2,12 @@
 
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { decorationPerUnit, type CartLine } from '@/lib/cart/types'
+import {
+  allInLineTotal,
+  allInUnitPrice,
+  cartLineDisplayImageUrl,
+  type CartLine,
+} from '@/lib/cart/types'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
@@ -122,7 +127,9 @@ export function CartTable({
         const moq = moqByProduct[line.productId]
         const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
         const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
-        const lineTotal = line.qty * (line.unitPrice + decorationPerUnit(line))
+        const unitPrice = allInUnitPrice(line)
+        const lineTotal = allInLineTotal(line)
+        const imageUrl = cartLineDisplayImageUrl(line)
         return (
           <article
             key={line.lineId}
@@ -131,9 +138,9 @@ export function CartTable({
             <div className="flex items-start gap-4 md:gap-5">
               {/* Image plate */}
               <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50 md:h-28 md:w-28">
-                {line.imageUrl ? (
+                {imageUrl ? (
                   <Image
-                    src={line.imageUrl}
+                    src={imageUrl}
                     alt={line.productName}
                     fill
                     sizes="(min-width: 768px) 112px, 96px"
@@ -155,7 +162,7 @@ export function CartTable({
                       <span
                         key={d.linkId}
                         className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
-                        title={`${d.name} · +${format(d.unitPrice)} / unit`}
+                        title={d.name}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -164,9 +171,6 @@ export function CartTable({
                           className="h-4 w-4 rounded-sm bg-white object-contain"
                         />
                         <span className="font-medium">{d.name}</span>
-                        <span className="tabular-nums text-gray-500">
-                          +{format(d.unitPrice)}
-                        </span>
                       </span>
                     ))}
                   </div>
@@ -244,7 +248,7 @@ export function CartTable({
             {/* Price row */}
             <div className="mt-4 flex items-baseline justify-between border-t border-gray-100 pt-3 text-sm">
               <span className="text-gray-500">
-                Unit · <span className="tabular-nums text-gray-700">{format(line.unitPrice)}</span>
+                Unit · <span className="tabular-nums text-gray-700">{format(unitPrice)}</span>
               </span>
               <span className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
                 {format(lineTotal)}

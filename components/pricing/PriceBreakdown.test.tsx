@@ -14,19 +14,18 @@ const ob = {
 }
 
 describe('PriceBreakdown', () => {
-  it('cart-totals variant renders garments, decoration, GST, total', () => {
+  it('cart-totals variant renders all-in subtotal, GST, total', () => {
     render(<PriceBreakdown breakdown={ob} variant="cart-totals" />)
-    expect(screen.getByText(/Garments/i)).toBeDefined()
-    expect(screen.getByText(/\$200\.00/)).toBeDefined()
-    expect(screen.getByText(/\$15\.00/)).toBeDefined()
+    expect(screen.getByText(/Subtotal/i)).toBeDefined()
+    expect(screen.getByText(/\$215\.00/)).toBeDefined()
     expect(screen.getByText(/\$32\.25/)).toBeDefined()
     expect(screen.getByText(/\$247\.25/)).toBeDefined()
   })
 
-  it('hides decoration line when decorationTotal is 0', () => {
+  it('hides the raw decoration line even when decorationTotal is present', () => {
     render(
       <PriceBreakdown
-        breakdown={{ ...ob, decorationTotal: 0 }}
+        breakdown={ob}
         variant="cart-totals"
       />
     )
@@ -41,8 +40,8 @@ describe('PriceBreakdown', () => {
   it('honours a custom format prop in place of NZD fallback', () => {
     const format = (n: number) => `A$${(n * 0.9).toFixed(2)}`
     render(<PriceBreakdown breakdown={ob} variant="cart-totals" format={format} />)
-    // (215 - 15) * 0.9 = 180.00
-    expect(screen.getByText(/A\$180\.00/)).toBeDefined()
+    // 215 * 0.9 = 193.50
+    expect(screen.getByText(/A\$193\.50/)).toBeDefined()
     // 247.25 * 0.9 = 222.525 -> 222.53
     expect(screen.getByText(/A\$222\.53/)).toBeDefined()
     // NZD-formatted strings should be absent.

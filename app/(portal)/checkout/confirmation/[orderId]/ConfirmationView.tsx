@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { cartLineDisplayImageUrl } from '@/lib/cart/types'
 
 const LABEL_CAP =
   'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
@@ -97,7 +98,6 @@ export function ConfirmationView(props: ConfirmationViewProps) {
     requiredBy,
     lines,
     subtotalExGst,
-    decorationCost,
     gst,
     totalIncGst,
     gstRate,
@@ -157,20 +157,17 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                 </p>
               ) : (
                 lines.map((line) => {
-                  const decoPerUnit = line.decorations.reduce(
-                    (s, d) => s + d.unitPrice,
-                    0,
-                  )
-                  const lineTotal = (line.unitPrice + decoPerUnit) * line.quantity
+                  const lineTotal = line.unitPrice * line.quantity
+                  const imageUrl = cartLineDisplayImageUrl(line)
                   return (
                     <article
                       key={line.id}
                       className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 md:gap-5"
                     >
                       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
-                        {line.imageUrl ? (
+                        {imageUrl ? (
                           <Image
-                            src={line.imageUrl}
+                            src={imageUrl}
                             alt={line.productName}
                             fill
                             sizes="80px"
@@ -194,7 +191,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                                 <span
                                   key={d.linkId ?? `${line.id}-deco-${i}`}
                                   className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
-                                  title={`${d.name} · +${format(d.unitPrice)} / unit`}
+                                  title={d.name}
                                 >
                                   {icon ? (
                                     /* eslint-disable-next-line @next/next/no-img-element */
@@ -205,9 +202,6 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                                     />
                                   ) : null}
                                   <span className="font-medium">{d.name}</span>
-                                  <span className="tabular-nums text-gray-500">
-                                    +{format(d.unitPrice)}
-                                  </span>
                                 </span>
                               )
                             })}
@@ -219,7 +213,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                           </span>{' '}
                           ×{' '}
                           <span className="tabular-nums text-gray-700">
-                            {format(line.unitPrice + decoPerUnit)}
+                            {format(line.unitPrice)}
                           </span>
                         </p>
                       </div>
@@ -320,12 +314,11 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                   {format(subtotalExGst)}
                 </span>
               </div>
-              {decorationCost > 0 && (
-                <div className="flex justify-between text-gray-500">
-                  <span className="pl-3">Includes decoration</span>
-                  <span className="tabular-nums">{format(decorationCost)}</span>
-                </div>
-              )}
+              {/*
+                props.decorationCost remains available for diagnostics, but the
+                customer-facing order total treats decoration as baked into the
+                subtotal/unit prices.
+              */}
               <div className="flex justify-between border-t border-gray-100 pt-2.5">
                 <span className="text-gray-600">Shipping</span>
                 <span className="text-gray-900">Included</span>

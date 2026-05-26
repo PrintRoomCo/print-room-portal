@@ -17,6 +17,7 @@ import {
 } from '@/lib/shop/decoration-filter'
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 type CustomerRole = 'org_admin' | 'buyer'
@@ -456,16 +457,20 @@ export function ProductDetailClient({
 
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
-    const cartLineDecorations: CartLineDecoration[] = pricedDecorations.map((d) => ({
-      linkId: d.linkId,
-      decorationId: d.decorationId,
-      name: d.name,
-      method: d.method,
-      positionLabel: d.positionLabel,
-      unitPrice: decorationPriceAt(d.linkId, qty, d.unitPrice),
-      artworkUrl: d.artworkUrl,
-      snapshotUrl: d.snapshotUrl,
-    }))
+    const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
+    const cartDecorationsForSwatch = (swatchId: string | null): CartLineDecoration[] =>
+      resolveDecorationsForPricing(selectedDecorations, swatchId).map((d) => ({
+        linkId: d.linkId,
+        decorationId: d.decorationId,
+        name: d.name,
+        method: d.method,
+        positionLabel: d.positionLabel,
+        unitPrice: decorationPriceAt(d.linkId, qty, d.unitPrice),
+        artworkUrl: d.artworkUrl,
+        snapshotUrl: d.snapshotUrl,
+      }))
+    const cartImageForSwatch = (swatchId: string | null): string | null =>
+      pickPreferredGalleryImageUrl(images, swatchId, product.image_url)
     const cartLineBrackets: CartLineBracket[] = brackets.map((b) => ({
       minQty: b.min_quantity,
       maxQty: b.max_quantity,
@@ -496,8 +501,8 @@ export function ProductDetailClient({
           variantLabel,
           qty: lineQty,
           unitPrice: pricing.unit_price,
-          imageUrl: product.image_url,
-          decorations: cartLineDecorations,
+          imageUrl: cartImageForSwatch(variant.color_swatch_id),
+          decorations: cartDecorationsForSwatch(variant.color_swatch_id),
           fulfilmentType,
           brackets: cartLineBrackets,
         })
@@ -526,8 +531,8 @@ export function ProductDetailClient({
           variantLabel: size,
           qty: lineQty,
           unitPrice: pricing.unit_price,
-          imageUrl: product.image_url,
-          decorations: cartLineDecorations,
+          imageUrl: cartImageForSwatch(colorSwatchId),
+          decorations: cartDecorationsForSwatch(colorSwatchId),
           fulfilmentType: 'make_to_stock',
           brackets: cartLineBrackets,
         })
@@ -557,8 +562,8 @@ export function ProductDetailClient({
       variantLabel: '—',
       qty,
       unitPrice: pricing.unit_price,
-      imageUrl: product.image_url,
-      decorations: cartLineDecorations,
+      imageUrl: cartImageForSwatch(colorSwatchId),
+      decorations: cartDecorationsForSwatch(colorSwatchId),
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
     })

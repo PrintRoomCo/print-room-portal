@@ -68,6 +68,24 @@ export function decorationPerUnit(line: CartLine): number {
   return line.decorations.reduce((sum, d) => sum + d.unitPrice, 0)
 }
 
+/** Customer-facing all-in unit price: garment unit plus any selected decoration. */
+export function allInUnitPrice(line: CartLine): number {
+  return line.unitPrice + decorationPerUnit(line)
+}
+
+/** Customer-facing line total based on the all-in unit price. */
+export function allInLineTotal(line: CartLine): number {
+  return line.qty * allInUnitPrice(line)
+}
+
+export function cartLineDisplayImageUrl(line: {
+  imageUrl?: string | null
+  decorations?: Array<{ snapshotUrl?: string | null }>
+}): string | null {
+  const snapshotUrl = line.decorations?.find((d) => d.snapshotUrl)?.snapshotUrl
+  return snapshotUrl ?? line.imageUrl ?? null
+}
+
 /** Stable signature for matching lines on add: same product+variant+decoration set merges quantity. */
 export function decorationSignature(decorations: CartLineDecoration[]): string {
   if (decorations.length === 0) return ''

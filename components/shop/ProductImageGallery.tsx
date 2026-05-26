@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
+  pickPreferredGalleryImageUrl,
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
 } from '@/lib/shop/catalogue-images'
@@ -40,20 +41,8 @@ export function ProductImageGallery({
     () => resolveGalleryImagesForColour(images, selectedColorSwatchId),
     [images, selectedColorSwatchId],
   )
-  // Pick the colour-matched candidate up front so the initial mount lands on
-  // a colour-specific image when one exists, instead of the generic hero.
-  const pickHero = (
-    list: CatalogueAwareGalleryImage[],
-    colourId: string | null,
-  ) => {
-    if (colourId) {
-      const match = list.find((img) => img.color_swatch_id === colourId)
-      if (match) return match.url
-    }
-    return list[0]?.url ?? fallbackUrl ?? null
-  }
   const [activeUrl, setActiveUrl] = useState<string | null>(() =>
-    pickHero(ordered, selectedColorSwatchId),
+    pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl),
   )
   const prevColorRef = useRef(selectedColorSwatchId)
 
@@ -64,7 +53,7 @@ export function ProductImageGallery({
       // Swatch selection moved — jump the hero to the new colour's first
       // matched image. Falls back to ordered[0]/fallback when the new colour
       // has no per-colour images uploaded yet.
-      setActiveUrl(pickHero(ordered, selectedColorSwatchId))
+      setActiveUrl(pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl))
       return
     }
     // Same colour, ordered may have shifted because images prop changed —
@@ -72,12 +61,9 @@ export function ProductImageGallery({
     const urls = new Set(ordered.map((img) => img.url))
     setActiveUrl((current) => {
       if (current && urls.has(current)) return current
-      return pickHero(ordered, selectedColorSwatchId)
+      return pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl)
     })
-    // pickHero is locally defined and closes over fallbackUrl — deps below
-    // capture the inputs that drive image resolution.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fallbackUrl, ordered, selectedColorSwatchId])
+  }, [fallbackUrl, images, ordered, selectedColorSwatchId])
 
   const activeImage = useMemo(
     () => ordered.find((img) => img.url === activeUrl) ?? null,

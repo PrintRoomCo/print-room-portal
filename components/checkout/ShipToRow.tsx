@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import type { CartLine } from '@/lib/cart/types'
+import { cartLineDisplayImageUrl, type CartLine } from '@/lib/cart/types'
 import { Switch } from '@/components/ui/Switch'
 
 export interface StoreOption {
@@ -57,14 +57,15 @@ export function ShipToRow({
   const selectValue = value ?? CUSTOM_SHIP_TO
   const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
   const decorationCount = line.decorations.length
+  const imageUrl = cartLineDisplayImageUrl(line)
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 bg-white py-5 text-sm first:pt-0 last:pb-0">
       <div className="flex min-w-0 flex-1 items-start gap-4">
         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
-          {line.imageUrl ? (
+          {imageUrl ? (
             <Image
-              src={line.imageUrl}
+              src={imageUrl}
               alt=""
               fill
               sizes="80px"

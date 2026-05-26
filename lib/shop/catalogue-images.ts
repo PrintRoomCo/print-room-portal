@@ -37,10 +37,12 @@ export function pickCatalogueItemThumbnail(
   rows: CatalogueItemImageRow[],
 ): string | null {
   const candidate = rows
-    .filter((r) => r.image_url && r.color_swatch_id == null)
+    .filter((r) => r.image_url)
     .sort((a, b) => {
       const sd = thumbnailSourceRank(a.source) - thumbnailSourceRank(b.source)
       if (sd !== 0) return sd
+      const cd = (a.color_swatch_id == null ? 0 : 1) - (b.color_swatch_id == null ? 0 : 1)
+      if (cd !== 0) return cd
       const vd = thumbnailViewRank(a.view) - thumbnailViewRank(b.view)
       if (vd !== 0) return vd
       return (a.position ?? 0) - (b.position ?? 0)
@@ -71,6 +73,38 @@ export function resolveGalleryImagesForColour(
   return Array.from(chosenByView.values())
     .map((entry) => entry.image)
     .sort(compareImages)
+}
+
+export function pickPreferredGalleryImage(
+  images: CatalogueAwareGalleryImage[],
+  selectedColorSwatchId: string | null,
+): CatalogueAwareGalleryImage | null {
+  const ordered = resolveGalleryImagesForColour(images, selectedColorSwatchId)
+  if (selectedColorSwatchId) {
+    return (
+      ordered.find(
+        (img) =>
+          img.source === 'designer_snapshot' &&
+          img.color_swatch_id === selectedColorSwatchId,
+      ) ??
+      ordered.find(
+        (img) => img.source === 'designer_snapshot' && img.color_swatch_id == null,
+      ) ??
+      ordered.find((img) => img.color_swatch_id === selectedColorSwatchId) ??
+      ordered[0] ??
+      null
+    )
+  }
+
+  return ordered.find((img) => img.source === 'designer_snapshot') ?? ordered[0] ?? null
+}
+
+export function pickPreferredGalleryImageUrl(
+  images: CatalogueAwareGalleryImage[],
+  selectedColorSwatchId: string | null,
+  fallbackUrl: string | null,
+): string | null {
+  return pickPreferredGalleryImage(images, selectedColorSwatchId)?.url ?? fallbackUrl
 }
 
 const PRIMARY_VIEWS = new Set([

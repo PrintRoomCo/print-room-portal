@@ -10,7 +10,12 @@ import { TierBadge } from '@/components/pricing/TierBadge'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
-import { decorationPerUnit } from '@/lib/cart/types'
+import {
+  allInLineTotal,
+  allInUnitPrice,
+  cartLineDisplayImageUrl,
+  decorationPerUnit,
+} from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import type { StoreOption } from './ShipToRow'
 import {
@@ -176,7 +181,7 @@ export function CheckoutReviewClient({
         }
         if (data.error === 'decoration_price_drift' && data.drift) {
           const summary = data.drift
-            .map((d) => `${d.decorationName}: was $${d.was.toFixed(2)} -> now $${d.now.toFixed(2)} (${d.reason})`)
+            .map((d) => `${d.decorationName} (${d.reason})`)
             .join('; ')
           setBanner({
             kind: 'error',
@@ -187,10 +192,7 @@ export function CheckoutReviewClient({
         }
         if (data.error === 'unit_price_drift' && data.priceDrift) {
           const summary = data.priceDrift
-            .map(
-              (d) =>
-                `${d.productName}: cart $${d.claimedUnitPrice.toFixed(2)} -> live $${d.canonicalUnitPrice.toFixed(2)}`,
-            )
+            .map((d) => d.productName)
             .join('; ')
           setBanner({
             kind: 'error',
@@ -345,15 +347,17 @@ export function CheckoutReviewClient({
         </div>
         <div className="divide-y divide-gray-100">
           {cart.lines.map((line) => {
-            const lineTotal = line.qty * (line.unitPrice + decorationPerUnit(line))
+            const unitPrice = allInUnitPrice(line)
+            const lineTotal = allInLineTotal(line)
+            const imageUrl = cartLineDisplayImageUrl(line)
             return (
               <article key={line.lineId} className="py-5 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
-                      {line.imageUrl ? (
+                      {imageUrl ? (
                         <Image
-                          src={line.imageUrl}
+                          src={imageUrl}
                           alt=""
                           fill
                           sizes="80px"
@@ -372,7 +376,7 @@ export function CheckoutReviewClient({
                         <ul className="mt-2 space-y-1 text-xs text-gray-600">
                           {line.decorations.map((decoration) => (
                             <li key={decoration.linkId}>
-                              {decoration.name} +{format(decoration.unitPrice)} / unit
+                              {decoration.name}
                             </li>
                           ))}
                         </ul>
@@ -380,7 +384,7 @@ export function CheckoutReviewClient({
                     </div>
                   </div>
                   <div className="text-right text-sm">
-                    <p className="text-gray-500">Unit {format(line.unitPrice)}</p>
+                    <p className="text-gray-500">Unit {format(unitPrice)}</p>
                     <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
                   </div>
                 </div>

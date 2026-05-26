@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pickCatalogueItemThumbnail,
+  pickPreferredGalleryImageUrl,
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
 } from './catalogue-images'
@@ -209,5 +211,52 @@ describe('resolveGalleryImagesForColour', () => {
       '/master-back.png',
       '/master-detail-blue.png',
     ])
+  })
+})
+
+describe('pickPreferredGalleryImageUrl', () => {
+  it('uses a designer snapshot as the active image even when a blank hero sorts first', () => {
+    expect(
+      pickPreferredGalleryImageUrl(
+        [
+          {
+            id: 'master-hero-blue',
+            url: '/blank-hero-blue.png',
+            view: 'hero',
+            position: 0,
+            color_swatch_id: 'blue',
+            scope: 'master',
+          },
+          {
+            id: 'designer-front-blue',
+            url: '/designer-front-blue.png',
+            view: 'front',
+            position: 99,
+            color_swatch_id: 'blue',
+            scope: 'catalogue',
+            source: 'designer_snapshot',
+          },
+        ],
+        'blue',
+        '/fallback.png',
+      ),
+    ).toBe('/designer-front-blue.png')
+  })
+})
+
+describe('pickCatalogueItemThumbnail', () => {
+  it('uses a colour-specific designer snapshot before the master fallback', () => {
+    expect(
+      pickCatalogueItemThumbnail('/blank.png', [
+        {
+          catalogue_item_id: 'item-1',
+          view: 'hero',
+          source: 'designer_snapshot',
+          position: 0,
+          image_url: '/designer-blue.png',
+          color_swatch_id: 'blue',
+        },
+      ]),
+    ).toBe('/designer-blue.png')
   })
 })

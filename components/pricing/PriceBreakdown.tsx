@@ -22,23 +22,17 @@ interface PriceBreakdownProps {
  * Catalogue prices are absolute — no tier-discount line.
  */
 export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownProps) {
-  const showDecoration = breakdown.decorationTotal > 0
   const showShipping = variant === 'cart-totals' || variant === 'checkout-review'
   const fmt = format ?? formatPrice
-  const productSubtotal = showDecoration
-    ? Number((breakdown.grossSubtotal - breakdown.decorationTotal).toFixed(2))
-    : breakdown.grossSubtotal
 
   return (
     <div className="space-y-1.5 text-sm">
-      <Row
-        label={showDecoration ? 'Garments' : 'Subtotal'}
-        value={productSubtotal}
-        format={fmt}
-      />
-      {showDecoration && (
-        <Row label="Decoration" value={breakdown.decorationTotal} format={fmt} />
-      )}
+      <Row label="Subtotal" value={breakdown.grossSubtotal} format={fmt} />
+      {/*
+        Keep breakdown.decorationTotal populated for debugging and checkout
+        parity checks, but do not expose the raw decoration cost customer-side.
+        Decoration is baked into the subtotal/unit price displays.
+      */}
       {showShipping && (
         <div className="flex items-baseline justify-between">
           <span className="text-gray-700">Shipping</span>

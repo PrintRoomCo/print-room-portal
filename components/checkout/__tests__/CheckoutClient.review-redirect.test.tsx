@@ -44,6 +44,12 @@ vi.mock('@/lib/pricing/usePricingContext', () => ({
   }),
 }))
 
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({
+    format: (n: number) => `$${n.toFixed(2)}`,
+  }),
+}))
+
 beforeEach(() => {
   sessionStorage.clear()
   mocks.clear.mockClear()

@@ -689,7 +689,6 @@ function QuoteDetail({
   const items = (Array.isArray(quote.line_items) ? quote.line_items : []) as QuoteItem[]
   const totals = {
     subtotal: Number(quote.subtotal || 0),
-    decoration: Number(quote.decoration_cost || 0),
     shipping: Number(quote.shipping_estimate || 0),
     total: Number(quote.total_amount || 0),
   }
@@ -758,24 +757,22 @@ function QuoteDetail({
                 <div className="space-y-4">
                   {items.map((item, index) => {
                     const decorations = Array.isArray(item.decorations) ? item.decorations : []
-                    const decoPerUnit = decorations.reduce(
-                      (s, d) => s + Number(d?.unitPrice ?? d?.unit_price ?? 0),
-                      0,
-                    )
+                    const itemImage =
+                      decorations.find((d) => d?.snapshotUrl)?.snapshotUrl ?? item.image_url
                     const qty = Number(item.quantity || 0)
                     const unitPrice = Number(item.unit_price || 0)
                     const lineTotal =
-                      Number(item.total_price || 0) || (qty * (unitPrice + decoPerUnit))
+                      Number(item.total_price || 0) || (qty * unitPrice)
                     return (
                       <article
                         key={item.id || `line-${index}`}
                         className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 md:gap-5"
                       >
                         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
-                          {item.image_url ? (
+                          {itemImage ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
-                              src={item.image_url}
+                              src={itemImage}
                               alt={item.product_name || item.productTitle || ''}
                               className="h-full w-full object-contain p-2"
                               loading="lazy"
@@ -793,7 +790,6 @@ function QuoteDetail({
                             <div className="mt-3 flex flex-wrap items-center gap-1.5">
                               {decorations.map((d, i) => {
                                 const icon = d?.snapshotUrl ?? d?.artworkUrl
-                                const dPrice = Number(d?.unitPrice ?? d?.unit_price ?? 0)
                                 return (
                                   <span
                                     key={`${item.id || index}-deco-${i}`}
@@ -808,9 +804,6 @@ function QuoteDetail({
                                       />
                                     ) : null}
                                     <span className="font-medium">{d?.name || 'Decoration'}</span>
-                                    <span className="tabular-nums text-gray-500">
-                                      +{formatMoney(dPrice, currency)}
-                                    </span>
                                   </span>
                                 )
                               })}
@@ -820,7 +813,7 @@ function QuoteDetail({
                             <span className="tabular-nums text-gray-700">{qty}</span>{' '}
                             ×{' '}
                             <span className="tabular-nums text-gray-700">
-                              {formatMoney(unitPrice + decoPerUnit, currency)}
+                              {formatMoney(unitPrice, currency)}
                             </span>
                           </p>
                         </div>
@@ -888,12 +881,10 @@ function QuoteDetail({
                     {formatMoney(totals.subtotal, currency)}
                   </span>
                 </div>
-                {totals.decoration > 0 && (
-                  <div className="flex justify-between text-gray-500">
-                    <span className="pl-3">Decoration</span>
-                    <span className="tabular-nums">{formatMoney(totals.decoration, currency)}</span>
-                  </div>
-                )}
+                {/*
+                  quote.decoration_cost remains stored for diagnostics, but
+                  customer-facing totals show all-in unit/subtotal pricing.
+                */}
                 <div className="flex justify-between border-t border-gray-100 pt-2.5">
                   <span className="text-gray-600">Shipping</span>
                   <span className="tabular-nums text-gray-900">
