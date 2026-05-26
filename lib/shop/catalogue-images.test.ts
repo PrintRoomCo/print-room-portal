@@ -190,6 +190,84 @@ describe('resolveGalleryImagesForColour', () => {
     ])
   })
 
+  it('falls back to a cross-swatch designer snapshot when none matches the selected colour', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        {
+          id: 'master-hero-bone',
+          url: '/master-hero-bone.png',
+          view: 'hero',
+          position: 0,
+          color_swatch_id: 'bone',
+          scope: 'master',
+        },
+        {
+          id: 'designer-hero-arctic',
+          url: '/designer-hero-arctic.png',
+          view: 'hero',
+          position: 0,
+          color_swatch_id: 'arctic',
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'bone',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual(['/designer-hero-arctic.png'])
+  })
+
+  it('prefers a swatch-matched snapshot over a cross-swatch snapshot', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        {
+          id: 'designer-hero-arctic',
+          url: '/designer-hero-arctic.png',
+          view: 'hero',
+          position: 0,
+          color_swatch_id: 'arctic',
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+        {
+          id: 'designer-hero-bone',
+          url: '/designer-hero-bone.png',
+          view: 'hero',
+          position: 1,
+          color_swatch_id: 'bone',
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'bone',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual(['/designer-hero-bone.png'])
+  })
+
+  it('still drops a non-snapshot catalogue image from a non-matching swatch', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'staff-front-blue',
+          url: '/staff-front-blue.png',
+          view: 'front',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'yellow',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual([
+      '/master-front.png',
+      '/master-back.png',
+    ])
+  })
+
   it('keeps master+match detail images even when view is not a primary view', () => {
     const resolved = resolveGalleryImagesForColour(
       [
