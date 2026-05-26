@@ -81,7 +81,7 @@ const loadProductDetailPageData = cache(async (
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, image_url, moq_override, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, image_url, sku_override, moq_override, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -250,6 +250,7 @@ const loadProductDetailPageData = cache(async (
     name: string
     description: string | null
     image_url: string | null
+    sku_override: string | null
     moq_override: number | null
   } | null
 
@@ -258,6 +259,7 @@ const loadProductDetailPageData = cache(async (
     name: stripTrailingSku(catItemForked?.name ?? productRow.name, productRow.sku),
     description: cleanDescription(catItemForked?.description ?? productRow.description),
     image_url: catItemForked?.image_url ?? productRow.image_url,
+    sku: catItemForked?.sku_override ?? productRow.sku,
   }
 
   const effectiveMoq = getEffectiveMoq(
