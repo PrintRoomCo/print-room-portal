@@ -25,10 +25,17 @@ export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownPro
   const showDecoration = breakdown.decorationTotal > 0
   const showShipping = variant === 'cart-totals' || variant === 'checkout-review'
   const fmt = format ?? formatPrice
+  const productSubtotal = showDecoration
+    ? Number((breakdown.grossSubtotal - breakdown.decorationTotal).toFixed(2))
+    : breakdown.grossSubtotal
 
   return (
     <div className="space-y-1.5 text-sm">
-      <Row label="Subtotal" value={breakdown.grossSubtotal} format={fmt} />
+      <Row
+        label={showDecoration ? 'Garments' : 'Subtotal'}
+        value={productSubtotal}
+        format={fmt}
+      />
       {showDecoration && (
         <Row label="Decoration" value={breakdown.decorationTotal} format={fmt} />
       )}

@@ -50,6 +50,70 @@ describe('resolveGalleryImagesForColour', () => {
     ])
   })
 
+  it('prefers a colour-matched designer snapshot over a plain staff upload', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'aaa-staff-front-blue',
+          url: '/staff-front-blue.png',
+          view: 'front',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+        {
+          id: 'zzz-designer-front-blue',
+          url: '/designer-front-blue.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual([
+      '/designer-front-blue.png',
+      '/master-back.png',
+    ])
+  })
+
+  it('prefers an all-colour designer snapshot over a colour-matched staff upload', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'staff-front-blue',
+          url: '/staff-front-blue.png',
+          view: 'front',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+        {
+          id: 'designer-front-all',
+          url: '/designer-front-all.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: null,
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual([
+      '/designer-front-all.png',
+      '/master-back.png',
+    ])
+  })
+
   it('prefers all-colour catalogue images before master images', () => {
     const resolved = resolveGalleryImagesForColour(
       [

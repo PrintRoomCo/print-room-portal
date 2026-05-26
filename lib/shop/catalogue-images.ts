@@ -91,12 +91,23 @@ function imagePriority(
   const scope = image.scope ?? 'master'
   const imageColor = image.color_swatch_id ?? null
 
-  if (scope === 'catalogue' && imageColor && imageColor === selectedColorSwatchId) return 1
-  if (scope === 'catalogue' && imageColor == null) return 2
-  if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 3
+  if (
+    scope === 'catalogue' &&
+    image.source === 'designer_snapshot' &&
+    imageColor &&
+    imageColor === selectedColorSwatchId
+  ) {
+    return 1
+  }
+  if (scope === 'catalogue' && image.source === 'designer_snapshot' && imageColor == null) {
+    return 2
+  }
+  if (scope === 'catalogue' && imageColor && imageColor === selectedColorSwatchId) return 3
+  if (scope === 'catalogue' && imageColor == null) return 4
+  if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 5
   if (scope === 'master' && imageColor == null) {
     const view = (image.view ?? '').toLowerCase()
-    if (PRIMARY_VIEWS.has(view)) return 4
+    if (PRIMARY_VIEWS.has(view)) return 6
     return null
   }
 

@@ -11,7 +11,10 @@ import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './P
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
 import type { DecorationOption } from '@/lib/shop/decorations'
-import { filterDecorationsBySwatch } from '@/lib/shop/decoration-filter'
+import {
+  filterDecorationsBySwatch,
+  resolveDecorationsForPricing,
+} from '@/lib/shop/decoration-filter'
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
@@ -385,14 +388,23 @@ export function ProductDetailClient({
     [decorations, colorSwatchId],
   )
 
-  const selectedDecorations = useMemo(
+  const visibleDecorations = useMemo(
     () => swatchVisibleDecorations.filter((d) => selectedLinkIds.has(d.linkId)),
     [swatchVisibleDecorations, selectedLinkIds],
   )
 
+  const pricedDecorations = useMemo(
+    () =>
+      resolveDecorationsForPricing(
+        decorations.filter((d) => selectedLinkIds.has(d.linkId)),
+        colorSwatchId,
+      ),
+    [decorations, selectedLinkIds, colorSwatchId],
+  )
+
   const galleryOverlays = useMemo<GalleryOverlay[]>(
     () =>
-      selectedDecorations.flatMap((d) =>
+      visibleDecorations.flatMap((d) =>
         d.overlay
           ? [
               {
@@ -405,7 +417,7 @@ export function ProductDetailClient({
             ]
           : [],
       ),
-    [selectedDecorations],
+    [visibleDecorations],
   )
 
   // Resolve decoration unit price for a specific qty (falls back to static unitPrice
@@ -418,23 +430,23 @@ export function ProductDetailClient({
 
   const decorationPerUnit = useMemo(
     () =>
-      selectedDecorations.reduce(
+      pricedDecorations.reduce(
         (s, d) => s + decorationPriceAt(d.linkId, qty, d.unitPrice),
         0,
       ),
-    [selectedDecorations, decorationPriceAt, qty],
+    [pricedDecorations, decorationPriceAt, qty],
   )
 
   // For rendering volume bracket rows: sum of selected decorations at that bracket's qty.
   const decorationPerUnitAtBracket = useMemo(
     () =>
       brackets.map((b) =>
-        selectedDecorations.reduce(
+        pricedDecorations.reduce(
           (s, d) => s + decorationPriceAt(d.linkId, b.min_quantity, d.unitPrice),
           0,
         ),
       ),
-    [brackets, selectedDecorations, decorationPriceAt],
+    [brackets, pricedDecorations, decorationPriceAt],
   )
 
   function showToast(msg: string) {
@@ -444,7 +456,7 @@ export function ProductDetailClient({
 
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
-    const cartLineDecorations: CartLineDecoration[] = selectedDecorations.map((d) => ({
+    const cartLineDecorations: CartLineDecoration[] = pricedDecorations.map((d) => ({
       linkId: d.linkId,
       decorationId: d.decorationId,
       name: d.name,
@@ -693,10 +705,10 @@ export function ProductDetailClient({
                   )
                 })}
               </ul>
-              {selectedDecorations.length > 0 && (
+              {pricedDecorations.length > 0 && (
                 <p className="mt-3 text-xs text-gray-500">
-                  Includes {selectedDecorations.length} decoration
-                  {selectedDecorations.length === 1 ? '' : 's'}.
+                  Includes {pricedDecorations.length} decoration
+                  {pricedDecorations.length === 1 ? '' : 's'}.
                 </p>
               )}
             </section>
@@ -885,8 +897,8 @@ export function ProductDetailClient({
                       lines: [
                         {
                           qty,
-                          unitEffective: pricing.unit_price + decorationPerUnit,
-                          decorationPerUnit: 0,
+                          unitEffective: pricing.unit_price,
+                          decorationPerUnit,
                         },
                       ],
                       gstRate: 0.15,

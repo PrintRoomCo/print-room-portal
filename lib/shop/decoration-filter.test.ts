@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { filterDecorationsBySwatch } from './decoration-filter'
+import { filterDecorationsBySwatch, resolveDecorationsForPricing } from './decoration-filter'
 
 interface MinimalDecoration {
   linkId: string
   decorationId: string
   snapshotColorSwatchId: string | null
+  isDefault?: boolean
+  sortOrder?: number
 }
 
 const a: MinimalDecoration = {
@@ -86,5 +88,51 @@ describe('filterDecorationsBySwatch', () => {
     }
     const result = filterDecorationsBySwatch([dec1Red, dec2Red], 'red')
     expect(result.map((d) => d.linkId).sort()).toEqual(['1', '2'])
+  })
+})
+
+describe('resolveDecorationsForPricing', () => {
+  it('keeps pricing for a swatch-specific decoration even on another colour', () => {
+    const result = resolveDecorationsForPricing([a], 'green')
+    expect(result.map((d) => d.linkId)).toEqual(['a'])
+  })
+
+  it('counts repeated swatch snapshots for the same decoration only once', () => {
+    const redSpecific: MinimalDecoration = {
+      linkId: 'red-specific',
+      decorationId: 'dec-shared',
+      snapshotColorSwatchId: 'red',
+      sortOrder: 0,
+    }
+    const blueSpecific: MinimalDecoration = {
+      linkId: 'blue-specific',
+      decorationId: 'dec-shared',
+      snapshotColorSwatchId: 'blue',
+      sortOrder: 0,
+    }
+
+    const result = resolveDecorationsForPricing([redSpecific, blueSpecific], 'blue')
+    expect(result.map((d) => d.linkId)).toEqual(['blue-specific'])
+  })
+
+  it('falls back to an all-colours or default row for cart metadata', () => {
+    const defaultSpecific: MinimalDecoration = {
+      linkId: 'default-specific',
+      decorationId: 'dec-shared',
+      snapshotColorSwatchId: 'red',
+      isDefault: true,
+      sortOrder: 1,
+    }
+    const allColours: MinimalDecoration = {
+      linkId: 'all',
+      decorationId: 'dec-shared',
+      snapshotColorSwatchId: null,
+      sortOrder: 2,
+    }
+
+    expect(resolveDecorationsForPricing([defaultSpecific, allColours], 'green').map((d) => d.linkId))
+      .toEqual(['all'])
+    expect(resolveDecorationsForPricing([defaultSpecific], 'green').map((d) => d.linkId))
+      .toEqual(['default-specific'])
   })
 })
