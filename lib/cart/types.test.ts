@@ -5,6 +5,7 @@ import {
   recomputeProductTierPrices,
   type CartLine,
   type CartLineBracket,
+  type CartLineDecoration,
 } from './types'
 
 const brackets: CartLineBracket[] = [
@@ -55,6 +56,7 @@ function line(opts: {
   qty: number
   unitPrice: number
   brackets?: CartLineBracket[] | undefined
+  decorations?: CartLineDecoration[]
 }): CartLine {
   return {
     lineId: opts.lineId,
@@ -65,7 +67,25 @@ function line(opts: {
     qty: opts.qty,
     unitPrice: opts.unitPrice,
     imageUrl: null,
-    decorations: [],
+    decorations: opts.decorations ?? [],
+    brackets: opts.brackets,
+  }
+}
+
+function deco(opts: {
+  linkId?: string
+  unitPrice: number
+  brackets?: CartLineBracket[]
+}): CartLineDecoration {
+  return {
+    linkId: opts.linkId ?? 'link-1',
+    decorationId: 'deco-1',
+    name: 'Screen print — Front',
+    method: 'screenprint',
+    positionLabel: 'Front',
+    unitPrice: opts.unitPrice,
+    artworkUrl: '',
+    snapshotUrl: null,
     brackets: opts.brackets,
   }
 }
@@ -129,6 +149,117 @@ describe('recomputeProductTierPrices', () => {
 
   it('returns the same line reference when no recalc is needed (referential equality)', () => {
     const stable = line({ lineId: 'a', productId: 'p1', qty: 100, unitPrice: 20, brackets })
+    const after = recomputeProductTierPrices([stable])
+    expect(after[0]).toBe(stable)
+  })
+
+  it("re-tiers a decoration's unitPrice from its own brackets at total product qty", () => {
+    // TPRC scenario: garment is flat (no brackets), decoration has qty bands.
+    // Line was added at qty 50 (deco $6.62/unit); user edits qty down to 24.
+    // Decoration should re-pick the 1-23/24-49 band ($12.49), not stay frozen.
+    const decoBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 23, unitPrice: 12.49 },
+      { minQty: 24, maxQty: 49, unitPrice: 12.49 },
+      { minQty: 50, maxQty: 99, unitPrice: 6.62 },
+      { minQty: 100, maxQty: null, unitPrice: 4.79 },
+    ]
+    const before = [
+      line({
+        lineId: 'a',
+        productId: 'p1',
+        qty: 24,
+        unitPrice: 7.25,
+        brackets: undefined, // flat-price garment, no item-tier ladder
+        decorations: [deco({ unitPrice: 6.62, brackets: decoBrackets })],
+      }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].decorations[0].unitPrice).toBe(12.49)
+    // Garment side stays put (no brackets to re-pick from).
+    expect(after[0].unitPrice).toBe(7.25)
+  })
+
+  it('re-tiers a decoration when qty climbs into a cheaper band', () => {
+    const decoBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 49, unitPrice: 12.49 },
+      { minQty: 50, maxQty: 99, unitPrice: 6.62 },
+      { minQty: 100, maxQty: null, unitPrice: 4.79 },
+    ]
+    const before = [
+      line({
+        lineId: 'a',
+        productId: 'p1',
+        qty: 120,
+        unitPrice: 20,
+        brackets,
+        decorations: [deco({ unitPrice: 12.49, brackets: decoBrackets })],
+      }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].unitPrice).toBe(20) // 120 in 100+ garment bucket
+    expect(after[0].decorations[0].unitPrice).toBe(4.79)
+  })
+
+  it('uses summed cross-line product qty when re-tiering decoration price', () => {
+    // Mirrors the existing garment-side behaviour: a multi-size order
+    // tiers on the run total, not the per-size qty.
+    const decoBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 49, unitPrice: 12.49 },
+      { minQty: 50, maxQty: 99, unitPrice: 6.62 },
+      { minQty: 100, maxQty: null, unitPrice: 4.79 },
+    ]
+    const before = [
+      line({
+        lineId: 'a',
+        productId: 'p1',
+        variantId: 'S',
+        qty: 30,
+        unitPrice: 99,
+        decorations: [deco({ unitPrice: 12.49, brackets: decoBrackets })],
+      }),
+      line({
+        lineId: 'b',
+        productId: 'p1',
+        variantId: 'M',
+        qty: 80,
+        unitPrice: 99,
+        decorations: [deco({ unitPrice: 12.49, brackets: decoBrackets })],
+      }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    // Total 110 → 100+ band → both decoration lines $4.79.
+    for (const l of after) expect(l.decorations[0].unitPrice).toBe(4.79)
+  })
+
+  it('leaves decorations without brackets frozen (legacy / non-tiered methods)', () => {
+    const before = [
+      line({
+        lineId: 'a',
+        productId: 'p1',
+        qty: 200,
+        unitPrice: 20,
+        brackets,
+        decorations: [deco({ unitPrice: 8.5, brackets: undefined })],
+      }),
+    ]
+    const after = recomputeProductTierPrices(before)
+    expect(after[0].decorations[0].unitPrice).toBe(8.5)
+  })
+
+  it('returns the same line reference when only a no-op decoration check runs', () => {
+    const decoBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 49, unitPrice: 12.49 },
+    ]
+    // qty=10 sits in the 1-49 garment band (unitPrice 30) and the 1-49 deco
+    // band (12.49). Both checks are no-ops → same reference returned.
+    const stable = line({
+      lineId: 'a',
+      productId: 'p1',
+      qty: 10,
+      unitPrice: 30,
+      brackets,
+      decorations: [deco({ unitPrice: 12.49, brackets: decoBrackets })],
+    })
     const after = recomputeProductTierPrices([stable])
     expect(after[0]).toBe(stable)
   })

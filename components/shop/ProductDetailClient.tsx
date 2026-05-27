@@ -335,9 +335,20 @@ export function ProductDetailClient({
     if (recalcItems.length === 0) return
     if (!Number.isInteger(qty) || qty <= 0) return
 
-    // Probe each bracket's representative qty + the current qty.
+    // Probe each bracket's representative qty, the standard screen-print
+    // qty ladder (so we capture the decoration's own band breakpoints even
+    // when the item has no garment-tier ladder), plus the current qty.
+    // The cart snapshots these as `decoration.brackets` so qty edits in the
+    // cart re-pick decoration price the same way they re-pick garment price.
+    const DECORATION_PROBE_BREAKPOINTS = [1, 24, 50, 100, 250, 500, 1000]
     const probeQtys = Array.from(
-      new Set([...brackets.map((b) => b.min_quantity), qty].filter((q) => q >= 1)),
+      new Set(
+        [
+          ...brackets.map((b) => b.min_quantity),
+          ...DECORATION_PROBE_BREAKPOINTS,
+          qty,
+        ].filter((q) => q >= 1),
+      ),
     )
 
     if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
@@ -458,6 +469,39 @@ export function ProductDetailClient({
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
     const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
+
+    // Build a per-decoration qty-band ladder from `decorationPricesByQty` so
+    // the cart can re-tier deco price on qty edit (same shape as the garment
+    // brackets snapshot). Collapses adjacent buckets with identical prices
+    // into a single band, and the tail band runs to maxQty=null. Returns
+    // undefined when we have no probe data (e.g. legacy decorations without
+    // recalcInputs) — cart will leave unitPrice frozen, server re-prices on
+    // submit either way.
+    const buildDecorationBrackets = (linkId: string): CartLineBracket[] | undefined => {
+      const probeMins = Object.keys(decorationPricesByQty)
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n) && n >= 1)
+        .sort((a, b) => a - b)
+      const points: Array<{ min: number; price: number }> = []
+      for (const min of probeMins) {
+        const price = decorationPricesByQty[min]?.[linkId]
+        if (price != null) points.push({ min, price })
+      }
+      if (points.length === 0) return undefined
+      const bands: CartLineBracket[] = []
+      for (let i = 0; i < points.length; i++) {
+        const start = points[i]
+        if (bands.length > 0 && bands[bands.length - 1].unitPrice === start.price) continue
+        const next = points[i + 1]
+        bands.push({
+          minQty: start.min,
+          maxQty: next ? next.min - 1 : null,
+          unitPrice: start.price,
+        })
+      }
+      return bands.length > 0 ? bands : undefined
+    }
+
     const cartDecorationsForSwatch = (swatchId: string | null): CartLineDecoration[] =>
       resolveDecorationsForPricing(selectedDecorations, swatchId).map((d) => ({
         linkId: d.linkId,
@@ -468,6 +512,7 @@ export function ProductDetailClient({
         unitPrice: decorationPriceAt(d.linkId, qty, d.unitPrice),
         artworkUrl: d.artworkUrl,
         snapshotUrl: d.snapshotUrl,
+        brackets: buildDecorationBrackets(d.linkId),
       }))
     const cartImageForSwatch = (swatchId: string | null): string | null =>
       pickPreferredGalleryImageUrl(images, swatchId, product.image_url)

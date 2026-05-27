@@ -15,6 +15,14 @@ export interface CartLineDecoration {
   artworkUrl: string
   /** designer-rendered mockup if present (Phase 8+); null in Phase 5. */
   snapshotUrl: string | null
+  /**
+   * Decoration's own qty-band ladder, snapshotted at add-time. When present,
+   * `recomputeProductTierPrices` re-picks `unitPrice` from this ladder on cart
+   * qty edits — matching how the garment tier already re-picks. Absent for
+   * legacy lines + decorations without qty-aware pricing (embroidery, heatpress
+   * etc.); in those cases unitPrice stays frozen until checkout re-prices.
+   */
+  brackets?: CartLineBracket[]
 }
 
 export interface CartLineBracket {
@@ -146,10 +154,28 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
     totalByProduct.set(l.productId, (totalByProduct.get(l.productId) ?? 0) + l.qty)
   }
   return lines.map((l) => {
-    if (!l.brackets || l.brackets.length === 0) return l
     const total = totalByProduct.get(l.productId) ?? l.qty
-    const bracket = pickBracket(l.brackets, total)
-    if (!bracket || bracket.unitPrice === l.unitPrice) return l
-    return { ...l, unitPrice: bracket.unitPrice }
+
+    let nextUnitPrice = l.unitPrice
+    if (l.brackets && l.brackets.length > 0) {
+      const bracket = pickBracket(l.brackets, total)
+      if (bracket) nextUnitPrice = bracket.unitPrice
+    }
+
+    let nextDecorations: CartLineDecoration[] = l.decorations
+    let decorationsChanged = false
+    if (l.decorations.length > 0) {
+      const remapped = l.decorations.map((d) => {
+        if (!d.brackets || d.brackets.length === 0) return d
+        const decoBracket = pickBracket(d.brackets, total)
+        if (!decoBracket || decoBracket.unitPrice === d.unitPrice) return d
+        decorationsChanged = true
+        return { ...d, unitPrice: decoBracket.unitPrice }
+      })
+      if (decorationsChanged) nextDecorations = remapped
+    }
+
+    if (nextUnitPrice === l.unitPrice && !decorationsChanged) return l
+    return { ...l, unitPrice: nextUnitPrice, decorations: nextDecorations }
   })
 }

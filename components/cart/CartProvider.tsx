@@ -12,6 +12,7 @@ import {
   recomputeProductTierPrices,
   type CartLine,
   type CartLineBracket,
+  type CartLineDecoration,
   type CartState,
 } from '@/lib/cart/types'
 
@@ -40,6 +41,30 @@ function normalizeBrackets(raw: unknown): CartLineBracket[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
+function normalizeDecorations(raw: unknown): CartLineDecoration[] {
+  if (!Array.isArray(raw)) return []
+  const out: CartLineDecoration[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const d = r as Partial<CartLineDecoration> & Record<string, unknown>
+    if (typeof d.linkId !== 'string' || typeof d.decorationId !== 'string') continue
+    if (typeof d.unitPrice !== 'number') continue
+    out.push({
+      linkId: d.linkId,
+      decorationId: d.decorationId,
+      name: typeof d.name === 'string' ? d.name : '',
+      method: typeof d.method === 'string' ? d.method : '',
+      positionLabel:
+        typeof d.positionLabel === 'string' ? d.positionLabel : null,
+      unitPrice: d.unitPrice,
+      artworkUrl: typeof d.artworkUrl === 'string' ? d.artworkUrl : '',
+      snapshotUrl: typeof d.snapshotUrl === 'string' ? d.snapshotUrl : null,
+      brackets: normalizeBrackets(d.brackets),
+    })
+  }
+  return out
+}
+
 function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
   const lines = (raw as { lines?: unknown }).lines
@@ -62,7 +87,7 @@ function normalizePersisted(raw: unknown): CartState {
         typeof l.shipToStoreId === 'string' || l.shipToStoreId === null
           ? (l.shipToStoreId ?? null)
           : null,
-      decorations: Array.isArray(l.decorations) ? l.decorations : [],
+      decorations: normalizeDecorations(l.decorations),
       fulfilmentType:
         l.fulfilmentType === 'make_to_stock' || l.fulfilmentType === 'stocked'
           ? l.fulfilmentType
@@ -146,12 +171,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
         )
         const merged: CartLine[] = existing
           ? s.lines.map((l) =>
-              // Refresh brackets from the incoming add — the new PDP fetch
-              // is the latest source of truth — and let recomputeProduct-
-              // TierPrices below settle unitPrice across every same-product
-              // line at the new total qty.
+              // Refresh brackets AND decoration brackets from the incoming
+              // add — the new PDP fetch is the latest source of truth — and
+              // let recomputeProductTierPrices below settle unitPrice across
+              // every same-product line at the new total qty. The signature
+              // match guarantees the decoration set is identical, so we can
+              // safely swap in the incoming decoration payload (which carries
+              // the latest qty-band ladder snapshot).
               l === existing
-                ? { ...l, qty: l.qty + line.qty, brackets: line.brackets ?? l.brackets }
+                ? {
+                    ...l,
+                    qty: l.qty + line.qty,
+                    brackets: line.brackets ?? l.brackets,
+                    decorations:
+                      line.decorations && line.decorations.length > 0
+                        ? line.decorations
+                        : l.decorations,
+                  }
                 : l,
             )
           : [
