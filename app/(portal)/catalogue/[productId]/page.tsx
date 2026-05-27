@@ -104,10 +104,14 @@ const loadProductDetailPageData = cache(async (
   // table. Probing `effective_unit_price` at the canonical breakpoints
   // catches markup-ladder products (where the manual ladder is empty) AND
   // manual-ladder products (engine routes through manual rows when present).
-  // Adjacent bands with identical prices collapse into one — matches the
-  // collapse pattern in ProductDetailClient.buildDecorationBrackets and the
-  // shape expected downstream at bracketRows.
-  const CANONICAL_BREAKPOINTS: number[] = [1, 24, 50, 100, 250, 500, 1000]
+  // Adjacent bands with identical prices collapse into one.
+  //
+  // qty=1 is intentionally NOT probed: `garment_markup_tiers` has a row
+  // 1-23 with multiplier 1.0, so effective_unit_price at qty=1 returns
+  // base_cost × tier — wholesale, not retail. Including it leaked a
+  // misleadingly-cheap "1-23" band into the Volume pricing widget for
+  // markup-ladder products. 24 is the actual B2B floor for printed gear.
+  const CANONICAL_BREAKPOINTS: number[] = [24, 50, 100, 250, 500, 1000]
   const bracketsQuery = (async () => {
     const probes: Array<{ qty: number; price: number | null }> = await Promise.all(
       CANONICAL_BREAKPOINTS.map(async (qty) => {
