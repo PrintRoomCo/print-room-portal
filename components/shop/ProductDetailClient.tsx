@@ -342,7 +342,9 @@ export function ProductDetailClient({
     // when the item has no garment-tier ladder), plus the current qty.
     // The cart snapshots these as `decoration.brackets` so qty edits in the
     // cart re-pick decoration price the same way they re-pick garment price.
-    const DECORATION_PROBE_BREAKPOINTS = [1, 24, 50, 100, 250, 500, 1000]
+    // qty=1 is excluded for symmetry with the garment brackets — printed
+    // gear's commercial floor is qty 24.
+    const DECORATION_PROBE_BREAKPOINTS = [24, 50, 100, 250, 500, 1000]
     const probeQtys = Array.from(
       new Set(
         [
@@ -491,11 +493,16 @@ export function ProductDetailClient({
 
     // Build a per-decoration qty-band ladder from `decorationPricesByQty` so
     // the cart can re-tier deco price on qty edit (same shape as the garment
-    // brackets snapshot). Collapses adjacent buckets with identical prices
-    // into a single band, and the tail band runs to maxQty=null. Returns
-    // undefined when we have no probe data (e.g. legacy decorations without
-    // recalcInputs) — cart will leave unitPrice frozen, server re-prices on
-    // submit either way.
+    // brackets snapshot). Two-pass collapse: drop runs where the price
+    // equals the previous kept point, then size each band by the NEXT kept
+    // point's qty minus one. Naive collapse (skip-but-don't-extend) would
+    // leave gaps — e.g. probes at qty 1 and qty 24 sharing a price → band
+    // (1, 23) and the next band starting at 50 → qty 24-49 falls in no band
+    // and pickBracket returns null on cart edits, which makes the cart's
+    // decoration unit price get stuck at the previous tier's value.
+    // Returns undefined when we have no probe data (legacy decorations
+    // without recalcInputs) — cart will leave unitPrice frozen and the
+    // server will re-price on submit either way.
     const buildDecorationBrackets = (linkId: string): CartLineBracket[] | undefined => {
       const probeMins = Object.keys(decorationPricesByQty)
         .map((s) => Number(s))
@@ -507,17 +514,16 @@ export function ProductDetailClient({
         if (price != null) points.push({ min, price })
       }
       if (points.length === 0) return undefined
-      const bands: CartLineBracket[] = []
-      for (let i = 0; i < points.length; i++) {
-        const start = points[i]
-        if (bands.length > 0 && bands[bands.length - 1].unitPrice === start.price) continue
-        const next = points[i + 1]
-        bands.push({
-          minQty: start.min,
-          maxQty: next ? next.min - 1 : null,
-          unitPrice: start.price,
-        })
+      const interesting: Array<{ min: number; price: number }> = []
+      for (const p of points) {
+        const last = interesting[interesting.length - 1]
+        if (!last || last.price !== p.price) interesting.push(p)
       }
+      const bands = interesting.map((p, i) => ({
+        minQty: p.min,
+        maxQty: i + 1 < interesting.length ? interesting[i + 1].min - 1 : null,
+        unitPrice: p.price,
+      }))
       return bands.length > 0 ? bands : undefined
     }
 
