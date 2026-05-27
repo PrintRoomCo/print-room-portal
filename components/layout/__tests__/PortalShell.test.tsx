@@ -11,6 +11,9 @@ vi.mock('@/contexts/CompanyContext', () => ({
 vi.mock('../PortalTopBar', () => ({
   PortalTopBar: () => <div data-testid="topbar" />,
 }))
+vi.mock('@/components/cart/CartDrawer', () => ({
+  CartDrawer: () => null,
+}))
 vi.mock('../Sidebar', () => ({
   Sidebar: ({ children }: { children: React.ReactNode }) => (
     <div>

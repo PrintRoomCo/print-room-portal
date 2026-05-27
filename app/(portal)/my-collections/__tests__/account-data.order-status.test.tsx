@@ -25,6 +25,10 @@ vi.mock('@/lib/supabase', () => ({
   getSupabaseServer: () => mocks.admin,
 }))
 
+vi.mock('next/cache', () => ({
+  unstable_cache: (fn: unknown) => fn,
+}))
+
 function queryResult(result: unknown) {
   const builder = {
     select: vi.fn(() => builder),
