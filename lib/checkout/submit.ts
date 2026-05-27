@@ -579,13 +579,10 @@ export async function submitCustomerOrder(
       const effective = await effectiveDecorationPrice(
         admin,
         {
-          decorationMethod: od.decoration_method,
+          orgDecorationId: od.id,
+          organizationId: input.context.organizationId,
           unitPriceOverride: row.unit_price_override,
           baseUnitPrice: od.unit_price,
-          widthMm: od.width_mm,
-          heightMm: od.height_mm,
-          colourCount: od.colour_count,
-          placementKey: loc?.placement_key ?? null,
         },
         decorationQty,
       )
