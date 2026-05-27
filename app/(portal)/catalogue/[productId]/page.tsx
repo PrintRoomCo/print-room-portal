@@ -100,11 +100,50 @@ const loadProductDetailPageData = cache(async (
     .eq('id', productId)
     .single()
 
-  const bracketsQuery = admin
-    .from('b2b_catalogue_item_pricing_tiers')
-    .select('min_quantity, max_quantity, unit_price')
-    .eq('catalogue_item_id', catItem.id)
-    .order('min_quantity')
+  // Brackets come from the canonical pricing engine, not the manual ladder
+  // table. Probing `effective_unit_price` at the canonical breakpoints
+  // catches markup-ladder products (where the manual ladder is empty) AND
+  // manual-ladder products (engine routes through manual rows when present).
+  // Adjacent bands with identical prices collapse into one — matches the
+  // collapse pattern in ProductDetailClient.buildDecorationBrackets and the
+  // shape expected downstream at bracketRows.
+  const CANONICAL_BREAKPOINTS: number[] = [1, 24, 50, 100, 250, 500, 1000]
+  const bracketsQuery = (async () => {
+    const probes: Array<{ qty: number; price: number | null }> = await Promise.all(
+      CANONICAL_BREAKPOINTS.map(async (qty) => {
+        const { data, error } = await admin.rpc('effective_unit_price', {
+          p_product_id: productId,
+          p_org_id: context.organizationId,
+          p_qty: qty,
+        })
+        if (error || data == null) return { qty, price: null }
+        return { qty, price: Number(data) }
+      }),
+    )
+    const points = probes.filter(
+      (p): p is { qty: number; price: number } => p.price != null,
+    )
+    if (points.length === 0) {
+      return { data: [] as Array<{ min_quantity: number; max_quantity: number | null; unit_price: number }> }
+    }
+    // First pass: drop runs where price equals the previous kept point. Each
+    // remaining "interesting" point is the start of a band.
+    const interesting: Array<{ qty: number; price: number }> = []
+    for (const p of points) {
+      const last = interesting[interesting.length - 1]
+      if (!last || last.price !== p.price) interesting.push(p)
+    }
+    // Second pass: each band's max_quantity is the NEXT interesting point's
+    // qty minus one, or null for the tail. Collapsed probes get absorbed
+    // into the previous band's range — at qty 24 with [{1,A},{24,A},{50,B}],
+    // band 1 spans 1..49, not 1..23.
+    const bands = interesting.map((p, i) => ({
+      min_quantity: p.qty,
+      max_quantity: i + 1 < interesting.length ? interesting[i + 1].qty - 1 : null,
+      unit_price: p.price,
+    }))
+    return { data: bands }
+  })()
 
   const [
     { data: product },
