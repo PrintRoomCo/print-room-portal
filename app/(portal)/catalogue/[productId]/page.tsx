@@ -134,7 +134,7 @@ const loadProductDetailPageData = cache(async (
       .eq('product_id', productId)
       .order('position', { ascending: true }),
     admin.from('b2b_catalogue_item_colors')
-      .select('color_swatch_id, sort_order, is_default')
+      .select('color_swatch_id, sort_order, is_default, product_color_swatches(label, hex, position)')
       .eq('catalogue_item_id', catItem.id)
       .order('sort_order', { ascending: true, nullsFirst: false }),
     admin.from('b2b_catalogue_item_images')
@@ -152,9 +152,24 @@ const loadProductDetailPageData = cache(async (
     color_swatch_id: string
     sort_order: number | null
     is_default: boolean | null
+    product_color_swatches:
+      | { label: string | null; hex: string | null; position: number | null }
+      | { label: string | null; hex: string | null; position: number | null }[]
+      | null
   }>
   const configuredColorIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
   const colorConfigById = new Map(catalogueColors.map((row) => [row.color_swatch_id, row]))
+  const colourOptions = catalogueColors.map((row) => {
+    const swatch = pickOne(row.product_color_swatches)
+    return {
+      id: row.color_swatch_id,
+      label: swatch?.label ?? null,
+      hex: swatch?.hex ?? null,
+      position: swatch?.position ?? 0,
+      catalogueSortOrder: row.sort_order ?? null,
+      isDefault: row.is_default === true,
+    }
+  })
 
   const variantRows = (variants ?? []) as unknown as RawVariant[]
   const mappedVariants = variantRows.map((v) => {
@@ -298,6 +313,7 @@ const loadProductDetailPageData = cache(async (
       organizationId: context.organizationId,
       customerRole: context.role,
       images,
+      colourOptions,
       decorations,
       effectiveMoq,
     },

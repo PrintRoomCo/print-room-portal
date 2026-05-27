@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
-import { VariantPicker, type VariantRow } from './VariantPicker'
+import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
@@ -66,6 +66,7 @@ interface Props {
   organizationId: string
   customerRole: CustomerRole
   images: GalleryImage[]
+  colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
    * Customer-effective MOQ: `b2b_catalogue_items.moq_override ?? products.moq ?? 1`.
@@ -82,6 +83,7 @@ export function ProductDetailClient({
   availability,
   customerRole,
   images,
+  colourOptions = [],
   decorations,
   effectiveMoq,
 }: Props) {
@@ -90,7 +92,7 @@ export function ProductDetailClient({
 
   const firstVariant = variants[0] ?? null
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
-    firstVariant?.color_swatch_id ?? null
+    firstVariant?.color_swatch_id ?? colourOptions[0]?.id ?? null
   )
   const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
   // Qty per variant_id. Survives colour-switches so the user can build a
@@ -405,6 +407,23 @@ export function ProductDetailClient({
     [swatchVisibleDecorations, selectedLinkIds],
   )
 
+  const pickerColourOptions = useMemo(() => {
+    if (colourOptions.length === 0) return undefined
+    if (decorations.length === 0) return colourOptions
+
+    const allColourDecoration = decorations.some((d) => d.snapshotColorSwatchId == null)
+    if (allColourDecoration) return colourOptions
+
+    const publishedSwatchIds = new Set(
+      decorations
+        .map((d) => d.snapshotColorSwatchId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    )
+    if (publishedSwatchIds.size === 0) return colourOptions
+
+    return colourOptions.filter((colour) => publishedSwatchIds.has(colour.id))
+  }, [colourOptions, decorations])
+
   const pricedDecorations = useMemo(
     () =>
       resolveDecorationsForPricing(
@@ -706,6 +725,7 @@ export function ProductDetailClient({
           {sizingMode === 'multi_size_with_variants' && (
             <VariantPicker
               variants={variants}
+              colorOptions={pickerColourOptions}
               selectedColorSwatchId={colorSwatchId}
               selectedSizeId={sizeId}
               availability={availability}
@@ -728,8 +748,8 @@ export function ProductDetailClient({
             )}
           </div>
 
-          {decorations.length > 0 && (
-            <DecorationSwatchPicker decorations={decorations} />
+          {visibleDecorations.length > 0 && (
+            <DecorationSwatchPicker decorations={visibleDecorations} />
           )}
 
           {canChooseOrderIntent && (

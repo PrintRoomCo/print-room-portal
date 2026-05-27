@@ -47,4 +47,36 @@ describe('VariantPicker keyboard navigation', () => {
 
     expect(blue).toHaveFocus()
   })
+
+  it('renders catalogue colour options even when no variant row exists for that swatch', () => {
+    render(
+      <VariantPicker
+        variants={[variants[1]]}
+        colorOptions={[
+          {
+            id: 'red',
+            label: 'Red',
+            hex: '#ff0000',
+            position: 0,
+            catalogueSortOrder: 0,
+            isDefault: true,
+          },
+          {
+            id: 'blue',
+            label: 'Blue',
+            hex: '#0000ff',
+            position: 1,
+            catalogueSortOrder: 1,
+            isDefault: false,
+          },
+        ]}
+        selectedColorSwatchId="blue"
+        selectedSizeId={1}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('radio', { name: /select colour red/i })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /select colour blue/i })).toBeInTheDocument()
+  })
 })

@@ -15,8 +15,18 @@ export interface VariantRow {
   size_order: number
 }
 
+export interface ColourOption {
+  id: string
+  label: string | null
+  hex: string | null
+  position: number
+  catalogueSortOrder: number | null
+  isDefault: boolean
+}
+
 interface VariantPickerProps {
   variants: VariantRow[]
+  colorOptions?: ColourOption[]
   selectedColorSwatchId: string | null
   selectedSizeId: number | null
   onChange: (next: { colorSwatchId: string | null; sizeId: number | null }) => void
@@ -26,27 +36,24 @@ interface VariantPickerProps {
 
 export function VariantPicker({
   variants,
+  colorOptions,
   selectedColorSwatchId,
   selectedSizeId,
   onChange,
   availability,
   showSizePicker = true,
 }: VariantPickerProps) {
-  const colorMap = new Map<
-    string,
-    {
-      id: string
-      label: string | null
-      hex: string | null
-      position: number
-      catalogueSortOrder: number | null
-      isDefault: boolean
-    }
-  >()
-  for (const v of variants) {
-    if (!v.color_swatch_id) continue
-    if (!colorMap.has(v.color_swatch_id)) {
-      colorMap.set(v.color_swatch_id, {
+  const colorMap = new Map<string, ColourOption>()
+  const addColor = (c: ColourOption) => {
+    if (!colorMap.has(c.id)) colorMap.set(c.id, c)
+  }
+
+  if (colorOptions && colorOptions.length > 0) {
+    for (const color of colorOptions) addColor(color)
+  } else {
+    for (const v of variants) {
+      if (!v.color_swatch_id) continue
+      addColor({
         id: v.color_swatch_id,
         label: v.color_label,
         hex: v.color_hex,

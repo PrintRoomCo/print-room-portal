@@ -84,7 +84,7 @@ describe('resolveGalleryImagesForColour', () => {
     ])
   })
 
-  it('prefers an all-colour designer snapshot over a colour-matched staff upload', () => {
+  it('prefers a colour-matched staff upload over an all-colour designer snapshot', () => {
     const resolved = resolveGalleryImagesForColour(
       [
         ...baseImages,
@@ -111,7 +111,7 @@ describe('resolveGalleryImagesForColour', () => {
     )
 
     expect(resolved.map((image) => image.url)).toEqual([
-      '/designer-front-all.png',
+      '/staff-front-blue.png',
       '/master-back.png',
     ])
   })
@@ -190,7 +190,7 @@ describe('resolveGalleryImagesForColour', () => {
     ])
   })
 
-  it('falls back to a cross-swatch designer snapshot when none matches the selected colour', () => {
+  it('does not borrow a designer snapshot from another swatch', () => {
     const resolved = resolveGalleryImagesForColour(
       [
         {
@@ -214,7 +214,7 @@ describe('resolveGalleryImagesForColour', () => {
       'bone',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual(['/designer-hero-arctic.png'])
+    expect(resolved.map((image) => image.url)).toEqual(['/master-hero-bone.png'])
   })
 
   it('prefers a swatch-matched snapshot over a cross-swatch snapshot', () => {

@@ -124,6 +124,7 @@ function imagePriority(
 ): number | null {
   const scope = image.scope ?? 'master'
   const imageColor = image.color_swatch_id ?? null
+  const source = image.source ?? 'staff_upload'
 
   if (
     scope === 'catalogue' &&
@@ -133,20 +134,19 @@ function imagePriority(
   ) {
     return 1
   }
-  if (scope === 'catalogue' && image.source === 'designer_snapshot' && imageColor == null) {
+  if (
+    scope === 'catalogue' &&
+    source === 'staff_upload' &&
+    imageColor &&
+    imageColor === selectedColorSwatchId
+  ) {
     return 2
   }
-  // Cross-swatch designer-snapshot fallback. A snapshot baked on a different
-  // swatch is still a more useful preview than a bare master photo — the
-  // customer at least sees that the decoration is applied. Once Phase 2 fans
-  // out snapshots per curated swatch, tier 1 wins and this tier rarely fires.
-  if (scope === 'catalogue' && image.source === 'designer_snapshot') return 3
-  if (scope === 'catalogue' && imageColor && imageColor === selectedColorSwatchId) return 4
-  if (scope === 'catalogue' && imageColor == null) return 5
-  if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 6
+  if (scope === 'catalogue' && imageColor == null) return 3
+  if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 4
   if (scope === 'master' && imageColor == null) {
     const view = (image.view ?? '').toLowerCase()
-    if (PRIMARY_VIEWS.has(view)) return 7
+    if (PRIMARY_VIEWS.has(view)) return 5
     return null
   }
 
