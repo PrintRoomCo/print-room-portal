@@ -155,6 +155,7 @@ export default async function CataloguePage({
           .from('b2b_catalogue_item_images')
           .select('catalogue_item_id, view, source, position, image_url, color_swatch_id')
           .in('catalogue_item_id', scopedItemIds)
+          .eq('is_published', true)
       : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
     scopedItemIds.length > 0
       ? admin
@@ -170,6 +171,7 @@ export default async function CataloguePage({
           .select('catalogue_item_id, unit_price_override, org_decorations(unit_price)')
           .in('catalogue_item_id', scopedItemIds)
           .eq('is_default', true)
+          .eq('is_published', true)
       : Promise.resolve({
           data: [] as Array<{
             catalogue_item_id: string

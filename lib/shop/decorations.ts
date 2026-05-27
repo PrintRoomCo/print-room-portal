@@ -178,6 +178,7 @@ export async function loadCatalogueItemDecorations(
     .from('b2b_catalogue_item_decorations')
     .select(LINK_SELECT)
     .eq('catalogue_item_id', catalogueItemId)
+    .eq('is_published', true)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 

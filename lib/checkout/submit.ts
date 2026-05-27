@@ -491,6 +491,7 @@ export async function submitCustomerOrder(
         )
       `)
       .in('id', linkIds)
+      .eq('is_published', true)
     if (linkErr) {
       throw new Error(`decoration lookup failed: ${linkErr.message}`)
     }

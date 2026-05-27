@@ -718,6 +718,13 @@ async function fetchDecorationLinks(admin: SupabaseClient, linkIds: string[]) {
   const map = new Map<string, DecorationLinkDetail>()
   if (linkIds.length === 0) return map
 
+  // is_published gate: proofs reach into the live decoration row at render
+  // time. If a published row was re-drafted via Phase 3 edit between proof
+  // creation and proof load, this filter will hide that decoration on the
+  // proof. The order_items table holds the snapshotted id; the order itself
+  // stays intact — the proof's rendered preview is the affected surface.
+  // Watch in-flight orders post-deploy; revert this filter here only if a
+  // real proof loses a decoration we wanted to keep showing.
   const { data, error } = await admin
     .from('b2b_catalogue_item_decorations')
     .select(`
@@ -772,6 +779,7 @@ async function fetchDecorationLinks(admin: SupabaseClient, linkIds: string[]) {
       )
     `)
     .in('id', linkIds)
+    .eq('is_published', true)
 
   if (error) throw new Error(`Decoration link lookup failed: ${error.message}`)
   for (const row of (data ?? []) as unknown as DecorationLinkDetail[]) {
@@ -787,6 +795,7 @@ async function fetchCatalogueImages(admin: SupabaseClient, catalogueItemIds: str
     .from('b2b_catalogue_item_images')
     .select('catalogue_item_id, color_swatch_id, view, image_url, source, position')
     .in('catalogue_item_id', catalogueItemIds)
+    .eq('is_published', true)
   if (error) throw new Error(`Catalogue image lookup failed: ${error.message}`)
   for (const row of (data ?? []) as CatalogueProofImageRow[]) {
     const list = map.get(row.catalogue_item_id) ?? []

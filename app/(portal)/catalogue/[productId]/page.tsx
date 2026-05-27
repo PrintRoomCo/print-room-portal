@@ -140,6 +140,7 @@ const loadProductDetailPageData = cache(async (
     admin.from('b2b_catalogue_item_images')
       .select('id, image_url, view, alt_text, position, color_swatch_id, source')
       .eq('catalogue_item_id', catItem.id)
+      .eq('is_published', true)
       .order('position', { ascending: true }),
     loadCatalogueItemDecorations(admin, catItem.id),
   ])

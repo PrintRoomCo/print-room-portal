@@ -14,6 +14,7 @@ import type {
 
 interface RawDecoration {
   id: string
+  is_published?: boolean | null
   decoration?: {
     id?: string
     name?: string | null
@@ -67,6 +68,7 @@ interface RawImage {
   view: string | null
   source: string | null
   position: number | null
+  is_published?: boolean | null
 }
 
 const ITEM_SELECT = `
@@ -79,6 +81,7 @@ const ITEM_SELECT = `
   decorations:b2b_catalogue_item_decorations(
     id,
     snapshot_url,
+    is_published,
     decoration:org_decorations!b2b_catalogue_item_decorations_org_decoration_id_fkey(
       id,
       name,
@@ -113,7 +116,8 @@ const ITEM_SELECT = `
     image_url,
     view,
     source,
-    position
+    position,
+    is_published
   )
 `
 
@@ -212,6 +216,7 @@ function toCatalogueProofProduct(item: RawCatalogueItem): CatalogueProofProduct 
 
   const decorations = (item.decorations ?? [])
     .map(normalizeDecoration)
+    .filter((d) => d.is_published === true)
     .filter((d) => Boolean(d.decoration?.decoration_method) && Boolean(d.decoration?.artwork_id))
     .map((d): CatalogueProofProductDecoration => ({
       linkId: d.id,
@@ -237,7 +242,9 @@ function toCatalogueProofProduct(item: RawCatalogueItem): CatalogueProofProduct 
 }
 
 function pickPrimaryImage(item: RawCatalogueItem): string | null {
-  const images = (item.images ?? []).filter((row) => row.image_url)
+  const images = (item.images ?? []).filter(
+    (row) => row.image_url && row.is_published === true,
+  )
   if (images.length === 0) return item.image_url ?? null
   const sorted = images.slice().sort((a, b) => {
     const sd = sourceRank(a.source) - sourceRank(b.source)
