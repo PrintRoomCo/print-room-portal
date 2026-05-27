@@ -139,22 +139,27 @@ export function pickBracket(
 
 /**
  * Recompute every line's unitPrice against the qty SUM across every line that
- * shares its productId. Mirrors the server-side pricing logic in
- * `submitCustomerOrder` (priceByProductId is summed by product_id so a multi-
- * size order prices at the total print run, not the per-size qty).
+ * shares BOTH productId AND decorationSignature. Variant and fulfilmentType
+ * are NOT part of the aggregation key — two sizes of the same product with
+ * the same decoration set still pool. Same product with different decoration
+ * methods or artworks does NOT pool (signatures differ → different engine
+ * setup amortization curves). Mirrors the server-side recompute in
+ * lib/checkout/submit.ts so cart display equals what submit will recompute.
  *
  * Called after every cart mutation (add merge / update / remove) so editing
- * one size's qty correctly re-tiers every same-product line. No-op on lines
- * that have no brackets snapshot (legacy) or whose total qty falls outside
- * every bracket.
+ * one line correctly re-tiers every same-product-and-signature line. No-op
+ * on lines that have no brackets snapshot (legacy) or whose total qty falls
+ * outside every bracket.
  */
 export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
-  const totalByProduct = new Map<string, number>()
+  const aggKey = (l: CartLine) => `${l.productId}::${decorationSignature(l.decorations)}`
+  const totalByKey = new Map<string, number>()
   for (const l of lines) {
-    totalByProduct.set(l.productId, (totalByProduct.get(l.productId) ?? 0) + l.qty)
+    const k = aggKey(l)
+    totalByKey.set(k, (totalByKey.get(k) ?? 0) + l.qty)
   }
   return lines.map((l) => {
-    const total = totalByProduct.get(l.productId) ?? l.qty
+    const total = totalByKey.get(aggKey(l)) ?? l.qty
 
     let nextUnitPrice = l.unitPrice
     if (l.brackets && l.brackets.length > 0) {
