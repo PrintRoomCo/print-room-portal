@@ -220,6 +220,28 @@ function makeLineKey(productId: string, variantId: string | null): string {
   return `${productId}::${variantId ?? ''}`
 }
 
+/**
+ * Aggregation key for cart-tier band lookup — mirrors recomputeProductTierPrices
+ * in lib/cart/types.ts so submit and cart agree on what qty pools. Variant +
+ * fulfilmentType are intentionally excluded (different sizes / fulfilment of
+ * the same product+signature still pool); decoration signature splits product
+ * lines that share product_id but differ in decoration methods/artworks.
+ */
+export function tierAggregationKey(
+  productId: string,
+  decorations: CheckoutLineDecorationInput[] | undefined,
+): string {
+  const sig =
+    !decorations || decorations.length === 0
+      ? ''
+      : decorations
+          .map((d) => d.linkId)
+          .slice()
+          .sort()
+          .join('|')
+  return `${productId}::${sig}`
+}
+
 // b2b_accounts.payment_terms CHECK constraint allows only 'prepay' | 'net20' | 'net30'.
 // Plan default was 'net_20' which fails; use 'net20' instead.
 const PAYMENT_TERMS_FALLBACK = 'net20'
@@ -386,26 +408,36 @@ export async function submitCustomerOrder(
   // Uses effective_unit_price so catalogue-scoped orgs get catalogue prices
   // (consistent with /shop), falling back to get_unit_price for global B2B.
   //
-  // Pricing tier is summed by product_id so multi-size orders price at the
-  // total run (mirrors the PDP: qty = multiSizeTotalQty | variantlessTotalQty).
-  // Without this, 6S + 6M + 6L + 6XL = 24 each line would price at the 6-tier
-  // instead of the 24-tier. Same fix path as the decoration totalQtyByLinkId
-  // pattern below.
-  const priceByProductId = new Map<string, number>()
+  // Pricing tier is summed by (product_id, decoration_signature) — same key
+  // the cart uses in recomputeProductTierPrices. Two lines that share product
+  // AND decoration set pool qty for the band lookup (multi-size run prices at
+  // total qty); two lines that share product but differ in decoration method
+  // do NOT pool (engine setup amortizes per-method-per-artwork).
+  const totalQtyByPriceKey = new Map<string, number>()
+  for (const line of input.lines) {
+    const k = tierAggregationKey(line.product_id, line.decorations)
+    totalQtyByPriceKey.set(k, (totalQtyByPriceKey.get(k) ?? 0) + line.qty)
+  }
+  const priceByPriceKey = new Map<string, number>()
   await Promise.all(
-    Array.from(totalQtyByProductId.entries()).map(async ([productId, totalQty]) => {
+    Array.from(totalQtyByPriceKey.entries()).map(async ([priceKey, totalQty]) => {
+      // priceKey is "${productId}::${signature}"; the product_id is the prefix
+      // up to the first "::". Signatures never contain "::" — they're sorted
+      // linkIds pipe-joined.
+      const productId = priceKey.slice(0, priceKey.indexOf('::'))
       const { data: unit } = await admin.rpc('effective_unit_price', {
         p_product_id: productId,
         p_org_id: input.context.organizationId,
         p_qty: totalQty,
       })
-      priceByProductId.set(productId, Number(unit ?? 0))
+      priceByPriceKey.set(priceKey, Number(unit ?? 0))
     }),
   )
 
   const repriced = input.lines.map(l => ({
     ...l,
-    unit_price: priceByProductId.get(l.product_id) ?? 0,
+    unit_price:
+      priceByPriceKey.get(tierAggregationKey(l.product_id, l.decorations)) ?? 0,
   }))
 
   // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
@@ -420,7 +452,8 @@ export async function submitCustomerOrder(
   for (const line of input.lines) {
     if (!line.has_brackets) continue
     if (typeof line.claimed_unit_price !== 'number') continue
-    const canonical = priceByProductId.get(line.product_id) ?? 0
+    const canonical =
+      priceByPriceKey.get(tierAggregationKey(line.product_id, line.decorations)) ?? 0
     if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
       unitPriceDrift.push({
         cartLineId: line.cart_line_id ?? null,
@@ -443,20 +476,12 @@ export async function submitCustomerOrder(
   //     edits are explicit). Validated decorations get persisted onto the
   //     order line as a jsonb snapshot below in step 4.
   //
-  //     Multi-size parity: screenprint setup is amortised across the whole
-  //     print run, so the PDP prices a decoration at the SUM of qtys across
-  //     every size that selected it (multiSizeTotalQty). We mirror that here
-  //     by pricing each decoration at the total qty across all lines that
-  //     share its linkId — pricing per-line.qty would drift on multi-size.
-  const totalQtyByLinkId = new Map<string, number>()
-  for (const line of input.lines) {
-    for (const dec of line.decorations ?? []) {
-      totalQtyByLinkId.set(
-        dec.linkId,
-        (totalQtyByLinkId.get(dec.linkId) ?? 0) + line.qty,
-      )
-    }
-  }
+  //     Decoration tier qty uses the same (product_id, decoration_signature)
+  //     aggregate as the garment above — keeps server and cart in lockstep on
+  //     band lookup. Two lines that share product + signature pool qty for the
+  //     engine; subset / different-signature lines don't. The earlier
+  //     by-linkId aggregation was looser and could pool qty across distinct
+  //     signatures that happened to share a linkId.
 
   const validatedByLineKey = new Map<string, CheckoutLineDecorationInput[]>()
   const drift: DecorationDrift[] = []
@@ -575,7 +600,9 @@ export async function submitCustomerOrder(
         continue
       }
       const loc = pickOne(od.decoration_locations)
-      const decorationQty = totalQtyByLinkId.get(dec.linkId) ?? line.qty
+      const decorationQty =
+        totalQtyByPriceKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
+        line.qty
       const effective = await effectiveDecorationPrice(
         admin,
         {
