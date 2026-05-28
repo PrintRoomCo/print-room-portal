@@ -94,11 +94,19 @@ export function cartLineDisplayImageUrl(line: {
   return snapshotUrl ?? line.imageUrl ?? null
 }
 
-/** Stable signature for matching lines on add: same product+variant+decoration set merges quantity. */
+/**
+ * Stable signature for matching lines on add AND for keying tier aggregation.
+ * Keyed on `decorationId` (org_decorations.id — the canonical artwork+method
+ * identity) rather than `linkId` (b2b_catalogue_item_decorations.id, which has
+ * one row per snapshot swatch). Per-swatch routing must not split the bucket:
+ * a Bone variant and an Arctic-blue variant carrying the same Screen-print —
+ * Left Chest must pool into one tier bracket. Server-side mirror lives in
+ * lib/checkout/submit.ts `tierAggregationKey` — keep them in step.
+ */
 export function decorationSignature(decorations: CartLineDecoration[]): string {
   if (decorations.length === 0) return ''
   return decorations
-    .map((d) => d.linkId)
+    .map((d) => d.decorationId)
     .slice()
     .sort()
     .join('|')

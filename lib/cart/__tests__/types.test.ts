@@ -26,10 +26,29 @@ describe('lineSignature', () => {
   })
 
   it('differs when decoration set differs', () => {
-    const a: CartLineDecoration[] = [{ linkId: 'l1' } as CartLineDecoration]
-    const b: CartLineDecoration[] = [{ linkId: 'l2' } as CartLineDecoration]
+    // Keyed on decorationId (org_decorations.id), not linkId — see
+    // decorationSignature in ../types.ts.
+    const a: CartLineDecoration[] = [
+      { linkId: 'l1', decorationId: 'od:a' } as CartLineDecoration,
+    ]
+    const b: CartLineDecoration[] = [
+      { linkId: 'l2', decorationId: 'od:b' } as CartLineDecoration,
+    ]
     expect(lineSignature('p1', 'v1', '—', a))
       .not.toBe(lineSignature('p1', 'v1', '—', b))
+  })
+
+  it('matches across per-swatch linkIds when decorationId is the same', () => {
+    // Per-swatch routing rows wrap the same org_decoration; they must NOT
+    // split the bucket / produce different line signatures.
+    const bone: CartLineDecoration[] = [
+      { linkId: 'link-bone', decorationId: 'od:shared' } as CartLineDecoration,
+    ]
+    const arctic: CartLineDecoration[] = [
+      { linkId: 'link-arctic', decorationId: 'od:shared' } as CartLineDecoration,
+    ]
+    expect(lineSignature('p1', 'v1', '—', bone))
+      .toBe(lineSignature('p1', 'v1', '—', arctic))
   })
 
   it('differs when fulfilment type differs', () => {
@@ -71,6 +90,26 @@ describe('recomputeProductTierPrices', () => {
     }
   }
 
+  /**
+   * Per-swatch decoration link rows wrap the SAME underlying org_decoration —
+   * Bone + Arctic blue both attach `Screen print — Left Chest` (decorationId X)
+   * via different b2b_catalogue_item_decoration rows (linkId A vs linkId B).
+   * Helper builds a decoration whose linkId differs from its peer but whose
+   * underlying decorationId matches — i.e. same artwork, different swatch route.
+   */
+  function decoForSwatch(linkId: string, sharedDecorationId: string): CartLineDecoration {
+    return {
+      linkId,
+      decorationId: sharedDecorationId,
+      name: 'Screen print — Left Chest',
+      method: 'screenprint',
+      positionLabel: 'LC',
+      unitPrice: 5.0,
+      artworkUrl: 'https://example/art.png',
+      snapshotUrl: null,
+    }
+  }
+
   function line(over: Partial<CartLine>): CartLine {
     return {
       lineId: over.lineId ?? `l-${Math.random()}`,
@@ -96,6 +135,30 @@ describe('recomputeProductTierPrices', () => {
     const out = recomputeProductTierPrices(lines)
     expect(out[0].unitPrice).toBe(9.43)
     expect(out[1].unitPrice).toBe(9.43)
+  })
+
+  it('per-swatch decoration link rows wrapping the same decorationId aggregate', () => {
+    // Real-world repro (TPRC Staple Tee, 2026-05-30):
+    // Screen print — Left Chest exists as TWO catalogue-item-decoration rows
+    // (one per swatch, Arctic blue + Bone) — different `linkId`s, but the same
+    // underlying `decorationId`. Pre-fix the cart keys aggregation on linkId
+    // so Bone variants and Arctic-blue variants pool into separate buckets.
+    // Total qty across all 6 lines is 85 → 50-tier ($12.54). Pre-fix Bone
+    // bucket sums 50 → $12.54 and Arctic-blue bucket sums 35 → 24-tier $14.14
+    // (drift). Post-fix both pool to 85 → all six lines $12.54.
+    const SHARED_DECO_ID = 'od:screen-print-left-chest'
+    const boneDeco = decoForSwatch('link-bone', SHARED_DECO_ID)
+    const arcticDeco = decoForSwatch('link-arctic', SHARED_DECO_ID)
+    const lines = [
+      line({ lineId: 'b-xs', variantLabel: 'Bone / XS', qty: 25, decorations: [boneDeco], unitPrice: 14.14 }),
+      line({ lineId: 'b-s', variantLabel: 'Bone / S', qty: 25, decorations: [boneDeco], unitPrice: 14.14 }),
+      line({ lineId: 'a-xs', variantLabel: 'Arctic blue / XS', qty: 1, decorations: [arcticDeco], unitPrice: 14.14 }),
+      line({ lineId: 'a-s', variantLabel: 'Arctic blue / S', qty: 10, decorations: [arcticDeco], unitPrice: 14.14 }),
+      line({ lineId: 'a-m', variantLabel: 'Arctic blue / M', qty: 12, decorations: [arcticDeco], unitPrice: 14.14 }),
+      line({ lineId: 'a-l', variantLabel: 'Arctic blue / L', qty: 12, decorations: [arcticDeco], unitPrice: 14.14 }),
+    ]
+    const out = recomputeProductTierPrices(lines)
+    for (const l of out) expect(l.unitPrice).toBe(12.54) // 85 in 50-99 band
   })
 
   it('same product + same signature + different fulfilmentType: aggregate qty for tier', () => {

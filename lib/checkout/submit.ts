@@ -226,6 +226,11 @@ function makeLineKey(productId: string, variantId: string | null): string {
  * fulfilmentType are intentionally excluded (different sizes / fulfilment of
  * the same product+signature still pool); decoration signature splits product
  * lines that share product_id but differ in decoration methods/artworks.
+ *
+ * Keyed on `decorationId` (org_decorations.id), not `linkId`
+ * (b2b_catalogue_item_decorations.id). A single decoration that's wired onto
+ * multiple swatches has one decorationId but one link row per swatch — keying
+ * on linkId would split per-colour-variant lines into separate tier buckets.
  */
 export function tierAggregationKey(
   productId: string,
@@ -235,7 +240,7 @@ export function tierAggregationKey(
     !decorations || decorations.length === 0
       ? ''
       : decorations
-          .map((d) => d.linkId)
+          .map((d) => d.decorationId)
           .slice()
           .sort()
           .join('|')
