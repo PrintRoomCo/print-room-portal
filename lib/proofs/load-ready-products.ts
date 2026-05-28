@@ -42,7 +42,6 @@ interface RawCatalogueItem {
   source_product_id: string
   name: string
   is_active: boolean
-  image_url: string | null
   decorations?: RawDecoration[] | null
   colors?: RawColor[] | null
   images?: RawImage[] | null
@@ -77,7 +76,6 @@ const ITEM_SELECT = `
   source_product_id,
   name,
   is_active,
-  image_url,
   decorations:b2b_catalogue_item_decorations(
     id,
     snapshot_url,
@@ -245,7 +243,7 @@ function pickPrimaryImage(item: RawCatalogueItem): string | null {
   const images = (item.images ?? []).filter(
     (row) => row.image_url && row.is_published === true,
   )
-  if (images.length === 0) return item.image_url ?? null
+  if (images.length === 0) return null
   const sorted = images.slice().sort((a, b) => {
     const sd = sourceRank(a.source) - sourceRank(b.source)
     if (sd !== 0) return sd
@@ -253,7 +251,7 @@ function pickPrimaryImage(item: RawCatalogueItem): string | null {
     if (vd !== 0) return vd
     return (a.position ?? 0) - (b.position ?? 0)
   })
-  return sorted[0]?.image_url ?? item.image_url ?? null
+  return sorted[0]?.image_url ?? null
 }
 
 function sourceRank(source: string | null) {
