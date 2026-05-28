@@ -583,13 +583,20 @@ export function ProductDetailClient({
         const tracked = a !== undefined
         const available = tracked ? a.available_qty : 0
         const backorderable = tracked && a.allow_order_without_stock
-        const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
-          ? orderIntent === 'bulk'
-            ? 'make_to_stock'
-            : 'stocked'
-          : backorderable || (tracked && lineQty > available)
-            ? 'make_to_stock'
-            : 'stocked'
+        // Backorderable variants ALWAYS submit as make_to_stock — there's no
+        // stock to draw from, so even if the customer picked "From Stock" on
+        // the OrderIntent toggle, the line must go through production.
+        // Otherwise the cart's oversell guard ("Only 0 available") fires
+        // against a variant that's explicitly marked orderable-without-stock.
+        const fulfilmentType: 'stocked' | 'make_to_stock' = backorderable
+          ? 'make_to_stock'
+          : canChooseOrderIntent
+            ? orderIntent === 'bulk'
+              ? 'make_to_stock'
+              : 'stocked'
+            : tracked && lineQty > available
+              ? 'make_to_stock'
+              : 'stocked'
         cart.addLine({
           productId: product.id,
           productName: product.name,
@@ -641,18 +648,18 @@ export function ProductDetailClient({
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant. When the order-mode
-    // toggle is available the customer's choice drives fulfilment (matching
-    // Mode 1); otherwise fall back to stock-vs-shortfall like the variant path.
-    // Backorderable single variants always go out as make_to_stock too.
-    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
-      ? orderIntent === 'bulk'
-        ? 'make_to_stock'
-        : 'stocked'
-      : selectedVariantBackorderable ||
-          (tracksThisVariant && qty > (availableQty ?? 0))
-        ? 'make_to_stock'
-        : 'stocked'
+    // Mode 3: one_size — single cart line, no variant. Backorderable variants
+    // always go out as make_to_stock; toggle choice is overridden for the same
+    // reason as the multi-size path above (no stock to draw from).
+    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = selectedVariantBackorderable
+      ? 'make_to_stock'
+      : canChooseOrderIntent
+        ? orderIntent === 'bulk'
+          ? 'make_to_stock'
+          : 'stocked'
+        : tracksThisVariant && qty > (availableQty ?? 0)
+          ? 'make_to_stock'
+          : 'stocked'
     cart.addLine({
       productId: product.id,
       productName: product.name,
