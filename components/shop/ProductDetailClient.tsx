@@ -583,17 +583,21 @@ export function ProductDetailClient({
         const tracked = a !== undefined
         const available = tracked ? a.available_qty : 0
         const backorderable = tracked && a.allow_order_without_stock
-        // Backorderable variants ALWAYS submit as make_to_stock — there's no
-        // stock to draw from, so even if the customer picked "From Stock" on
-        // the OrderIntent toggle, the line must go through production.
-        // Otherwise the cart's oversell guard ("Only 0 available") fires
-        // against a variant that's explicitly marked orderable-without-stock.
-        const fulfilmentType: 'stocked' | 'make_to_stock' = backorderable
-          ? 'make_to_stock'
-          : canChooseOrderIntent
-            ? orderIntent === 'bulk'
-              ? 'make_to_stock'
-              : 'stocked'
+        // Fulfilment decision:
+        //   - canChooseOrderIntent (org_admin with toggle): respect customer's
+        //     explicit choice. PDP shortfall already blocked any From-Stock +
+        //     zero-stock combo, including backorderable, so this branch is
+        //     safe to follow blindly.
+        //   - buyer / no toggle: backorderable variants auto-route to
+        //     make_to_stock (buyer has no choice surface and the AM has
+        //     opted them in via the flag). Non-backorderable falls back to
+        //     stock-vs-qty for the existing partial-stock path.
+        const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+          ? orderIntent === 'bulk'
+            ? 'make_to_stock'
+            : 'stocked'
+          : backorderable
+            ? 'make_to_stock'
             : tracked && lineQty > available
               ? 'make_to_stock'
               : 'stocked'
@@ -648,15 +652,16 @@ export function ProductDetailClient({
       return
     }
 
-    // Mode 3: one_size — single cart line, no variant. Backorderable variants
-    // always go out as make_to_stock; toggle choice is overridden for the same
-    // reason as the multi-size path above (no stock to draw from).
-    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = selectedVariantBackorderable
-      ? 'make_to_stock'
-      : canChooseOrderIntent
-        ? orderIntent === 'bulk'
-          ? 'make_to_stock'
-          : 'stocked'
+    // Mode 3: one_size — single cart line, no variant. Same fulfilment
+    // decision as multi-size: toggle choice wins when present (PDP shortfall
+    // already enforced From-Stock vs zero-stock); buyer flow auto-routes
+    // backorderable to make_to_stock.
+    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+      ? orderIntent === 'bulk'
+        ? 'make_to_stock'
+        : 'stocked'
+      : selectedVariantBackorderable
+        ? 'make_to_stock'
         : tracksThisVariant && qty > (availableQty ?? 0)
           ? 'make_to_stock'
           : 'stocked'
@@ -686,17 +691,23 @@ export function ProductDetailClient({
         : // one_size: no variant selection required
           Number.isInteger(qty) && meetsMoq && pricingOk
 
-  let inventoryIntentShortfall: { label: string; available: number } | null = null
+  let inventoryIntentShortfall: {
+    label: string
+    available: number
+    backorderable: boolean
+  } | null = null
   if (isInventoryMode) {
     if (sizingMode === 'multi_size_with_variants') {
       for (const variant of variants) {
         const requested = variantQuantities[variant.variant_id] ?? 0
         if (requested <= 0) continue
         const a = availability[variant.variant_id]
-        // Backorderable variants skip the shortfall guard — the line goes
-        // out as make_to_stock either way, so requested qty > on-hand isn't
-        // a problem to surface to the customer.
-        if (a?.allow_order_without_stock) continue
+        const backorderable = a?.allow_order_without_stock === true
+        // Buyer / no toggle: backorderable variants auto-route to
+        // make_to_stock at submit, so there's no useful prompt to surface
+        // (customer has no choice to switch). Org_admin with toggle: let
+        // the shortfall message fire so they can switch to Made to Order.
+        if (backorderable && !canChooseOrderIntent) continue
         const available = a?.available_qty ?? 0
         if (requested > available) {
           const label =
@@ -705,18 +716,19 @@ export function ProductDetailClient({
           inventoryIntentShortfall = {
             label,
             available,
+            backorderable,
           }
           break
         }
       }
-    } else if (
-      selectedVariant &&
-      !selectedVariantBackorderable &&
-      qty > (availableQty ?? 0)
-    ) {
-      inventoryIntentShortfall = {
-        label: 'selected variant',
-        available: availableQty ?? 0,
+    } else if (selectedVariant && qty > (availableQty ?? 0)) {
+      // Same rule as multi-size: skip only when the buyer has no toggle.
+      if (!(selectedVariantBackorderable && !canChooseOrderIntent)) {
+        inventoryIntentShortfall = {
+          label: 'selected variant',
+          available: availableQty ?? 0,
+          backorderable: selectedVariantBackorderable,
+        }
       }
     }
   }
@@ -1063,11 +1075,13 @@ export function ProductDetailClient({
             </button>
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">
-                Only {inventoryIntentShortfall.available} available for{' '}
-                {inventoryIntentShortfall.label}.{' '}
-                {canChooseOrderIntent
-                  ? 'Switch to Made to Order or reduce quantity.'
-                  : 'Reduce quantity to order from stock.'}
+                {inventoryIntentShortfall.backorderable && canChooseOrderIntent
+                  ? `No available stock for ${inventoryIntentShortfall.label} — select Made to Order to order this.`
+                  : `Only ${inventoryIntentShortfall.available} available for ${inventoryIntentShortfall.label}. ${
+                      canChooseOrderIntent
+                        ? 'Switch to Made to Order or reduce quantity.'
+                        : 'Reduce quantity to order from stock.'
+                    }`}
               </p>
             )}
           </section>
