@@ -1,6 +1,7 @@
 'use client'
 
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
+import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 export interface VariantRow {
   variant_id: string
@@ -30,7 +31,7 @@ interface VariantPickerProps {
   selectedColorSwatchId: string | null
   selectedSizeId: number | null
   onChange: (next: { colorSwatchId: string | null; sizeId: number | null }) => void
-  availability?: Record<string, number>
+  availability?: Record<string, VariantAvailability>
   showSizePicker?: boolean
 }
 
@@ -145,12 +146,19 @@ export function VariantPicker({
                 (v) =>
                   v.color_swatch_id === selectedColorSwatchId && v.size_id === s.id,
               )
-              const tracked =
-                variantForSize != null &&
-                availability != null &&
-                availability[variantForSize.variant_id] !== undefined
-              const qty = tracked ? availability![variantForSize!.variant_id] : null
+              const avail =
+                variantForSize != null && availability != null
+                  ? availability[variantForSize.variant_id]
+                  : undefined
+              const tracked = avail !== undefined
+              const qty = tracked ? avail.available_qty : null
               const outOfStock = tracked && (qty ?? 0) === 0
+              const backorderable = tracked && avail.allow_order_without_stock
+              const showBackorderableChip = outOfStock && backorderable
+              // Backorderable cells should still feel interactive even when
+              // stocked === 0 — don't apply the muted/gray treatment that
+              // signals "unorderable" in the stocked-only path.
+              const mutedOutOfStock = outOfStock && !backorderable
               return (
                 <ToggleGroup.Item
                   key={s.id}
@@ -158,26 +166,32 @@ export function VariantPicker({
                   className={`flex flex-col items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-spring ${
                     isSelected
                       ? 'border-pr-blue bg-pr-blue text-white'
-                      : outOfStock
+                      : mutedOutOfStock
                         ? 'border-gray-200 bg-gray-50 text-gray-400'
                         : 'border-gray-200 bg-white text-gray-800 hover:border-gray-400'
                   }`}
                 >
                   <span>{s.label}</span>
                   {tracked && (
-                    <span
-                      className={`mt-0.5 text-[10px] font-normal ${
-                        isSelected
-                          ? 'text-white/80'
-                          : outOfStock
-                            ? 'text-gray-400'
-                            : (qty ?? 0) <= 5
-                              ? 'text-amber-600'
-                              : 'text-gray-500'
-                      }`}
-                    >
-                      {outOfStock ? '0 in stock' : `${qty} in stock`}
-                    </span>
+                    showBackorderableChip ? (
+                      <span className="mt-0.5 inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                        Available to order
+                      </span>
+                    ) : (
+                      <span
+                        className={`mt-0.5 text-[10px] font-normal ${
+                          isSelected
+                            ? 'text-white/80'
+                            : mutedOutOfStock
+                              ? 'text-gray-400'
+                              : (qty ?? 0) <= 5
+                                ? 'text-amber-600'
+                                : 'text-gray-500'
+                        }`}
+                      >
+                        {outOfStock ? '0 in stock' : `${qty} in stock`}
+                      </span>
+                    )
                   )}
                 </ToggleGroup.Item>
               )

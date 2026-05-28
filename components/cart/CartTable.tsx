@@ -10,6 +10,7 @@ import {
 } from '@/lib/cart/types'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -50,16 +51,24 @@ export function CartTable({
     const productIds = Array.from(new Set(lines.map((l) => l.productId)))
     let cancelled = false
     setLoading(true)
+    // The endpoint returns Record<variantId, VariantAvailability> per
+    // 2026-05-29 shape change; CartTable's oversell guard only needs the
+    // numeric qty, so collapse to number at the boundary. Backorderable
+    // lines bypass this guard via fulfilmentType === 'make_to_stock' which
+    // ProductDetailClient sets at PDP-add time.
     Promise.all(
       productIds.map(async (id) => {
         try {
           const res = await fetch(`/api/shop/products/${id}/availability`)
-          if (!res.ok) return { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
+          const empty = { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
+          if (!res.ok) return empty
           const { availability: a, effectiveMoq } = (await res.json()) as {
-            availability: Record<string, number>
+            availability: Record<string, VariantAvailability>
             effectiveMoq?: number
           }
-          return { productId: id, availability: a, effectiveMoq }
+          const collapsed: Record<string, number> = {}
+          for (const [k, v] of Object.entries(a ?? {})) collapsed[k] = v.available_qty
+          return { productId: id, availability: collapsed, effectiveMoq }
         } catch {
           return { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
         }

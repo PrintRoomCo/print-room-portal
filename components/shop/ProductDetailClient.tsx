@@ -18,6 +18,7 @@ import {
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
+import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 type CustomerRole = 'org_admin' | 'buyer'
@@ -61,8 +62,13 @@ interface Props {
   product: ProductData
   variants: VariantRow[]
   brackets: Bracket[]
-  /** variant_id → available_qty, only populated for variants the org stocks. */
-  availability: Record<string, number>
+  /**
+   * variant_id → { available_qty, allow_order_without_stock }. Only populated
+   * for variants the org tracks; key presence still signals "tracked". The
+   * flag lets a zero-stock variant remain orderable (line becomes
+   * make_to_stock, surfaces an "Available to order" chip on the size grid).
+   */
+  availability: Record<string, VariantAvailability>
   organizationId: string
   customerRole: CustomerRole
   images: GalleryImage[]
@@ -142,8 +148,11 @@ export function ProductDetailClient({
   const tracksThisVariant =
     selectedVariant != null && availability[selectedVariant.variant_id] !== undefined
   const availableQty = selectedVariant
-    ? availability[selectedVariant.variant_id]
+    ? availability[selectedVariant.variant_id]?.available_qty
     : undefined
+  const selectedVariantBackorderable =
+    selectedVariant != null &&
+    availability[selectedVariant.variant_id]?.allow_order_without_stock === true
   const isOutOfStock = tracksThisVariant && (availableQty ?? 0) === 0
 
   // Total in-stock across every size for the currently selected colour.
@@ -156,10 +165,10 @@ export function ProductDetailClient({
     let tracked = false
     for (const v of variants) {
       if (v.color_swatch_id !== colorSwatchId) continue
-      const qty = availability[v.variant_id]
-      if (qty === undefined) continue
+      const a = availability[v.variant_id]
+      if (a === undefined) continue
       tracked = true
-      total += qty
+      total += a.available_qty
     }
     return tracked ? total : undefined
   }, [variants, colorSwatchId, availability])
@@ -168,24 +177,33 @@ export function ProductDetailClient({
     return variants
       .filter((v) => v.color_swatch_id === colorSwatchId && v.size_id != null)
       .map((v) => {
-        const tracked = availability[v.variant_id] !== undefined
+        const a = availability[v.variant_id]
+        const tracked = a !== undefined
         return {
           variantId: v.variant_id,
           sizeId: v.size_id as number,
           sizeLabel: v.size_label ?? '',
           sizeOrder: v.size_order,
-          available: tracked ? availability[v.variant_id] : null,
+          available: tracked ? a.available_qty : null,
+          allowOrderWithoutStock: tracked ? a.allow_order_without_stock : false,
         }
       })
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
   }, [variants, colorSwatchId, availability])
 
+  // Backorderable variants count as "has inventory" for the gate that
+  // unlocks the From-Stock vs Made-to-Order toggle and lets the customer
+  // proceed past stock guards — even though zero stock is on hand.
   const currentSelectionHasInventory = useMemo(() => {
     if (sizingMode === 'multi_size_with_variants') {
-      return sizeRowsForColour.some((row) => (row.available ?? 0) > 0)
+      return sizeRowsForColour.some(
+        (row) => (row.available ?? 0) > 0 || row.allowOrderWithoutStock,
+      )
     }
     if (!selectedVariant) return false
-    return (availability[selectedVariant.variant_id] ?? 0) > 0
+    const a = availability[selectedVariant.variant_id]
+    if (!a) return false
+    return a.available_qty > 0 || a.allow_order_without_stock
   }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
 
   // The order-mode toggle is offered ONLY to an org_admin looking at a product
@@ -242,11 +260,17 @@ export function ProductDetailClient({
       .filter((v) => (variantQuantities[v.variant_id] ?? 0) > 0)
       .map((v) => {
         const qtyLine = variantQuantities[v.variant_id] ?? 0
-        const tracked = availability[v.variant_id] !== undefined
-        const stocked = tracked ? (availability[v.variant_id] ?? 0) : 0
+        const a = availability[v.variant_id]
+        const tracked = a !== undefined
+        const stocked = tracked ? a.available_qty : 0
+        const backorderable = tracked && a.allow_order_without_stock
         const forceBulkOrder = canChooseOrderIntent && orderIntent === 'bulk'
-        const inStock = forceBulkOrder ? 0 : tracked ? Math.min(qtyLine, stocked) : 0
-        const toBeMade = forceBulkOrder
+        // Backorderable variant behaves like the bulk path at line level —
+        // entire qty goes to production, none drawn from stock — even though
+        // it's a tracked SKU. Matches the "make_to_stock" cart fulfilment.
+        const treatAsBulk = forceBulkOrder || backorderable
+        const inStock = treatAsBulk ? 0 : tracked ? Math.min(qtyLine, stocked) : 0
+        const toBeMade = treatAsBulk
           ? qtyLine
           : tracked
             ? Math.max(0, qtyLine - stocked)
@@ -555,13 +579,15 @@ export function ProductDetailClient({
         if (lineQty <= 0) continue
         const variantLabel =
           [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
-        const tracked = availability[variant.variant_id] !== undefined
-        const available = availability[variant.variant_id] ?? 0
+        const a = availability[variant.variant_id]
+        const tracked = a !== undefined
+        const available = tracked ? a.available_qty : 0
+        const backorderable = tracked && a.allow_order_without_stock
         const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
           ? orderIntent === 'bulk'
             ? 'make_to_stock'
             : 'stocked'
-          : tracked && lineQty > available
+          : backorderable || (tracked && lineQty > available)
             ? 'make_to_stock'
             : 'stocked'
         cart.addLine({
@@ -618,11 +644,13 @@ export function ProductDetailClient({
     // Mode 3: one_size — single cart line, no variant. When the order-mode
     // toggle is available the customer's choice drives fulfilment (matching
     // Mode 1); otherwise fall back to stock-vs-shortfall like the variant path.
+    // Backorderable single variants always go out as make_to_stock too.
     const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
       ? orderIntent === 'bulk'
         ? 'make_to_stock'
         : 'stocked'
-      : tracksThisVariant && qty > (availableQty ?? 0)
+      : selectedVariantBackorderable ||
+          (tracksThisVariant && qty > (availableQty ?? 0))
         ? 'make_to_stock'
         : 'stocked'
     cart.addLine({
@@ -657,7 +685,12 @@ export function ProductDetailClient({
       for (const variant of variants) {
         const requested = variantQuantities[variant.variant_id] ?? 0
         if (requested <= 0) continue
-        const available = availability[variant.variant_id] ?? 0
+        const a = availability[variant.variant_id]
+        // Backorderable variants skip the shortfall guard — the line goes
+        // out as make_to_stock either way, so requested qty > on-hand isn't
+        // a problem to surface to the customer.
+        if (a?.allow_order_without_stock) continue
+        const available = a?.available_qty ?? 0
         if (requested > available) {
           const label =
             [variant.color_label, variant.size_label].filter(Boolean).join(' / ') ||
@@ -669,7 +702,11 @@ export function ProductDetailClient({
           break
         }
       }
-    } else if (selectedVariant && qty > (availableQty ?? 0)) {
+    } else if (
+      selectedVariant &&
+      !selectedVariantBackorderable &&
+      qty > (availableQty ?? 0)
+    ) {
       inventoryIntentShortfall = {
         label: 'selected variant',
         available: availableQty ?? 0,
@@ -805,15 +842,24 @@ export function ProductDetailClient({
                     const trackedRow = row.available !== null
                     const stocked = trackedRow ? (row.available ?? 0) : 0
                     const value = variantQuantities[row.variantId] ?? 0
-                    const backorder = trackedRow
-                      ? Math.max(0, value - stocked)
-                      : value
+                    // Backorderable lines always go to production — surface
+                    // the full requested qty as "to be made" rather than
+                    // counting the (zero) stock balance against it.
+                    const backorder = !trackedRow || row.allowOrderWithoutStock
+                      ? value
+                      : Math.max(0, value - stocked)
+                    const showBackorderableChip =
+                      trackedRow && row.allowOrderWithoutStock && stocked === 0
                     return (
                       <tr key={row.variantId} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
                         <td className="px-5 py-3 text-xs text-gray-600">
-                          {!trackedRow ? '—' : `${stocked}`}
-                          {backorder > 0 && (
+                          {showBackorderableChip ? (
+                            <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                              Available to order
+                            </span>
+                          ) : !trackedRow ? '—' : `${stocked}`}
+                          {backorder > 0 && !showBackorderableChip && (
                             <span className="ml-1 text-amber-700">
                               ({backorder} to be made)
                             </span>

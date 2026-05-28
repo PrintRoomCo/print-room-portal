@@ -9,6 +9,7 @@ import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
+import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -170,7 +171,7 @@ const loadProductDetailPageData = cache(async (
       .eq('is_active', true),
     bracketsQuery,
     admin.from('variant_availability')
-      .select('variant_id, available_qty')
+      .select('variant_id, available_qty, allow_order_without_stock')
       .eq('organization_id', context.organizationId),
     admin.from('product_images')
       .select('id, file_url, view, alt_text, position, color_swatch_id')
@@ -246,9 +247,16 @@ const loadProductDetailPageData = cache(async (
       return a.size_order - b.size_order
     })
 
-  const availability: Record<string, number> = {}
-  for (const r of (availRows ?? []) as { variant_id: string; available_qty: number }[]) {
-    availability[r.variant_id] = r.available_qty
+  const availability: Record<string, VariantAvailability> = {}
+  for (const r of (availRows ?? []) as Array<{
+    variant_id: string
+    available_qty: number
+    allow_order_without_stock: boolean | null
+  }>) {
+    availability[r.variant_id] = {
+      available_qty: r.available_qty,
+      allow_order_without_stock: r.allow_order_without_stock === true,
+    }
   }
 
   const catalogueImages = ((catalogueImageRows ?? []) as Array<{
