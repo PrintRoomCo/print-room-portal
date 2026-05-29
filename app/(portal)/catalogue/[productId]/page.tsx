@@ -7,6 +7,7 @@ import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
+import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
@@ -116,13 +117,22 @@ const loadProductDetailPageData = cache(async (
   const bracketsQuery = (async () => {
     const probes: Array<{ qty: number; price: number | null }> = await Promise.all(
       CANONICAL_BREAKPOINTS.map(async (qty) => {
-        const { data, error } = await admin.rpc('effective_unit_price', {
-          p_product_id: productId,
-          p_org_id: context.organizationId,
-          p_qty: qty,
-        })
-        if (error || data == null) return { qty, price: null }
-        return { qty, price: Number(data) }
+        // Item-keyed (Phase 1): the loader already resolved catItem.id, so we
+        // price the specific skin rather than re-resolving the product via the
+        // legacy LIMIT 1 lookup. Identical output for single-skin products;
+        // correct once a product carries multiple skins. Per-probe failures are
+        // swallowed so a transient pricing error never breaks the PDP.
+        try {
+          const price = await effectiveUnitPriceForItem(
+            admin,
+            catItem.id,
+            context.organizationId,
+            qty,
+          )
+          return { qty, price }
+        } catch {
+          return { qty, price: null }
+        }
       }),
     )
     const points = probes.filter(
