@@ -83,7 +83,7 @@ const loadProductDetailPageData = cache(async (
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, sku_override, moq_override, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, sku_override, moq_override, variant_label, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -328,6 +328,7 @@ const loadProductDetailPageData = cache(async (
     description: string | null
     sku_override: string | null
     moq_override: number | null
+    variant_label: string | null
   } | null
 
   const displayProduct = {
@@ -366,6 +367,11 @@ const loadProductDetailPageData = cache(async (
         fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
         brand_name: brandName,
         category_name: categoryName,
+        // Phase 2 — catalogue-item identity threaded to the client so it can ride
+        // the cart line through checkout into submit_b2b_order. `catItem.id` was
+        // already resolved server-side; we just stop dropping it.
+        catalogueItemId: catItem.id ?? null,
+        catalogueVariantLabel: catItemForked?.variant_label ?? null,
       },
       variants: mappedVariants,
       brackets: bracketRows,

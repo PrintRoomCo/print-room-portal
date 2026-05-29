@@ -43,6 +43,10 @@ interface ProductData {
   fulfilment_type: FulfilmentType
   brand_name: string | null
   category_name: string | null
+  // Phase 2 — catalogue-item identity (named to avoid colliding with the
+  // size/colour `variantLabel` on CartLine). Null for legacy/non-catalogue.
+  catalogueItemId: string | null
+  catalogueVariantLabel: string | null
 }
 
 interface Bracket {
