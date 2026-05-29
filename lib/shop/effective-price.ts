@@ -82,3 +82,50 @@ export async function effectiveUnitPricesBulk(
   }
   return { prices: map }
 }
+
+/**
+ * Item-keyed price for a SPECIFIC catalogue item (Phase 1 multi-skin).
+ * Prefer this over {@link effectiveUnitPrice} whenever a catalogue_item_id is in
+ * hand — it has no LIMIT 1 product lookup, so it cannot silently misprice once a
+ * product has multiple active skins. Routes through `catalogue_unit_price`
+ * server-side (never `get_unit_price`). Throws on RPC error.
+ */
+export async function effectiveUnitPriceForItem(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+  orgId: string,
+  qty: number,
+): Promise<number> {
+  const { data, error } = await admin.rpc('effective_unit_price_for_item', {
+    p_catalogue_item_id: catalogueItemId,
+    p_org_id: orgId,
+    p_qty: qty,
+  })
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+/**
+ * Batched item-keyed pricing — symmetric with {@link effectiveUnitPricesBulk} but
+ * keyed on catalogue_item_id. Returns a Map<catalogueItemId, unitPrice>. Throws on
+ * RPC error.
+ */
+export async function effectiveUnitPricesForItemsBulk(
+  admin: SupabaseClient,
+  catalogueItemIds: string[],
+  orgId: string,
+  qtyByItem: Record<string, number>,
+): Promise<Map<string, number>> {
+  const { data, error } = await admin.rpc('effective_unit_prices_for_items_bulk', {
+    p_catalogue_item_ids: catalogueItemIds,
+    p_org_id: orgId,
+    p_qty_by_item: qtyByItem,
+  })
+  if (error) throw error
+  return new Map(
+    ((data ?? []) as Array<{ catalogue_item_id: string; unit_price: number }>).map((r) => [
+      r.catalogue_item_id,
+      Number(r.unit_price),
+    ]),
+  )
+}
