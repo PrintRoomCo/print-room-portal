@@ -55,6 +55,19 @@ describe('lineSignature', () => {
     expect(lineSignature('p1', 'v1', 'Black / M', noDeco, 'stocked'))
       .not.toBe(lineSignature('p1', 'v1', 'Black / M', noDeco, 'make_to_stock'))
   })
+
+  it('separates two skins of one product by catalogueItemId (phase 2)', () => {
+    // Two catalogue items sharing one master product must NOT merge in the cart.
+    expect(lineSignature('p1', 'v1', '—', noDeco, 'stocked', 'ci-A'))
+      .not.toBe(lineSignature('p1', 'v1', '—', noDeco, 'stocked', 'ci-B'))
+  })
+
+  it('falls back to productId when catalogueItemId is null (legacy parity)', () => {
+    // A null catalogue id must reproduce the pre-phase-2 signature exactly, so
+    // legacy/non-catalogue lines keep merging as before.
+    expect(lineSignature('p1', 'v1', '—', noDeco, 'stocked', null))
+      .toBe(lineSignature('p1', 'v1', '—', noDeco))
+  })
 })
 
 describe('recomputeProductTierPrices', () => {

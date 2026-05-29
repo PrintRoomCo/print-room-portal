@@ -63,6 +63,16 @@ export interface CartLine {
    * unitPrice stays frozen until checkout submit re-prices server-side.
    */
   brackets?: CartLineBracket[]
+  /**
+   * Phase 2 — catalogue-item identity. The b2b_catalogue_items.id this line was
+   * added from, threaded through checkout into submit_b2b_order so the order
+   * records WHICH skin sold and resolves MOQ/fulfilment on the exact item.
+   * Optional + nullable: absent on legacy persisted lines (treated as "no
+   * catalogue identity", same as before). `catalogueVariantLabel` is the skin's
+   * label (e.g. "Design A"), DISTINCT from `variantLabel` (size/colour).
+   */
+  catalogueItemId?: string | null
+  catalogueVariantLabel?: string | null
 }
 
 export type CartLineFulfilmentType = 'stocked' | 'make_to_stock'
@@ -117,6 +127,12 @@ export function decorationSignature(decorations: CartLineDecoration[]): string {
  * variantLabel + decoration set merges quantity. Includes variantLabel so
  * variantless lines (variantId = '') with different sizes stay separate, and
  * fulfilment type so stock and bulk-mode lines remain independently editable.
+ *
+ * Phase 2: `catalogueItemId` is the FIRST discriminator in the string — two
+ * skins of one master product (same productId, different catalogue item) never
+ * merge. `catalogueItemId` is a trailing param so the ~dozen existing call
+ * sites keep working unchanged; passing null reproduces the pre-phase-2
+ * signature exactly (legacy parity).
  */
 export function lineSignature(
   productId: string,
@@ -124,8 +140,9 @@ export function lineSignature(
   variantLabel: string,
   decorations: CartLineDecoration[],
   fulfilmentType: CartLineFulfilmentType = 'stocked',
+  catalogueItemId: string | null = null,
 ): string {
-  return `${productId}::${variantId}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
+  return `${catalogueItemId ?? productId}::${variantId}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
 }
 
 /**
