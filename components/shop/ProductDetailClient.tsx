@@ -616,6 +616,8 @@ export function ProductDetailClient({
           decorations: cartDecorationsForSwatch(variant.color_swatch_id),
           fulfilmentType,
           brackets: cartLineBrackets,
+          catalogueItemId: product.catalogueItemId,
+          catalogueVariantLabel: product.catalogueVariantLabel,
         })
         added += lineQty
       }
@@ -646,6 +648,8 @@ export function ProductDetailClient({
           decorations: cartDecorationsForSwatch(colorSwatchId),
           fulfilmentType: 'make_to_stock',
           brackets: cartLineBrackets,
+          catalogueItemId: product.catalogueItemId,
+          catalogueVariantLabel: product.catalogueVariantLabel,
         })
         added += lineQty
       }
@@ -680,6 +684,8 @@ export function ProductDetailClient({
       decorations: cartDecorationsForSwatch(colorSwatchId),
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
+      catalogueItemId: product.catalogueItemId,
+      catalogueVariantLabel: product.catalogueVariantLabel,
     })
     showToast('Added to cart')
   }
