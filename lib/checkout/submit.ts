@@ -46,6 +46,13 @@ export interface CheckoutLineInput {
    * made. Absent on legacy carts; treated as MOQ-applicable (conservative).
    */
   fulfilment_type?: 'stocked' | 'make_to_stock'
+  /**
+   * Phase 2 — catalogue-item identity carried from the cart line. Threaded into
+   * submit_b2b_order's p_lines so the order records which skin sold. camelCase
+   * to match the cart line; the RPC payload maps it to snake_case
+   * catalogue_item_id. Null/absent for legacy/non-catalogue lines.
+   */
+  catalogueItemId?: string | null
 }
 
 export interface CheckoutInput {
@@ -489,6 +496,9 @@ export async function submitCustomerOrder(
   //     signatures that happened to share a linkId.
 
   const validatedByLineKey = new Map<string, CheckoutLineDecorationInput[]>()
+  // Phase 2 — catalogue_item_id each line's decoration links resolve to, used
+  // only as a drift cross-check against the line's own catalogueItemId.
+  const decoCatalogueItemIdByLineKey = new Map<string, string>()
   const drift: DecorationDrift[] = []
 
   for (const line of input.lines) {
@@ -643,6 +653,15 @@ export async function submitCustomerOrder(
       })
     }
     validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), validated)
+    if (validated.length > 0) {
+      const decoCatId = byId.get(validated[0].linkId)?.catalogue_item_id
+      if (decoCatId) {
+        decoCatalogueItemIdByLineKey.set(
+          makeLineKey(line.product_id, line.variant_id ?? null),
+          decoCatId,
+        )
+      }
+    }
   }
 
   if (drift.length > 0) {
@@ -665,6 +684,11 @@ export async function submitCustomerOrder(
     totalDecorationRevenue += perUnit * l.qty
   }
 
+  // Phase 2 — drift signal only (we never throw): if a line's own catalogue
+  // identity disagrees with the one its decoration links resolve to, log once
+  // and trust the line's id (it is the authoritative line identity).
+  let warnedCatalogueDrift = false
+
   const { data, error } = await admin.rpc('submit_b2b_order', {
     p_idempotency_key: input.idempotency_key,
     p_organization_id: input.context.organizationId,
@@ -680,12 +704,32 @@ export async function submitCustomerOrder(
     p_lines: repriced.map((l) => {
       const perUnitDeco =
         decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? 0
+      // Phase 2 — the line's own catalogueItemId is the authoritative identity.
+      // The decoration-derived id is only a cross-check; if they disagree, warn
+      // once and still trust the line's id.
+      const lineCatalogueItemId = l.catalogueItemId ?? null
+      const decoCatalogueItemId =
+        decoCatalogueItemIdByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? null
+      if (
+        lineCatalogueItemId &&
+        decoCatalogueItemId &&
+        lineCatalogueItemId !== decoCatalogueItemId &&
+        !warnedCatalogueDrift
+      ) {
+        warnedCatalogueDrift = true
+        console.warn(
+          `[submit_b2b_order] catalogue_item_id drift on line ` +
+            `${l.cart_line_id ?? l.product_id}: line carries ${lineCatalogueItemId} but ` +
+            `its decoration links resolve to ${decoCatalogueItemId}; trusting the line id.`,
+        )
+      }
       return {
         product_id: l.product_id,
         product_name: l.product_name,
         quantity: l.qty,
         unit_price: l.unit_price + perUnitDeco,
         variant_id: l.variant_id ?? null,
+        catalogue_item_id: lineCatalogueItemId,
       }
     }),
     p_intent: input.intent ?? 'customer',
