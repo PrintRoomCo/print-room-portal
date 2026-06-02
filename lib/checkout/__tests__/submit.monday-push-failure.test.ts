@@ -56,7 +56,7 @@ function makeSupabaseStub(opts: {
    * Override role lookup result for `user_organizations` so getGrantedCatalogueItemIds
    * takes the admin-bypass branch.
    */
-  membershipRole: 'org_admin' | 'buyer'
+  membershipRole: 'org_admin' | 'staff'
 }) {
   const writes: RecordedWrite[] = []
 

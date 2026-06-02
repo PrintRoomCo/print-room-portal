@@ -30,7 +30,7 @@ describe('GET /api/inventory/audit', () => {
   it('403s for a non-admin member', async () => {
     vi.mocked(requireB2BCustomerApi).mockResolvedValue({
       admin: makeAdmin({}),
-      context: { organizationId: ORG, role: 'buyer' },
+      context: { organizationId: ORG, role: 'staff' },
     } as never)
     const res = await GET()
     expect(res.status).toBe(403)
