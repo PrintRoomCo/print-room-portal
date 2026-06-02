@@ -54,7 +54,7 @@ export default async function OrderProofEditPage({
   // Buyer-role gate — only org_admin or buyer roles may edit. The schema
   // today only has these two values, but the check is explicit so a future
   // viewer role can never accidentally land here.
-  const ALLOWED_ROLES = new Set(['org_admin', 'buyer'])
+  const ALLOWED_ROLES = new Set(['org_admin', 'staff'])
   if (!ALLOWED_ROLES.has(context.role)) {
     return <ProofNotReady />
   }

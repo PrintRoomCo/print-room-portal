@@ -67,7 +67,7 @@ interface RequestBody {
 }
 
 const VISIBLE_QUALITY_STATES = new Set(['attached_to_monday', 'sent_to_customer'])
-const ALLOWED_ROLES = new Set(['org_admin', 'buyer'])
+export const ALLOWED_ROLES = new Set(['org_admin', 'staff'])
 
 export async function POST(
   request: Request,

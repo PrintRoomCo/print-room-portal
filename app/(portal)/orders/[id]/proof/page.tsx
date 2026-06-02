@@ -6,7 +6,7 @@ import { ProofViewer } from '@/components/proofs/ProofViewer'
 import { coerceProofDocument } from '@/lib/proofs/types'
 import { isProofVisibleToCustomer } from '@/lib/proofs/visibility'
 
-const ALLOWED_EDIT_ROLES = new Set(['org_admin', 'buyer'])
+const ALLOWED_EDIT_ROLES = new Set(['org_admin', 'staff'])
 
 interface OrderRow {
   id: string
