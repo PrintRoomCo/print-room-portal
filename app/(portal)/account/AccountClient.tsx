@@ -424,15 +424,15 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
         )}
       </div>
 
-      {/* Recent Quotes */}
+      {/* Recent Orders */}
       <div className="card-elevated">
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">
-              Recent Quotes
+              Recent Orders
             </h2>
             <Link href="/my-collections" className="text-sm text-[rgb(var(--color-primary))] hover:underline">
-              View all quotes
+              View all orders
             </Link>
           </div>
         </div>
@@ -455,7 +455,7 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
                     <div className="flex-1">
                       <div className="flex items-center gap-4">
                         <h3 className="font-semibold text-gray-900">
-                          Quote {quote.quote_number || '—'}
+                          Order {quote.quote_number || '—'}
                         </h3>
                         <QuoteStatusBadge status={quote.status} />
                       </div>
@@ -480,10 +480,10 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
           <div className="p-12 text-center">
             <OrderEmptyIcon />
             <h3 className="mt-4 text-lg font-semibold text-gray-900">
-              No quotes yet
+              No orders yet
             </h3>
             <p className="mt-2 text-gray-600">
-              Your quote history will appear here
+              Your order history will appear here
             </p>
           </div>
         )}
