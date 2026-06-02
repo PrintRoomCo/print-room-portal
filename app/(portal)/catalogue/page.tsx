@@ -12,6 +12,7 @@ import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
+import { effectiveFulfilment, matchesMode, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
@@ -97,12 +98,16 @@ export default async function CataloguePage({
     ? { data: [] as Array<{ id: string; source_product_id: string }> }
     : await admin
         .from('b2b_catalogue_items')
-        .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+        .select('id, source_product_id, fulfilment_type_override, b2b_catalogues!inner(organization_id, is_active)')
         .eq('b2b_catalogues.organization_id', context.organizationId)
         .eq('b2b_catalogues.is_active', true)
         .eq('is_active', true)
         .in('id', grantedItemIds)
-  const catItemRows = (catItems ?? []) as Array<{ id: string; source_product_id: string }>
+  const catItemRows = (catItems ?? []) as Array<{
+    id: string
+    source_product_id: string
+    fulfilment_type_override: FulfilmentType | null
+  }>
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
 
   // Inventory tenants: union curated catalogue with any product they track
@@ -129,7 +134,32 @@ export default async function CataloguePage({
   const catalogueProductIds = new Set(catItemRows.map((r) => r.source_product_id))
   const scopedProductIds = Array.from(new Set([...catalogueProductIds, ...inventoryProductIds]))
 
-  if (scopedProductIds.length === 0) {
+  // Ordering-mode filter (Item 2): keep only products whose effective mode
+  // (override ?? base) matches the selected pill. Override is per catalogue
+  // item; base is products.fulfilment_type. Falls back to base when no override.
+  let modeScopedProductIds = scopedProductIds
+  if (filters.mode !== 'all' && scopedProductIds.length > 0) {
+    const overrideByProductId = new Map<string, FulfilmentType | null>(
+      catItemRows.map((r) => [r.source_product_id, r.fulfilment_type_override]),
+    )
+    const { data: baseRows } = await admin
+      .from('products')
+      .select('id, fulfilment_type')
+      .in('id', scopedProductIds)
+    const baseByProductId = new Map<string, FulfilmentType | null>(
+      ((baseRows ?? []) as Array<{ id: string; fulfilment_type: FulfilmentType | null }>).map(
+        (r) => [r.id, r.fulfilment_type],
+      ),
+    )
+    modeScopedProductIds = scopedProductIds.filter((pid) =>
+      matchesMode(
+        effectiveFulfilment(overrideByProductId.get(pid) ?? null, baseByProductId.get(pid) ?? null),
+        filters.mode,
+      ),
+    )
+  }
+
+  if (modeScopedProductIds.length === 0) {
     return (
       <div className="space-y-6 p-4 md:p-8">
         <PortalEmptyState
@@ -149,7 +179,7 @@ export default async function CataloguePage({
     .from('products')
     .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at', { count: 'exact' })
     .eq('is_active', true)
-    .in('id', scopedProductIds)
+    .in('id', modeScopedProductIds)
 
   if (filters.q) q = q.ilike('name', `%${filters.q}%`)
   if (filters.brandId) q = q.eq('brand_id', filters.brandId)
