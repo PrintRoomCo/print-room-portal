@@ -31,11 +31,13 @@ const nextConfig = {
       // index since the /quote-requests/[id] page no longer exists.
       { source: '/quote-requests', destination: '/tracking', permanent: true },
       { source: '/quote-requests/:path*', destination: '/tracking', permanent: true },
-      // 2026-05-14 catalogue merge — /shop + /inventory folded into /catalogue.
+      // 2026-05-14 catalogue merge — /shop folded into /catalogue.
       // PDPs deep-link from /shop/[id] preserved via per-id redirect.
       { source: '/shop', destination: '/catalogue', permanent: true },
       { source: '/shop/:productId', destination: '/catalogue/:productId', permanent: true },
-      { source: '/inventory', destination: '/catalogue', permanent: true },
+      // 2026-06-02 — /inventory reinstated as a distinct org-admin Inventory page;
+      // its old `/inventory -> /catalogue` redirect is intentionally removed (a
+      // permanent 308 would otherwise shadow the new route on every environment).
     ]
   },
 }
