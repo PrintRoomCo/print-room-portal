@@ -12,6 +12,7 @@ export default defineConfig({
       'components/**/*.test.tsx',
       'app/**/*.test.ts',
       'app/**/*.test.tsx',
+      'scripts/__tests__/**/*.test.ts',
     ],
   },
   resolve: {
