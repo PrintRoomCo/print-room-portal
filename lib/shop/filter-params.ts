@@ -1,3 +1,5 @@
+import type { OrderingMode } from './fulfilment-mode'
+
 export type ShopSort = 'name' | 'newest'
 
 export interface ShopFilters {
@@ -7,6 +9,7 @@ export interface ShopFilters {
   garmentFamily: string | null
   sort: ShopSort
   inStock: boolean
+  mode: OrderingMode
   page: number
 }
 
@@ -17,10 +20,13 @@ export const DEFAULT_SHOP_FILTERS: ShopFilters = {
   garmentFamily: null,
   sort: 'name',
   inStock: false,
+  mode: 'all',
   page: 1,
 }
 
 const SORT_VALUES: ShopSort[] = ['name', 'newest']
+
+const MODE_VALUES: OrderingMode[] = ['all', 'from_inventory', 'reorder']
 
 function pickFirst(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0]
@@ -43,6 +49,10 @@ export function parseShopFilters(
     garmentFamily: pickFirst(sp.garment_family) || null,
     sort,
     inStock: pickFirst(sp.in_stock) === '1',
+    mode: (() => {
+      const raw = pickFirst(sp.mode) as OrderingMode | undefined
+      return raw && MODE_VALUES.includes(raw) ? raw : 'all'
+    })(),
     page,
   }
 }
@@ -55,5 +65,6 @@ export function activeFilterCount(filters: ShopFilters): number {
   if (filters.garmentFamily !== null) n++
   if (filters.sort !== 'name') n++
   if (filters.inStock) n++
+  if (filters.mode !== 'all') n++
   return n
 }
