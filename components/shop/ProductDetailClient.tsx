@@ -21,7 +21,7 @@ import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
-type CustomerRole = 'org_admin' | 'buyer'
+type CustomerRole = 'org_admin' | 'staff'
 type OrderIntent = 'inventory' | 'bulk'
 
 interface ProductData {
@@ -225,7 +225,7 @@ export function ProductDetailClient({
   // case the PDP hides bulk-order artefacts (volume pricing + lead time) and
   // the Add-to-cart guard blocks ordering beyond available stock.
   const isInventoryMode =
-    customerRole === 'buyer' ||
+    customerRole === 'staff' ||
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 

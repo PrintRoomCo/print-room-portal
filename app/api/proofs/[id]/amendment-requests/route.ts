@@ -22,7 +22,7 @@ import { sendProofEmail } from '@/lib/email/send-proof-email'
  *      `design_proof_versions.snapshot_data`.
  *
  *   2. Buyer-role gate: caller must have `user_organizations.role IN
- *      ('org_admin','buyer')` for the proof's org. RLS on the table is the
+ *      ('org_admin','staff')` for the proof's org. RLS on the table is the
  *      second line of defence; this route is the first.
  *
  *   3. Allow-list gate: every diff path must be in the DB-backed allow-list
@@ -77,7 +77,7 @@ export async function POST(
   if ('error' in auth) return auth.error
   const { admin, context } = auth
 
-  // Buyer-role gate. Today the schema only has 'org_admin' | 'buyer', but
+  // Buyer-role gate. Today the schema only has 'org_admin' | 'staff', but
   // we check explicitly so adding a 'viewer' role later is a no-op here.
   if (!ALLOWED_ROLES.has(context.role)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
