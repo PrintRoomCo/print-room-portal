@@ -4,6 +4,7 @@ import type { ShopFacets } from '@/lib/shop/facets'
 import { activeFilterCount } from '@/lib/shop/filter-params'
 import { FilterAutoSubmitSelect } from './FilterAutoSubmitSelect'
 import { FilterAutoSubmitCheckbox } from './FilterAutoSubmitCheckbox'
+import { PILL_LABELS } from '@/lib/shop/fulfilment-mode'
 
 interface Props {
   filters: ShopFilters
@@ -62,6 +63,19 @@ export function FilterRail({ filters, facets, basePath }: Props) {
             options={[
               { value: '', label: 'All families' },
               ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
+            ]}
+          />
+        </Section>
+
+        <Section label="Ordering mode">
+          <FilterAutoSubmitSelect
+            name="mode"
+            defaultValue={filters.mode === 'all' ? '' : filters.mode}
+            ariaLabel="Filter by ordering mode"
+            options={[
+              { value: '', label: 'All' },
+              { value: 'from_inventory', label: PILL_LABELS.from_inventory },
+              { value: 'reorder', label: PILL_LABELS.reorder },
             ]}
           />
         </Section>
