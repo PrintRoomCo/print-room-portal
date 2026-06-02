@@ -6,17 +6,16 @@ import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { usePortalDrawer } from './PortalTopBarContext'
 import type { B2BCustomerAccess } from '@/types/company'
+import { PORTAL_NAV_ITEMS, getNavigationItems, type PortalNavItem, type NavIconKey } from '@/lib/nav/portal-nav'
 
 interface SidebarProps {
   children: React.ReactNode
   customer: B2BCustomerAccess
 }
 
-type TenantType = NonNullable<B2BCustomerAccess['tenantType']>
-
 // Identifiers for the four hand-drawn rows rendered inside the inline SVG
-// menu. Order = display order. Anything in `allNavItems` not listed here
-// (e.g. Leavers Quotes) falls back to a classic Link row beneath the SVG.
+// menu. Order = display order. Anything in `PORTAL_NAV_ITEMS` not listed here
+// (e.g. Leavers Quotes, Inventory) falls back to a classic Link row beneath the SVG.
 type SvgRowId = 'tracking' | 'catalogue' | 'orders' | 'proofs'
 const SVG_ROWS: ReadonlyArray<{ id: SvgRowId; label: string; href: string }> = [
   { id: 'tracking',  label: 'Tracking',  href: '/tracking' },
@@ -25,69 +24,15 @@ const SVG_ROWS: ReadonlyArray<{ id: SvgRowId; label: string; href: string }> = [
   { id: 'proofs',    label: 'Proofs',    href: '/proofs' },
 ]
 
-// Navigation items with permission requirements.
-// "My Account" lives in the AccountMenu dropdown in the top bar — not here.
-// "Sign Out" lives in the AccountMenu too. Catalogue absorbs the previous
-// Shop + Inventory surfaces (inline stock chip on each card).
-const allNavItems = [
-  {
-    name: 'Tracking',
-    href: '/tracking',
-    icon: TrackerIcon,
-    requiresCompany: false,
-    requiresLeavers: false,
-    requiredTenantTypes: null as ReadonlyArray<TenantType> | null,
-  },
-  {
-    name: 'Catalogue',
-    href: '/catalogue',
-    icon: CatalogueIcon,
-    requiresCompany: true,
-    requiresLeavers: false,
-    requiredTenantTypes: null,
-  },
-  {
-    name: 'Orders',
-    href: '/my-collections',
-    icon: OrdersIcon,
-    requiresCompany: false,
-    requiresLeavers: false,
-    requiredTenantTypes: null,
-  },
-  {
-    name: 'Proofs',
-    href: '/proofs',
-    icon: ProofsIcon,
-    requiresCompany: true,
-    requiresLeavers: false,
-    requiredTenantTypes: null,
-  },
-  {
-    name: 'Leavers Quotes',
-    href: '/leavers-quotes',
-    icon: LeaversIcon,
-    requiresCompany: false,
-    requiresLeavers: true,
-    requiredTenantTypes: null,
-  },
-] as const
-
-function getNavigationItems(customer: B2BCustomerAccess) {
-  return allNavItems.filter((item) => {
-    if (item.requiresCompany && !customer.isCompanyUser) return false
-    if (item.requiresLeavers && !customer.canUseLeavers) return false
-    if (item.requiredTenantTypes) {
-      if (!customer.tenantType) return false
-      if (!item.requiredTenantTypes.includes(customer.tenantType)) return false
-    }
-    return true
-  })
-}
-
 export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname() ?? ''
   const drawer = usePortalDrawer()
-  const navigation = getNavigationItems(customer)
+  const navigation = getNavigationItems({
+    isCompanyUser: customer.isCompanyUser,
+    canUseLeavers: customer.canUseLeavers,
+    isOrgAdmin: customer.isOrgAdmin,
+    tenantType: customer.tenantType,
+  })
 
   // SVG menu rows the current user is allowed to see. Permission gating
   // flows through `navigation` (already filtered by getNavigationItems).
@@ -360,7 +305,10 @@ export function Sidebar({ children, customer }: SidebarProps) {
                       }`}
                       tabIndex={drawer.open ? 0 : -1}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {(() => {
+                        const Icon = EXTRA_ICONS[item.iconKey]
+                        return <Icon className="h-5 w-5 flex-shrink-0" />
+                      })()}
                       <span>{item.name}</span>
                     </Link>
                   </li>
@@ -389,6 +337,30 @@ export function Sidebar({ children, customer }: SidebarProps) {
 }
 
 // ─── Icons ─────────────────────────────────────────────────────────
+
+// Maps a PortalNavItem's iconKey to its icon component. Used by the
+// `extraItems` list (classic Link rows beneath the inline SVG menu).
+const EXTRA_ICONS: Record<NavIconKey, (p: { className?: string }) => React.ReactElement> = {
+  tracking: TrackerIcon,
+  catalogue: CatalogueIcon,
+  orders: OrdersIcon,
+  proofs: ProofsIcon,
+  leavers: LeaversIcon,
+  inventory: InventoryIcon,
+}
+
+function InventoryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10m0-10L4 7m0 0v10l8 4"
+      />
+    </svg>
+  )
+}
 
 function OrdersIcon({ className }: { className?: string }) {
   return (
