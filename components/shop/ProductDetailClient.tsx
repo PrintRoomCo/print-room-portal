@@ -233,6 +233,14 @@ export function ProductDetailClient({
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
+  // From-inventory mode (spec Item 3) applied to the multi-size variant table:
+  // show ONLY sizes with a tracked, in-stock quantity for the current colour,
+  // and drop the "Available" status column below. Reorder/MTO mode is
+  // unchanged; CartTable remains the oversell net.
+  const visibleSizeRows = isInventoryMode
+    ? sizeRowsForColour.filter((row) => row.available !== null && row.available > 0)
+    : sizeRowsForColour
+
   // MOQ exists to make a new production run economical — it does not apply when
   // drawing down stock that has already been made. In inventory mode the only
   // ceiling is available stock (enforced by the shortfall guard), so the
@@ -806,6 +814,7 @@ export function ProductDetailClient({
               selectedSizeId={sizeId}
               availability={availability}
               showSizePicker={false}
+              inStockOnly={isInventoryMode}
               onChange={({ colorSwatchId: c, sizeId: s }) => {
                 setColorSwatchId(c)
                 setSizeId(s)
@@ -860,18 +869,20 @@ export function ProductDetailClient({
             </section>
           )}
 
-          {multiSize && sizeRowsForColour.length > 0 && (
+          {multiSize && visibleSizeRows.length > 0 && (
             <section className="overflow-hidden rounded-[24px] bg-white">
               <table className="w-full text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500">
                   <tr>
                     <th className="px-5 pt-5 pb-2 font-medium">Size</th>
-                    <th className="px-5 pt-5 pb-2 font-medium">Available</th>
+                    {!isInventoryMode && (
+                      <th className="px-5 pt-5 pb-2 font-medium">Available</th>
+                    )}
                     <th className="px-5 pt-5 pb-2 text-right font-medium">Qty</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sizeRowsForColour.map((row) => {
+                  {visibleSizeRows.map((row) => {
                     const trackedRow = row.available !== null
                     const stocked = trackedRow ? (row.available ?? 0) : 0
                     const value = variantQuantities[row.variantId] ?? 0
@@ -886,18 +897,20 @@ export function ProductDetailClient({
                     return (
                       <tr key={row.variantId} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
-                        <td className="px-5 py-3 text-xs text-gray-600">
-                          {showBackorderableChip ? (
-                            <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
-                              Available to order
-                            </span>
-                          ) : !trackedRow ? '—' : `${stocked}`}
-                          {backorder > 0 && !showBackorderableChip && (
-                            <span className="ml-1 text-amber-700">
-                              ({backorder} to be made)
-                            </span>
-                          )}
-                        </td>
+                        {!isInventoryMode && (
+                          <td className="px-5 py-3 text-xs text-gray-600">
+                            {showBackorderableChip ? (
+                              <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                                Available to order
+                              </span>
+                            ) : !trackedRow ? '—' : `${stocked}`}
+                            {backorder > 0 && !showBackorderableChip && (
+                              <span className="ml-1 text-amber-700">
+                                ({backorder} to be made)
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-5 py-3 text-right">
                           <input
                             type="number"
@@ -927,7 +940,7 @@ export function ProductDetailClient({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-200">
-                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={2}>
+                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={isInventoryMode ? 1 : 2}>
                       Total this colour
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
@@ -936,7 +949,7 @@ export function ProductDetailClient({
                   </tr>
                   {otherColoursTotalQty > 0 && (
                     <tr className="border-t border-gray-100">
-                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={2}>
+                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={isInventoryMode ? 1 : 2}>
                         Order total (across all variants)
                       </td>
                       <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
