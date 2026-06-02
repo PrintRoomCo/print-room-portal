@@ -7,8 +7,11 @@
 import { sendEmail } from './client'
 import { getStatusLabel } from '@/lib/job-tracker'
 
-const TRACKER_BASE_URL =
-  process.env.PUBLIC_TRACKER_BASE_URL || 'https://www.theprintroom.nz/apps/order-tracker'
+// Portal-native tracker base. The status email's "View order tracker" CTA links
+// into the authed customer portal (/order-tracker/<token>), not the retired
+// external Shopify-proxy page. Override origin via NEXT_PUBLIC_SITE_URL.
+const PORTAL_ORIGIN =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
 
 // Shared email styles
 const EMAIL_STYLES = `
@@ -58,7 +61,7 @@ interface TrackerEmailParams {
 export async function sendTrackerStatusEmail(
   params: TrackerEmailParams
 ): Promise<{ success: boolean; error?: string }> {
-  const trackerUrl = `${TRACKER_BASE_URL}/job/${params.trackerToken}`
+  const trackerUrl = `${PORTAL_ORIGIN}/order-tracker/${params.trackerToken}`
   const statusLabel = getStatusLabel(params.newStatus)
   const ref = params.quoteNumber || params.jobReference
   const subject = `Order update: ${statusLabel} — ${ref}`

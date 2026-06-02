@@ -17,7 +17,7 @@ import {
 } from './actions'
 import type { CollectionWithDesigns, DesignSubmission } from '@/lib/collections'
 import type { JobTracker } from '@/lib/job-tracker'
-import { getTrackerUrl } from '@/lib/job-tracker'
+import { getPortalTrackerPath } from '@/lib/job-tracker'
 
 interface Quote {
   id: string
@@ -282,7 +282,7 @@ export default function CollectionDetail() {
     }
   }
 
-  const trackerUrl = tracker?.tracker_token ? getTrackerUrl(tracker.tracker_token) : null
+  const trackerUrl = tracker?.tracker_token ? getPortalTrackerPath(tracker.tracker_token) : null
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 motion-safe:animate-portal-enter">
@@ -377,17 +377,15 @@ export default function CollectionDetail() {
                 {trackerUrl ? ' You can track your order progress below.' : ' Contact us to place your order.'}
               </p>
               {trackerUrl && (
-                <a
+                <Link
                   href={trackerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-[rgb(var(--color-brand-blue))] font-medium hover:underline"
                 >
                   View Order Tracker
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
-                </a>
+                </Link>
               )}
             </div>
           </div>
@@ -695,7 +693,7 @@ function QuoteDetail({
   const proofFiles = (Array.isArray(tracker?.proof_files)
     ? tracker.proof_files
     : []) as ProofFile[]
-  const trackerUrl = tracker?.tracker_token ? getTrackerUrl(tracker.tracker_token) : null
+  const trackerUrl = tracker?.tracker_token ? getPortalTrackerPath(tracker.tracker_token) : null
   const currency = quote.currency || 'NZD'
   const heading =
     quote.reference || `Order ${quote.id.slice(0, 8).toUpperCase()}`
@@ -903,14 +901,12 @@ function QuoteDetail({
 
               <div className="mt-7 space-y-3">
                 {trackerUrl ? (
-                  <a
+                  <Link
                     href={trackerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
                   >
                     Open tracker
-                  </a>
+                  </Link>
                 ) : (
                   <Link
                     href="/order-tracker"

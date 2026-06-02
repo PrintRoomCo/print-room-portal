@@ -7,6 +7,7 @@ import { getCompanyAccess } from '@/lib/company'
 import {
   getJobsForCompany,
   getJobsForUser,
+  getJobTrackerForUserByToken,
 } from '@/lib/job-tracker-queries'
 import type { JobTracker } from '@/lib/job-tracker'
 import type { B2BCustomerAccess } from '@/types/company'
@@ -140,6 +141,19 @@ export const getPortalOrderTrackerData = cache(async (): Promise<PortalOrderTrac
   }
   return fetchOrderTrackerDataForUser(user.id, user.email ?? null)
 })
+
+/**
+ * Single tracker for the portal-native `/order-tracker/[token]` deep link,
+ * scoped to the authed user (returns null when unauthenticated, unknown, or
+ * not owned — see getJobTrackerForUserByToken).
+ */
+export const getPortalTrackerByToken = cache(
+  async (token: string): Promise<JobTracker | null> => {
+    const user = await getPortalUser()
+    if (!user) return null
+    return getJobTrackerForUserByToken(token, user.id, user.email ?? null)
+  }
+)
 
 /**
  * unstable_cache body for getPortalAccountData. Same pattern as the order

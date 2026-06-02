@@ -10,7 +10,7 @@ import {
   STATUS_STEPS,
   getItemTotalQty,
   getStatusLabel,
-  getTrackerUrl,
+  getPortalTrackerPath,
   getTrackingNumber,
   isTrackerCompleted,
 } from '@/lib/job-tracker'
@@ -18,10 +18,22 @@ import {
 interface JobTrackerOrderCardProps {
   tracker: JobTracker
   showCustomerEmail?: boolean
+  /** Open expanded on first render (used by the single-order detail page). */
+  defaultExpanded?: boolean
+  /**
+   * Hide the now-self-referential "Track Project" / "View Full Project Tracker"
+   * links. Set on the detail page, which IS the full tracker.
+   */
+  hideTrackerLink?: boolean
 }
 
-export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOrderCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+export function JobTrackerOrderCard({
+  tracker,
+  showCustomerEmail,
+  defaultExpanded = false,
+  hideTrackerLink = false,
+}: JobTrackerOrderCardProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 
   const completed = isTrackerCompleted(tracker.status)
   const quoteData = tracker.quote_data ?? null
@@ -29,7 +41,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
   const subtotal = quoteData?.summary?.total ?? quoteData?.summary?.subtotal ?? quoteData?.subtotal ?? 0
   const currency = quoteData?.currencyCode || 'NZD'
 
-  const trackerUrl = getTrackerUrl(tracker.tracker_token)
+  const trackerUrl = getPortalTrackerPath(tracker.tracker_token)
   const totalItems = items.reduce((sum, item) => sum + getItemTotalQty(item), 0)
 
   return (
@@ -79,16 +91,14 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       View Order
                     </Link>
                   )}
-                  {trackerUrl && (
-                    <a
+                  {!hideTrackerLink && (
+                    <Link
                       href={trackerUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
                       Track Project
-                    </a>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -241,19 +251,19 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
           )}
 
           {/* Full Tracker Link */}
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <a
-              href={trackerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200"
-            >
-              View Full Project Tracker
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-          </div>
+          {!hideTrackerLink && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <Link
+                href={trackerUrl}
+                className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200"
+              >
+                View Full Project Tracker
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

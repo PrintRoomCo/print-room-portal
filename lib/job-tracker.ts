@@ -327,6 +327,16 @@ export function getTrackerUrl(trackerToken: string): string {
   return `${base}/job/${trackerToken}`
 }
 
+/**
+ * Relative in-app path to the portal-native single-order tracker. Use this for
+ * same-origin navigation (Link/anchor inside the portal) instead of the dead
+ * external `getTrackerUrl`. Server-side emails that need an absolute URL prepend
+ * the portal origin themselves.
+ */
+export function getPortalTrackerPath(trackerToken: string): string {
+  return `/order-tracker/${trackerToken}`
+}
+
 export function detectCarrierFromUrl(url: string | undefined): string | null {
   if (!url) return null
 

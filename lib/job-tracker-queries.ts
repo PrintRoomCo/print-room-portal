@@ -232,6 +232,87 @@ export async function getJobsForCompany(
   }
 }
 
+/**
+ * Fetch a single tracker by its `tracker_token`, scoped to what `userId` is
+ * allowed to see. Powers the portal-native `/order-tracker/[token]` deep link.
+ *
+ * Authorization (any one):
+ *   - the tracker's `user_id` is the requester, or
+ *   - the requester's email matches the tracker's `customer_email`, or
+ *   - the requester is an `org_admin` of the org whose b2b account owns the
+ *     tracker's `company_id`, and the tracker's `location_id` is one of that
+ *     org's stores (mirrors `getJobsForCompany` scoping used by the list view).
+ *
+ * Returns `null` for an unknown token OR an unauthorised requester — callers
+ * surface both as not-found, so a token guess never leaks another org's order.
+ */
+export async function getJobTrackerForUserByToken(
+  token: string,
+  userId: string,
+  email?: string | null
+): Promise<JobTracker | null> {
+  try {
+    const supabase = getSupabaseServer()
+
+    const { data, error } = await supabase
+      .from('job_trackers')
+      .select('*')
+      .eq('tracker_token', token)
+      .maybeSingle()
+
+    if (error) {
+      if (error.code === '42P01') return null
+      console.error('[JobTracker] Failed to fetch tracker by token:', error)
+      return null
+    }
+
+    const tracker = data as JobTracker | null
+    if (!tracker) return null
+
+    const ownsByUser = tracker.user_id === userId
+    const ownsByEmail =
+      !!email &&
+      !!tracker.customer_email &&
+      tracker.customer_email.toLowerCase() === email.toLowerCase()
+
+    let authorized = ownsByUser || ownsByEmail
+
+    if (!authorized) {
+      const { data: membership } = await supabase
+        .from('user_organizations')
+        .select('organization_id, role')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (membership?.role === 'org_admin' && membership.organization_id) {
+        const { data: b2bAccount } = await supabase
+          .from('b2b_accounts')
+          .select('company_id')
+          .eq('organization_id', membership.organization_id)
+          .maybeSingle()
+
+        if (b2bAccount?.company_id && b2bAccount.company_id === tracker.company_id) {
+          const { data: stores } = await supabase
+            .from('stores')
+            .select('id')
+            .eq('organization_id', membership.organization_id)
+
+          const locationIds = (stores || []).map((s: { id: string }) => s.id)
+          authorized = !!tracker.location_id && locationIds.includes(tracker.location_id)
+        }
+      }
+    }
+
+    if (!authorized) return null
+
+    const [withImages] = await attachProductImages([tracker])
+    return withImages
+  } catch (err) {
+    console.error('[JobTracker] Error fetching tracker by token:', err)
+    return null
+  }
+}
+
 export async function getJobTrackersByQuoteId(
   quoteId: string
 ): Promise<JobTracker[]> {
