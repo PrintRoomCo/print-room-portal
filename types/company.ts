@@ -14,7 +14,7 @@ export interface B2BCustomerAccess {
   companyId: string | null
   companyName: string | null
   locationIds: string[]
-  role: 'org_admin' | 'buyer'
+  role: 'org_admin' | 'staff'
   tier: string
 
   isCompanyUser: boolean

@@ -134,7 +134,7 @@ export async function getCompanyAccess(
     .eq('organization_id', orgMembership.organization_id)
 
   const locationIds = (locations || []).map((loc) => loc.id)
-  const role = (orgMembership.role as 'org_admin' | 'buyer') || 'org_admin'
+  const role = (orgMembership.role as 'org_admin' | 'staff') || 'org_admin'
   const tier = b2bAccount?.tier_level?.toString() || 'bronze'
 
   // 6. Check if the organization has any tracked inventory.
@@ -180,7 +180,7 @@ interface AccessInput {
   companyId: string | null
   companyName: string | null
   locationIds: string[]
-  role: 'org_admin' | 'buyer'
+  role: 'org_admin' | 'staff'
   tier: string
   tierLabel: string | null
   tierDiscount: number
@@ -192,7 +192,7 @@ interface AccessInput {
   tenantType: B2BCustomerAccess['tenantType']
 }
 
-function buildAccess(input: AccessInput): B2BCustomerAccess {
+export function buildAccess(input: AccessInput): B2BCustomerAccess {
   const {
     role,
     isCompanyUser,
@@ -206,7 +206,7 @@ function buildAccess(input: AccessInput): B2BCustomerAccess {
   } = input
 
   const isOrgAdmin = role === 'org_admin'
-  const isBuyer = role === 'buyer'
+  const isBuyer = role === 'staff'
 
   return {
     ...rest,
