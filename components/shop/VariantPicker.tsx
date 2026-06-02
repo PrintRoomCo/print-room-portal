@@ -33,6 +33,13 @@ interface VariantPickerProps {
   onChange: (next: { colorSwatchId: string | null; sizeId: number | null }) => void
   availability?: Record<string, VariantAvailability>
   showSizePicker?: boolean
+  /**
+   * From-inventory mode (spec Item 3): show ONLY sizes with a tracked,
+   * in-stock variant for the selected colour, and suppress the
+   * "Available to order" chip + "{qty} in stock" status text. Reorder/default
+   * mode (false) is unchanged. CartTable oversell guard remains the net.
+   */
+  inStockOnly?: boolean
 }
 
 export function VariantPicker({
@@ -43,6 +50,7 @@ export function VariantPicker({
   onChange,
   availability,
   showSizePicker = true,
+  inStockOnly = false,
 }: VariantPickerProps) {
   const colorMap = new Map<string, ColourOption>()
   const addColor = (c: ColourOption) => {
@@ -83,6 +91,20 @@ export function VariantPicker({
     }
   }
   const sizes = Array.from(sizeMap.values()).sort((a, b) => a.order - b.order)
+
+  // In-stock-only: keep a size only if the variant for the *selected colour*
+  // is tracked with available_qty > 0. Zero-stock and untracked sizes are not
+  // selectable (no "available to order" path in From-inventory mode).
+  const visibleSizes = inStockOnly
+    ? sizes.filter((s) => {
+        const variantForSize = variants.find(
+          (v) => v.color_swatch_id === selectedColorSwatchId && v.size_id === s.id,
+        )
+        if (!variantForSize || !availability) return false
+        const a = availability[variantForSize.variant_id]
+        return a !== undefined && a.available_qty > 0
+      })
+    : sizes
 
   const selectedColor = colors.find((c) => c.id === selectedColorSwatchId) ?? null
 
@@ -126,7 +148,7 @@ export function VariantPicker({
         </div>
       )}
 
-      {showSizePicker && sizes.length > 0 && (
+      {showSizePicker && visibleSizes.length > 0 && (
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-900">Size</label>
           <ToggleGroup.Root
@@ -140,7 +162,7 @@ export function VariantPicker({
             aria-label="Select size"
             className="flex flex-wrap gap-2"
           >
-            {sizes.map((s) => {
+            {visibleSizes.map((s) => {
               const isSelected = s.id === selectedSizeId
               const variantForSize = variants.find(
                 (v) =>
@@ -172,7 +194,7 @@ export function VariantPicker({
                   }`}
                 >
                   <span>{s.label}</span>
-                  {tracked && (
+                  {!inStockOnly && tracked && (
                     showBackorderableChip ? (
                       <span className="mt-0.5 inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
                         Available to order
