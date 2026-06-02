@@ -86,4 +86,15 @@ describe('PDP ordering-mode pills', () => {
       screen.queryByRole('group', { name: /order mode/i }),
     ).not.toBeInTheDocument()
   })
+
+  // Regression (2026-06-03): the mixed-only gate hid the toggle from
+  // made_to_order products that DO carry stock + tiers, where an org_admin
+  // previously could choose to draw from inventory. The toggle is gated on
+  // stock + tiers, not on the product being explicitly 'mixed'.
+  it('made_to_order + org_admin with stock + tiers → toggle still shows', () => {
+    renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin' })
+    const group = screen.getByRole('group', { name: /order mode/i })
+    expect(group).toHaveTextContent('From inventory')
+    expect(group).toHaveTextContent('Reorder')
+  })
 })

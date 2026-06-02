@@ -60,16 +60,25 @@ const availability = {
   'red-m': { available_qty: 0, allow_order_without_stock: false },
 } as never
 
+// All-out-of-stock variant of `availability`: with no inventory on the current
+// selection, canChooseOrderIntent is false, so an org_admin lands in reorder
+// (made-to-order) mode by default — the canonical bulk-order case.
+const noStock = {
+  'red-s': { available_qty: 0, allow_order_without_stock: false },
+  'red-m': { available_qty: 0, allow_order_without_stock: false },
+} as never
+
 function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order' | 'mixed'
   role: 'org_admin' | 'staff'
+  availability?: typeof availability
 }) {
   return render(
     <ProductDetailClient
       product={{ ...baseProduct, fulfilment_type: opts.fulfilment_type }}
       variants={variants}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
-      availability={availability}
+      availability={opts.availability ?? availability}
       organizationId="o1"
       customerRole={opts.role}
       images={[]}
@@ -94,9 +103,12 @@ describe('PDP multi-size table — From-inventory suppression (Item 3)', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('reorder mode (made_to_order): all sizes + Available column unchanged', () => {
-    // made_to_order + org_admin + tiers → isInventoryMode false (reorder).
-    renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin' })
+  it('reorder mode (made_to_order, no stock): all sizes + Available column unchanged', () => {
+    // made_to_order + org_admin + tiers, but NO inventory on the selection →
+    // canChooseOrderIntent false → reorder mode (all sizes + Available column).
+    // (A made_to_order product that DOES carry stock now defaults to inventory
+    //  mode with a toggle — restored pre-2026-06-03 behavior; see pills test.)
+    renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin', availability: noStock })
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
     expect(

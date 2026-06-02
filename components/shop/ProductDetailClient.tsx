@@ -211,14 +211,17 @@ export function ProductDetailClient({
     return a.available_qty > 0 || a.allow_order_without_stock
   }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
 
-  // The order-mode toggle is offered ONLY to an org_admin looking at a product
-  // that BOTH has stock for the current selection AND has volume tiers. With no
-  // tiers there is nothing to "Made to Order" against; buyers can only ever
-  // draw from stock by role — neither case shows a toggle.
+  // The order-mode toggle is offered to an org_admin looking at a product that
+  // BOTH has stock for the current selection AND has volume tiers — i.e. it can
+  // be drawn from inventory OR reordered in bulk. We deliberately do NOT require
+  // fulfilment_type === 'mixed': a 'mixed' product satisfies this naturally when
+  // it holds stock, and gating on 'mixed' silently hid the toggle from
+  // made_to_order items that DO carry tracked stock (regression 2026-06-03).
+  // With no tiers there is nothing to reorder against; restricted members can
+  // only ever draw from stock by role — neither case shows a toggle.
   const isOrgAdminViewer = customerRole === 'org_admin'
   const canChooseOrderIntent =
     isOrgAdminViewer &&
-    product.fulfilment_type === 'mixed' &&
     currentSelectionHasInventory &&
     brackets.length > 0
 
