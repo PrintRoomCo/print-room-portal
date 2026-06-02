@@ -28,7 +28,7 @@ export default async function CheckoutPage() {
       paymentTerms={context.paymentTerms}
       defaultDepositPercent={context.defaultDepositPercent}
       defaultStoreId={context.defaultStoreId}
-      isBuyer={context.role === 'buyer'}
+      isBuyer={context.role === 'staff'}
       tenantType={context.tenantType}
     />
   )

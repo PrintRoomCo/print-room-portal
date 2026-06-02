@@ -265,7 +265,7 @@ export async function submitCustomerOrder(
   // 0. Buyer-scope guard: a buyer (Buyer Roles step 6) is locked to their
   //    defaultStoreId. Reject any line that ships elsewhere AND any custom-
   //    shipping path. Server-side mirror of CheckoutClient's ShipToRow lock.
-  if (input.context.role === 'buyer') {
+  if (input.context.role === 'staff') {
     const expected = input.context.defaultStoreId
     if (input.custom_shipping_address) {
       throw new BuyerScopeError([null], expected)

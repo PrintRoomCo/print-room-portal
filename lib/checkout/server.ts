@@ -9,7 +9,7 @@ export interface B2BCustomerContext {
   /** user_organizations.id — the (user, org) membership row id. Used for per-member access grants. */
   membershipId: string
   /** Buyer Roles step 6 — discriminator for ship-to lock + order list scope. */
-  role: 'org_admin' | 'buyer'
+  role: 'org_admin' | 'staff'
   email: string
   fullName: string
   organizationId: string
@@ -97,7 +97,7 @@ export async function requireB2BCustomer(
     context: {
       userId: user.id,
       membershipId: membership.id,
-      role: ((membership as { role?: string }).role === 'buyer' ? 'buyer' : 'org_admin'),
+      role: ((membership as { role?: string }).role === 'staff' ? 'staff' : 'org_admin'),
       email: profile?.email ?? user.email ?? '',
       fullName: profile?.full_name ?? '',
       organizationId: org.id,
