@@ -752,7 +752,7 @@ function QuoteDetail({
             <section className="rounded-[32px] bg-white p-6 md:p-8">
               <h2 className={`mb-6 ${LABEL_CAP}`}>Order summary</h2>
               {items.length === 0 ? (
-                <p className="text-sm text-gray-500">No items recorded on this quote.</p>
+                <p className="text-sm text-gray-500">No items recorded on this order.</p>
               ) : (
                 <div className="space-y-4">
                   {items.map((item, index) => {

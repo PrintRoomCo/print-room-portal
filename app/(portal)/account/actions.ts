@@ -125,6 +125,13 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
     return { success: false, errors: ['No company associated with your account.'] }
   }
 
+  // Server-side mirror of the `access.isOrgAdmin` UI gate on the Add Location
+  // card. The UI hides the action from buyers, but the server action is
+  // directly callable — only org admins may add locations.
+  if (membership.role !== 'org_admin') {
+    return { success: false, errors: ['Only organisation admins can add locations.'] }
+  }
+
   const storeName = (formData.get('storeName') as string)?.trim()
   if (!storeName) {
     return { success: false, errors: ['Store name is required.'] }

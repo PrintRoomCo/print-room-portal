@@ -76,7 +76,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                       onClick={(e) => e.stopPropagation()}
                       className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
-                      View Quote
+                      View Order
                     </Link>
                   )}
                   {trackerUrl && (
@@ -208,7 +208,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
           ) : (
             <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
               No itemised products on record for this project — your account manager
-              can reference the original quote.
+              can reference the original order.
             </div>
           )}
 
