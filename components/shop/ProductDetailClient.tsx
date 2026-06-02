@@ -18,6 +18,7 @@ import {
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
+import { PILL_LABELS } from '@/lib/shop/fulfilment-mode'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
@@ -214,8 +215,10 @@ export function ProductDetailClient({
   // that BOTH has stock for the current selection AND has volume tiers. With no
   // tiers there is nothing to "Made to Order" against; buyers can only ever
   // draw from stock by role — neither case shows a toggle.
+  const isOrgAdminViewer = customerRole === 'org_admin'
   const canChooseOrderIntent =
-    customerRole === 'org_admin' &&
+    isOrgAdminViewer &&
+    product.fulfilment_type === 'mixed' &&
     currentSelectionHasInventory &&
     brackets.length > 0
 
@@ -225,7 +228,8 @@ export function ProductDetailClient({
   // case the PDP hides bulk-order artefacts (volume pricing + lead time) and
   // the Add-to-cart guard blocks ordering beyond available stock.
   const isInventoryMode =
-    customerRole === 'staff' ||
+    !isOrgAdminViewer ||
+    product.fulfilment_type === 'stocked' ||
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
@@ -1139,7 +1143,7 @@ function OrderIntentToggle({
                 : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-950'
             } ${mode === 'bulk' ? 'border-l border-gray-300' : ''}`}
           >
-            {mode === 'inventory' ? 'From Stock' : 'Made to Order'}
+            {mode === 'inventory' ? PILL_LABELS.from_inventory : PILL_LABELS.reorder}
           </button>
         )
       })}

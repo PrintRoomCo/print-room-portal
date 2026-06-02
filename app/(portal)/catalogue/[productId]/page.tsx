@@ -10,6 +10,7 @@ import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
+import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
@@ -83,7 +84,7 @@ const loadProductDetailPageData = cache(async (
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, sku_override, moq_override, variant_label, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -329,6 +330,7 @@ const loadProductDetailPageData = cache(async (
     sku_override: string | null
     moq_override: number | null
     variant_label: string | null
+    fulfilment_type_override: FulfilmentType | null
   } | null
 
   const displayProduct = {
@@ -364,7 +366,10 @@ const loadProductDetailPageData = cache(async (
         supports_labels: displayProduct.supports_labels,
         garment_family: displayProduct.garment_family,
         default_sizes: displayProduct.default_sizes,
-        fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
+        fulfilment_type: effectiveFulfilment(
+          catItemForked?.fulfilment_type_override ?? null,
+          displayProduct.fulfilment_type,
+        ),
         brand_name: brandName,
         category_name: categoryName,
         // Phase 2 — catalogue-item identity threaded to the client so it can ride
