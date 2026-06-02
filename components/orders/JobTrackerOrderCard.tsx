@@ -1,12 +1,10 @@
 'use client'
 
-import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ProductionProgressBar } from '@/components/orders/ProductionProgressBar'
 import { ProjectLineItem } from '@/components/orders/ProjectLineItem'
-import { ReorderForm } from '@/components/orders/ReorderForm'
-import { useAuth } from '@/contexts/AuthContext'
+import { ReorderButton } from '@/components/orders/ReorderButton'
 import type { JobTracker } from '@/lib/job-tracker'
 import {
   STATUS_STEPS,
@@ -23,10 +21,7 @@ interface JobTrackerOrderCardProps {
 }
 
 export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOrderCardProps) {
-  const { user } = useAuth()
   const [isExpanded, setIsExpanded] = useState(false)
-  const [showReorderModal, setShowReorderModal] = useState(false)
-  const [reorderSuccess, setReorderSuccess] = useState(false)
 
   const completed = isTrackerCompleted(tracker.status)
   const quoteData = tracker.quote_data ?? null
@@ -36,11 +31,6 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
 
   const trackerUrl = getTrackerUrl(tracker.tracker_token)
   const totalItems = items.reduce((sum, item) => sum + getItemTotalQty(item), 0)
-
-  function closeReorderModal() {
-    setShowReorderModal(false)
-    setReorderSuccess(false)
-  }
 
   return (
     <div className="rounded-3xl bg-white overflow-hidden">
@@ -79,19 +69,7 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
                   <span className="text-black font-normal text-sm">{currency}</span>
                 </p>
                 <div className="flex gap-2 mt-2 justify-end">
-                  {completed && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setReorderSuccess(false)
-                        setShowReorderModal(true)
-                      }}
-                      className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
-                    >
-                      Reorder
-                    </button>
-                  )}
+                  {completed && <ReorderButton tracker={tracker} />}
                   {tracker.quote_id && (
                     <Link
                       href={`/my-collections/${tracker.quote_id}`}
@@ -151,69 +129,6 @@ export function JobTrackerOrderCard({ tracker, showCustomerEmail }: JobTrackerOr
               />
             </div>
       </div>
-
-      {/* Reorder Modal */}
-      <Dialog.Root
-        open={showReorderModal}
-        onOpenChange={(open) => {
-          if (!open) closeReorderModal()
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="glass-modal-backdrop" />
-          <Dialog.Content className="glass-modal-content fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Dialog.Title className="text-xl font-bold text-gray-900">
-                  Reorder project
-                </Dialog.Title>
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label="Close"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </Dialog.Close>
-              </div>
-
-              {reorderSuccess ? (
-                <div className="text-center py-6">
-                  <div className="w-12 h-12 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-3">
-                    <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    Once you&apos;ve submitted this information, your account manager will
-                    reach out to confirm pricing and send an updated proof for your
-                    approval.
-                  </p>
-                </div>
-              ) : user?.email ? (
-                <ReorderForm
-                  tracker={tracker}
-                  userEmail={user.email}
-                  onSubmitted={() => {
-                    setReorderSuccess(true)
-                    setTimeout(() => {
-                      closeReorderModal()
-                    }, 4000)
-                  }}
-                  onCancel={closeReorderModal}
-                />
-              ) : (
-                <p className="text-sm text-gray-600">
-                  Your session has expired. Please sign in again to submit a reorder.
-                </p>
-              )}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
 
       {/* Expanded Details */}
       {isExpanded && (
