@@ -10,6 +10,7 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
+import { DecorationTile } from './DecorationTile'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import {
   filterDecorationsBySwatch,
@@ -788,6 +789,7 @@ export function ProductDetailClient({
                 selectedColorSwatchId={colorSwatchId}
                 overlays={galleryOverlays}
               />
+              <DecorationTile decorations={swatchVisibleDecorations} productName={product.name} />
             </div>
           </div>
 
