@@ -89,18 +89,22 @@ function renderPDP(opts: {
   )
 }
 
-describe('PDP multi-size table — From-inventory suppression (Item 3)', () => {
-  it('inventory mode (stocked): only in-stock sizes, no Available status column', () => {
+describe('PDP multi-size table — From-inventory available qty (Item 3, inverted 2026-06-03)', () => {
+  it('inventory mode (stocked): only in-stock sizes, AND shows the Available qty per size', () => {
     // stocked product → isInventoryMode is forced true regardless of role.
     renderPDP({ fulfilment_type: 'stocked', role: 'org_admin' })
     // In-stock size S is orderable…
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
-    // …the 0-stock size M is hidden…
+    // …the 0-stock size M is hidden (in-stock-only filter stays)…
     expect(screen.queryByLabelText('Quantity for size M')).not.toBeInTheDocument()
-    // …and the availability status column is dropped.
+    // …and From-inventory mode SHOWS the available quantity per size:
+    // the Available column is present and S's stock (4) is displayed.
+    // (Reversal of Plan C Task 6/7, confirmed 2026-06-03 — customers need to
+    //  see how much stock is available per size when drawing from inventory.)
     expect(
-      screen.queryByRole('columnheader', { name: 'Available' }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('columnheader', { name: 'Available' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
   })
 
   it('reorder mode (made_to_order, no stock): all sizes + Available column unchanged', () => {

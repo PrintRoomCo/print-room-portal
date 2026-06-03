@@ -219,9 +219,17 @@ export function ProductDetailClient({
   // made_to_order items that DO carry tracked stock (regression 2026-06-03).
   // With no tiers there is nothing to reorder against; restricted members can
   // only ever draw from stock by role — neither case shows a toggle.
+  //
+  // A 'stocked' product is inventory-only by definition (pillsFor → only
+  // 'from_inventory') and isInventoryMode is hard-forced true for it below, so a
+  // toggle could never actually switch it into reorder/bulk. Offering one
+  // produced an INERT Reorder pill that left the size table filtered to
+  // in-stock-only — "Reorder doesn't reveal sizes" (Symptom 1+2, 2026-06-03).
+  // Excluding stocked here means it shows no toggle and stays inventory-only.
   const isOrgAdminViewer = customerRole === 'org_admin'
   const canChooseOrderIntent =
     isOrgAdminViewer &&
+    product.fulfilment_type !== 'stocked' &&
     currentSelectionHasInventory &&
     brackets.length > 0
 
@@ -878,9 +886,7 @@ export function ProductDetailClient({
                 <thead className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500">
                   <tr>
                     <th className="px-5 pt-5 pb-2 font-medium">Size</th>
-                    {!isInventoryMode && (
-                      <th className="px-5 pt-5 pb-2 font-medium">Available</th>
-                    )}
+                    <th className="px-5 pt-5 pb-2 font-medium">Available</th>
                     <th className="px-5 pt-5 pb-2 text-right font-medium">Qty</th>
                   </tr>
                 </thead>
@@ -900,20 +906,22 @@ export function ProductDetailClient({
                     return (
                       <tr key={row.variantId} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
-                        {!isInventoryMode && (
-                          <td className="px-5 py-3 text-xs text-gray-600">
-                            {showBackorderableChip ? (
-                              <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
-                                Available to order
-                              </span>
-                            ) : !trackedRow ? '—' : `${stocked}`}
-                            {backorder > 0 && !showBackorderableChip && (
-                              <span className="ml-1 text-amber-700">
-                                ({backorder} to be made)
-                              </span>
-                            )}
-                          </td>
-                        )}
+                        <td className="px-5 py-3 text-xs text-gray-600">
+                          {showBackorderableChip ? (
+                            <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                              Available to order
+                            </span>
+                          ) : !trackedRow ? '—' : `${stocked}`}
+                          {/* "to be made" is a reorder/MTO concept — qty beyond
+                              stock that goes to production. In From-inventory mode
+                              the shortfall guard already caps orders at available
+                              stock, so we show only the available count there. */}
+                          {!isInventoryMode && backorder > 0 && !showBackorderableChip && (
+                            <span className="ml-1 text-amber-700">
+                              ({backorder} to be made)
+                            </span>
+                          )}
+                        </td>
                         <td className="px-5 py-3 text-right">
                           <input
                             type="number"
@@ -943,7 +951,7 @@ export function ProductDetailClient({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-200">
-                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={isInventoryMode ? 1 : 2}>
+                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={2}>
                       Total this colour
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
@@ -952,7 +960,7 @@ export function ProductDetailClient({
                   </tr>
                   {otherColoursTotalQty > 0 && (
                     <tr className="border-t border-gray-100">
-                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={isInventoryMode ? 1 : 2}>
+                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={2}>
                         Order total (across all variants)
                       </td>
                       <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">

@@ -97,4 +97,16 @@ describe('PDP ordering-mode pills', () => {
     expect(group).toHaveTextContent('From inventory')
     expect(group).toHaveTextContent('Reorder')
   })
+
+  // Defect (2026-06-03, Symptom 1+2): a 'stocked' product with stock + tiers
+  // rendered the order-mode toggle for an org_admin, but isInventoryMode is
+  // hard-forced true for stocked, so clicking Reorder did nothing — an inert
+  // pill that never revealed the bulk-order sizes. Spec (pillsFor) says
+  // stocked = inventory-only, NO toggle. The toggle must not mount at all.
+  it('stocked + org_admin with stock + tiers → NO toggle (inventory-only)', () => {
+    renderPDP({ fulfilment_type: 'stocked', role: 'org_admin' })
+    expect(
+      screen.queryByRole('group', { name: /order mode/i }),
+    ).not.toBeInTheDocument()
+  })
 })
