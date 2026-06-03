@@ -30,7 +30,7 @@ describe('resolveGalleryImagesForColour', () => {
     expect(resolveGalleryImagesForColour(baseImages, 'blue')).toEqual(baseImages)
   })
 
-  it('allows partial catalogue overrides by view', () => {
+  it('filters master base views once a colour-specific catalogue image exists', () => {
     const resolved = resolveGalleryImagesForColour(
       [
         ...baseImages,
@@ -46,10 +46,7 @@ describe('resolveGalleryImagesForColour', () => {
       'blue',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual([
-      '/catalogue-front-blue.png',
-      '/master-back.png',
-    ])
+    expect(resolved.map((image) => image.url)).toEqual(['/catalogue-front-blue.png'])
   })
 
   it('prefers a colour-matched designer snapshot over a plain staff upload', () => {
@@ -78,10 +75,7 @@ describe('resolveGalleryImagesForColour', () => {
       'blue',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual([
-      '/designer-front-blue.png',
-      '/master-back.png',
-    ])
+    expect(resolved.map((image) => image.url)).toEqual(['/designer-front-blue.png'])
   })
 
   it('prefers a colour-matched staff upload over an all-colour designer snapshot', () => {
@@ -110,10 +104,7 @@ describe('resolveGalleryImagesForColour', () => {
       'blue',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual([
-      '/staff-front-blue.png',
-      '/master-back.png',
-    ])
+    expect(resolved.map((image) => image.url)).toEqual(['/staff-front-blue.png'])
   })
 
   it('prefers all-colour catalogue images before master images', () => {
@@ -132,10 +123,7 @@ describe('resolveGalleryImagesForColour', () => {
       'yellow',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual([
-      '/master-front.png',
-      '/catalogue-back-all.png',
-    ])
+    expect(resolved.map((image) => image.url)).toEqual(['/catalogue-back-all.png'])
   })
 
   it('ignores images for a different selected colour', () => {
@@ -284,11 +272,7 @@ describe('resolveGalleryImagesForColour', () => {
       'blue',
     )
 
-    expect(resolved.map((image) => image.url)).toEqual([
-      '/master-front.png',
-      '/master-back.png',
-      '/master-detail-blue.png',
-    ])
+    expect(resolved.map((image) => image.url)).toEqual(['/master-detail-blue.png'])
   })
 })
 
@@ -319,6 +303,56 @@ describe('pickPreferredGalleryImageUrl', () => {
         '/fallback.png',
       ),
     ).toBe('/designer-front-blue.png')
+  })
+})
+
+describe('resolveGalleryImagesForColour blank-image filter', () => {
+  const masterBase: CatalogueAwareGalleryImage = {
+    id: 'm-base',
+    url: 'https://cdn.example/blank-front.png',
+    view: 'front',
+    scope: 'master',
+    color_swatch_id: null,
+  }
+  const catalogueColour: CatalogueAwareGalleryImage = {
+    id: 'c-hero',
+    url: 'https://cdn.example/red-hero.png',
+    view: 'hero',
+    scope: 'catalogue',
+    source: 'staff_upload',
+    color_swatch_id: 'sw-red',
+  }
+  const masterColourMatched: CatalogueAwareGalleryImage = {
+    id: 'm-back',
+    url: 'https://cdn.example/red-back.png',
+    view: 'back',
+    scope: 'master',
+    color_swatch_id: 'sw-red',
+  }
+
+  it('drops the master color-null base when a colour-specific image exists', () => {
+    const out = resolveGalleryImagesForColour([masterBase, catalogueColour], 'sw-red')
+    const ids = out.map((image) => image.id)
+
+    expect(ids).toContain('c-hero')
+    expect(ids).not.toContain('m-base')
+  })
+
+  it('keeps the master base as last resort when no colour-specific image exists', () => {
+    const out = resolveGalleryImagesForColour([masterBase], 'sw-red')
+
+    expect(out.map((image) => image.id)).toEqual(['m-base'])
+  })
+
+  it('never drops a colour-matched master image; only drops the color-null base', () => {
+    const out = resolveGalleryImagesForColour(
+      [masterColourMatched, masterBase],
+      'sw-red',
+    )
+    const ids = out.map((image) => image.id)
+
+    expect(ids).toContain('m-back')
+    expect(ids).not.toContain('m-base')
   })
 })
 
