@@ -277,7 +277,7 @@ const loadProductDetailPageData = cache(async (
     alt_text: string | null
     position: number | null
     color_swatch_id: string | null
-    source: 'designer_snapshot' | 'staff_upload' | null
+    source: 'designer_snapshot' | 'staff_upload' | 'staff_pick' | null
   }>)
     .filter((r) => r.image_url)
     .map((r) => ({

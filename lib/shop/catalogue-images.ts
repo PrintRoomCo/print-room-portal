@@ -6,7 +6,7 @@ export interface CatalogueAwareGalleryImage {
   position?: number | null
   color_swatch_id?: string | null
   scope?: 'catalogue' | 'master'
-  source?: 'designer_snapshot' | 'staff_upload' | null
+  source?: 'designer_snapshot' | 'staff_upload' | 'staff_pick' | null
 }
 
 export interface CatalogueItemImageRow {
@@ -29,6 +29,7 @@ function thumbnailViewRank(view: string | null): number {
 function thumbnailSourceRank(source: string | null): number {
   if (source === 'designer_snapshot') return 0
   if (source === 'staff_upload') return 1
+  if (source === 'staff_pick') return 1
   return 9
 }
 
@@ -144,7 +145,7 @@ function imagePriority(
   }
   if (
     scope === 'catalogue' &&
-    source === 'staff_upload' &&
+    (source === 'staff_upload' || source === 'staff_pick') &&
     imageColor &&
     imageColor === selectedColorSwatchId
   ) {

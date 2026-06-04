@@ -107,6 +107,56 @@ describe('resolveGalleryImagesForColour', () => {
     expect(resolved.map((image) => image.url)).toEqual(['/staff-front-blue.png'])
   })
 
+  it('prefers a colour-matched staff_pick over an all-colour designer snapshot (priority-2 gate)', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'pick-front-blue',
+          url: '/pick-front-blue.png',
+          view: 'front',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_pick',
+        },
+        {
+          id: 'designer-front-all',
+          url: '/designer-front-all.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: null,
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual(['/pick-front-blue.png'])
+  })
+
+  it('staff_pick is not dropped from the PDP — colour-matched staff_pick reaches priority 2', () => {
+    // This test FAILS if the imagePriority gate only checks source === 'staff_upload'
+    const resolved = resolveGalleryImagesForColour(
+      [
+        {
+          id: 'pick-hero-blue',
+          url: '/pick-hero-blue.png',
+          view: 'hero',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_pick',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.length).toBeGreaterThan(0)
+    expect(resolved.map((image) => image.url)).toContain('/pick-hero-blue.png')
+  })
+
   it('prefers all-colour catalogue images before master images', () => {
     const resolved = resolveGalleryImagesForColour(
       [
@@ -370,5 +420,29 @@ describe('pickCatalogueItemThumbnail', () => {
         },
       ]),
     ).toBe('/designer-blue.png')
+  })
+
+  it('staff_pick thumbnail rank equals staff_upload rank (both rank 1, after designer_snapshot rank 0)', () => {
+    // staff_pick should win over an unknown-source image but lose to designer_snapshot
+    expect(
+      pickCatalogueItemThumbnail('/blank.png', [
+        {
+          catalogue_item_id: 'item-1',
+          view: 'hero',
+          source: 'staff_pick',
+          position: 0,
+          image_url: '/pick-hero.png',
+          color_swatch_id: null,
+        },
+        {
+          catalogue_item_id: 'item-1',
+          view: 'hero',
+          source: null,
+          position: 0,
+          image_url: '/unknown-hero.png',
+          color_swatch_id: null,
+        },
+      ]),
+    ).toBe('/pick-hero.png')
   })
 })

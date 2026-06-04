@@ -187,7 +187,7 @@ interface DesignDraft {
 interface ImagePick {
   url: string | null
   view: string | null
-  source: 'decoration_snapshot' | 'designer_snapshot' | 'staff_upload' | 'product_image' | 'none'
+  source: 'decoration_snapshot' | 'designer_snapshot' | 'staff_upload' | 'staff_pick' | 'product_image' | 'none'
 }
 
 export async function loadOrderProofAssembly(
@@ -623,7 +623,7 @@ function pickCatalogueImage(rows: CatalogueProofImageRow[], colorSwatchId: strin
   return {
     url: best?.image_url ?? null,
     view: best?.view ?? null,
-    source: best?.source === 'designer_snapshot' ? 'designer_snapshot' : best ? 'staff_upload' : 'none',
+    source: best?.source === 'designer_snapshot' ? 'designer_snapshot' : best?.source === 'staff_pick' ? 'staff_pick' : best ? 'staff_upload' : 'none',
   }
 }
 
@@ -957,6 +957,7 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 function catalogueSourceRank(source: string | null) {
   if (source === 'designer_snapshot') return 0
   if (source === 'staff_upload') return 1
+  if (source === 'staff_pick') return 1
   return 9
 }
 

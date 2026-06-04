@@ -257,6 +257,7 @@ function pickPrimaryImage(item: RawCatalogueItem): string | null {
 function sourceRank(source: string | null) {
   if (source === 'designer_snapshot') return 0
   if (source === 'staff_upload') return 1
+  if (source === 'staff_pick') return 1
   return 9
 }
 
