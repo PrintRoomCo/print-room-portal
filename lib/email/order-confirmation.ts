@@ -11,9 +11,10 @@ export interface OrderConfirmationParams {
   paymentTerms: string | null
   /**
    * Plain-text contract notes from b2b_accounts.contract_notes. Surfaced under
-   * the payment-terms line when paymentTerms === 'contract'. Null otherwise.
+   * the payment-terms line when pricingMode === 'contract'. Null otherwise.
    */
   contractNotes?: string | null
+  pricingMode?: string | null
   requiredBy: string | null
   lines: Array<{
     productName: string
@@ -56,7 +57,7 @@ export async function sendOrderConfirmation(
 ): Promise<SendEmailResult> {
   const paymentTerms = formatPaymentTerms(params.paymentTerms)
   const contractNotes =
-    params.paymentTerms === 'contract' && params.contractNotes
+    params.pricingMode === 'contract' && params.contractNotes
       ? params.contractNotes
       : null
   const requiredBy = params.requiredBy ?? null

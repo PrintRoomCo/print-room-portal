@@ -1247,6 +1247,7 @@ export async function submitCustomerOrder(
         totalAmount: fallbackTotal,
         paymentTerms: emailPaymentTerms,
         contractNotes: input.context.contractNotes,
+        pricingMode: input.context.pricingMode,
         requiredBy: emailRequiredBy,
         lines: fallbackLines,
       })

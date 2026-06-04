@@ -18,8 +18,9 @@ export interface B2BCustomerContext {
   b2bAccountId: string | null
   tierLevel: number | null
   paymentTerms: string | null
-  /** Free-text contract terms; surfaced in checkout + email when paymentTerms='contract'. */
+  /** Free-text contract terms; surfaced in checkout + email when pricingMode='contract'. */
   contractNotes: string | null
+  pricingMode: string | null
   defaultDepositPercent: number | null
   storeIds: string[]
   /** Per-buyer default ship-to store, set by staff in the b2b-accounts members panel. Null = no default. */
@@ -77,7 +78,7 @@ export async function requireB2BCustomer(
       .select('id, name, customer_code')
       .eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
-      .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type')
+      .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type, pricing_mode')
       .eq('organization_id', membership.organization_id).maybeSingle(),
     admin.from('stores')
       .select('id')
@@ -107,6 +108,7 @@ export async function requireB2BCustomer(
       tierLevel: b2b?.tier_level ?? null,
       paymentTerms: b2b?.payment_terms ?? null,
       contractNotes: (b2b as { contract_notes?: string | null } | null)?.contract_notes ?? null,
+      pricingMode: (b2b as { pricing_mode?: string | null } | null)?.pricing_mode ?? null,
       defaultDepositPercent: b2b?.default_deposit_percent ?? null,
       storeIds: (stores ?? []).map((s) => s.id),
       defaultStoreId: membership.default_store_id ?? null,
