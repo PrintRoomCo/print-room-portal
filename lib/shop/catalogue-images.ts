@@ -1,3 +1,5 @@
+import { normalizeCatalogueImageView } from './catalogue-image-view'
+
 export interface CatalogueAwareGalleryImage {
   id: string
   url: string
@@ -22,7 +24,7 @@ const THUMBNAIL_VIEW_PREFERENCE = ['hero', 'front']
 
 function thumbnailViewRank(view: string | null): number {
   if (!view) return 99
-  const idx = THUMBNAIL_VIEW_PREFERENCE.indexOf(view.toLowerCase())
+  const idx = THUMBNAIL_VIEW_PREFERENCE.indexOf(normalizeCatalogueImageView(view) ?? view.toLowerCase())
   return idx === -1 ? 50 : idx
 }
 
@@ -64,7 +66,7 @@ export function resolveGalleryImagesForColour(
     const priority = imagePriority(image, selectedColorSwatchId)
     if (priority == null) continue
 
-    const key = image.view ?? `image:${image.id}`
+    const key = normalizeCatalogueImageView(image.view, image.url) ?? image.view ?? `image:${image.id}`
     const current = chosenByView.get(key)
     if (!current || compareCandidates(image, priority, current.image, current.priority) < 0) {
       chosenByView.set(key, { image, priority })
@@ -160,7 +162,8 @@ function imagePriority(
   if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 4
   if (scope === 'master' && imageColor == null) {
     const view = (image.view ?? '').toLowerCase()
-    if (PRIMARY_VIEWS.has(view)) return 5
+    const normalizedView = normalizeCatalogueImageView(view, image.url) ?? view
+    if (PRIMARY_VIEWS.has(normalizedView)) return 5
     return null
   }
 
@@ -181,7 +184,8 @@ const VIEW_ORDER = ['hero', 'front', 'back', 'left_sleeve', 'right_sleeve', 'lef
 
 function viewOrderRank(view: string | null | undefined) {
   if (!view) return VIEW_ORDER.length
-  const idx = VIEW_ORDER.indexOf(view.toLowerCase())
+  const normalized = normalizeCatalogueImageView(view) ?? view.toLowerCase()
+  const idx = VIEW_ORDER.indexOf(normalized)
   return idx === -1 ? VIEW_ORDER.length : idx
 }
 

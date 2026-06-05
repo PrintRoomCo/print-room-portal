@@ -48,19 +48,24 @@ describe('ProductImageGallery keyboard navigation', () => {
     const user = userEvent.setup()
     renderGallery()
 
-    const tabs = screen.getAllByRole('tab')
+    let tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(3)
     tabs[0].focus()
 
     await user.keyboard('{ArrowRight}')
+    tabs = screen.getAllByRole('tab')
     expect(tabs[1]).toHaveFocus()
 
     await user.keyboard('{Home}')
+    tabs = screen.getAllByRole('tab')
     expect(tabs[0]).toHaveFocus()
 
     await user.keyboard('{End}')
+    tabs = screen.getAllByRole('tab')
     expect(tabs[2]).toHaveFocus()
 
     await user.keyboard('{ArrowLeft}')
+    tabs = screen.getAllByRole('tab')
     expect(tabs[1]).toHaveFocus()
   })
 

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
-import { DecorationSwatchPicker } from './DecorationSwatchPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
@@ -806,15 +805,13 @@ export function ProductDetailClient({
           {/* Info + controls — editorial column */}
           <div className="space-y-8">
             <header>
-              {product.sku && (
-                <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                  SKU {product.sku}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap items-baseline gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(32px,4vw,56px)] text-gray-900">
                   {product.name}
                 </h1>
+                <AvailabilityBadge
+                  availableQty={multiSize ? colourTotalAvailable : availableQty}
+                />
                 {product.sizing_type && product.sizing_type !== 'multi_size' && (
                   <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-gray-600">
                     {product.sizing_type.replace(/_/g, ' ')}
@@ -845,19 +842,12 @@ export function ProductDetailClient({
             />
           )}
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <AvailabilityBadge
-              availableQty={multiSize ? colourTotalAvailable : availableQty}
-            />
-            {product.lead_time_days != null && !isInventoryMode && (
+          {product.lead_time_days != null && !isInventoryMode && (
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
               </span>
-            )}
-          </div>
-
-          {visibleDecorations.length > 0 && (
-            <DecorationSwatchPicker decorations={visibleDecorations} />
+            </div>
           )}
 
           {canChooseOrderIntent && (
@@ -1148,10 +1138,6 @@ export function ProductDetailClient({
   )
 }
 
-function formatSpecKey(key: string): string {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
 function OrderIntentToggle({
   value,
   onChange,
@@ -1187,27 +1173,12 @@ function OrderIntentToggle({
   )
 }
 
-// Condensed details rail rendered directly under the product description.
-// Skips fields surfaced elsewhere on the PDP (SKU above title, sizing-type
-// pill next to title, lead-time chip next to availability) to avoid the
-// "same info three times" feel.
 function ProductDetailsCondensed({ product }: { product: ProductData }) {
   const rows: { label: string; value: React.ReactNode }[] = []
 
+  if (product.sku) rows.push({ label: 'SKU', value: product.sku })
   if (product.brand_name) rows.push({ label: 'Brand', value: product.brand_name })
   if (product.category_name) rows.push({ label: 'Category', value: product.category_name })
-  if (product.garment_family) rows.push({ label: 'Garment family', value: product.garment_family.replace(/_/g, ' ') })
-  if (product.default_sizes && product.default_sizes.length > 0) rows.push({ label: 'Sizes', value: product.default_sizes.join(', ') })
-  if (product.safety_standard) rows.push({ label: 'Safety standard', value: product.safety_standard })
-
-  if (product.specs && typeof product.specs === 'object') {
-    const skipKeys = new Set(['sizes', 'sizeRange'])
-    for (const [k, v] of Object.entries(product.specs)) {
-      if (skipKeys.has(k)) continue
-      if (v == null || typeof v === 'object') continue
-      rows.push({ label: formatSpecKey(k), value: String(v) })
-    }
-  }
 
   if (rows.length === 0) return null
 

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   updateLine: vi.fn(),
   removeLine: vi.fn(),
+  lines: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -17,19 +18,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/components/cart/useCart', () => ({
   useCart: () => ({
-    lines: [
-      {
-        lineId: 'line-1',
-        productId: 'product-1',
-        productName: 'Test tee',
-        variantId: 'variant-1',
-        variantLabel: 'Black / M',
-        qty: 12,
-        unitPrice: 10,
-        imageUrl: null,
-        decorations: [],
-      },
-    ],
+    lines: mocks.lines,
     clear: mocks.clear,
     updateLine: mocks.updateLine,
     removeLine: mocks.removeLine,
@@ -52,6 +41,19 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 
 beforeEach(() => {
   sessionStorage.clear()
+  mocks.lines = [
+    {
+      lineId: 'line-1',
+      productId: 'product-1',
+      productName: 'Test tee',
+      variantId: 'variant-1',
+      variantLabel: 'Black / M',
+      qty: 12,
+      unitPrice: 10,
+      imageUrl: null,
+      decorations: [],
+    },
+  ]
   mocks.clear.mockClear()
   mocks.push.mockClear()
   mocks.updateLine.mockClear()
@@ -84,6 +86,37 @@ describe('CheckoutClient review step', () => {
     expect(JSON.parse(raw ?? '{}')).toMatchObject({
       requiredBy: '',
       notes: '',
+      intent: 'customer',
+      perLineShipTo: { 'line-1': 'store-1' },
+    })
+  })
+
+  it('lets make-to-stock lines ship directly when Add all to inventory is toggled off', async () => {
+    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'make_to_stock' }]
+    const user = userEvent.setup()
+    render(
+      <CheckoutClient
+        stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
+        customerCode="CUST-1"
+        paymentTerms="net20"
+        defaultDepositPercent={null}
+        defaultStoreId={null}
+        isBuyer={false}
+        tenantType="franchise"
+      />,
+    )
+
+    const inventorySwitch = screen.getByRole('switch', { name: /add all lines to my inventory/i })
+    expect(inventorySwitch).toHaveAttribute('aria-checked', 'true')
+
+    await user.click(inventorySwitch)
+    expect(inventorySwitch).toHaveAttribute('aria-checked', 'false')
+
+    await user.click(screen.getByRole('button', { name: /review order/i }))
+
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
+    const raw = sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY)
+    expect(JSON.parse(raw ?? '{}')).toMatchObject({
       intent: 'customer',
       perLineShipTo: { 'line-1': 'store-1' },
     })

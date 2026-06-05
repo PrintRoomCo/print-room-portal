@@ -11,6 +11,7 @@ import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
+import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
@@ -283,7 +284,7 @@ const loadProductDetailPageData = cache(async (
     .map((r) => ({
       id: `catalogue:${r.id}`,
       url: r.image_url as string,
-      view: r.view,
+      view: normalizeCatalogueImageView(r.view, r.image_url),
       alt: r.alt_text,
       position: r.position,
       color_swatch_id: r.color_swatch_id,
@@ -303,7 +304,7 @@ const loadProductDetailPageData = cache(async (
     .map((r) => ({
       id: `master:${r.id}`,
       url: r.file_url as string,
-      view: r.view,
+      view: normalizeCatalogueImageView(r.view, r.file_url),
       alt: r.alt_text,
       position: r.position,
       color_swatch_id: r.color_swatch_id,

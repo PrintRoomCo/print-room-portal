@@ -169,6 +169,7 @@ function buildInput(): CheckoutInput {
       tierLevel: null,
       paymentTerms: 'net20',
       contractNotes: null,
+      pricingMode: null,
       defaultDepositPercent: null,
       storeIds: [],
       defaultStoreId: null,

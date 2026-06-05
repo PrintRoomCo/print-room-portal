@@ -167,6 +167,22 @@ export function CheckoutReviewClient({
             requested?: number
           }
         }
+        if (data.error === 'member_access_drift') {
+          setBanner({
+            kind: 'error',
+            msg:
+              'Your catalogue access changed while this order was being reviewed. Return to the catalogue and add the available items again.',
+          })
+          return
+        }
+        if (data.error === 'buyer_ship_to_mismatch') {
+          setBanner({
+            kind: 'error',
+            msg:
+              'Your shipping location changed while this order was being reviewed. Go back to checkout and confirm the ship-to location.',
+          })
+          return
+        }
         if (data.error === 'moq_violation' && data.violations) {
           const summary = data.violations
             .map((v) => `${v.productName}: ${v.totalQty} ordered, min ${v.effectiveMoq}`)

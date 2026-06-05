@@ -149,9 +149,7 @@ export function CheckoutClient({
     setInventoryByLine((prev) => {
       const updated: Record<string, boolean> = {}
       for (const line of cart.lines) {
-        // make-to-stock lines stay forced ON even when master toggle is off.
-        updated[line.lineId] =
-          line.fulfilmentType === 'make_to_stock' ? true : next
+        updated[line.lineId] = next
       }
       // Preserve any other keys (defensive; shouldn't happen post-effect).
       for (const k of Object.keys(prev)) {
@@ -304,7 +302,6 @@ export function CheckoutClient({
         )}
         <div className="divide-y divide-gray-100">
           {cart.lines.map((line) => {
-            const forced = line.fulfilmentType === 'make_to_stock'
             return (
               <ShipToRow
                 key={line.lineId}
@@ -327,11 +324,10 @@ export function CheckoutClient({
                     ? (next) =>
                         setInventoryByLine((prev) => ({
                           ...prev,
-                          [line.lineId]: forced ? true : next,
+                          [line.lineId]: next,
                         }))
                     : undefined
                 }
-                inventoryToggleForced={canRouteToInventory && forced}
               />
             )
           })}
@@ -366,7 +362,7 @@ export function CheckoutClient({
           className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
         >
           {hasMakeToStockLines
-            ? 'Some items exceed current stock and must go to production — tick "Add all to my inventory" to continue.'
+            ? 'Some items exceed current stock. Route the full order to inventory, or untick the inventory switches to ship directly.'
             : 'All lines must go to the same destination — either tick "Add all to my inventory" or untick all.'}
         </div>
       )}
