@@ -74,18 +74,16 @@ export function resolveGalleryImagesForColour(
   }
 
   const entries = Array.from(chosenByView.values())
-  // Once a catalogue-specific image exists, master product photos are just the
-  // blank garment fallback for this customer surface. Keep them only as the
-  // last resort so the PDP never empties.
-  const hasCatalogueImage = entries.some(
-    (entry) => (entry.image.scope ?? 'master') === 'catalogue',
-  )
-  const hasRetainedNonFallbackImage = entries.some((entry) => entry.priority < 5)
-  const filtered = hasCatalogueImage
-    ? entries.filter((entry) => (entry.image.scope ?? 'master') !== 'master')
-    : hasRetainedNonFallbackImage
-      ? entries.filter((entry) => entry.priority !== 5)
-      : entries
+  // Priority 5 is the generic, null-colour master image — the blank garment for
+  // a view nothing better covers. Drop it whenever ANY better image survives:
+  // a catalogue pin (p1–p3) OR the colour's OWN master photo (p4, e.g. its real
+  // back). Keeping p4 is what surfaces Forest Green's actual back on the PDP
+  // while the generic back/side marketing shots fall away. The generic stays
+  // only as the last resort so the gallery never empties.
+  const hasBetterThanGenericFallback = entries.some((entry) => entry.priority < 5)
+  const filtered = hasBetterThanGenericFallback
+    ? entries.filter((entry) => entry.priority !== 5)
+    : entries
   const kept = filtered.length > 0 ? filtered : entries
 
   return kept.map((entry) => entry.image).sort(compareImages)

@@ -394,16 +394,19 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
     expect(out.map((image) => image.id)).toEqual(['m-base'])
   })
 
-  it('drops colour-matched master images too when a catalogue image exists', () => {
+  it('keeps a colour-matched master image but drops the generic base when a catalogue image exists', () => {
+    // The colour's own master photo (e.g. its back) fills a view the catalogue
+    // doesn't cover and MUST be surfaced; only the generic null-colour blank is
+    // dropped. (Previously both were dropped, hiding the real colour-matched back.)
     const out = resolveGalleryImagesForColour(
       [masterColourMatched, masterBase, catalogueColour],
       'sw-red',
     )
     const ids = out.map((image) => image.id)
 
-    expect(ids).toContain('c-hero')
-    expect(ids).not.toContain('m-base')
-    expect(ids).not.toContain('m-back')
+    expect(ids).toContain('c-hero') // catalogue pin wins its own view
+    expect(ids).toContain('m-back') // the colour's REAL back is surfaced
+    expect(ids).not.toContain('m-base') // generic null-colour blank still dropped
   })
 
   it('keeps colour-matched master images as the fallback when no catalogue image exists', () => {
@@ -411,6 +414,27 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
     const ids = out.map((image) => image.id)
 
     expect(ids).toContain('m-back')
+  })
+
+  it('surfaces the colour-matched master back beside a pinned catalogue front, never the generic back/side (Box Tee Forest Green)', () => {
+    // Mirrors prod: Forest Green has a staff_pick front (catalogue scope) plus
+    // its own master back, alongside generic null-colour back/side marketing
+    // shots. The customer must see the real FG front + FG back and none of the
+    // generic blanks.
+    const out = resolveGalleryImagesForColour(
+      [
+        { id: 'cat-fg-front', url: '/fg-front.png', view: 'front', scope: 'catalogue', source: 'staff_pick', color_swatch_id: 'fg' },
+        { id: 'm-fg-back', url: '/fg-back.png', view: 'back', scope: 'master', color_swatch_id: 'fg' },
+        { id: 'm-null-back', url: '/generic-back.png', view: 'back', scope: 'master', color_swatch_id: null },
+        { id: 'm-null-side', url: '/generic-side.png', view: 'side', scope: 'master', color_swatch_id: null },
+      ],
+      'fg',
+    )
+    const ids = out.map((image) => image.id)
+
+    expect(ids).toEqual(['cat-fg-front', 'm-fg-back'])
+    expect(ids).not.toContain('m-null-back')
+    expect(ids).not.toContain('m-null-side')
   })
 })
 
