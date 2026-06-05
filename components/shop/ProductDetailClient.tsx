@@ -243,6 +243,12 @@ export function ProductDetailClient({
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
+  // Org_admin drawing From inventory may overflow a size's available stock:
+  // the in-stock units are drawn down and the shortfall becomes a production
+  // run. Restricted staff and stocked-only products are NOT in scope; they
+  // keep the hard cap at available stock (inventoryIntentShortfall below).
+  const isInventoryOverflowScope = canChooseOrderIntent && orderIntent === 'inventory'
+
   // From-inventory mode (spec Item 3) applied to the multi-size variant table:
   // show ONLY sizes with a tracked, in-stock quantity for the current colour,
   // and drop the "Available" status column below. Reorder/MTO mode is
@@ -322,6 +328,30 @@ export function ProductDetailClient({
         ? variantlessTotalQty
         : singleQty
   const setQty = setSingleQty
+
+  // Total units that exceed available stock across every touched variant - the
+  // production ("to be made") portion of a From-inventory order. Summed per
+  // product to match the server-side MOQ rollup (lib/checkout/submit.ts). Only
+  // meaningful inside isInventoryOverflowScope.
+  const toBeMadeSum = useMemo(() => {
+    if (!isInventoryOverflowScope) return 0
+    if (sizingMode === 'multi_size_with_variants') {
+      return orderLines.reduce((sum, line) => sum + line.toBeMade, 0)
+    }
+    // one_size: a single selected variant.
+    if (selectedVariant) {
+      const avail = availability[selectedVariant.variant_id]?.available_qty ?? 0
+      return Math.max(0, qty - avail)
+    }
+    return 0
+  }, [
+    isInventoryOverflowScope,
+    sizingMode,
+    orderLines,
+    selectedVariant,
+    availability,
+    qty,
+  ])
 
   useEffect(() => {
     setSingleQty((q) => Math.max(defaultMinQty, q))
@@ -739,7 +769,9 @@ export function ProductDetailClient({
     available: number
     backorderable: boolean
   } | null = null
-  if (isInventoryMode) {
+  // Hard cap stays for everyone EXCEPT the org_admin From-inventory overflow
+  // scope, where exceeding stock is allowed and routed into a production run.
+  if (isInventoryMode && !isInventoryOverflowScope) {
     if (sizingMode === 'multi_size_with_variants') {
       for (const variant of variants) {
         const requested = variantQuantities[variant.variant_id] ?? 0
@@ -775,7 +807,28 @@ export function ProductDetailClient({
       }
     }
   }
-  const canSubmitSelection = canAddToCart && inventoryIntentShortfall == null
+
+  // Production top-up MOQ guard (org_admin From-inventory overflow only). The
+  // to-be-made units trigger a production run, which must reach the product's
+  // real MOQ. Pure stock draws (toBeMadeSum === 0) are exempt; the server check
+  // in lib/checkout/submit.ts is the redundant safety net behind this.
+  let madeMoqShortfall: { toBeMade: number; moq: number; needed: number } | null =
+    null
+  if (
+    isInventoryOverflowScope &&
+    toBeMadeSum > 0 &&
+    effectiveMoq > 1 &&
+    toBeMadeSum < effectiveMoq
+  ) {
+    madeMoqShortfall = {
+      toBeMade: toBeMadeSum,
+      moq: effectiveMoq,
+      needed: effectiveMoq - toBeMadeSum,
+    }
+  }
+
+  const canSubmitSelection =
+    canAddToCart && inventoryIntentShortfall == null && madeMoqShortfall == null
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
@@ -1123,6 +1176,20 @@ export function ProductDetailClient({
                         : 'Reduce quantity to order from stock.'
                     }`}
               </p>
+            )}
+            {isInventoryOverflowScope && toBeMadeSum > 0 && (
+              madeMoqShortfall ? (
+                <p className="mt-3 text-xs text-amber-700">
+                  Production run minimum is {madeMoqShortfall.moq}.{' '}
+                  {madeMoqShortfall.toBeMade} to be made — add{' '}
+                  {madeMoqShortfall.needed} more, or reduce to draw only from
+                  stock.
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-gray-500">
+                  {toBeMadeSum} to be made · production min {effectiveMoq}
+                </p>
+              )
             )}
           </section>
           </div>
