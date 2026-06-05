@@ -394,15 +394,23 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
     expect(out.map((image) => image.id)).toEqual(['m-base'])
   })
 
-  it('never drops a colour-matched master image; only drops the color-null base', () => {
+  it('drops colour-matched master images too when a catalogue image exists', () => {
     const out = resolveGalleryImagesForColour(
-      [masterColourMatched, masterBase],
+      [masterColourMatched, masterBase, catalogueColour],
       'sw-red',
     )
     const ids = out.map((image) => image.id)
 
-    expect(ids).toContain('m-back')
+    expect(ids).toContain('c-hero')
     expect(ids).not.toContain('m-base')
+    expect(ids).not.toContain('m-back')
+  })
+
+  it('keeps colour-matched master images as the fallback when no catalogue image exists', () => {
+    const out = resolveGalleryImagesForColour([masterColourMatched, masterBase], 'sw-red')
+    const ids = out.map((image) => image.id)
+
+    expect(ids).toContain('m-back')
   })
 })
 

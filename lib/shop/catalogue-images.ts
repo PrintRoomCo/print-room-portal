@@ -72,13 +72,18 @@ export function resolveGalleryImagesForColour(
   }
 
   const entries = Array.from(chosenByView.values())
-  // Priority 5 is the master-scope, color-null primary-view fallback. Drop it
-  // when the selected colour has a retained priority 1-4 image, but never
-  // empty the PDP.
+  // Once a catalogue-specific image exists, master product photos are just the
+  // blank garment fallback for this customer surface. Keep them only as the
+  // last resort so the PDP never empties.
+  const hasCatalogueImage = entries.some(
+    (entry) => (entry.image.scope ?? 'master') === 'catalogue',
+  )
   const hasRetainedNonFallbackImage = entries.some((entry) => entry.priority < 5)
-  const filtered = hasRetainedNonFallbackImage
-    ? entries.filter((entry) => entry.priority !== 5)
-    : entries
+  const filtered = hasCatalogueImage
+    ? entries.filter((entry) => (entry.image.scope ?? 'master') !== 'master')
+    : hasRetainedNonFallbackImage
+      ? entries.filter((entry) => entry.priority !== 5)
+      : entries
   const kept = filtered.length > 0 ? filtered : entries
 
   return kept.map((entry) => entry.image).sort(compareImages)

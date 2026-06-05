@@ -10,7 +10,6 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
-import { DecorationTile } from './DecorationTile'
 import type { DecorationOption } from '@/lib/shop/decorations'
 import {
   filterDecorationsBySwatch,
@@ -505,6 +504,17 @@ export function ProductDetailClient({
     [visibleDecorations],
   )
 
+  const galleryDecorationImages = useMemo(
+    () =>
+      swatchVisibleDecorations.map((d) => ({
+        id: d.linkId,
+        url: d.artworkUrl,
+        label: d.positionLabel ? `${d.name} - ${d.positionLabel}` : d.name,
+        alt: `${d.name} artwork`,
+      })),
+    [swatchVisibleDecorations],
+  )
+
   // Resolve decoration unit price for a specific qty (falls back to static unitPrice
   // for embroidery / legacy rows / cache miss).
   const decorationPriceAt = useMemo(
@@ -788,8 +798,8 @@ export function ProductDetailClient({
                 productName={product.name}
                 selectedColorSwatchId={colorSwatchId}
                 overlays={galleryOverlays}
+                decorationImages={galleryDecorationImages}
               />
-              <DecorationTile decorations={swatchVisibleDecorations} productName={product.name} />
             </div>
           </div>
 

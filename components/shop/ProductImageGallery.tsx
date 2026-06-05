@@ -22,13 +22,45 @@ export interface GalleryOverlay {
   artworkUrl: string
 }
 
+export interface GalleryDecorationImage {
+  id: string
+  url: string
+  label: string
+  alt: string
+}
+
 interface Props {
   images: GalleryImage[]
   fallbackUrl: string | null
   productName: string
   selectedColorSwatchId: string | null
   overlays?: GalleryOverlay[]
+  decorationImages?: GalleryDecorationImage[]
 }
+
+type GalleryItem =
+  | {
+      kind: 'product'
+      key: string
+      url: string
+      label: string
+      alt: string
+      image: GalleryImage
+    }
+  | {
+      kind: 'fallback'
+      key: string
+      url: string
+      label: string
+      alt: string
+    }
+  | {
+      kind: 'decoration'
+      key: string
+      url: string
+      label: string
+      alt: string
+    }
 
 export function ProductImageGallery({
   images,
@@ -36,39 +68,76 @@ export function ProductImageGallery({
   productName,
   selectedColorSwatchId,
   overlays = [],
+  decorationImages = [],
 }: Props) {
   const ordered = useMemo(
     () => resolveGalleryImagesForColour(images, selectedColorSwatchId),
     [images, selectedColorSwatchId],
   )
-  const [activeUrl, setActiveUrl] = useState<string | null>(() =>
-    pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl),
+  const galleryItems = useMemo<GalleryItem[]>(
+    () => [
+      ...ordered.map((image) => ({
+        kind: 'product' as const,
+        key: `product:${image.id}`,
+        url: image.url,
+        label: image.view ?? 'image',
+        alt: productName,
+        image,
+      })),
+      ...(ordered.length === 0 && fallbackUrl
+        ? [
+            {
+              kind: 'fallback' as const,
+              key: 'fallback',
+              url: fallbackUrl,
+              label: 'image',
+              alt: productName,
+            },
+          ]
+        : []),
+      ...decorationImages
+        .filter((image) => image.url)
+        .map((image) => ({
+          kind: 'decoration' as const,
+          key: `decoration:${image.id}`,
+          url: image.url,
+          label: `artwork: ${image.label}`,
+          alt: image.alt,
+        })),
+    ],
+    [decorationImages, fallbackUrl, ordered, productName],
+  )
+  const preferredKey = useMemo(() => {
+    const preferredUrl = pickPreferredGalleryImageUrl(
+      images,
+      selectedColorSwatchId,
+      fallbackUrl,
+    )
+    return (
+      galleryItems.find((item) => item.url === preferredUrl)?.key ??
+      galleryItems[0]?.key ??
+      null
+    )
+  }, [fallbackUrl, galleryItems, images, selectedColorSwatchId])
+  const [activeKey, setActiveKey] = useState<string | null>(() => preferredKey)
+  const activeItem = useMemo(
+    () => galleryItems.find((item) => item.key === activeKey) ?? galleryItems[0] ?? null,
+    [activeKey, galleryItems],
   )
   const prevColorRef = useRef(selectedColorSwatchId)
 
   useEffect(() => {
     const colourChanged = prevColorRef.current !== selectedColorSwatchId
     prevColorRef.current = selectedColorSwatchId
-    if (colourChanged) {
-      // Swatch selection moved — jump the hero to the new colour's first
-      // matched image. Falls back to ordered[0]/fallback when the new colour
-      // has no per-colour images uploaded yet.
-      setActiveUrl(pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl))
-      return
-    }
-    // Same colour, ordered may have shifted because images prop changed —
-    // keep current activeUrl if still valid, else reset.
-    const urls = new Set(ordered.map((img) => img.url))
-    setActiveUrl((current) => {
-      if (current && urls.has(current)) return current
-      return pickPreferredGalleryImageUrl(images, selectedColorSwatchId, fallbackUrl)
+    setActiveKey((current) => {
+      if (!colourChanged && current && galleryItems.some((item) => item.key === current)) {
+        return current
+      }
+      return preferredKey
     })
-  }, [fallbackUrl, images, ordered, selectedColorSwatchId])
+  }, [galleryItems, preferredKey, selectedColorSwatchId])
 
-  const activeImage = useMemo(
-    () => ordered.find((img) => img.url === activeUrl) ?? null,
-    [ordered, activeUrl],
-  )
+  const activeImage = activeItem?.kind === 'product' ? activeItem.image : null
   // A designer_snapshot already has decorations baked in by staff — overlaying
   // live artwork on top would double-render (and any CDN/browser cache lag on
   // the snapshot URL would offset the two copies). Trust the snapshot as-is.
@@ -110,7 +179,7 @@ export function ProductImageGallery({
     nextButton?.click()
   }
 
-  if (!activeUrl) {
+  if (!activeItem) {
     return (
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
         <div className="flex h-full items-center justify-center text-gray-300">No image</div>
@@ -122,9 +191,9 @@ export function ProductImageGallery({
     <div className="flex flex-col gap-3">
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
         <Image
-          key={activeUrl}
-          src={activeUrl}
-          alt={productName}
+          key={activeItem.key}
+          src={activeItem.url}
+          alt={activeItem.alt}
           fill
           sizes="(min-width:1024px) 40vw, 100vw"
           className="object-contain p-6"
@@ -157,24 +226,25 @@ export function ProductImageGallery({
           )
         })}
       </div>
-      {ordered.length > 1 && (
+      {galleryItems.length > 1 && (
         <div
           className="flex flex-wrap gap-2"
           role="tablist"
           aria-label="Product views"
+          tabIndex={-1}
           onKeyDown={handleThumbnailKeyDown}
         >
-          {ordered.map((img) => {
-            const isActive = img.url === activeUrl
+          {galleryItems.map((item) => {
+            const isActive = item.key === activeKey
             return (
               <button
-                key={img.id}
+                key={item.key}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                aria-label={`View ${img.view ?? 'image'}`}
+                aria-label={`View ${item.label}`}
                 tabIndex={isActive ? 0 : -1}
-                onClick={() => setActiveUrl(img.url)}
+                onClick={() => setActiveKey(item.key)}
                 className={
                   'relative h-16 w-16 overflow-hidden rounded-lg border bg-white transition ' +
                   (isActive
@@ -183,7 +253,7 @@ export function ProductImageGallery({
                 }
               >
                 <Image
-                  src={img.url}
+                  src={item.url}
                   alt=""
                   fill
                   sizes="64px"

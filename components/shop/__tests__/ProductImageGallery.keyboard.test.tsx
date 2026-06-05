@@ -6,19 +6,24 @@ import { ProductImageGallery, type GalleryImage } from '../ProductImageGallery'
 vi.mock('next/image', () => ({
   default: ({
     alt = '',
-    fill: _fill,
-    priority: _priority,
-    sizes: _sizes,
+    fill,
+    priority,
+    sizes,
     ...props
   }: {
     alt?: string
     fill?: boolean
     priority?: boolean
     sizes?: string
-  }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} {...props} />
-  ),
+  }) => {
+    void fill
+    void priority
+    void sizes
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img alt={alt} {...props} />
+    )
+  },
 }))
 
 const images: GalleryImage[] = [
@@ -57,5 +62,64 @@ describe('ProductImageGallery keyboard navigation', () => {
 
     await user.keyboard('{ArrowLeft}')
     expect(tabs[1]).toHaveFocus()
+  })
+
+  it('shows applied artwork as a gallery thumbnail and omits blank master product thumbnails', () => {
+    render(
+      <ProductImageGallery
+        images={[
+          {
+            id: 'catalogue-hero',
+            url: '/decorated-product.png',
+            view: 'hero',
+            position: -100,
+            color_swatch_id: 'bone',
+            scope: 'catalogue',
+            source: 'designer_snapshot',
+          },
+          {
+            id: 'master-back',
+            url: '/blank-back.png',
+            view: 'back',
+            position: 1,
+            color_swatch_id: 'bone',
+            scope: 'master',
+          },
+        ]}
+        fallbackUrl={null}
+        productName="Staple Tee"
+        selectedColorSwatchId="bone"
+        decorationImages={[
+          {
+            id: 'link-1',
+            url: '/actual-artwork.png',
+            label: 'Screen print - Left Chest',
+            alt: 'Screen print artwork',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByRole('tab', { name: 'View hero' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'View artwork: Screen print - Left Chest' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'View back' })).not.toBeInTheDocument()
+  })
+
+  it('still renders the product fallback image when no gallery images exist', () => {
+    render(
+      <ProductImageGallery
+        images={[]}
+        fallbackUrl="/fallback.png"
+        productName="Fallback Tee"
+        selectedColorSwatchId={null}
+      />,
+    )
+
+    expect(screen.getByRole('img', { name: 'Fallback Tee' })).toHaveAttribute(
+      'src',
+      '/fallback.png',
+    )
   })
 })
