@@ -6,6 +6,7 @@ import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
+import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
@@ -243,15 +244,26 @@ export function tierAggregationKey(
   productId: string,
   decorations: CheckoutLineDecorationInput[] | undefined,
 ): string {
-  const sig =
-    !decorations || decorations.length === 0
-      ? ''
-      : decorations
-          .map((d) => d.decorationId)
-          .slice()
-          .sort()
-          .join('|')
-  return `${productId}::${sig}`
+  return `${productId}::${decorationAggregationSignature(decorations)}`
+}
+
+function decorationAggregationSignature(
+  decorations: CheckoutLineDecorationInput[] | undefined,
+): string {
+  return !decorations || decorations.length === 0
+    ? ''
+    : decorations
+        .map((d) => d.decorationId)
+        .slice()
+        .sort()
+        .join('|')
+}
+
+function garmentPriceAggregationKey(line: CheckoutLineInput): string {
+  const itemOrProduct = line.catalogueItemId
+    ? `item:${line.catalogueItemId}`
+    : `product:${line.product_id}`
+  return `${itemOrProduct}::${decorationAggregationSignature(line.decorations)}`
 }
 
 // b2b_accounts.payment_terms CHECK constraint allows only 'prepay' | 'net20' | 'net30'.
@@ -417,39 +429,68 @@ export async function submitCustomerOrder(
   if (moqViolations.length > 0) throw new MoqViolationError(moqViolations)
 
   // 2. Re-price every line on the server — ignore any client-sent prices.
-  // Uses effective_unit_price so catalogue-scoped orgs get catalogue prices
-  // (consistent with /shop), falling back to get_unit_price for global B2B.
+  // Catalogue item lines use the exact b2b_catalogue_items.id from the cart so
+  // two skins on the same source product never collapse into one product-level
+  // price bucket. Legacy/global lines keep the product-level effective price.
   //
-  // Pricing tier is summed by (product_id, decoration_signature) — same key
-  // the cart uses in recomputeProductTierPrices. Two lines that share product
-  // AND decoration set pool qty for the band lookup (multi-size run prices at
-  // total qty); two lines that share product but differ in decoration method
-  // do NOT pool (engine setup amortizes per-method-per-artwork).
-  const totalQtyByPriceKey = new Map<string, number>()
+  // Garment pricing still includes the decoration signature in its key, matching
+  // the cart's historical tier behavior for decorated runs. Decoration pricing
+  // below keeps its own product+decoration aggregation, so item-aware garment
+  // pricing does not silently alter decoration-tier pooling.
+  const totalQtyByDecorationTierKey = new Map<string, number>()
   for (const line of input.lines) {
     const k = tierAggregationKey(line.product_id, line.decorations)
-    totalQtyByPriceKey.set(k, (totalQtyByPriceKey.get(k) ?? 0) + line.qty)
+    totalQtyByDecorationTierKey.set(
+      k,
+      (totalQtyByDecorationTierKey.get(k) ?? 0) + line.qty,
+    )
   }
-  const priceByPriceKey = new Map<string, number>()
-  await Promise.all(
-    Array.from(totalQtyByPriceKey.entries()).map(async ([priceKey, totalQty]) => {
-      // priceKey is "${productId}::${signature}"; the product_id is the prefix
-      // up to the first "::". Signatures never contain "::" — they're sorted
-      // linkIds pipe-joined.
-      const productId = priceKey.slice(0, priceKey.indexOf('::'))
-      const { data: unit } = await admin.rpc('effective_unit_price', {
-        p_product_id: productId,
-        p_org_id: input.context.organizationId,
-        p_qty: totalQty,
+
+  const garmentPriceGroups = new Map<
+    string,
+    { productId: string; catalogueItemId: string | null; totalQty: number }
+  >()
+  for (const line of input.lines) {
+    const k = garmentPriceAggregationKey(line)
+    const existing = garmentPriceGroups.get(k)
+    if (existing) {
+      existing.totalQty += line.qty
+    } else {
+      garmentPriceGroups.set(k, {
+        productId: line.product_id,
+        catalogueItemId: line.catalogueItemId ?? null,
+        totalQty: line.qty,
       })
-      priceByPriceKey.set(priceKey, Number(unit ?? 0))
+    }
+  }
+
+  const garmentPriceByKey = new Map<string, number>()
+  await Promise.all(
+    Array.from(garmentPriceGroups.entries()).map(async ([priceKey, group]) => {
+      if (group.catalogueItemId) {
+        const unit = await effectiveUnitPriceForItem(
+          admin,
+          group.catalogueItemId,
+          input.context.organizationId,
+          group.totalQty,
+        )
+        garmentPriceByKey.set(priceKey, unit)
+        return
+      }
+
+      const { data: unit } = await admin.rpc('effective_unit_price', {
+        p_product_id: group.productId,
+        p_org_id: input.context.organizationId,
+        p_qty: group.totalQty,
+      })
+      garmentPriceByKey.set(priceKey, Number(unit ?? 0))
     }),
   )
 
   const repriced = input.lines.map(l => ({
     ...l,
     unit_price:
-      priceByPriceKey.get(tierAggregationKey(l.product_id, l.decorations)) ?? 0,
+      garmentPriceByKey.get(garmentPriceAggregationKey(l)) ?? 0,
   }))
 
   // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
@@ -465,7 +506,7 @@ export async function submitCustomerOrder(
     if (!line.has_brackets) continue
     if (typeof line.claimed_unit_price !== 'number') continue
     const canonical =
-      priceByPriceKey.get(tierAggregationKey(line.product_id, line.decorations)) ?? 0
+      garmentPriceByKey.get(garmentPriceAggregationKey(line)) ?? 0
     if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
       unitPriceDrift.push({
         cartLineId: line.cart_line_id ?? null,
@@ -616,7 +657,7 @@ export async function submitCustomerOrder(
       }
       const loc = pickOne(od.decoration_locations)
       const decorationQty =
-        totalQtyByPriceKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
+        totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
         line.qty
       const effective = await effectiveDecorationPrice(
         admin,

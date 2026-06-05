@@ -193,7 +193,6 @@ export function CheckoutReviewClient({
               `Minimum order quantity not met. ${summary}. ` +
               `Add more to meet the minimum, or contact your account manager.`,
           })
-          router.push('/cart')
           return
         }
         if (data.error === 'decoration_price_drift' && data.drift) {
@@ -204,7 +203,6 @@ export function CheckoutReviewClient({
             kind: 'error',
             msg: `Decoration pricing has changed - review your cart. ${summary}`,
           })
-          router.push('/cart')
           return
         }
         if (data.error === 'unit_price_drift' && data.priceDrift) {
@@ -215,7 +213,14 @@ export function CheckoutReviewClient({
             kind: 'error',
             msg: `Pricing has changed since you added these to your cart - review and resubmit. ${summary}`,
           })
-          router.push('/cart')
+          return
+        }
+        if (data.error === 'OUT_OF_STOCK') {
+          setBanner({
+            kind: 'error',
+            msg:
+              'Stock changed while you were checking out - please review your order and try again.',
+          })
           return
         }
         if (data.error === 'insufficient_stock' || data.error === 'no_inventory') {
@@ -234,14 +239,12 @@ export function CheckoutReviewClient({
                 ' Please reduce the quantity or remove it.'
               : `Sorry, ${lineLabel} is not stocked for your account - please contact staff or remove it from your cart.`
           setBanner({ kind: 'error', msg })
-          router.push('/cart')
           return
         }
         setBanner({
           kind: 'error',
           msg: 'Stock changed while you were checking out - please review your cart and try again.',
         })
-        router.push('/cart')
         return
       }
 
