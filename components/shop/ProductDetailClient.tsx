@@ -744,6 +744,39 @@ export function ProductDetailClient({
     // decision as multi-size: toggle choice wins when present (PDP shortfall
     // already enforced From-Stock vs zero-stock); buyer flow auto-routes
     // backorderable to make_to_stock.
+    // Mode 3 org_admin From-inventory overflow: split into a stocked draw + a
+    // make_to_stock production line, mirroring Mode 1.
+    if (
+      isInventoryOverflowScope &&
+      tracksThisVariant &&
+      !selectedVariantBackorderable &&
+      qty > (availableQty ?? 0)
+    ) {
+      const avail = availableQty ?? 0
+      const oneSizeBase = {
+        productId: product.id,
+        productName: product.name,
+        variantId: '',
+        variantLabel: '—',
+        unitPrice: pricing.unit_price,
+        imageUrl: cartImageForSwatch(colorSwatchId),
+        decorations: cartDecorationsForSwatch(colorSwatchId),
+        brackets: cartLineBrackets,
+        catalogueItemId: product.catalogueItemId,
+        catalogueVariantLabel: product.catalogueVariantLabel,
+      }
+      if (avail > 0) {
+        cart.addLine({ ...oneSizeBase, qty: avail, fulfilmentType: 'stocked' })
+      }
+      cart.addLine({
+        ...oneSizeBase,
+        qty: qty - avail,
+        fulfilmentType: 'make_to_stock',
+      })
+      showToast('Added to cart')
+      return
+    }
+
     const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
       ? orderIntent === 'bulk'
         ? 'make_to_stock'
