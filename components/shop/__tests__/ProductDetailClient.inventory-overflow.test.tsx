@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProductDetailClient } from '../ProductDetailClient'
 
@@ -110,5 +110,68 @@ describe('PDP From-inventory production top-up — MOQ guard', () => {
     })
     expect(screen.queryByText(/Production run minimum is/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/to be made · production min/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('PDP From-inventory production top-up — cart split (multi-size)', () => {
+  beforeEach(() => {
+    // Pricing is fetched (debounced) before Add-to-cart enables. Stub it OK.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ status: 'ok', unit_price: 10 }),
+      })),
+    )
+  })
+
+  it('overflowing variant adds a stocked line + a make_to_stock line', async () => {
+    renderPDP('org_admin')
+    // 28 of S, 4 in stock -> 4 stocked + 24 made (meets MOQ 24).
+    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
+      target: { value: '28' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
+    )
+    const btn = screen.getByRole('button', { name: /add to cart/i })
+    fireEvent.click(btn)
+
+    expect(addLine).toHaveBeenCalledTimes(2)
+    expect(addLine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variantId: 'red-s',
+        qty: 4,
+        fulfilmentType: 'stocked',
+      }),
+    )
+    expect(addLine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variantId: 'red-s',
+        qty: 24,
+        fulfilmentType: 'make_to_stock',
+      }),
+    )
+  })
+
+  it('within-stock variant adds a single stocked line', async () => {
+    renderPDP('org_admin')
+    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
+      target: { value: '3' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
+    )
+    const btn = screen.getByRole('button', { name: /add to cart/i })
+    fireEvent.click(btn)
+
+    expect(addLine).toHaveBeenCalledTimes(1)
+    expect(addLine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variantId: 'red-s',
+        qty: 3,
+        fulfilmentType: 'stocked',
+      }),
+    )
   })
 })

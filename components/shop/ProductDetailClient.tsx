@@ -650,15 +650,45 @@ export function ProductDetailClient({
         const tracked = a !== undefined
         const available = tracked ? a.available_qty : 0
         const backorderable = tracked && a.allow_order_without_stock
-        // Fulfilment decision:
-        //   - canChooseOrderIntent (org_admin with toggle): respect customer's
-        //     explicit choice. PDP shortfall already blocked any From-Stock +
-        //     zero-stock combo, including backorderable, so this branch is
-        //     safe to follow blindly.
-        //   - buyer / no toggle: backorderable variants auto-route to
-        //     make_to_stock (buyer has no choice surface and the AM has
-        //     opted them in via the flag). Non-backorderable falls back to
-        //     stock-vs-qty for the existing partial-stock path.
+        const baseLine = {
+          productId: product.id,
+          productName: product.name,
+          variantId: variant.variant_id,
+          variantLabel,
+          unitPrice: pricing.unit_price,
+          imageUrl: cartImageForSwatch(variant.color_swatch_id),
+          decorations: cartDecorationsForSwatch(variant.color_swatch_id),
+          brackets: cartLineBrackets,
+          catalogueItemId: product.catalogueItemId,
+          catalogueVariantLabel: product.catalogueVariantLabel,
+        }
+
+        // Org_admin From-inventory overflow: split a partial-stock variant into
+        // a stocked draw + a make_to_stock production line. The server MOQ
+        // engine then counts only the production portion and inventory draws
+        // only the stocked portion. lineSignature keys on fulfilmentType, so
+        // the two lines never merge in the cart.
+        if (
+          isInventoryOverflowScope &&
+          tracked &&
+          !backorderable &&
+          lineQty > available
+        ) {
+          if (available > 0) {
+            cart.addLine({ ...baseLine, qty: available, fulfilmentType: 'stocked' })
+          }
+          cart.addLine({
+            ...baseLine,
+            qty: lineQty - available,
+            fulfilmentType: 'make_to_stock',
+          })
+          added += lineQty
+          continue
+        }
+
+        // Fulfilment decision (unchanged): toggle choice wins for org_admin;
+        // buyer/no-toggle auto-routes backorderable to make_to_stock, else
+        // stock-vs-qty.
         const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
           ? orderIntent === 'bulk'
             ? 'make_to_stock'
@@ -668,20 +698,7 @@ export function ProductDetailClient({
             : tracked && lineQty > available
               ? 'make_to_stock'
               : 'stocked'
-        cart.addLine({
-          productId: product.id,
-          productName: product.name,
-          variantId: variant.variant_id,
-          variantLabel,
-          qty: lineQty,
-          unitPrice: pricing.unit_price,
-          imageUrl: cartImageForSwatch(variant.color_swatch_id),
-          decorations: cartDecorationsForSwatch(variant.color_swatch_id),
-          fulfilmentType,
-          brackets: cartLineBrackets,
-          catalogueItemId: product.catalogueItemId,
-          catalogueVariantLabel: product.catalogueVariantLabel,
-        })
+        cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
         added += lineQty
       }
       if (added > 0) {
