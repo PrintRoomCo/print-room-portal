@@ -186,3 +186,18 @@ describe('PDP From-inventory production top-up — size grid caption', () => {
     expect(screen.getByText(/\(24 to be made\)/i)).toBeInTheDocument()
   })
 })
+
+describe('PDP From-inventory production top-up — restricted staff unchanged', () => {
+  it('staff cannot overflow: no production hint, Add-to-cart stays blocked', () => {
+    renderPDP('staff')
+    // Staff are inventory-only; the in-stock-only filter keeps S visible.
+    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
+      target: { value: '28' },
+    })
+    // No production top-up surfaces for restricted staff...
+    expect(screen.queryByText(/to be made · production min/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Production run minimum is/i)).not.toBeInTheDocument()
+    // ...and the existing hard-cap shortfall message still fires.
+    expect(screen.getByText(/Only 4 available/i)).toBeInTheDocument()
+  })
+})
