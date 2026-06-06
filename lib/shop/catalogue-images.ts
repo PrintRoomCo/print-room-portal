@@ -20,7 +20,8 @@ export interface CatalogueItemImageRow {
   color_swatch_id: string | null
 }
 
-const THUMBNAIL_VIEW_PREFERENCE = ['hero', 'front']
+// `front` is canonical; the normaliser collapses the legacy `hero` token into it.
+const THUMBNAIL_VIEW_PREFERENCE = ['front']
 
 function thumbnailViewRank(view: string | null): number {
   if (!view) return 99
@@ -122,7 +123,6 @@ export function pickPreferredGalleryImageUrl(
 }
 
 const PRIMARY_VIEWS = new Set([
-  'hero',
   'front',
   'back',
   'left',
@@ -178,7 +178,7 @@ function compareCandidates(
   return compareImages(a, b)
 }
 
-const VIEW_ORDER = ['hero', 'front', 'back', 'left_sleeve', 'right_sleeve', 'left', 'right', 'top', 'bottom', 'side']
+const VIEW_ORDER = ['front', 'back', 'left_sleeve', 'right_sleeve', 'left', 'right', 'top', 'bottom', 'side']
 
 function viewOrderRank(view: string | null | undefined) {
   if (!view) return VIEW_ORDER.length

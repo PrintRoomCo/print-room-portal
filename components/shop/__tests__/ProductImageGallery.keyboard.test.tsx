@@ -26,10 +26,13 @@ vi.mock('next/image', () => ({
   },
 }))
 
+// Three distinct canonical views — `hero` and `front` would now collapse into the
+// one `front` slot (PR5 canonicalisation), so keyboard nav is exercised with
+// genuinely separate views instead.
 const images: GalleryImage[] = [
-  { id: 'hero', url: '/hero.png', view: 'hero', position: 0 },
-  { id: 'front', url: '/front.png', view: 'front', position: 1 },
-  { id: 'back', url: '/back.png', view: 'back', position: 2 },
+  { id: 'front', url: '/front.png', view: 'front', position: 0 },
+  { id: 'back', url: '/back.png', view: 'back', position: 1 },
+  { id: 'side', url: '/side.png', view: 'side', position: 2 },
 ]
 
 function renderGallery() {
@@ -83,11 +86,15 @@ describe('ProductImageGallery keyboard navigation', () => {
             source: 'designer_snapshot',
           },
           {
+            // A blank, null-colour master back — the generic fallback that must be
+            // dropped once a catalogue image exists. (A colour-MATCHED master back
+            // is instead kept, per the Forest Green fix; that path is covered in
+            // catalogue-images.test.ts.)
             id: 'master-back',
             url: '/blank-back.png',
             view: 'back',
             position: 1,
-            color_swatch_id: 'bone',
+            color_swatch_id: null,
             scope: 'master',
           },
         ]}

@@ -1,5 +1,7 @@
 const VIEW_ALIASES: Record<string, string> = {
-  hero: 'hero',
+  // `front` is the canonical front token; `hero` is the legacy alias kept readable
+  // so old `product_images` / catalogue rows resolve to the same slot as `front`.
+  hero: 'front',
   front: 'front',
   front_center: 'front',
   front_chest: 'front',
@@ -7,7 +9,9 @@ const VIEW_ALIASES: Record<string, string> = {
   back_center: 'back',
   back_full: 'back',
   left: 'left',
+  side_left: 'left',
   right: 'right',
+  side_right: 'right',
   left_sleeve: 'left_sleeve',
   sleeve_left: 'left_sleeve',
   right_sleeve: 'right_sleeve',
