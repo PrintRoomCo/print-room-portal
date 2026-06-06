@@ -1021,7 +1021,7 @@ export function ProductDetailClient({
                               stock that goes to production. In From-inventory mode
                               the shortfall guard already caps orders at available
                               stock, so we show only the available count there. */}
-                          {!isInventoryMode && backorder > 0 && !showBackorderableChip && (
+                          {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showBackorderableChip && (
                             <span className="ml-1 text-amber-700">
                               ({backorder} to be made)
                             </span>
