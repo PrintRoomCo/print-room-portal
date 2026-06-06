@@ -175,3 +175,14 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
     )
   })
 })
+
+describe('PDP From-inventory production top-up — size grid caption', () => {
+  it('shows per-size "to be made" once a size overflows its stock', () => {
+    renderPDP('org_admin')
+    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
+      target: { value: '28' },
+    })
+    // S row Available cell now annotates the 24-unit production portion.
+    expect(screen.getByText(/\(24 to be made\)/i)).toBeInTheDocument()
+  })
+})
