@@ -12,6 +12,7 @@ import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
 import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
+import { resolveColourMatrix, type MatrixVariant } from '@/lib/shop/colour-matrix'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
@@ -43,8 +44,8 @@ interface RawVariant {
   color_swatch_id: string | null
   size_id: number | null
   product_color_swatches:
-    | { label: string | null; hex: string | null; position: number | null }
-    | { label: string | null; hex: string | null; position: number | null }[]
+    | { label: string | null; hex: string | null; position: number | null; image_url: string | null }
+    | { label: string | null; hex: string | null; position: number | null; image_url: string | null }[]
     | null
   sizes:
     | { label: string | null; order_index: number | null }
@@ -176,7 +177,7 @@ const loadProductDetailPageData = cache(async (
     admin.from('product_variants')
       .select(`
         id, color_swatch_id, size_id,
-        product_color_swatches (label, hex, position),
+        product_color_swatches (label, hex, position, image_url),
         sizes (label, order_index)
       `)
       .eq('product_id', productId)
@@ -213,22 +214,14 @@ const loadProductDetailPageData = cache(async (
       | { label: string | null; hex: string | null; position: number | null }[]
       | null
   }>
-  const configuredColorIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
+  // Curated rows (b2b_catalogue_item_colors) drive ONLY ordering + the default
+  // colour now, never visibility. resolveColourMatrix surfaces every master
+  // colour that has a buyable variant; decoration scope is a separate staff
+  // concern.
   const colorConfigById = new Map(catalogueColors.map((row) => [row.color_swatch_id, row]))
-  const colourOptions = catalogueColors.map((row) => {
-    const swatch = pickOne(row.product_color_swatches)
-    return {
-      id: row.color_swatch_id,
-      label: swatch?.label ?? null,
-      hex: swatch?.hex ?? null,
-      position: swatch?.position ?? 0,
-      catalogueSortOrder: row.sort_order ?? null,
-      isDefault: row.is_default === true,
-    }
-  })
 
   const variantRows = (variants ?? []) as unknown as RawVariant[]
-  const mappedVariants = variantRows.map((v) => {
+  const mappedVariantRows: MatrixVariant[] = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
     const size = pickOne(v.sizes)
     const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
@@ -237,6 +230,7 @@ const loadProductDetailPageData = cache(async (
       color_swatch_id: v.color_swatch_id,
       color_label: swatch?.label ?? null,
       color_hex: swatch?.hex ?? null,
+      color_image_url: swatch?.image_url ?? null,
       color_position: swatch?.position ?? 0,
       catalogue_color_sort_order: colorConfig?.sort_order ?? null,
       catalogue_color_is_default: colorConfig?.is_default === true,
@@ -245,19 +239,7 @@ const loadProductDetailPageData = cache(async (
       size_order: size?.order_index ?? 0,
     }
   })
-    .filter((v) => {
-      if (configuredColorIds.size === 0) return true
-      return v.color_swatch_id != null && configuredColorIds.has(v.color_swatch_id)
-    })
-    .sort((a, b) => {
-      if (a.catalogue_color_is_default !== b.catalogue_color_is_default) {
-        return a.catalogue_color_is_default ? -1 : 1
-      }
-      const aColor = a.catalogue_color_sort_order ?? a.color_position
-      const bColor = b.catalogue_color_sort_order ?? b.color_position
-      if (aColor !== bColor) return aColor - bColor
-      return a.size_order - b.size_order
-    })
+  const { colourOptions, variants: mappedVariants } = resolveColourMatrix(mappedVariantRows)
 
   const availability: Record<string, VariantAvailability> = {}
   for (const r of (availRows ?? []) as Array<{
@@ -310,7 +292,22 @@ const loadProductDetailPageData = cache(async (
       color_swatch_id: r.color_swatch_id,
       scope: 'master' as const,
     }))
-  const images = [...catalogueImages, ...masterImages]
+  // Each colour's own swatch photo, as a per-colour master image. The gallery
+  // resolver ranks this priority 4 — below catalogue decoration images (p1–p3)
+  // but above the generic product fallback (p5) — so a surfaced, undecorated
+  // colour shows its real photo instead of every colour sharing one image.
+  const swatchImages = colourOptions
+    .filter((o) => o.imageUrl)
+    .map((o) => ({
+      id: `swatch:${o.id}`,
+      url: o.imageUrl as string,
+      view: 'front',
+      alt: o.label,
+      position: 0,
+      color_swatch_id: o.id,
+      scope: 'master' as const,
+    }))
+  const images = [...catalogueImages, ...masterImages, ...swatchImages]
 
   const bracketRows = (brackets ?? []) as {
     min_quantity: number
