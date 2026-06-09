@@ -214,11 +214,10 @@ const loadProductDetailPageData = cache(async (
       | { label: string | null; hex: string | null; position: number | null }[]
       | null
   }>
-  // Curated rows (b2b_catalogue_item_colors) drive ONLY ordering + the default
-  // colour now, never visibility. resolveColourMatrix surfaces every master
-  // colour that has a buyable variant; decoration scope is a separate staff
-  // concern.
+  // Only colours explicitly added to this catalogue item (b2b_catalogue_item_colors)
+  // are shown. The set also drives ordering and the default colour selection.
   const colorConfigById = new Map(catalogueColors.map((row) => [row.color_swatch_id, row]))
+  const addedSwatchIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
 
   const variantRows = (variants ?? []) as unknown as RawVariant[]
   const mappedVariantRows: MatrixVariant[] = variantRows.map((v) => {
@@ -239,7 +238,7 @@ const loadProductDetailPageData = cache(async (
       size_order: size?.order_index ?? 0,
     }
   })
-  const { colourOptions, variants: mappedVariants } = resolveColourMatrix(mappedVariantRows)
+  const { colourOptions, variants: mappedVariants } = resolveColourMatrix(mappedVariantRows, addedSwatchIds)
 
   const availability: Record<string, VariantAvailability> = {}
   for (const r of (availRows ?? []) as Array<{
