@@ -1,4 +1,4 @@
-import Image from 'next/image'
+import { ImageWithFallback } from './ImageWithFallback'
 import { Money } from './Money'
 
 export interface ProductCardSwatch {
@@ -36,19 +36,18 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <article className="group flex h-full flex-col rounded-3xl bg-white p-3 transition-shadow duration-300 ease-spring hover:shadow-md">
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-gray-50">
-        {product.image_url ? (
-          <Image
-            src={product.image_url}
-            alt={product.name}
-            fill
-            sizes="(min-width:1024px) 25vw, (min-width:768px) 33vw, 50vw"
-            className="object-contain transition-transform duration-500 ease-spring group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-gray-300">
-            No image
-          </div>
-        )}
+        <ImageWithFallback
+          src={product.image_url ?? ''}
+          alt={product.name}
+          fill
+          sizes="(min-width:1024px) 25vw, (min-width:768px) 33vw, 50vw"
+          className="object-contain transition-transform duration-500 ease-spring group-hover:scale-[1.02]"
+          fallback={
+            <div className="flex h-full items-center justify-center text-xs text-gray-300">
+              No image
+            </div>
+          }
+        />
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-3 px-2 pb-1">

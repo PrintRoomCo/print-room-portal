@@ -120,6 +120,16 @@ export function ProductImageGallery({
     )
   }, [fallbackUrl, galleryItems, images, selectedColorSwatchId])
   const [activeKey, setActiveKey] = useState<string | null>(() => preferredKey)
+  // A gallery image can point at a now-deleted upstream (e.g. a discontinued
+  // garment pruned from the old BigCommerce store). Degrade a dead URL to the
+  // "No image" placeholder instead of rendering a broken image.
+  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
+  const markFailed = (key: string) =>
+    setFailedKeys((prev) => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
   const activeItem = useMemo(
     () => galleryItems.find((item) => item.key === activeKey) ?? galleryItems[0] ?? null,
     [activeKey, galleryItems],
@@ -190,15 +200,20 @@ export function ProductImageGallery({
   return (
     <div className="flex flex-col gap-3">
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
-        <Image
-          key={activeItem.key}
-          src={activeItem.url}
-          alt={activeItem.alt}
-          fill
-          sizes="(min-width:1024px) 40vw, 100vw"
-          className="object-contain p-6"
-          priority
-        />
+        {failedKeys.has(activeItem.key) ? (
+          <div className="flex h-full items-center justify-center text-gray-300">No image</div>
+        ) : (
+          <Image
+            key={activeItem.key}
+            src={activeItem.url}
+            alt={activeItem.alt}
+            fill
+            sizes="(min-width:1024px) 40vw, 100vw"
+            className="object-contain p-6"
+            priority
+            onError={() => markFailed(activeItem.key)}
+          />
+        )}
         {activeOverlays.map((o) => {
           const left = (o.rect.x + o.placement.x * o.rect.w) * 100
           const top = (o.rect.y + o.placement.y * o.rect.h) * 100
@@ -252,13 +267,20 @@ export function ProductImageGallery({
                     : 'border-gray-200 hover:border-gray-300')
                 }
               >
-                <Image
-                  src={item.url}
-                  alt=""
-                  fill
-                  sizes="64px"
-                  className="object-contain p-1"
-                />
+                {failedKeys.has(item.key) ? (
+                  <span className="flex h-full w-full items-center justify-center text-[8px] text-gray-300">
+                    —
+                  </span>
+                ) : (
+                  <Image
+                    src={item.url}
+                    alt=""
+                    fill
+                    sizes="64px"
+                    className="object-contain p-1"
+                    onError={() => markFailed(item.key)}
+                  />
+                )}
               </button>
             )
           })}
