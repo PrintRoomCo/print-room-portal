@@ -94,6 +94,12 @@ interface Props {
    * "stocked = no MOQ" was an unintentional collapse pre-2026-05-22.
    */
   effectiveMoq: number
+  /**
+   * Pre-order: item is pre_order fulfilment type but there is no currently open
+   * ordering period for this org. When true, the add-to-cart button is disabled
+   * with a "Ordering opens with the next window" message.
+   */
+  preOrderClosed?: boolean
 }
 
 export function ProductDetailClient({
@@ -106,6 +112,7 @@ export function ProductDetailClient({
   colourOptions = [],
   decorations,
   effectiveMoq,
+  preOrderClosed = false,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -1003,7 +1010,8 @@ export function ProductDetailClient({
   }
 
   const canSubmitSelection =
-    canAddToCart && inventoryIntentShortfall == null && madeMoqShortfall == null
+    canAddToCart && inventoryIntentShortfall == null && madeMoqShortfall == null &&
+    !preOrderClosed
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
@@ -1339,7 +1347,11 @@ export function ProductDetailClient({
               disabled={!canSubmitSelection || pricingLoading}
               className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {pricingLoading ? 'Checking price...' : 'Add to cart'}
+              {pricingLoading
+                ? 'Checking price...'
+                : preOrderClosed
+                  ? 'Ordering opens with the next window'
+                  : 'Add to cart'}
             </button>
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">

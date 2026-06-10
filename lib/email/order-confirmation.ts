@@ -16,6 +16,8 @@ export interface OrderConfirmationParams {
   contractNotes?: string | null
   pricingMode?: string | null
   requiredBy: string | null
+  /** ISO timestamp of the ordering-period close — renders the provisional-pricing note. */
+  provisionalUntil?: string | null
   lines: Array<{
     productName: string
     variantLabel: string
@@ -61,6 +63,12 @@ export async function sendOrderConfirmation(
       ? params.contractNotes
       : null
   const requiredBy = params.requiredBy ?? null
+  const provisionalNote = params.provisionalUntil
+    ? `Pricing is provisional until your ordering window closes on ${new Date(
+        params.provisionalUntil,
+      ).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' })}. ` +
+      `Your final price can only stay the same or drop as your network's total volume grows.`
+    : null
   const lineRowsHtml = params.lines
     .map((line) => {
       const productName = escapeHtml(line.productName)
@@ -112,6 +120,7 @@ export async function sendOrderConfirmation(
               </tr>
             </tfoot>
           </table>
+          ${provisionalNote ? `<p style="margin:18px 0 0;padding:14px 16px;border-radius:10px;background-color:#fefce8;border:1px solid #fde68a;font-size:13px;color:#92400e;">${escapeHtml(provisionalNote)}</p>` : ''}
           <div style="margin:18px 0 0;padding:14px 16px;border-radius:10px;background-color:#f3f4f6;font-size:13px;color:#374151;">
             <div>Payment terms: <strong>${escapeHtml(paymentTerms)}</strong></div>
             ${contractNotes ? `<div style="margin-top:6px;color:#4b5563;">${escapeHtml(contractNotes)}</div>` : ''}
@@ -141,6 +150,7 @@ export async function sendOrderConfirmation(
     `Payment terms: ${paymentTerms}\n` +
     (contractNotes ? `${contractNotes}\n` : '') +
     (requiredBy ? `Required by: ${requiredBy}\n` : '') +
+    (provisionalNote ? `\n${provisionalNote}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room Team`
 

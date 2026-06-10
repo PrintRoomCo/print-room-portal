@@ -27,6 +27,8 @@ export type OrderStatus =
   // New (2026-05-21)
   | 'awaiting-proof-review'
   | 'awaiting-customer-approval'
+  // New (2026-06-11) — pre-order: order received, price frozen when window closes
+  | 'awaiting-period-close'
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   'awaiting-approval': 'Awaiting approval',
@@ -39,6 +41,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   // New (2026-05-21)
   'awaiting-proof-review': 'Preparing proof',
   'awaiting-customer-approval': 'Proof ready — review on your order page',
+  // New (2026-06-11)
+  'awaiting-period-close': 'Received — price confirmed when your ordering window closes',
 }
 
 export function orderStatusLabel(status: OrderStatus): string {

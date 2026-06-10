@@ -10,6 +10,7 @@ import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
+import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -473,9 +474,37 @@ export async function submitCustomerOrder(
     }
   }
 
+  // PRE-ORDER: lines on pre_order items price from the period snapshot
+  // (worst case = own qty band; the close worker can only lower it).
+  const cartCatalogueItemIds = Array.from(
+    new Set(
+      input.lines
+        .map((l) => l.catalogueItemId)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  )
+  const openPeriod = await getOpenPeriodForOrg(admin, input.context.organizationId)
+  const preOrderItemIds = openPeriod
+    ? await getPreOrderItemIds(admin, cartCatalogueItemIds)
+    : new Set<string>()
+
   const garmentPriceByKey = new Map<string, number>()
   await Promise.all(
     Array.from(garmentPriceGroups.entries()).map(async ([priceKey, group]) => {
+      if (
+        group.catalogueItemId &&
+        openPeriod &&
+        preOrderItemIds.has(group.catalogueItemId)
+      ) {
+        const { data: unit } = await admin.rpc('period_unit_price', {
+          p_period_id: openPeriod.id,
+          p_catalogue_item_id: group.catalogueItemId,
+          p_qty: group.totalQty,
+        })
+        garmentPriceByKey.set(priceKey, Number(unit ?? 0))
+        return
+      }
+
       if (group.catalogueItemId) {
         const unit = await effectiveUnitPriceForItem(
           admin,
@@ -1409,6 +1438,8 @@ export async function submitCustomerOrder(
         pricingMode: input.context.pricingMode,
         requiredBy: emailRequiredBy,
         lines: fallbackLines,
+        provisionalUntil:
+          openPeriod && preOrderItemIds.size > 0 ? openPeriod.closesAt : null,
       })
       if (!result.success) {
         console.error(
