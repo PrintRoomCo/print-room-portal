@@ -1152,16 +1152,29 @@ export async function submitCustomerOrder(
     // scope here. Compute directly from repriced.
     const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
 
-    const { itemId, subitemIds } = await pushOrderDeal({
-      customerEmail: input.context.email ?? '',
-      customerName: input.context.organizationName,
-      customerCompany: input.context.organizationName,
-      orderRef: order_ref,
-      inHandDate: input.required_by ?? null,
-      notes: input.notes ?? null,
-      totalAmount,
-      lines,
-    })
+    // Demo orgs route their Monday deal to the Demo group (same board) so
+    // production's New Deals stays clean while the tracking round-trip
+    // (monday_item_id → tracker-status webhook) keeps working.
+    const { data: orgFlagRow } = await admin
+      .from('organizations')
+      .select('is_test')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    const isTestOrg = Boolean((orgFlagRow as { is_test?: boolean } | null)?.is_test)
+
+    const { itemId, subitemIds } = await pushOrderDeal(
+      {
+        customerEmail: input.context.email ?? '',
+        customerName: input.context.organizationName,
+        customerCompany: input.context.organizationName,
+        orderRef: order_ref,
+        inHandDate: input.required_by ?? null,
+        notes: input.notes ?? null,
+        totalAmount,
+        lines,
+      },
+      { demo: isTestOrg },
+    )
 
     mondayItemId = itemId
     Object.assign(subitemIdByQuoteItemId, subitemIds)
