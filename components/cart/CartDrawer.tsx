@@ -8,6 +8,7 @@ import { decorationPerUnit } from '@/lib/cart/types'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
 import { CartTable } from './CartTable'
 import { useCart } from './useCart'
 
@@ -90,6 +91,12 @@ export function CartDrawer() {
           <div className="sticky bottom-0 border-t border-gray-200/70 bg-white px-5 py-4">
             {cart.lines.length > 0 ? (
               <>
+                <PeriodSavingsBar
+                  cartCatalogueItemIds={cart.lines
+                    .map((l) => l.catalogueItemId)
+                    .filter((v): v is string => Boolean(v))}
+                  compact
+                />
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-sm text-gray-500">Total</span>
                   <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">

@@ -17,8 +17,11 @@ interface Summary {
 
 export function PeriodSavingsBar({
   cartCatalogueItemIds,
+  compact = false,
 }: {
   cartCatalogueItemIds: string[]
+  /** Compact mode — used in the cart drawer where space is constrained. */
+  compact?: boolean
 }) {
   const [summary, setSummary] = useState<Summary | null>(null)
 
@@ -50,6 +53,18 @@ export function PeriodSavingsBar({
     month: 'long',
   })
   const saving = (target.currentUnitPrice! - target.nextUnitPrice!).toFixed(2)
+
+  if (compact) {
+    return (
+      <div
+        className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800"
+        role="status"
+      >
+        {target.unitsToNextBreak} more units by {closes} drops price by ${saving}/unit.
+        {target.aggQty != null ? ` Network total: ${target.aggQty}.` : ''}
+      </div>
+    )
+  }
 
   return (
     <div
