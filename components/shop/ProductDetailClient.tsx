@@ -53,6 +53,10 @@ interface ProductData {
   // treated as 'computed' (today's path), so a missing wiring can never
   // accidentally make an item manual.
   priceMode?: 'computed' | 'manual_final'
+  // Manual-final: combined decoration figure per canonical breakpoint, resolved
+  // server-side. Seeds the PDP so the right decoration shows on first paint,
+  // independent of the client decoration-pricing fetch. Absent for computed.
+  manualDecorationSeed?: Record<number, number>
 }
 
 interface Bracket {
@@ -375,10 +379,12 @@ export function ProductDetailClient({
     Record<number, Record<string, number>>
   >({})
   // Manual-final: the item's ONE combined decoration figure per probed qty
-  // (engine value, no per-placement breakdown). Empty unless price_mode is manual.
+  // (engine value, no per-placement breakdown). Seeded server-side at the
+  // canonical breakpoints so the PDP is correct on first paint; the client fetch
+  // below refines it for other qtys. Empty unless price_mode is manual.
   const [manualDecorationByQty, setManualDecorationByQty] = useState<
     Record<number, number>
-  >({})
+  >(product.manualDecorationSeed ?? {})
   const isManualPricing = product.priceMode === 'manual_final'
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -426,7 +432,12 @@ export function ProductDetailClient({
         placementKey: d.recalcInputs!.placementKey,
         colourCount: d.recalcInputs!.colourCount,
       }))
-    if (recalcItems.length === 0) return
+    // Manual-final items need the combined decoration figure regardless of
+    // per-placement recalc inputs — it's resolved from the catalogue item id, not
+    // from placement/colour-count. Without this a manual item whose decoration
+    // has no recalcInputs (e.g. embroidery, or a manually-attached decoration)
+    // would never fetch the combined and the PDP would show $0 decoration.
+    if (recalcItems.length === 0 && !isManualPricing) return
     if (!Number.isInteger(qty) || qty <= 0) return
 
     // Probe each bracket's representative qty, the standard screen-print
@@ -478,13 +489,17 @@ export function ProductDetailClient({
           }
           setDecorationPricesByQty(resolved)
           // Manual-final combined figure per qty (null for computed items).
+          // Merge over the server seed so a sparse/failed fetch never wipes the
+          // first-paint values; fresher fetched values win per qty.
           const manualResolved: Record<number, number> = {}
           for (const [qStr, combined] of Object.entries(json.manualByQty ?? {})) {
             if (combined != null && Number.isFinite(Number(combined))) {
               manualResolved[Number(qStr)] = Number(combined)
             }
           }
-          setManualDecorationByQty(manualResolved)
+          if (Object.keys(manualResolved).length > 0) {
+            setManualDecorationByQty((prev) => ({ ...prev, ...manualResolved }))
+          }
         }
       } catch {
         // network error — keep existing prices
@@ -495,7 +510,7 @@ export function ProductDetailClient({
       controller.abort()
       if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
     }
-  }, [qty, decorations, brackets])
+  }, [qty, decorations, brackets, isManualPricing])
 
   const [toast, setToast] = useState<string | null>(null)
 

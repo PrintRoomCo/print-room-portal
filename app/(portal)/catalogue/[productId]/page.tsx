@@ -163,6 +163,29 @@ const loadProductDetailPageData = cache(async (
     return { data: bands }
   })()
 
+  // Manual-final: seed the combined decoration figure per canonical breakpoint
+  // server-side so the PDP renders the correct decoration on first paint, without
+  // depending on the client decoration-pricing fetch (which can be gated/raced).
+  // Empty for computed items (engine returns NULL → omitted).
+  const manualDecorationSeedQuery = (async (): Promise<Record<number, number>> => {
+    if (catItem.price_mode !== 'manual_final') return {}
+    const seed: Record<number, number> = {}
+    await Promise.all(
+      CANONICAL_BREAKPOINTS.map(async (qty) => {
+        try {
+          const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
+            p_catalogue_item_id: catItem.id,
+            p_qty: qty,
+          })
+          if (!error && data != null && Number.isFinite(Number(data))) seed[qty] = Number(data)
+        } catch {
+          // per-probe failure swallowed — client fetch remains a fallback
+        }
+      }),
+    )
+    return seed
+  })()
+
   const [
     { data: product },
     { data: variants },
@@ -172,6 +195,7 @@ const loadProductDetailPageData = cache(async (
     { data: catalogueColorRows },
     { data: catalogueImageRows },
     decorations,
+    manualDecorationSeed,
   ] = await Promise.all([
     productQuery,
     admin.from('product_variants')
@@ -200,6 +224,7 @@ const loadProductDetailPageData = cache(async (
       .eq('is_published', true)
       .order('position', { ascending: true }),
     loadCatalogueItemDecorations(admin, catItem.id),
+    manualDecorationSeedQuery,
   ])
 
   const productRow = product as unknown as ProductDetail | null
@@ -377,6 +402,9 @@ const loadProductDetailPageData = cache(async (
         // Manual-final pricing (2026-06-10). Drives the client to read the
         // item's combined decoration figure instead of summing per-placement.
         priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',
+        // Manual-final: combined decoration per canonical breakpoint, resolved
+        // server-side so the PDP shows the right decoration immediately.
+        manualDecorationSeed,
       },
       variants: mappedVariants,
       brackets: bracketRows,
