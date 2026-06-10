@@ -439,7 +439,9 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
 })
 
 describe('pickCatalogueItemThumbnail', () => {
-  it('uses a colour-specific designer snapshot before the master fallback', () => {
+  it('excludes designer_snapshot from the fallback derive — falls back to master url', () => {
+    // Snapshots are excluded from the card fallback; an explicit card_image_id pick
+    // (handled by the caller) is the only way a snapshot becomes the card thumbnail.
     expect(
       pickCatalogueItemThumbnail('/blank.png', [
         {
@@ -451,11 +453,11 @@ describe('pickCatalogueItemThumbnail', () => {
           color_swatch_id: 'blue',
         },
       ]),
-    ).toBe('/designer-blue.png')
+    ).toBe('/blank.png')
   })
 
-  it('staff_pick thumbnail rank equals staff_upload rank (both rank 1, after designer_snapshot rank 0)', () => {
-    // staff_pick should win over an unknown-source image but lose to designer_snapshot
+  it('staff_pick all-colours front wins over unknown-source row', () => {
+    // staff_pick (all-colours, hero=front) goes into acFront, wins positionally first.
     expect(
       pickCatalogueItemThumbnail('/blank.png', [
         {
@@ -476,5 +478,23 @@ describe('pickCatalogueItemThumbnail', () => {
         },
       ]),
     ).toBe('/pick-hero.png')
+  })
+
+  it('all-colours front beats lead-colour front', () => {
+    expect(
+      pickCatalogueItemThumbnail('/blank.png', [
+        { catalogue_item_id: 'item-1', view: 'front', source: 'staff_upload', position: 0, image_url: '/ac-front.png', color_swatch_id: null },
+        { catalogue_item_id: 'item-1', view: 'front', source: 'staff_upload', position: 0, image_url: '/lead-front.png', color_swatch_id: 'lead' },
+      ], 'lead'),
+    ).toBe('/ac-front.png')
+  })
+
+  it('lead-colour front beats all-colours non-front', () => {
+    expect(
+      pickCatalogueItemThumbnail('/blank.png', [
+        { catalogue_item_id: 'item-1', view: 'back', source: 'staff_upload', position: 0, image_url: '/ac-back.png', color_swatch_id: null },
+        { catalogue_item_id: 'item-1', view: 'front', source: 'staff_upload', position: 0, image_url: '/lead-front.png', color_swatch_id: 'lead' },
+      ], 'lead'),
+    ).toBe('/lead-front.png')
   })
 })
