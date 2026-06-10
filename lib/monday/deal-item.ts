@@ -39,6 +39,28 @@ function getBoardId(): string {
 // "New Deals" group on the Deals board (2046357917).
 const DEALS_GROUP_ID = 'topics'
 
+export interface PushOrderDealOptions {
+  /** organizations.is_test — route the deal item to the demo group. */
+  demo?: boolean
+}
+
+/**
+ * Demo orders (org.is_test) go to the Demo group on the SAME Deals board so
+ * the tracking round-trip stays live while New Deals stays clean. Missing
+ * env falls back to production (a noisy demo deal beats a broken push).
+ */
+function resolveDealsGroupId(demo: boolean | undefined): string {
+  if (!demo) return DEALS_GROUP_ID
+  const demoGroup = process.env.MONDAY_DEMO_GROUP_ID
+  if (!demoGroup) {
+    console.warn(
+      '[Monday Order] MONDAY_DEMO_GROUP_ID not set — demo order falling back to the production deals group',
+    )
+    return DEALS_GROUP_ID
+  }
+  return demoGroup
+}
+
 // Column ids on the CRM Deals board (2046357917).
 // Mirrors print-room-chatbot-api/api/services/monday-quote.ts QUOTE_COLUMNS.
 const COL_CUSTOMER_NAME = 'text_mkzjv77f'
@@ -440,6 +462,7 @@ function totalOrderQuantity(lines: OrderLineForMonday[]): number {
 
 export async function createOrderDealItem(
   data: OrderDealData,
+  opts?: PushOrderDealOptions,
 ): Promise<{ itemId: string; itemName: string }> {
   const itemName = buildOrderItemName(data)
 
@@ -474,7 +497,7 @@ export async function createOrderDealItem(
 
   const result = await mondayApiCall<MondayCreateItemResponse>(mutation, {
     boardId: getBoardId(),
-    groupId: DEALS_GROUP_ID,
+    groupId: resolveDealsGroupId(opts?.demo),
     itemName,
     columnValues: JSON.stringify(columnValues),
   })
@@ -507,8 +530,9 @@ export async function createOrderDealSubitem(
 
 export async function pushOrderDeal(
   data: OrderDealData,
+  opts?: PushOrderDealOptions,
 ): Promise<{ itemId: string; subitemIds: Record<string, string> }> {
-  const { itemId } = await createOrderDealItem(data)
+  const { itemId } = await createOrderDealItem(data, opts)
   const subitemIds: Record<string, string> = {}
   for (const line of data.lines) {
     try {
