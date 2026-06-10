@@ -98,7 +98,7 @@ export default async function CataloguePage({
     ? { data: [] as Array<{ id: string; source_product_id: string }> }
     : await admin
         .from('b2b_catalogue_items')
-        .select('id, source_product_id, fulfilment_type_override, b2b_catalogues!inner(organization_id, is_active)')
+        .select('id, source_product_id, fulfilment_type_override, card_image_id, b2b_catalogues!inner(organization_id, is_active)')
         .eq('b2b_catalogues.organization_id', context.organizationId)
         .eq('b2b_catalogues.is_active', true)
         .eq('is_active', true)
@@ -107,6 +107,7 @@ export default async function CataloguePage({
     id: string
     source_product_id: string
     fulfilment_type_override: FulfilmentType | null
+    card_image_id: string | null
   }>
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
 
@@ -293,6 +294,49 @@ export default async function CataloguePage({
     imagesByProduct.set(productId, list)
   }
 
+  // Explicit card picks: bypass is_published so a staff_pick image that is
+  // unpublished can still be used as the card thumbnail.
+  const cardImageIds = catItemRows
+    .filter((r) => productIds.includes(r.source_product_id) && r.card_image_id != null)
+    .map((r) => r.card_image_id as string)
+  const cardImageIdToUrl = new Map<string, string>()
+  if (cardImageIds.length > 0) {
+    const { data: pickedRows } = await admin
+      .from('b2b_catalogue_item_images')
+      .select('id, image_url')
+      .in('id', cardImageIds)
+    for (const r of (pickedRows ?? []) as Array<{ id: string; image_url: string | null }>) {
+      if (r.image_url) cardImageIdToUrl.set(r.id, r.image_url)
+    }
+  }
+
+  // Lead colour per item: is_default colour wins, then smallest sort_order (nulls
+  // last), else null. Mirrors the staff-side rule exactly.
+  type LeadColourRow = { catalogue_item_id: string; color_swatch_id: string | null; is_default: boolean | null; sort_order: number | null }
+  const { data: leadColourRows } = scopedItemIds.length > 0
+    ? await admin
+        .from('b2b_catalogue_item_colors')
+        .select('catalogue_item_id, color_swatch_id, is_default, sort_order')
+        .in('catalogue_item_id', scopedItemIds)
+    : { data: [] as LeadColourRow[] }
+  const coloursByCatItem = new Map<string, Array<{ color_swatch_id: string | null; is_default: boolean | null; sort_order: number | null }>>()
+  for (const r of (leadColourRows ?? []) as LeadColourRow[]) {
+    const list = coloursByCatItem.get(r.catalogue_item_id) ?? []
+    list.push({ color_swatch_id: r.color_swatch_id, is_default: r.is_default, sort_order: r.sort_order })
+    coloursByCatItem.set(r.catalogue_item_id, list)
+  }
+  const leadColorByItemId = new Map<string, string | null>()
+  for (const [itemId, colours] of coloursByCatItem) {
+    const sorted = colours.slice().sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER
+      return ao - bo
+    })
+    leadColorByItemId.set(itemId, sorted[0]?.color_swatch_id ?? null)
+  }
+
   // Stock total per product_id. Products with no variant_inventory rows
   // resolve to undefined → null on the card (no badge). Products with rows
   // resolve to a number — even zero, which surfaces as "Made to order".
@@ -378,11 +422,17 @@ export default async function CataloguePage({
     const fromAllIn =
       rpcPrice.unitPrice > 0 ? rpcPrice.unitPrice + decorationOverlay : rpcPrice.unitPrice
     const stockTotal = stockByProduct.has(p.id) ? stockByProduct.get(p.id)! : null
+    const catItemId = itemIdByProductId.get(p.id)
+    const cardImageId = catItemId
+      ? (catItemRows.find((r) => r.id === catItemId)?.card_image_id ?? null)
+      : null
+    const pickedUrl = cardImageId ? (cardImageIdToUrl.get(cardImageId) ?? null) : null
+    const leadColorSwatchId = catItemId ? (leadColorByItemId.get(catItemId) ?? null) : null
     return {
       id: p.id,
       name: stripTrailingSku(p.name, p.sku),
       sku: p.sku,
-      image_url: pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? []),
+      image_url: pickedUrl ?? pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? [], leadColorSwatchId),
       type: p.garment_family,
       from_unit_price: fromAllIn,
       price_status: rpcPrice.status,

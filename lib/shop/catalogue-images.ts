@@ -20,38 +20,65 @@ export interface CatalogueItemImageRow {
   color_swatch_id: string | null
 }
 
-// `front` is canonical; the normaliser collapses the legacy `hero` token into it.
-const THUMBNAIL_VIEW_PREFERENCE = ['front']
-
-function thumbnailViewRank(view: string | null): number {
-  if (!view) return 99
-  const idx = THUMBNAIL_VIEW_PREFERENCE.indexOf(normalizeCatalogueImageView(view) ?? view.toLowerCase())
-  return idx === -1 ? 50 : idx
+export interface CardFallbackImage {
+  color_swatch_id: string | null
+  view: string | null
+  source: string | null
+  position: number | null
+  image_url: string | null
 }
 
-function thumbnailSourceRank(source: string | null): number {
-  if (source === 'designer_snapshot') return 0
-  if (source === 'staff_upload') return 1
-  if (source === 'staff_pick') return 1
-  return 9
+/**
+ * Snapshot-excluded, per-colour-aware card derive. The SINGLE source of card
+ * fallback ordering, replicated identically in print-room-staff-portal and locked
+ * by a shared test vector — do not let the two drift.
+ *
+ * Order: all-colours `front` -> lead colour's `front` -> first all-colours by
+ * position (any view) -> masterImageUrl -> null. designer_snapshot rows are
+ * always excluded from the derive (a snapshot only becomes the card via an
+ * explicit pick, handled by the caller before this runs).
+ */
+export function deriveCardImageUrl(args: {
+  images: CardFallbackImage[]
+  leadColorSwatchId: string | null
+  masterImageUrl: string | null
+  normalizeView: (view: string | null) => string | null
+}): string | null {
+  const { images, leadColorSwatchId, masterImageUrl, normalizeView } = args
+  const isFront = (v: string | null) => normalizeView(v) === 'front'
+  const byPos = (arr: CardFallbackImage[]) =>
+    arr.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  const eligible = images.filter((i) => i.image_url && i.source !== 'designer_snapshot')
+  const allColours = byPos(eligible.filter((i) => i.color_swatch_id == null))
+  const acFront = allColours.find((i) => isFront(i.view))
+  if (acFront?.image_url) return acFront.image_url
+  if (leadColorSwatchId) {
+    const leadFront = byPos(
+      eligible.filter((i) => i.color_swatch_id === leadColorSwatchId && isFront(i.view)),
+    )[0]
+    if (leadFront?.image_url) return leadFront.image_url
+  }
+  if (allColours[0]?.image_url) return allColours[0].image_url
+  return masterImageUrl ?? null
 }
 
 export function pickCatalogueItemThumbnail(
   fallbackUrl: string | null,
   rows: CatalogueItemImageRow[],
+  leadColorSwatchId: string | null = null,
 ): string | null {
-  const candidate = rows
-    .filter((r) => r.image_url)
-    .sort((a, b) => {
-      const sd = thumbnailSourceRank(a.source) - thumbnailSourceRank(b.source)
-      if (sd !== 0) return sd
-      const cd = (a.color_swatch_id == null ? 0 : 1) - (b.color_swatch_id == null ? 0 : 1)
-      if (cd !== 0) return cd
-      const vd = thumbnailViewRank(a.view) - thumbnailViewRank(b.view)
-      if (vd !== 0) return vd
-      return (a.position ?? 0) - (b.position ?? 0)
-    })[0]
-  return candidate?.image_url ?? fallbackUrl
+  return deriveCardImageUrl({
+    images: rows.map((r) => ({
+      color_swatch_id: r.color_swatch_id,
+      view: r.view,
+      source: r.source,
+      position: r.position,
+      image_url: r.image_url,
+    })),
+    leadColorSwatchId,
+    masterImageUrl: fallbackUrl,
+    normalizeView: (v) => normalizeCatalogueImageView(v),
+  })
 }
 
 export function resolveGalleryImagesForColour(
