@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+import { cacheTags } from '@/lib/cache/tags'
 
 export async function POST(
   _req: Request,
@@ -52,6 +54,8 @@ export async function POST(
     p_reason: 'customer_cancel_before_close',
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  revalidateTag(cacheTags.orderTracker, { expire: 0 })
 
   return NextResponse.json({ ok: true })
 }

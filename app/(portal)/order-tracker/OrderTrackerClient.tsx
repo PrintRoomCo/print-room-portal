@@ -7,7 +7,9 @@ import { TrackerSummaryCards } from '@/components/orders/TrackerSummaryCards'
 import { isTrackerCompleted, type JobTracker } from '@/lib/job-tracker'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { getPortalOwnerKey } from '@/lib/portal-owner'
-import type { PortalOrderTrackerData } from '@/lib/portal-data'
+import type { PortalOrderTrackerData, PreOrderTrackerItem } from '@/lib/portal-data'
+import { ORDER_STATUS_LABELS } from '@/lib/orders/status-labels'
+import { CancelPreOrderButton } from './CancelPreOrderButton'
 
 type StatusFilter = 'active' | 'completed'
 
@@ -21,6 +23,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
   const [trackers, setTrackers] = useState<JobTracker[]>(initialData.trackers)
   const [isCompanyWide, setIsCompanyWide] = useState(initialData.isCompanyWide)
   const [dataOwnerKey, setDataOwnerKey] = useState(initialData.ownerKey)
+  const [preOrders, setPreOrders] = useState<PreOrderTrackerItem[]>(initialData.preOrders ?? [])
   const [dataLoading, setDataLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
@@ -31,6 +34,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
     if (!currentOwnerKey) {
       setTrackers([])
       setIsCompanyWide(false)
+      setPreOrders([])
       setDataOwnerKey(null)
       setDataLoading(false)
       return
@@ -46,14 +50,16 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
 
     setTrackers([])
     setIsCompanyWide(false)
+    setPreOrders([])
     setDataLoading(true)
 
     fetch('/api/order-tracker', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : { trackers: [], isCompanyWide: false }))
+      .then((res) => (res.ok ? res.json() : { trackers: [], isCompanyWide: false, preOrders: [] }))
       .then((data: PortalOrderTrackerData) => {
         if (stale) return
         setTrackers(data.trackers || [])
         setIsCompanyWide(data.isCompanyWide || false)
+        setPreOrders(data.preOrders ?? [])
         setDataOwnerKey(data.ownerKey ?? currentOwnerKey)
         setDataLoading(false)
       })
@@ -61,6 +67,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
         if (stale || error?.name === 'AbortError') return
         setTrackers([])
         setIsCompanyWide(false)
+        setPreOrders([])
         setDataOwnerKey(currentOwnerKey)
         setDataLoading(false)
       })
@@ -105,6 +112,19 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
             Track active production work and revisit completed orders.
           </p>
         </header>
+
+        {preOrders.length > 0 && (
+          <div className="mb-10">
+            <h2 className="mb-4 text-base font-semibold text-gray-900">
+              Orders awaiting your ordering window
+            </h2>
+            <div className="space-y-3">
+              {preOrders.map((order) => (
+                <PreOrderRow key={order.orderId} order={order} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {trackers.length > 0 && (
           <div className="mb-8">
@@ -169,6 +189,44 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
             />
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function PreOrderRow({ order }: { order: PreOrderTrackerItem }) {
+  const closesAt = order.periodClosesAt
+    ? new Date(order.periodClosesAt).toLocaleDateString('en-NZ', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null
+
+  return (
+    <div className="rounded-3xl bg-white px-6 py-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-semibold text-black">
+            {order.orderRef ? `Order #${order.orderRef}` : `Order ${order.orderId.slice(0, 8)}…`}
+          </p>
+          <p className="mt-0.5 text-sm text-gray-600">
+            {ORDER_STATUS_LABELS['awaiting-period-close']}
+          </p>
+          {closesAt && (
+            <p className="mt-1 text-xs text-gray-500">Window closes {closesAt}</p>
+          )}
+          {order.windowOpen && (
+            <p className="mt-2 text-xs text-gray-500">
+              Need to change it? Cancel and place a new order before the window closes.
+            </p>
+          )}
+        </div>
+        {order.windowOpen && (
+          <div className="shrink-0 self-start sm:self-center">
+            <CancelPreOrderButton orderId={order.orderId} />
+          </div>
+        )}
       </div>
     </div>
   )
