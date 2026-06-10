@@ -26,6 +26,12 @@ export const metadata: Metadata = {
 // stay catalogue-only.
 const INVENTORY_TENANT_TYPES = new Set(['studio_plus_inventory', 'franchise'])
 const DEFAULT_FLOOR_QTY = 1000
+// Entry quantity for the high end of the card price range. The catalogue-wide
+// MOQ — both the manual price ladders and the garment markup tiers treat 24 as
+// the first real order band (the 24-49 markup multiplier is also the steepest),
+// so the all-in price at qty 24 is the most expensive a customer realistically
+// pays. The floor qty (largest markup tier) gives the cheapest volume price.
+const ENTRY_QTY = 24
 
 interface ProductRow {
   id: string
@@ -98,7 +104,7 @@ export default async function CataloguePage({
     ? { data: [] as Array<{ id: string; source_product_id: string }> }
     : await admin
         .from('b2b_catalogue_items')
-        .select('id, source_product_id, fulfilment_type_override, card_image_id, b2b_catalogues!inner(organization_id, is_active)')
+        .select('id, source_product_id, fulfilment_type_override, card_image_id, price_mode, b2b_catalogues!inner(organization_id, is_active)')
         .eq('b2b_catalogues.organization_id', context.organizationId)
         .eq('b2b_catalogues.is_active', true)
         .eq('is_active', true)
@@ -108,7 +114,9 @@ export default async function CataloguePage({
     source_product_id: string
     fulfilment_type_override: FulfilmentType | null
     card_image_id: string | null
+    price_mode: 'computed' | 'manual_final' | null
   }>
+  const priceModeByItemId = new Map(catItemRows.map((r) => [r.id, r.price_mode]))
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
 
   // Inventory tenants: union curated catalogue with any product they track
@@ -203,8 +211,13 @@ export default async function CataloguePage({
     loadCatalogueFloorQty(admin),
     loadTierMultiplier(admin, context.organizationId),
   ])
+  // Two price points per card: floor qty = cheapest volume price (low end of
+  // the range), ENTRY_QTY = most expensive realistic order (high end).
   const qtyByProduct: Record<string, number> = Object.fromEntries(
     rows.map((r) => [r.id, floorQty]),
+  )
+  const qtyEntryByProduct: Record<string, number> = Object.fromEntries(
+    rows.map((r) => [r.id, ENTRY_QTY]),
   )
   const scopedItemIds = catItemRows
     .filter((r) => productIds.includes(r.source_product_id))
@@ -215,13 +228,15 @@ export default async function CataloguePage({
       .map((r) => [r.source_product_id, r.id]),
   )
   const [
-    { prices },
+    { prices: pricesLow },
+    { prices: pricesHigh },
     { data: catalogueImageRows },
     { data: decorationRows },
     { data: stockRows },
     { data: swatchRows },
   ] = await Promise.all([
     effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
+    effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyEntryByProduct),
     scopedItemIds.length > 0
       ? admin
           .from('b2b_catalogue_item_images')
@@ -386,10 +401,19 @@ export default async function CataloguePage({
     seenHexByProduct.set(productId, seen)
   }
 
-  // Sum of default decorations per catalogue item at the same floor quantity
-  // as the garment price. This mirrors the PDP/cart pricing path: engine
-  // price first, flat org-decoration fallback for methods without an engine.
-  const decorationSumByItem = new Map<string, number>()
+  // Decoration overlay per catalogue item at BOTH the floor (cheapest volume)
+  // and the entry (most expensive) quantity. The source depends on price_mode:
+  //   * manual_final → the ONE combined per-band figure
+  //     (catalogue_item_decoration_price, no tier multiplier) — same source the
+  //     PDP/cart use for manual items.
+  //   * computed → sum of default per-placement decorations
+  //     (effective_decoration_unit_price × tier) — the existing rate-sheet path.
+  const decoLowByItem = new Map<string, number>()
+  const decoHighByItem = new Map<string, number>()
+
+  // Per-placement decorations — computed items only. Manual items are summed
+  // from their combined figure below, so skip their per-placement rows here
+  // (otherwise the card would bill the rate sheet, not the typed combined).
   await Promise.all(((decorationRows ?? []) as Array<{
     catalogue_item_id: string
     org_decoration_id: string | null
@@ -399,28 +423,58 @@ export default async function CataloguePage({
       | null
   }>).map(async (r) => {
     if (!r.org_decoration_id) return
+    if (priceModeByItemId.get(r.catalogue_item_id) === 'manual_final') return
     const orgDec = Array.isArray(r.org_decorations) ? r.org_decorations[0] : r.org_decorations
     const fallback = orgDec?.unit_price != null ? Number(orgDec.unit_price) : null
-    const { data, error } = await admin.rpc('effective_decoration_unit_price', {
-      p_org_decoration_id: r.org_decoration_id,
-      p_qty: floorQty,
-    })
-    const base = !error && data != null ? Number(data) : fallback
-    if (base == null || !Number.isFinite(base) || base <= 0) return
-    const price = Number((base * tierMultiplier).toFixed(2))
-    decorationSumByItem.set(
-      r.catalogue_item_id,
-      (decorationSumByItem.get(r.catalogue_item_id) ?? 0) + price,
-    )
+    const resolve = async (qty: number): Promise<number> => {
+      const { data, error } = await admin.rpc('effective_decoration_unit_price', {
+        p_org_decoration_id: r.org_decoration_id,
+        p_qty: qty,
+      })
+      const base = !error && data != null ? Number(data) : fallback
+      if (base == null || !Number.isFinite(base) || base <= 0) return 0
+      return Number((base * tierMultiplier).toFixed(2))
+    }
+    const [low, high] = await Promise.all([resolve(floorQty), resolve(ENTRY_QTY)])
+    if (low > 0) decoLowByItem.set(r.catalogue_item_id, (decoLowByItem.get(r.catalogue_item_id) ?? 0) + low)
+    if (high > 0) decoHighByItem.set(r.catalogue_item_id, (decoHighByItem.get(r.catalogue_item_id) ?? 0) + high)
+  }))
+
+  // Manual combined decoration — manual_final items only. One figure per band,
+  // no tier multiplier (the typed price IS the customer price).
+  const manualScopedItemIds = catItemRows
+    .filter((r) => r.price_mode === 'manual_final' && productIds.includes(r.source_product_id))
+    .map((r) => r.id)
+  await Promise.all(manualScopedItemIds.map(async (itemId) => {
+    const resolve = async (qty: number): Promise<number> => {
+      const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
+        p_catalogue_item_id: itemId,
+        p_qty: qty,
+      })
+      const v = !error && data != null ? Number(data) : 0
+      return Number.isFinite(v) && v > 0 ? v : 0
+    }
+    const [low, high] = await Promise.all([resolve(floorQty), resolve(ENTRY_QTY)])
+    if (low > 0) decoLowByItem.set(itemId, low)
+    if (high > 0) decoHighByItem.set(itemId, high)
   }))
 
   const products = rows.map((p) => {
-    const rpcPrice =
-      prices.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
+    const lowPrice =
+      pricesLow.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
+    const highPrice =
+      pricesHigh.get(p.id) ?? { unitPrice: 0, status: 'missing' as const, hasStock: false }
     const itemId = itemIdByProductId.get(p.id)
-    const decorationOverlay = itemId ? decorationSumByItem.get(itemId) ?? 0 : 0
-    const fromAllIn =
-      rpcPrice.unitPrice > 0 ? rpcPrice.unitPrice + decorationOverlay : rpcPrice.unitPrice
+    const decoLow = itemId ? decoLowByItem.get(itemId) ?? 0 : 0
+    const decoHigh = itemId ? decoHighByItem.get(itemId) ?? 0 : 0
+    const allInLow = lowPrice.unitPrice > 0 ? lowPrice.unitPrice + decoLow : 0
+    const allInHigh = highPrice.unitPrice > 0 ? highPrice.unitPrice + decoHigh : 0
+    // Range = most expensive (entry qty) → cheapest (floor qty). min/max guard
+    // so an inverted multiplier can never flip the display; equal ends collapse
+    // to a single price (fixed-price items) in ProductCard.
+    const candidates = [allInLow, allInHigh].filter((v) => v > 0)
+    const priceLow = candidates.length ? Math.min(...candidates) : 0
+    const priceHigh = candidates.length ? Math.max(...candidates) : 0
     const stockTotal = stockByProduct.has(p.id) ? stockByProduct.get(p.id)! : null
     const catItemId = itemIdByProductId.get(p.id)
     const cardImageId = catItemId
@@ -434,9 +488,10 @@ export default async function CataloguePage({
       sku: p.sku,
       image_url: pickedUrl ?? pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? [], leadColorSwatchId),
       type: p.garment_family,
-      from_unit_price: fromAllIn,
-      price_status: rpcPrice.status,
-      has_stock: rpcPrice.hasStock,
+      price_low: priceLow,
+      price_high: priceHigh,
+      price_status: priceHigh > 0 ? ('ok' as const) : ('missing' as const),
+      has_stock: lowPrice.hasStock,
       total_stock: stockTotal,
       swatches: swatchesByProduct.get(p.id) ?? [],
     }

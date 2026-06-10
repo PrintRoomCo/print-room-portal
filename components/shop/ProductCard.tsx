@@ -13,7 +13,13 @@ interface ProductCardData {
   image_url: string | null
   /** Garment family (preferred) or category, uppercased on render. */
   type: string | null
-  from_unit_price: number
+  /**
+   * All-in price range, decoration included. `price_high` = most expensive
+   * (entry qty), `price_low` = cheapest (floor/volume qty). Equal ends render as
+   * a single price (fixed-price items).
+   */
+  price_low: number
+  price_high: number
   price_status: 'ok' | 'missing'
   has_stock: boolean
   /** Stock total across every tracked variant. Currently unused on card — */
@@ -61,13 +67,15 @@ export function ProductCard({ product }: ProductCardProps) {
           <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
             {formatType(product.type)}
           </dd>
-          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
+          <dd className="whitespace-nowrap font-medium uppercase tracking-wider text-gray-900">
             {product.price_status === 'missing' ? (
               'On request'
-            ) : (
+            ) : product.price_high > product.price_low ? (
               <>
-                From <Money nzd={product.from_unit_price} />
+                <Money nzd={product.price_high} /> – <Money nzd={product.price_low} />
               </>
+            ) : (
+              <Money nzd={product.price_low} />
             )}
           </dd>
         </dl>
