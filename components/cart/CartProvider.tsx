@@ -117,6 +117,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
                       line.decorations && line.decorations.length > 0
                         ? line.decorations
                         : l.decorations,
+                    // Manual-final: refresh the line-level combined decoration +
+                    // its ladder from the incoming add (same "latest source of
+                    // truth" rule as brackets); recompute settles it at new qty.
+                    manualDecorationPerUnit:
+                      line.manualDecorationPerUnit ?? l.manualDecorationPerUnit,
+                    manualDecorationBrackets:
+                      line.manualDecorationBrackets ?? l.manualDecorationBrackets,
                   }
                 : l,
             )

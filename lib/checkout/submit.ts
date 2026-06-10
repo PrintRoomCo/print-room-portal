@@ -54,6 +54,15 @@ export interface CheckoutLineInput {
    * catalogue_item_id. Null/absent for legacy/non-catalogue lines.
    */
   catalogueItemId?: string | null
+  /**
+   * Manual-final pricing (2026-06-10). The cart's claimed combined decoration
+   * figure for the whole item (one number per band). Present only for lines on a
+   * price_mode='manual_final' catalogue item. The server re-derives the figure
+   * from catalogue_item_decoration_price() and drift-checks against this with
+   * zero tolerance, then folds the SERVER value (never the per-placement sum)
+   * into the line's unit price. Null/absent for computed lines (today's path).
+   */
+  claimed_manual_decoration?: number | null
 }
 
 export interface CheckoutInput {
@@ -540,7 +549,30 @@ export async function submitCustomerOrder(
   // Phase 2 — catalogue_item_id each line's decoration links resolve to, used
   // only as a drift cross-check against the line's own catalogueItemId.
   const decoCatalogueItemIdByLineKey = new Map<string, string>()
+  // Manual-final (2026-06-10) — the engine's combined decoration figure per line
+  // key (one number for the whole item). When set it is the authoritative per-unit
+  // decoration cost; the per-placement sum is NOT used. Absent for computed lines.
+  const manualDecorationByLineKey = new Map<string, number>()
   const drift: DecorationDrift[] = []
+
+  // Manual-final (2026-06-10): a line is manual iff its catalogue item's
+  // price_mode = 'manual_final'. We read it from the DB (authoritative) rather
+  // than inferring from a non-null decoration RPC — a manual item priced below
+  // its lowest decoration band returns NULL but must still bill 0 decoration,
+  // NOT fall through to the per-placement rate-sheet sum.
+  const lineItemIds = Array.from(
+    new Set(input.lines.map((l) => l.catalogueItemId).filter((x): x is string => !!x)),
+  )
+  const manualItemIds = new Set<string>()
+  if (lineItemIds.length > 0) {
+    const { data: pmRows } = await admin
+      .from('b2b_catalogue_items')
+      .select('id, price_mode')
+      .in('id', lineItemIds)
+    for (const r of (pmRows ?? []) as Array<{ id: string; price_mode: string | null }>) {
+      if (r.price_mode === 'manual_final') manualItemIds.add(r.id)
+    }
+  }
 
   for (const line of input.lines) {
     const decs = line.decorations ?? []
@@ -604,6 +636,28 @@ export async function submitCustomerOrder(
     const byId = new Map((rows as unknown as LinkRow[] ?? []).map((r) => [r.id, r]))
     const validated: CheckoutLineDecorationInput[] = []
 
+    // Decoration tier qty for this line (aggregated across same product+signature
+    // lines, mirroring the cart). Used for both the per-placement engine price
+    // and the manual-final combined figure.
+    const decorationQty =
+      totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
+      line.qty
+
+    // Manual-final: when the line's catalogue item is manual, resolve the item's
+    // ONE combined decoration figure from the engine (exact, no multiplier).
+    // A NULL band => 0 decoration (the item has no decoration price at this qty);
+    // we still treat the line as manual (keep per-placement VALIDATION, skip
+    // per-placement pricing + drift, bill the combined at the line level).
+    const isManualLine = !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
+    let manualCombined = 0
+    if (isManualLine) {
+      const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
+        p_catalogue_item_id: line.catalogueItemId,
+        p_qty: decorationQty,
+      })
+      manualCombined = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
+    }
+
     for (const dec of decs) {
       const row = byId.get(dec.linkId)
       if (!row) {
@@ -656,9 +710,25 @@ export async function submitCustomerOrder(
         continue
       }
       const loc = pickOne(od.decoration_locations)
-      const decorationQty =
-        totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
-        line.qty
+      const art = pickOne(od.organization_artworks)
+
+      // Manual-final: the placement stays on the order as metadata (real name +
+      // artwork) but is NOT individually billed — unitPrice 0; the line's
+      // combined figure (below) is the decoration cost. No per-placement drift.
+      if (isManualLine) {
+        validated.push({
+          linkId: row.id,
+          decorationId: od.id,
+          name: od.name,
+          method: od.decoration_method,
+          positionLabel: loc?.location ?? null,
+          unitPrice: 0,
+          artworkUrl: art?.public_url ?? dec.artworkUrl,
+          snapshotUrl: row.snapshot_url,
+        })
+        continue
+      }
+
       const effective = await effectiveDecorationPrice(
         admin,
         {
@@ -681,7 +751,6 @@ export async function submitCustomerOrder(
         })
         continue
       }
-      const art = pickOne(od.organization_artworks)
       validated.push({
         linkId: row.id,
         decorationId: od.id,
@@ -693,6 +762,38 @@ export async function submitCustomerOrder(
         snapshotUrl: row.snapshot_url,
       })
     }
+
+    // Manual-final: the SERVER combined is authoritative and always billed.
+    // When the cart sent a claim, drift-check it (round 2dp then exact, per
+    // Decision #3 — no tolerance) and BLOCK on mismatch so a stale/tampered cart
+    // can't surprise the customer. When the claim is null/absent (unresolved PDP
+    // fetch, reorder rebuild, legacy cart) we silently re-price from the engine —
+    // mirrors the garment "legacy cart" path (UnitPriceDrift only guards carts
+    // that carried a snapshot).
+    if (isManualLine) {
+      const serverR = Number(manualCombined.toFixed(2))
+      const claimedR =
+        line.claimed_manual_decoration == null
+          ? null
+          : Number(Number(line.claimed_manual_decoration).toFixed(2))
+      if (claimedR != null && claimedR !== serverR) {
+        drift.push({
+          cartLineId: line.cart_line_id ?? null,
+          productId: line.product_id,
+          linkId: validated[0]?.linkId ?? decs[0]?.linkId ?? '',
+          decorationName: 'Decoration (combined)',
+          was: claimedR,
+          now: serverR,
+          reason: 'price_drift',
+        })
+      } else {
+        manualDecorationByLineKey.set(
+          makeLineKey(line.product_id, line.variant_id ?? null),
+          serverR,
+        )
+      }
+    }
+
     validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), validated)
     if (validated.length > 0) {
       const decoCatId = byId.get(validated[0].linkId)?.catalogue_item_id
@@ -718,10 +819,14 @@ export async function submitCustomerOrder(
   const decorationCostByLineKey = new Map<string, number>()
   let totalDecorationRevenue = 0
   for (const l of repriced) {
-    const validated =
-      validatedByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? []
-    const perUnit = validated.reduce((s, d) => s + d.unitPrice, 0)
-    decorationCostByLineKey.set(makeLineKey(l.product_id, l.variant_id ?? null), perUnit)
+    const lineKey = makeLineKey(l.product_id, l.variant_id ?? null)
+    // Manual-final lines bill ONE combined figure (validated entries are $0
+    // metadata); computed lines sum the per-placement prices.
+    const manualDeco = manualDecorationByLineKey.get(lineKey)
+    const validated = validatedByLineKey.get(lineKey) ?? []
+    const perUnit =
+      manualDeco != null ? manualDeco : validated.reduce((s, d) => s + d.unitPrice, 0)
+    decorationCostByLineKey.set(lineKey, perUnit)
     totalDecorationRevenue += perUnit * l.qty
   }
 

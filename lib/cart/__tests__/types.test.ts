@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   lineSignature,
   recomputeProductTierPrices,
+  decorationPerUnit,
+  allInUnitPrice,
   type CartLine,
   type CartLineBracket,
   type CartLineDecoration,
@@ -301,5 +303,85 @@ describe('recomputeProductTierPrices', () => {
     const out = recomputeProductTierPrices(lines)
     expect(out[0].unitPrice).toBe(12.0)
     expect(out[0]).toBe(lines[0]) // unchanged reference
+  })
+})
+
+describe('manual-final decoration (price_mode=manual_final)', () => {
+  const deco = (linkId: string, unitPrice: number): CartLineDecoration => ({
+    linkId,
+    decorationId: `od:${linkId}`,
+    name: `deco-${linkId}`,
+    method: 'screenprint',
+    positionLabel: 'LC',
+    unitPrice,
+    artworkUrl: 'https://example/art.png',
+    snapshotUrl: null,
+  })
+
+  function manualLine(over: Partial<CartLine>): CartLine {
+    return {
+      lineId: over.lineId ?? 'm1',
+      productId: over.productId ?? 'p-manual',
+      productName: 'Manual Tee',
+      variantId: over.variantId ?? 'v1',
+      variantLabel: over.variantLabel ?? 'Black / M',
+      qty: over.qty ?? 50,
+      unitPrice: over.unitPrice ?? 20,
+      imageUrl: null,
+      decorations: over.decorations ?? [],
+      catalogueItemId: 'item-1',
+      manualDecorationPerUnit: over.manualDecorationPerUnit,
+      manualDecorationBrackets: over.manualDecorationBrackets,
+      brackets: over.brackets,
+    }
+  }
+
+  it('decorationPerUnit returns the line-level combined, NOT the per-placement sum', () => {
+    const line = manualLine({
+      // Per-placement entries are $0 metadata under manual mode; the combined wins.
+      decorations: [deco('l1', 0), deco('l2', 0)],
+      manualDecorationPerUnit: 7.6,
+    })
+    expect(decorationPerUnit(line)).toBe(7.6)
+    expect(allInUnitPrice(line)).toBe(27.6) // garment 20 + combined 7.6
+  })
+
+  it('computed lines (no manualDecorationPerUnit) still sum per-placement', () => {
+    const line = manualLine({
+      manualDecorationPerUnit: null,
+      decorations: [deco('l1', 3), deco('l2', 2.5)],
+    })
+    expect(decorationPerUnit(line)).toBe(5.5)
+  })
+
+  it('manualDecorationPerUnit of 0 is honoured (not treated as "fall back to sum")', () => {
+    const line = manualLine({
+      manualDecorationPerUnit: 0,
+      decorations: [deco('l1', 9.99)],
+    })
+    expect(decorationPerUnit(line)).toBe(0)
+  })
+
+  it('recompute re-picks the combined from manualDecorationBrackets on qty edit', () => {
+    const manualBrackets: CartLineBracket[] = [
+      { minQty: 24, maxQty: 49, unitPrice: 8 },
+      { minQty: 50, maxQty: 99, unitPrice: 7 },
+      { minQty: 100, maxQty: null, unitPrice: 6 },
+    ]
+    const lines = [
+      manualLine({ lineId: 'a', qty: 60, manualDecorationPerUnit: 8, manualDecorationBrackets: manualBrackets }),
+      manualLine({ lineId: 'b', qty: 60, manualDecorationPerUnit: 8, manualDecorationBrackets: manualBrackets }),
+    ]
+    // Pool to 120 → 100+ band → combined drops to 6 on both lines.
+    const out = recomputeProductTierPrices(lines)
+    expect(out[0].manualDecorationPerUnit).toBe(6)
+    expect(out[1].manualDecorationPerUnit).toBe(6)
+  })
+
+  it('recompute leaves the combined frozen when no manual brackets snapshot', () => {
+    const line = manualLine({ qty: 1000, manualDecorationPerUnit: 7.6, manualDecorationBrackets: undefined })
+    const out = recomputeProductTierPrices([line])
+    expect(out[0].manualDecorationPerUnit).toBe(7.6)
+    expect(out[0]).toBe(line) // unchanged reference (no garment brackets either)
   })
 })

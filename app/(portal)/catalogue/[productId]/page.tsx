@@ -86,7 +86,7 @@ const loadProductDetailPageData = cache(async (
 
   const { data: catItem } = await admin
     .from('b2b_catalogue_items')
-    .select('id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, b2b_catalogues!inner(is_active)')
+    .select('id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, b2b_catalogues!inner(is_active)')
     .eq('source_product_id', productId)
     .eq('is_active', true)
     .eq('b2b_catalogues.organization_id', context.organizationId)
@@ -374,6 +374,9 @@ const loadProductDetailPageData = cache(async (
         // already resolved server-side; we just stop dropping it.
         catalogueItemId: catItem.id ?? null,
         catalogueVariantLabel: catItemForked?.variant_label ?? null,
+        // Manual-final pricing (2026-06-10). Drives the client to read the
+        // item's combined decoration figure instead of summing per-placement.
+        priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',
       },
       variants: mappedVariants,
       brackets: bracketRows,

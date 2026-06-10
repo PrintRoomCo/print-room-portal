@@ -73,6 +73,18 @@ export interface CartLine {
    */
   catalogueItemId?: string | null
   catalogueVariantLabel?: string | null
+  /**
+   * Manual-final pricing (2026-06-10). When the catalogue item's price_mode is
+   * 'manual_final' the decoration is ONE combined figure per qty band for the
+   * whole item, not a per-placement sum. This holds that combined per-unit
+   * figure; when set (non-null) it IS the line's decoration cost and the
+   * per-placement `decorations[].unitPrice` sum is ignored (see decorationPerUnit).
+   * `manualDecorationBrackets` is its own qty ladder so a cart qty edit re-picks
+   * it the same way the garment + per-placement ladders re-pick. Absent/null for
+   * computed items (today's per-placement path, unchanged).
+   */
+  manualDecorationPerUnit?: number | null
+  manualDecorationBrackets?: CartLineBracket[]
 }
 
 export type CartLineFulfilmentType = 'stocked' | 'make_to_stock'
@@ -81,8 +93,18 @@ export interface CartState {
   lines: CartLine[]
 }
 
-/** Total decoration price per garment for a given cart line. */
+/**
+ * Total decoration price per garment for a given cart line.
+ *
+ * Manual-final items (price_mode='manual_final') carry ONE combined decoration
+ * figure for the whole item in `manualDecorationPerUnit`; when present that is
+ * authoritative and the per-placement `decorations[].unitPrice` entries are NOT
+ * summed (they remain on the line as metadata — real placement names/artwork —
+ * but are not individually billed). Computed items fall back to the per-placement
+ * sum, unchanged.
+ */
 export function decorationPerUnit(line: CartLine): number {
+  if (line.manualDecorationPerUnit != null) return line.manualDecorationPerUnit
   return line.decorations.reduce((sum, d) => sum + d.unitPrice, 0)
 }
 
@@ -205,7 +227,28 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
       if (decorationsChanged) nextDecorations = remapped
     }
 
-    if (nextUnitPrice === l.unitPrice && !decorationsChanged) return l
-    return { ...l, unitPrice: nextUnitPrice, decorations: nextDecorations }
+    // Manual-final: re-pick the line-level combined decoration from its own
+    // ladder on a qty edit (mirrors the garment + per-placement re-pick above).
+    let nextManualDeco = l.manualDecorationPerUnit
+    let manualDecoChanged = false
+    if (
+      l.manualDecorationPerUnit != null &&
+      l.manualDecorationBrackets &&
+      l.manualDecorationBrackets.length > 0
+    ) {
+      const manualBracket = pickBracket(l.manualDecorationBrackets, total)
+      if (manualBracket && manualBracket.unitPrice !== l.manualDecorationPerUnit) {
+        nextManualDeco = manualBracket.unitPrice
+        manualDecoChanged = true
+      }
+    }
+
+    if (nextUnitPrice === l.unitPrice && !decorationsChanged && !manualDecoChanged) return l
+    return {
+      ...l,
+      unitPrice: nextUnitPrice,
+      decorations: nextDecorations,
+      manualDecorationPerUnit: nextManualDeco,
+    }
   })
 }

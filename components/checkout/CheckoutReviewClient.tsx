@@ -129,6 +129,9 @@ export function CheckoutReviewClient({
             has_brackets: Array.isArray(line.brackets) && line.brackets.length > 0,
             fulfilment_type: line.fulfilmentType,
             catalogueItemId: line.catalogueItemId ?? null,
+            // Manual-final: the cart's claimed combined decoration figure for the
+            // whole item. The server re-derives it from the engine and drift-checks.
+            claimed_manual_decoration: line.manualDecorationPerUnit ?? null,
           })),
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),

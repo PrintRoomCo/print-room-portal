@@ -47,6 +47,12 @@ interface ProductData {
   // size/colour `variantLabel` on CartLine). Null for legacy/non-catalogue.
   catalogueItemId: string | null
   catalogueVariantLabel: string | null
+  // Manual-final pricing (2026-06-10). 'manual_final' => decoration is ONE
+  // combined figure per band for the whole item (read from the engine), not a
+  // per-placement sum, and the garment is already tier-exact. Optional: absent =>
+  // treated as 'computed' (today's path), so a missing wiring can never
+  // accidentally make an item manual.
+  priceMode?: 'computed' | 'manual_final'
 }
 
 interface Bracket {
@@ -368,6 +374,12 @@ export function ProductDetailClient({
   const [decorationPricesByQty, setDecorationPricesByQty] = useState<
     Record<number, Record<string, number>>
   >({})
+  // Manual-final: the item's ONE combined decoration figure per probed qty
+  // (engine value, no per-placement breakdown). Empty unless price_mode is manual.
+  const [manualDecorationByQty, setManualDecorationByQty] = useState<
+    Record<number, number>
+  >({})
+  const isManualPricing = product.priceMode === 'manual_final'
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -443,12 +455,17 @@ export function ProductDetailClient({
         const res = await fetch('/api/shop/decoration-pricing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ qtys: probeQtys, items: recalcItems }),
+          body: JSON.stringify({
+            qtys: probeQtys,
+            items: recalcItems,
+            catalogueItemId: product.catalogueItemId,
+          }),
           signal: controller.signal,
         })
         if (res.ok && !cancelled) {
           const json = (await res.json()) as {
             pricesByQty: Record<string, Record<string, number | null>>
+            manualByQty?: Record<string, number | null>
           }
           const resolved: Record<number, Record<string, number>> = {}
           for (const [qStr, links] of Object.entries(json.pricesByQty ?? {})) {
@@ -460,6 +477,14 @@ export function ProductDetailClient({
             resolved[q] = inner
           }
           setDecorationPricesByQty(resolved)
+          // Manual-final combined figure per qty (null for computed items).
+          const manualResolved: Record<number, number> = {}
+          for (const [qStr, combined] of Object.entries(json.manualByQty ?? {})) {
+            if (combined != null && Number.isFinite(Number(combined))) {
+              manualResolved[Number(qStr)] = Number(combined)
+            }
+          }
+          setManualDecorationByQty(manualResolved)
         }
       } catch {
         // network error — keep existing prices
@@ -552,25 +577,59 @@ export function ProductDetailClient({
     [decorationPricesByQty],
   )
 
-  const decorationPerUnit = useMemo(
+  // Manual-final: the item's ONE combined decoration figure at a given qty.
+  // Exact probe key when present; else the highest probed band <= qty (mirrors a
+  // band pick); 0 before the fetch resolves.
+  const manualDecorationAt = useMemo(
     () =>
-      pricedDecorations.reduce(
-        (s, d) => s + decorationPriceAt(d.linkId, qty, d.unitPrice),
-        0,
-      ),
-    [pricedDecorations, decorationPriceAt, qty],
+      (atQty: number): number => {
+        if (manualDecorationByQty[atQty] != null) return manualDecorationByQty[atQty]
+        const mins = Object.keys(manualDecorationByQty)
+          .map(Number)
+          .filter((n) => Number.isFinite(n))
+          .sort((a, b) => a - b)
+        let val = 0
+        for (const m of mins) {
+          if (m <= atQty) val = manualDecorationByQty[m]
+          else break
+        }
+        return val
+      },
+    [manualDecorationByQty],
   )
 
-  // For rendering volume bracket rows: sum of selected decorations at that bracket's qty.
+  // Manual decoration is charged only when the line actually carries decorations
+  // (a customer who deselects every placement pays no decoration). The server
+  // applies the same gate so cart and submit agree.
+  const hasPricedDecorations = pricedDecorations.length > 0
+
+  const decorationPerUnit = useMemo(
+    () =>
+      isManualPricing
+        ? hasPricedDecorations
+          ? manualDecorationAt(qty)
+          : 0
+        : pricedDecorations.reduce(
+            (s, d) => s + decorationPriceAt(d.linkId, qty, d.unitPrice),
+            0,
+          ),
+    [isManualPricing, hasPricedDecorations, manualDecorationAt, pricedDecorations, decorationPriceAt, qty],
+  )
+
+  // For rendering volume bracket rows: combined decoration at that bracket's qty.
   const decorationPerUnitAtBracket = useMemo(
     () =>
       brackets.map((b) =>
-        pricedDecorations.reduce(
-          (s, d) => s + decorationPriceAt(d.linkId, b.min_quantity, d.unitPrice),
-          0,
-        ),
+        isManualPricing
+          ? hasPricedDecorations
+            ? manualDecorationAt(b.min_quantity)
+            : 0
+          : pricedDecorations.reduce(
+              (s, d) => s + decorationPriceAt(d.linkId, b.min_quantity, d.unitPrice),
+              0,
+            ),
       ),
-    [brackets, pricedDecorations, decorationPriceAt],
+    [brackets, isManualPricing, hasPricedDecorations, manualDecorationAt, pricedDecorations, decorationPriceAt],
   )
 
   function showToast(msg: string) {
@@ -618,6 +677,46 @@ export function ProductDetailClient({
       return bands.length > 0 ? bands : undefined
     }
 
+    // Manual-final: the LINE-level combined decoration ladder (one figure per
+    // band for the whole item). Same two-pass collapse as the per-placement
+    // builder above, applied to the combined `manualDecorationByQty`.
+    const buildManualDecorationBrackets = (): CartLineBracket[] | undefined => {
+      const probeMins = Object.keys(manualDecorationByQty)
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n) && n >= 1)
+        .sort((a, b) => a - b)
+      const points: Array<{ min: number; price: number }> = []
+      for (const min of probeMins) {
+        const price = manualDecorationByQty[min]
+        if (price != null) points.push({ min, price })
+      }
+      if (points.length === 0) return undefined
+      const interesting: Array<{ min: number; price: number }> = []
+      for (const p of points) {
+        const last = interesting[interesting.length - 1]
+        if (!last || last.price !== p.price) interesting.push(p)
+      }
+      const bands = interesting.map((p, i) => ({
+        minQty: p.min,
+        maxQty: i + 1 < interesting.length ? interesting[i + 1].min - 1 : null,
+        unitPrice: p.price,
+      }))
+      return bands.length > 0 ? bands : undefined
+    }
+
+    // Line-level manual decoration snapshot (null/undefined for computed items,
+    // or manual items with no decoration selected — no decoration billed then).
+    // Only snapshot a concrete figure once the combined fetch has resolved; if it
+    // hasn't (sub-debounce add / fetch error), snapshot null so the server
+    // silently re-prices from the engine rather than us claiming a stale 0 that
+    // would trip the zero-tolerance drift guard at checkout.
+    const manualDecorationActive = isManualPricing && selectedDecorations.length > 0
+    const hasManualData = Object.keys(manualDecorationByQty).length > 0
+    const manualDecorationPerUnitSnapshot =
+      manualDecorationActive && hasManualData ? manualDecorationAt(qty) : null
+    const manualDecorationBracketsSnapshot =
+      manualDecorationActive && hasManualData ? buildManualDecorationBrackets() : undefined
+
     const cartDecorationsForSwatch = (swatchId: string | null): CartLineDecoration[] =>
       resolveDecorationsForPricing(selectedDecorations, swatchId).map((d) => ({
         linkId: d.linkId,
@@ -625,10 +724,13 @@ export function ProductDetailClient({
         name: d.name,
         method: d.method,
         positionLabel: d.positionLabel,
-        unitPrice: decorationPriceAt(d.linkId, qty, d.unitPrice),
+        // Manual items: per-placement price is not individually billed (the line
+        // carries one combined figure). Snapshot 0 so any accidental fallback to
+        // the per-placement sum yields 0, never a wrong positive number.
+        unitPrice: isManualPricing ? 0 : decorationPriceAt(d.linkId, qty, d.unitPrice),
         artworkUrl: d.artworkUrl,
         snapshotUrl: d.snapshotUrl,
-        brackets: buildDecorationBrackets(d.linkId),
+        brackets: isManualPricing ? undefined : buildDecorationBrackets(d.linkId),
       }))
     const cartImageForSwatch = (swatchId: string | null): string | null =>
       pickPreferredGalleryImageUrl(images, swatchId, product.image_url)
@@ -661,6 +763,8 @@ export function ProductDetailClient({
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
           catalogueVariantLabel: product.catalogueVariantLabel,
+          manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
+          manualDecorationBrackets: manualDecorationBracketsSnapshot,
         }
 
         // Org_admin From-inventory overflow: split a partial-stock variant into
@@ -730,6 +834,8 @@ export function ProductDetailClient({
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
           catalogueVariantLabel: product.catalogueVariantLabel,
+          manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
+          manualDecorationBrackets: manualDecorationBracketsSnapshot,
         })
         added += lineQty
       }
@@ -764,6 +870,8 @@ export function ProductDetailClient({
         brackets: cartLineBrackets,
         catalogueItemId: product.catalogueItemId,
         catalogueVariantLabel: product.catalogueVariantLabel,
+        manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
+        manualDecorationBrackets: manualDecorationBracketsSnapshot,
       }
       if (avail > 0) {
         cart.addLine({ ...oneSizeBase, qty: avail, fulfilmentType: 'stocked' })
@@ -799,6 +907,8 @@ export function ProductDetailClient({
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       catalogueVariantLabel: product.catalogueVariantLabel,
+      manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
+      manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
     showToast('Added to cart')
   }

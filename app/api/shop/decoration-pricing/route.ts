@@ -14,20 +14,31 @@ interface Body {
   /** Multi-qty mode. Returns { pricesByQty }. Wins if both qty + qtys provided. */
   qtys?: number[]
   items?: Item[]
+  /**
+   * The catalogue item being priced (one PDP = one item). When provided it is
+   * the authoritative source for the manual_final combined decoration figure
+   * (matches submit, which keys off the line's catalogue identity). Falls back
+   * to reverse-deriving from the decoration links when absent.
+   */
+  catalogueItemId?: string | null
 }
 
 type LinkLookup = {
   decoIdByLink: Map<string, string>
   fallbackByLink: Map<string, number>
+  /** b2b_catalogue_items.id each link belongs to — used to resolve the item's
+   *  manual_final combined decoration price (one figure for the whole item). */
+  catalogueItemIdByLink: Map<string, string>
 }
 
 async function loadLinkLookup(admin: SupabaseClient, linkIds: string[]): Promise<LinkLookup> {
   const decoIdByLink = new Map<string, string>()
   const fallbackByLink = new Map<string, number>()
-  if (linkIds.length === 0) return { decoIdByLink, fallbackByLink }
+  const catalogueItemIdByLink = new Map<string, string>()
+  if (linkIds.length === 0) return { decoIdByLink, fallbackByLink, catalogueItemIdByLink }
   const { data } = await admin
     .from('b2b_catalogue_item_decorations')
-    .select('id, org_decoration_id, org_decorations!inner(unit_price)')
+    .select('id, org_decoration_id, catalogue_item_id, org_decorations!inner(unit_price)')
     .in('id', linkIds)
   for (const row of data ?? []) {
     const od = Array.isArray((row as { org_decorations: unknown }).org_decorations)
@@ -35,8 +46,44 @@ async function loadLinkLookup(admin: SupabaseClient, linkIds: string[]): Promise
       : (row as { org_decorations: { unit_price?: number | string } }).org_decorations
     decoIdByLink.set(row.id as string, row.org_decoration_id as string)
     fallbackByLink.set(row.id as string, Number(od?.unit_price ?? 0))
+    if ((row as { catalogue_item_id?: string }).catalogue_item_id) {
+      catalogueItemIdByLink.set(row.id as string, (row as { catalogue_item_id: string }).catalogue_item_id)
+    }
   }
-  return { decoIdByLink, fallbackByLink }
+  return { decoIdByLink, fallbackByLink, catalogueItemIdByLink }
+}
+
+/**
+ * Manual-final combined decoration price for the item, at a given qty. Prefers
+ * the explicit `catalogueItemId` (authoritative, matches submit); otherwise
+ * reverse-derives it from the decoration links, requiring all links to resolve
+ * to a single catalogue item. Returns null for computed items / no matching band
+ * (engine returns NULL) — caller then stays on the per-placement path.
+ */
+async function resolveManualCombined(
+  admin: SupabaseClient,
+  lookup: LinkLookup,
+  linkIds: string[],
+  qty: number,
+  explicitCatalogueItemId: string | null | undefined,
+): Promise<number | null> {
+  let catalogueItemId = explicitCatalogueItemId ?? null
+  if (!catalogueItemId) {
+    const itemIds = new Set<string>()
+    for (const id of linkIds) {
+      const cid = lookup.catalogueItemIdByLink.get(id)
+      if (cid) itemIds.add(cid)
+    }
+    if (itemIds.size !== 1) return null
+    catalogueItemId = [...itemIds][0]
+  }
+  const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
+    p_catalogue_item_id: catalogueItemId,
+    p_qty: qty,
+  })
+  if (error || data == null) return null
+  const n = Number(data)
+  return Number.isFinite(n) ? n : null
 }
 
 async function loadTierMultiplier(admin: SupabaseClient, organizationId: string): Promise<number> {
@@ -106,16 +153,22 @@ export async function POST(request: Request) {
     }
 
     const pricesByQty: Record<string, Record<string, number | null>> = {}
-    await Promise.all(
-      qtys.flatMap((qty) =>
+    // Manual-final: ONE combined decoration figure per qty for the whole item.
+    // Non-null only for manual items; null leaves the consumer on the per-link path.
+    const manualByQty: Record<string, number | null> = {}
+    await Promise.all([
+      ...qtys.flatMap((qty) =>
         body.items!.map(async (item) => {
           const price = await priceLink(admin, qty, item.linkId, lookup, tierMult)
           if (!pricesByQty[String(qty)]) pricesByQty[String(qty)] = {}
           pricesByQty[String(qty)][item.linkId] = price
         }),
       ),
-    )
-    return NextResponse.json({ pricesByQty })
+      ...qtys.map(async (qty) => {
+        manualByQty[String(qty)] = await resolveManualCombined(admin, lookup, linkIds, qty, body.catalogueItemId)
+      }),
+    ])
+    return NextResponse.json({ pricesByQty, manualByQty })
   }
 
   // Single-qty mode (legacy)
@@ -128,5 +181,6 @@ export async function POST(request: Request) {
   )
   const prices: Record<string, number | null> = {}
   for (const [linkId, price] of results) prices[linkId] = price
-  return NextResponse.json({ prices })
+  const manual = await resolveManualCombined(admin, lookup, linkIds, body.qty, body.catalogueItemId)
+  return NextResponse.json({ prices, manual })
 }
