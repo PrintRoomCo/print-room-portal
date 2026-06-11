@@ -24,6 +24,18 @@ type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 type CustomerRole = 'org_admin' | 'staff'
 type OrderIntent = 'inventory' | 'bulk'
 
+const DECORATION_METHOD_LABELS: Record<string, string> = {
+  screenprint: 'Screen print',
+  embroidery: 'Embroidery',
+  heatpress: 'Heat press',
+  supacolour: 'Supacolour',
+  dtf: 'DTF',
+}
+
+function decorationMethodLabel(method: string): string {
+  return DECORATION_METHOD_LABELS[method] ?? method.replace(/_/g, ' ')
+}
+
 interface ProductData {
   id: string
   name: string
@@ -582,12 +594,14 @@ export function ProductDetailClient({
 
   const galleryDecorationImages = useMemo(
     () =>
-      swatchVisibleDecorations.map((d) => ({
-        id: d.linkId,
-        url: d.artworkUrl,
-        label: d.positionLabel ? `${d.name} - ${d.positionLabel}` : d.name,
-        alt: `${d.name} artwork`,
-      })),
+      swatchVisibleDecorations
+        .filter((d): d is DecorationOption & { artworkUrl: string } => Boolean(d.artworkUrl))
+        .map((d) => ({
+          id: d.linkId,
+          url: d.artworkUrl,
+          label: d.positionLabel ? `${d.name} - ${d.positionLabel}` : d.name,
+          alt: `${d.name} artwork`,
+        })),
     [swatchVisibleDecorations],
   )
 
@@ -620,22 +634,15 @@ export function ProductDetailClient({
     [manualDecorationByQty],
   )
 
-  // Manual decoration is charged only when the line actually carries decorations
-  // (a customer who deselects every placement pays no decoration). The server
-  // applies the same gate so cart and submit agree.
-  const hasPricedDecorations = pricedDecorations.length > 0
-
   const decorationPerUnit = useMemo(
     () =>
       isManualPricing
-        ? hasPricedDecorations
-          ? manualDecorationAt(qty)
-          : 0
+        ? manualDecorationAt(qty)
         : pricedDecorations.reduce(
             (s, d) => s + decorationPriceAt(d.linkId, qty, d.unitPrice),
             0,
           ),
-    [isManualPricing, hasPricedDecorations, manualDecorationAt, pricedDecorations, decorationPriceAt, qty],
+    [isManualPricing, manualDecorationAt, pricedDecorations, decorationPriceAt, qty],
   )
 
   // For rendering volume bracket rows: combined decoration at that bracket's qty.
@@ -643,15 +650,13 @@ export function ProductDetailClient({
     () =>
       brackets.map((b) =>
         isManualPricing
-          ? hasPricedDecorations
-            ? manualDecorationAt(b.min_quantity)
-            : 0
+          ? manualDecorationAt(b.min_quantity)
           : pricedDecorations.reduce(
               (s, d) => s + decorationPriceAt(d.linkId, b.min_quantity, d.unitPrice),
               0,
             ),
       ),
-    [brackets, isManualPricing, hasPricedDecorations, manualDecorationAt, pricedDecorations, decorationPriceAt],
+    [brackets, isManualPricing, manualDecorationAt, pricedDecorations, decorationPriceAt],
   )
 
   function showToast(msg: string) {
@@ -726,13 +731,12 @@ export function ProductDetailClient({
       return bands.length > 0 ? bands : undefined
     }
 
-    // Line-level manual decoration snapshot (null/undefined for computed items,
-    // or manual items with no decoration selected — no decoration billed then).
+    // Line-level manual decoration snapshot (null/undefined for computed items).
     // Only snapshot a concrete figure once the combined fetch has resolved; if it
     // hasn't (sub-debounce add / fetch error), snapshot null so the server
     // silently re-prices from the engine rather than us claiming a stale 0 that
     // would trip the zero-tolerance drift guard at checkout.
-    const manualDecorationActive = isManualPricing && selectedDecorations.length > 0
+    const manualDecorationActive = isManualPricing
     const hasManualData = Object.keys(manualDecorationByQty).length > 0
     const manualDecorationPerUnitSnapshot =
       manualDecorationActive && hasManualData ? manualDecorationAt(qty) : null
@@ -1084,6 +1088,27 @@ export function ProductDetailClient({
                 Lead time ~{product.lead_time_days} days
               </span>
             </div>
+          )}
+
+          {swatchVisibleDecorations.length > 0 && (
+            <section className="rounded-[24px] bg-white p-5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
+                Includes
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-gray-800">
+                {swatchVisibleDecorations.map((d) => {
+                  const label = d.positionLabel
+                    ? `${decorationMethodLabel(d.method)} — ${d.positionLabel}`
+                    : decorationMethodLabel(d.method)
+                  return (
+                    <li key={d.linkId} className="flex items-center justify-between gap-3">
+                      <span>{label}</span>
+                      <span className="text-xs text-gray-500">{d.name}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
           )}
 
           {canChooseOrderIntent && (

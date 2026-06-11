@@ -37,7 +37,7 @@ export function normalizeDecorations(raw: unknown): CartLineDecoration[] {
       positionLabel:
         typeof d.positionLabel === 'string' ? d.positionLabel : null,
       unitPrice: d.unitPrice,
-      artworkUrl: typeof d.artworkUrl === 'string' ? d.artworkUrl : '',
+      artworkUrl: typeof d.artworkUrl === 'string' ? d.artworkUrl : null,
       snapshotUrl: typeof d.snapshotUrl === 'string' ? d.snapshotUrl : null,
       brackets: normalizeBrackets(d.brackets),
     })

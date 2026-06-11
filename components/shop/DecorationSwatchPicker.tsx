@@ -47,12 +47,18 @@ export function DecorationSwatchPicker({
               className="flex flex-col items-center gap-1.5"
             >
               <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border-2 border-pr-blue bg-white ring-2 ring-pr-blue/30">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imgSrc}
-                  alt=""
-                  className="max-h-full max-w-full object-contain"
-                />
+                {imgSrc ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={imgSrc}
+                    alt=""
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <span className="text-[10px] font-semibold text-gray-500">
+                    {methodShort}
+                  </span>
+                )}
                 <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-pr-blue text-[10px] font-bold text-white shadow">
                   ✓
                 </span>

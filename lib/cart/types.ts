@@ -11,8 +11,8 @@ export interface CartLineDecoration {
   positionLabel: string | null
   /** snapshot of resolved unit price at add-time. */
   unitPrice: number
-  /** raw artwork thumbnail. */
-  artworkUrl: string
+  /** raw artwork thumbnail. Null for details-only included decorations. */
+  artworkUrl: string | null
   /** designer-rendered mockup if present (Phase 8+); null in Phase 5. */
   snapshotUrl: string | null
   /**

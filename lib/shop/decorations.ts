@@ -24,9 +24,9 @@ export interface DecorationOption {
   positionLabel: string | null
   /** resolved server-side: COALESCE(link.unit_price_override, decoration.unit_price) */
   unitPrice: number
-  /** raw artwork thumbnail (always present). */
-  artworkUrl: string
-  artworkName: string
+  /** raw artwork thumbnail. Null for details-only included decorations. */
+  artworkUrl: string | null
+  artworkName: string | null
   /** designer-rendered mockup, populated by Phase 8. Null in Phase 5. */
   snapshotUrl: string | null
   snapshotColorSwatchId: string | null
@@ -193,7 +193,6 @@ export async function loadCatalogueItemDecorations(
     const dec = pickOne(row.decoration)
     if (!dec || !dec.is_active) continue
     const art = pickOne(dec.artwork)
-    if (!art) continue
     const loc = pickOne(dec.location)
     const printArea = pickOne(row.print_area)
     const baseUnitPrice = Number(dec.unit_price)
@@ -226,8 +225,8 @@ export async function loadCatalogueItemDecorations(
       method: dec.decoration_method,
       positionLabel: loc?.location ?? null,
       unitPrice,
-      artworkUrl: art.public_url,
-      artworkName: art.name,
+      artworkUrl: art?.public_url ?? null,
+      artworkName: art?.name ?? null,
       snapshotUrl: row.snapshot_url,
       snapshotColorSwatchId: row.snapshot_color_swatch_id,
       isDefault: row.is_default === true,
@@ -243,8 +242,9 @@ function buildOverlay(
   admin: SupabaseClient,
   row: RawLinkRow,
   printArea: RawPrintArea | null,
-  artwork: RawArtwork,
+  artwork: RawArtwork | null,
 ): DecorationOverlay | null {
+  if (!artwork) return null
   if (!printArea || !printArea.image_id) return null
   const rectX = toNum(printArea.rect_x)
   const rectY = toNum(printArea.rect_y)

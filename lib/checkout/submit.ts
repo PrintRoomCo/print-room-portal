@@ -19,7 +19,7 @@ export interface CheckoutLineDecorationInput {
   method: string
   positionLabel: string | null
   unitPrice: number
-  artworkUrl: string
+  artworkUrl: string | null
   snapshotUrl: string | null
 }
 
