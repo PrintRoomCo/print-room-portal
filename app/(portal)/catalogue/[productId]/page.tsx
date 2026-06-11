@@ -14,6 +14,11 @@ import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
 import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
 import { resolveColourMatrix, type MatrixVariant } from '@/lib/shop/colour-matrix'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
+import {
+  getOpenPeriodForOrg,
+  getPreOrderItemIds,
+  getPeriodBracketsForItem,
+} from '@/lib/pricing/period-brackets'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -333,11 +338,37 @@ const loadProductDetailPageData = cache(async (
     }))
   const images = [...catalogueImages, ...masterImages, ...swatchImages]
 
-  const bracketRows = (brackets ?? []) as {
+  const existingBracketRows = (brackets ?? []) as {
     min_quantity: number
     max_quantity: number | null
     unit_price: number
   }[]
+
+  // Pre-order: when this catalogue item is pre_order fulfilment type, swap the
+  // bracket source to the period snapshot (spec §3.5). If the item is pre_order
+  // but no period is open, keep the live brackets for display but gate the CTA.
+  const catalogueItemId = catItem.id ?? null
+  const openPeriod = await getOpenPeriodForOrg(admin, context.organizationId)
+  const preOrderIds = catalogueItemId
+    ? await getPreOrderItemIds(admin, [catalogueItemId])
+    : new Set<string>()
+  const isPreOrderItem = catalogueItemId != null && preOrderIds.has(catalogueItemId)
+  const preOrderClosed = isPreOrderItem && !openPeriod
+  let bracketRows = existingBracketRows
+  if (isPreOrderItem && openPeriod && catalogueItemId) {
+    const periodBrackets = await getPeriodBracketsForItem(
+      admin,
+      openPeriod.id,
+      catalogueItemId,
+    )
+    if (periodBrackets.length > 0) {
+      bracketRows = periodBrackets.map((b) => ({
+        min_quantity: b.minQty,
+        max_quantity: b.maxQty,
+        unit_price: b.unitPrice,
+      }))
+    }
+  }
 
   const brandName = Array.isArray(productRow.brands)
     ? (productRow.brands[0]?.name ?? null)
@@ -415,6 +446,7 @@ const loadProductDetailPageData = cache(async (
       colourOptions,
       decorations,
       effectiveMoq,
+      preOrderClosed,
     },
   }
 })

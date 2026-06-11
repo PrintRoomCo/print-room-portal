@@ -53,10 +53,19 @@ interface PortalAccountOrderStatusRow {
   status: string | null
 }
 
+export interface PreOrderTrackerItem {
+  orderId: string
+  orderRef: string | null
+  createdAt: string
+  periodClosesAt: string | null
+  windowOpen: boolean
+}
+
 export interface PortalOrderTrackerData {
   trackers: JobTracker[]
   isCompanyWide: boolean
   ownerKey: string | null
+  preOrders: PreOrderTrackerItem[]
 }
 
 export const getPortalUser = cache(async (): Promise<User | null> => {
@@ -79,6 +88,20 @@ export const getPortalCompanyAccess = cache(async (): Promise<B2BCustomerAccess 
  * cached scope. Invalidate via cacheTags.orderTrackerByUser/Org on order
  * status writes.
  */
+interface PreOrderRow {
+  id: string
+  created_at: string | null
+  period_id: string | null
+  quotes: {
+    order_ref: string | null
+    created_by: string | null
+  } | null
+  b2b_ordering_periods: {
+    closes_at: string | null
+    status: string | null
+  } | null
+}
+
 const fetchOrderTrackerDataForUser = unstable_cache(
   async (userId: string, email: string | null): Promise<PortalOrderTrackerData> => {
     const adminClient = getSupabaseServer()
@@ -90,6 +113,7 @@ const fetchOrderTrackerDataForUser = unstable_cache(
 
     let trackers: JobTracker[] = []
     let isCompanyWide = false
+    let preOrders: PreOrderTrackerItem[] = []
 
     try {
       const canSeeAllOrgOrders = membership?.role === 'org_admin'
@@ -117,6 +141,33 @@ const fetchOrderTrackerDataForUser = unstable_cache(
         trackers = await getJobsForUser(userId, email || undefined)
         isCompanyWide = false
       }
+
+      // Fetch pre-orders (awaiting-period-close) for this user/org.
+      if (membership?.organization_id) {
+        let preOrderQuery = adminClient
+          .from('orders')
+          .select(
+            'id, created_at, period_id, quotes!inner ( order_ref, created_by, organization_id ), b2b_ordering_periods ( closes_at, status )',
+          )
+          .eq('status', 'awaiting-period-close')
+          .eq('quotes.organization_id', membership.organization_id)
+          .order('created_at', { ascending: false })
+
+        // staff (non-org_admin) see only their own pre-orders
+        if (membership.role !== 'org_admin') {
+          preOrderQuery = preOrderQuery.eq('quotes.created_by', userId)
+        }
+
+        const { data: preOrderRows } = await preOrderQuery
+
+        preOrders = ((preOrderRows ?? []) as unknown as PreOrderRow[]).map((row) => ({
+          orderId: row.id,
+          orderRef: row.quotes?.order_ref ?? null,
+          createdAt: row.created_at ?? new Date().toISOString(),
+          periodClosesAt: row.b2b_ordering_periods?.closes_at ?? null,
+          windowOpen: row.b2b_ordering_periods?.status === 'open',
+        }))
+      }
     } catch (error) {
       console.error('[OrderTracker] Failed to fetch trackers:', error)
     }
@@ -125,6 +176,7 @@ const fetchOrderTrackerDataForUser = unstable_cache(
       trackers,
       isCompanyWide,
       ownerKey: membership?.organization_id ? `org:${membership.organization_id}` : `user:${userId}`,
+      preOrders,
     }
   },
   ['portal-order-tracker-data'],
@@ -137,7 +189,7 @@ const fetchOrderTrackerDataForUser = unstable_cache(
 export const getPortalOrderTrackerData = cache(async (): Promise<PortalOrderTrackerData> => {
   const user = await getPortalUser()
   if (!user) {
-    return { trackers: [], isCompanyWide: false, ownerKey: null }
+    return { trackers: [], isCompanyWide: false, ownerKey: null, preOrders: [] }
   }
   return fetchOrderTrackerDataForUser(user.id, user.email ?? null)
 })

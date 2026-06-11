@@ -68,6 +68,7 @@ function makeSupabaseStub(opts: {
       select: (_cols?: string) => builder,
       eq: (_column: string, _value: unknown) => builder,
       in: (_column: string, _value: unknown) => builder,
+      gt: (_column: string, _value: unknown) => builder,
       single: async () => responseFor(table),
       maybeSingle: async () => {
         const r = responseFor(table)

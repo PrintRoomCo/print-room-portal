@@ -89,6 +89,7 @@ function makeSupabaseStub(opts: {
         filters.push({ column, value })
         return builder
       },
+      gt: (_column: string, _value: unknown) => builder,
       order: (_col: string, _opts?: unknown) => builder,
       limit: (_n: number) => builder,
       single: async () => settle(),

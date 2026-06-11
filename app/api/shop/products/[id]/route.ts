@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+import {
+  getOpenPeriodForOrg,
+  getPreOrderItemIds,
+  getPeriodBracketsForItem,
+} from '@/lib/pricing/period-brackets'
 
 export async function GET(
   _request: Request,
@@ -133,6 +138,30 @@ export async function GET(
       return a.size_order - b.size_order
     })
 
+  // Pre-order: swap brackets to period snapshot when open (spec §3.5).
+  const openPeriod = await getOpenPeriodForOrg(admin, context.organizationId)
+  const preOrderIds = await getPreOrderItemIds(admin, [catItem.id])
+  const isPreOrderItem = preOrderIds.has(catItem.id)
+  let finalBrackets = (brackets ?? []) as Array<{
+    min_quantity: number
+    max_quantity: number | null
+    unit_price: number
+  }>
+  if (isPreOrderItem && openPeriod) {
+    const periodBrackets = await getPeriodBracketsForItem(
+      admin,
+      openPeriod.id,
+      catItem.id,
+    )
+    if (periodBrackets.length > 0) {
+      finalBrackets = periodBrackets.map((b) => ({
+        min_quantity: b.minQty,
+        max_quantity: b.maxQty,
+        unit_price: b.unitPrice,
+      }))
+    }
+  }
+
   return NextResponse.json({
     product: {
       ...productRow,
@@ -141,6 +170,6 @@ export async function GET(
       image_url: productRow.image_url,
     },
     variants: mappedVariants,
-    brackets: brackets ?? [],
+    brackets: finalBrackets,
   })
 }
