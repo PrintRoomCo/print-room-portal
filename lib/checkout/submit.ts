@@ -603,9 +603,50 @@ export async function submitCustomerOrder(
     }
   }
 
+  async function applyManualDecorationForLine(
+    line: CheckoutLineInput,
+    decorationQty: number,
+    driftLinkId: string,
+  ): Promise<void> {
+    if (!line.catalogueItemId) return
+    const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
+      p_catalogue_item_id: line.catalogueItemId,
+      p_qty: decorationQty,
+    })
+    const manualCombined = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
+    const serverR = Number(manualCombined.toFixed(2))
+    const claimedR =
+      line.claimed_manual_decoration == null
+        ? null
+        : Number(Number(line.claimed_manual_decoration).toFixed(2))
+    if (claimedR != null && claimedR !== serverR) {
+      drift.push({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        linkId: driftLinkId,
+        decorationName: 'Decoration (combined)',
+        was: claimedR,
+        now: serverR,
+        reason: 'price_drift',
+      })
+    } else {
+      manualDecorationByLineKey.set(
+        makeLineKey(line.product_id, line.variant_id ?? null),
+        serverR,
+      )
+    }
+  }
+
   for (const line of input.lines) {
     const decs = line.decorations ?? []
+    const isManualLine = !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
     if (decs.length === 0) {
+      if (isManualLine) {
+        const decorationQty =
+          totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
+          line.qty
+        await applyManualDecorationForLine(line, decorationQty, '')
+      }
       validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), [])
       continue
     }
@@ -677,15 +718,6 @@ export async function submitCustomerOrder(
     // A NULL band => 0 decoration (the item has no decoration price at this qty);
     // we still treat the line as manual (keep per-placement VALIDATION, skip
     // per-placement pricing + drift, bill the combined at the line level).
-    const isManualLine = !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
-    let manualCombined = 0
-    if (isManualLine) {
-      const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
-        p_catalogue_item_id: line.catalogueItemId,
-        p_qty: decorationQty,
-      })
-      manualCombined = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
-    }
 
     for (const dec of decs) {
       const row = byId.get(dec.linkId)
@@ -800,27 +832,11 @@ export async function submitCustomerOrder(
     // mirrors the garment "legacy cart" path (UnitPriceDrift only guards carts
     // that carried a snapshot).
     if (isManualLine) {
-      const serverR = Number(manualCombined.toFixed(2))
-      const claimedR =
-        line.claimed_manual_decoration == null
-          ? null
-          : Number(Number(line.claimed_manual_decoration).toFixed(2))
-      if (claimedR != null && claimedR !== serverR) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: validated[0]?.linkId ?? decs[0]?.linkId ?? '',
-          decorationName: 'Decoration (combined)',
-          was: claimedR,
-          now: serverR,
-          reason: 'price_drift',
-        })
-      } else {
-        manualDecorationByLineKey.set(
-          makeLineKey(line.product_id, line.variant_id ?? null),
-          serverR,
-        )
-      }
+      await applyManualDecorationForLine(
+        line,
+        decorationQty,
+        validated[0]?.linkId ?? decs[0]?.linkId ?? '',
+      )
     }
 
     validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), validated)
