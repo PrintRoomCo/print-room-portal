@@ -156,6 +156,7 @@ function buildInput(): CheckoutInput {
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: true,
+      orderingPermission: 'both',
     },
     idempotency_key: 'idem-test-jt',
     required_by: '2026-06-01',
