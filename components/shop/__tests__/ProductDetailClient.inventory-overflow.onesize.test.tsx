@@ -58,6 +58,7 @@ function renderPDP() {
       availability={availability}
       organizationId="o1"
       customerRole="org_admin"
+      orderingPermission="both"
       images={[]}
       colourOptions={[]}
       decorations={[]}

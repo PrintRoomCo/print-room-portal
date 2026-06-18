@@ -90,6 +90,7 @@ describe('ProductDetailClient PDP layout', () => {
         availability={{ 'red-s': { available_qty: 115, allow_order_without_stock: false } }}
         organizationId="o1"
         customerRole="org_admin"
+        orderingPermission="both"
         images={[
           {
             id: 'catalogue-hero',

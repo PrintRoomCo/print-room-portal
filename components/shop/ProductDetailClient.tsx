@@ -17,7 +17,12 @@ import {
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
-import { PILL_LABELS } from '@/lib/shop/fulfilment-mode'
+import {
+  PILL_LABELS,
+  effectivePermission,
+  orderingOptions,
+  type MemberPermission,
+} from '@/lib/shop/fulfilment-mode'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
@@ -97,6 +102,12 @@ interface Props {
   availability: Record<string, VariantAvailability>
   organizationId: string
   customerRole: CustomerRole
+  /**
+   * The viewing member's stored ordering permission
+   * (user_organizations.ordering_permission). org_admin is always elevated to
+   * 'both' by effectivePermission regardless of this value.
+   */
+  orderingPermission: MemberPermission
   images: GalleryImage[]
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
@@ -120,6 +131,7 @@ export function ProductDetailClient({
   brackets,
   availability,
   customerRole,
+  orderingPermission,
   images,
   colourOptions = [],
   decorations,
@@ -254,10 +266,14 @@ export function ProductDetailClient({
   // produced an INERT Reorder pill that left the size table filtered to
   // in-stock-only — "Reorder doesn't reveal sizes" (Symptom 1+2, 2026-06-03).
   // Excluding stocked here means it shows no toggle and stays inventory-only.
-  const isOrgAdminViewer = customerRole === 'org_admin'
+  const permission = effectivePermission(customerRole, orderingPermission)
+  const options = orderingOptions(product.fulfilment_type, permission)
+
+  // Offer the From-inventory / Reorder choice only when BOTH paths are open to this
+  // viewer AND there's stock to draw AND tiers to reorder against.
   const canChooseOrderIntent =
-    isOrgAdminViewer &&
-    product.fulfilment_type !== 'stocked' &&
+    options.canDrawStock &&
+    options.canReorder &&
     currentSelectionHasInventory &&
     brackets.length > 0
 
@@ -267,8 +283,7 @@ export function ProductDetailClient({
   // case the PDP hides bulk-order artefacts (volume pricing + lead time) and
   // the Add-to-cart guard blocks ordering beyond available stock.
   const isInventoryMode =
-    !isOrgAdminViewer ||
-    product.fulfilment_type === 'stocked' ||
+    (options.canDrawStock && !options.canReorder) ||
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
@@ -1066,7 +1081,7 @@ export function ProductDetailClient({
               <ProductDetailsCondensed product={product} />
             </header>
 
-          {sizingMode === 'multi_size_with_variants' && (
+          {!options.deadZone && sizingMode === 'multi_size_with_variants' && (
             <VariantPicker
               variants={variants}
               colorOptions={pickerColourOptions}
@@ -1082,7 +1097,7 @@ export function ProductDetailClient({
             />
           )}
 
-          {product.lead_time_days != null && !isInventoryMode && (
+          {!options.deadZone && product.lead_time_days != null && !isInventoryMode && (
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
@@ -1111,6 +1126,12 @@ export function ProductDetailClient({
             </section>
           )}
 
+          {options.deadZone ? (
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              unavailable to order right now. contact the print room for more information
+            </div>
+          ) : (
+          <>
           {canChooseOrderIntent && (
             <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
@@ -1404,6 +1425,8 @@ export function ProductDetailClient({
               )
             )}
           </section>
+          </>
+          )}
           </div>
         </div>
 

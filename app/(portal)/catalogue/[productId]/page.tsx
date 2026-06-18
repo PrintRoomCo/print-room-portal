@@ -442,6 +442,7 @@ const loadProductDetailPageData = cache(async (
       availability,
       organizationId: context.organizationId,
       customerRole: context.role,
+      orderingPermission: context.orderingPermission,
       images,
       colourOptions,
       decorations,
