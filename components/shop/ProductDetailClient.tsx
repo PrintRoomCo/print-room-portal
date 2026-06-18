@@ -30,6 +30,9 @@ const DECORATION_METHOD_LABELS: Record<string, string> = {
   heatpress: 'Heat press',
   supacolour: 'Supacolour',
   dtf: 'DTF',
+  // Neutral method for image-first "custom mockup" baked decorations (no artwork,
+  // no specific method) — the decoration is in the mockup photo.
+  custom: 'Custom decoration',
 }
 
 function decorationMethodLabel(method: string): string {

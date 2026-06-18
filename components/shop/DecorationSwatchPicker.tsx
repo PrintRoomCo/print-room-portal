@@ -9,6 +9,8 @@ const METHOD_SHORTHAND: Record<string, string> = {
   heatpress: 'HP',
   supacolour: 'SC',
   dtf: 'DTF',
+  // Image-first "custom mockup" baked decorations carry the neutral 'custom' method.
+  custom: 'Custom',
 }
 
 interface DecorationSwatchPickerProps {
