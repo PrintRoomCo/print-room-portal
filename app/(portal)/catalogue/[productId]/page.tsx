@@ -81,24 +81,51 @@ const loadProductDetailPageData = cache(async (
   if ('kind' in auth) return { status: 'auth-failure', failure: auth }
   const { admin, context } = auth
 
-  // Per-member access filter — gate before we even reach the product table.
-  const grantedItemIds = await getGrantedCatalogueItemIds(
-    admin,
-    context.membershipId,
-    context.organizationId,
-  )
-  if (grantedItemIds.length === 0) return { status: 'not-found' }
+  // Per-member access filter — gate before we reach the product table.
+  // Preview exception: when launched from the editor for a specific item,
+  // force-show that exact skin (bypass grant + is_active), still org-scoped.
+  let catItem: {
+    id: string
+    name: string | null
+    description: string | null
+    sku_override: string | null
+    moq_override: number | null
+    variant_label: string | null
+    fulfilment_type_override: FulfilmentType | null
+    price_mode: 'computed' | 'manual_final' | null
+  } | null
 
-  const { data: catItem } = await admin
-    .from('b2b_catalogue_items')
-    .select('id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, b2b_catalogues!inner(is_active)')
-    .eq('source_product_id', productId)
-    .eq('is_active', true)
-    .eq('b2b_catalogues.organization_id', context.organizationId)
-    .eq('b2b_catalogues.is_active', true)
-    .in('id', grantedItemIds)
-    .limit(1)
-    .maybeSingle()
+  const catItemSelect =
+    'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, b2b_catalogues!inner(organization_id, is_active)'
+
+  if (context.isPreview && context.previewItemId) {
+    const { data } = await admin
+      .from('b2b_catalogue_items')
+      .select(catItemSelect)
+      .eq('id', context.previewItemId)
+      .eq('source_product_id', productId)
+      .eq('b2b_catalogues.organization_id', context.organizationId)
+      .maybeSingle()
+    catItem = data as typeof catItem
+  } else {
+    const grantedItemIds = await getGrantedCatalogueItemIds(
+      admin,
+      context.membershipId,
+      context.organizationId,
+    )
+    if (grantedItemIds.length === 0) return { status: 'not-found' }
+    const { data } = await admin
+      .from('b2b_catalogue_items')
+      .select(catItemSelect)
+      .eq('source_product_id', productId)
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', context.organizationId)
+      .eq('b2b_catalogues.is_active', true)
+      .in('id', grantedItemIds)
+      .limit(1)
+      .maybeSingle()
+    catItem = data as typeof catItem
+  }
 
   if (!catItem) return { status: 'not-found' }
 
@@ -233,7 +260,9 @@ const loadProductDetailPageData = cache(async (
   ])
 
   const productRow = product as unknown as ProductDetail | null
-  if (!productRow || !productRow.is_active) return { status: 'not-found' }
+  // Preview force-show: a still-draft (is_active=false) product must render
+  // when the staff preview launched straight to this item's PDP.
+  if (!productRow || (!productRow.is_active && !context.isPreview)) return { status: 'not-found' }
 
   const catalogueColors = (catalogueColorRows ?? []) as Array<{
     color_swatch_id: string
