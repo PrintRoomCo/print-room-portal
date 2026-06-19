@@ -3,6 +3,7 @@ import { CompanyProvider } from '@/contexts/CompanyContext'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { CartProvider } from '@/components/cart/CartProvider'
 import { PortalShell } from '@/components/layout/PortalShell'
+import { PreviewBanner } from '@/components/preview/PreviewBanner'
 import { getPortalCompanyAccess, getPortalUser } from '@/lib/portal-data'
 import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 
@@ -16,6 +17,7 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <AuthProvider initialUser={user}>
       <CompanyProvider initialAccess={access} initialUserId={user?.id ?? null}>
+        <PreviewBanner />
         <CurrencyProvider initialRates={exchangeRates.rates}>
           <CartProvider>
             <PortalShell>{children}</PortalShell>
