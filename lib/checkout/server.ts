@@ -3,6 +3,8 @@ import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
+import { readPreviewSession } from '@/lib/preview/cookie'
+import { buildPreviewContext } from '@/lib/preview/context'
 
 export interface B2BCustomerContext {
   userId: string
@@ -43,6 +45,10 @@ export interface B2BCustomerContext {
   moqExempt: boolean
   /** Layer-2 ordering permission (user_organizations.ordering_permission). org_admin ignores it. */
   orderingPermission: import('@/lib/shop/fulfilment-mode').MemberPermission
+  /** True when this context was built for a staff preview (read-only). */
+  isPreview?: boolean
+  /** Editor-launched preview: the in-edit catalogue item id to force-show on its PDP. */
+  previewItemId?: string | null
 }
 
 export type AuthFailureKind =
@@ -62,6 +68,17 @@ export type RequireB2BCustomerResult =
 export async function requireB2BCustomer(
   opts: { requireCustomerCode?: boolean } = {}
 ): Promise<RequireB2BCustomerResult> {
+  // Preview: a valid staff preview cookie renders the store as the target
+  // member via service-role, with no member auth session. Reads only.
+  const nowSec = Math.floor(Date.now() / 1000)
+  const previewPayload = await readPreviewSession(nowSec)
+  if (previewPayload) {
+    const previewAdmin = getSupabaseServer()
+    const preview = await buildPreviewContext(previewAdmin, previewPayload)
+    if (preview) return preview
+    // Stale/invalid target — fall through to normal auth.
+  }
+
   const authed = await getSupabaseServerComponent()
   const { data: { user } } = await authed.auth.getUser()
   if (!user) return { kind: 'unauthenticated' }
@@ -152,6 +169,14 @@ export async function requireB2BCustomerApi(
   if ('kind' in result) {
     const mapped = AUTH_FAILURE_RESPONSE[result.kind]
     return { error: NextResponse.json({ error: mapped.message }, { status: mapped.status }) }
+  }
+  if (result.context.isPreview) {
+    return {
+      error: NextResponse.json(
+        { error: 'Preview only — nothing was saved.' },
+        { status: 403 },
+      ),
+    }
   }
   return result
 }
