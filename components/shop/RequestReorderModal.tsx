@@ -2,6 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState } from 'react'
+import { useCompany } from '@/contexts/CompanyContext'
 
 interface RequestReorderModalProps {
   variantId: string
@@ -25,6 +26,8 @@ export function RequestReorderModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const { access } = useCompany()
+  const isPreview = access?.isPreview ?? false
 
   useEffect(() => {
     if (previousFocusRef.current == null) {
@@ -34,6 +37,7 @@ export function RequestReorderModal({
   }, [])
 
   async function handleSubmit() {
+    if (isPreview) return // read-only preview — never POST
     if (!Number.isInteger(qty) || qty <= 0) {
       setError('Quantity must be a positive whole number.')
       return
@@ -130,10 +134,10 @@ export function RequestReorderModal({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || isPreview}
               className="rounded-full bg-pr-blue px-4 py-2 text-sm font-medium text-white hover:bg-pr-blue/90 disabled:opacity-50"
             >
-              {submitting ? 'Submitting…' : 'Submit request'}
+              {isPreview ? 'Preview only' : submitting ? 'Submitting…' : 'Submit request'}
             </button>
           </div>
         </Dialog.Content>

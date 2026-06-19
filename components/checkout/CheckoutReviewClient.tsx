@@ -17,6 +17,7 @@ import {
   decorationPerUnit,
 } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useCompany } from '@/contexts/CompanyContext'
 import type { StoreOption } from './ShipToRow'
 import {
   allLinesUseCustomAddress,
@@ -47,6 +48,8 @@ export function CheckoutReviewClient({
   const router = useRouter()
   const pricingCtx = usePricingContext()
   const { format } = useCurrency()
+  const { access } = useCompany()
+  const isPreview = access?.isPreview ?? false
   const [reviewState, setReviewState] = useState<CheckoutReviewState | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -82,6 +85,7 @@ export function CheckoutReviewClient({
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
 
   async function confirmOrder() {
+    if (isPreview) return // read-only preview — never POST
     if (!reviewState || cart.lines.length === 0) return
 
     const missingShipTo = cart.lines.some(
@@ -511,9 +515,9 @@ export function CheckoutReviewClient({
         itemCount={cart.lines.length}
         totalLabel={format(breakdown.total)}
         onSubmit={confirmOrder}
-        disabled={!customerCode}
+        disabled={isPreview || !customerCode}
         submitting={submitting}
-        submitLabel="Confirm & place order"
+        submitLabel={isPreview ? 'Preview only' : 'Confirm & place order'}
         submittingLabel="Placing order…"
       />
     </div>
