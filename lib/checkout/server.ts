@@ -41,6 +41,8 @@ export interface B2BCustomerContext {
    * customers. Mirrors submit_b2b_order's top-level branch.
    */
   moqExempt: boolean
+  /** Layer-2 ordering permission (user_organizations.ordering_permission). org_admin ignores it. */
+  orderingPermission: import('@/lib/shop/fulfilment-mode').MemberPermission
 }
 
 export type AuthFailureKind =
@@ -68,7 +70,7 @@ export async function requireB2BCustomer(
 
   const { data: membership } = await admin
     .from('user_organizations')
-    .select('id, organization_id, default_store_id, role')
+    .select('id, organization_id, default_store_id, role, ordering_permission')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) return { kind: 'no_org' }
@@ -116,6 +118,10 @@ export async function requireB2BCustomer(
       allowsMultiStoreOrdering:
         (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
       moqExempt: Boolean((org as { moq_exempt?: boolean | null }).moq_exempt),
+      orderingPermission:
+        ((membership as { ordering_permission?: string }).ordering_permission as
+          | import('@/lib/shop/fulfilment-mode').MemberPermission
+          | undefined) ?? 'stock_only',
     } satisfies B2BCustomerContext,
   }
 }

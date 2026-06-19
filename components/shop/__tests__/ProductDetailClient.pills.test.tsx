@@ -42,6 +42,7 @@ const baseProduct = {
 function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order' | 'mixed'
   role: 'org_admin' | 'staff'
+  orderingPermission?: 'stock_only' | 'reorder_only' | 'both'
 }) {
   return render(
     <ProductDetailClient
@@ -62,6 +63,7 @@ function renderPDP(opts: {
       availability={{ v1: { available_qty: 5, allow_order_without_stock: false } }}
       organizationId="o1"
       customerRole={opts.role}
+      orderingPermission={opts.orderingPermission ?? 'both'}
       images={[]}
       colourOptions={[]}
       decorations={[]}
@@ -80,22 +82,30 @@ describe('PDP ordering-mode pills', () => {
     expect(group).not.toHaveTextContent('Made to Order')
   })
 
-  it('restricted role never sees the Reorder pill', () => {
-    renderPDP({ fulfilment_type: 'mixed', role: 'staff' })
+  // A stock_only-restricted staff member has no reorder path (member cap), so
+  // the From-inventory/Reorder choice never mounts — they are inventory-only.
+  it('restricted (stock_only) member never sees the Reorder pill', () => {
+    renderPDP({
+      fulfilment_type: 'mixed',
+      role: 'staff',
+      orderingPermission: 'stock_only',
+    })
     expect(
       screen.queryByRole('group', { name: /order mode/i }),
     ).not.toBeInTheDocument()
   })
 
-  // Regression (2026-06-03): the mixed-only gate hid the toggle from
-  // made_to_order products that DO carry stock + tiers, where an org_admin
-  // previously could choose to draw from inventory. The toggle is gated on
-  // stock + tiers, not on the product being explicitly 'mixed'.
-  it('made_to_order + org_admin with stock + tiers → toggle still shows', () => {
+  // Shared resolver (D1, 2026-06-18): orderingOptions('made_to_order', …) yields
+  // canDrawStock=false (a made_to_order product has no stock-draw path by
+  // nature), so there is nothing to toggle between — it is reorder-only and the
+  // From-inventory/Reorder choice does not mount. This supersedes the
+  // 2026-06-03 stock+tiers gate, which keyed on fulfilment_type !== 'stocked'
+  // rather than the product's actual draw capability.
+  it('made_to_order + org_admin → reorder-only, NO toggle', () => {
     renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin' })
-    const group = screen.getByRole('group', { name: /order mode/i })
-    expect(group).toHaveTextContent('From inventory')
-    expect(group).toHaveTextContent('Reorder')
+    expect(
+      screen.queryByRole('group', { name: /order mode/i }),
+    ).not.toBeInTheDocument()
   })
 
   // Defect (2026-06-03, Symptom 1+2): a 'stocked' product with stock + tiers

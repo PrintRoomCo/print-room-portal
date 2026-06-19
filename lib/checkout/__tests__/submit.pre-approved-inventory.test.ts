@@ -168,6 +168,7 @@ function buildInput(
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: true,
+      orderingPermission: 'both',
     },
     idempotency_key: 'idem-test-1',
     required_by: null,

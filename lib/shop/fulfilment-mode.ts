@@ -45,3 +45,50 @@ export function matchesMode(effective: FulfilmentType, mode: OrderingMode): bool
   if (mode === 'from_inventory') return effective === 'stocked' || effective === 'mixed'
   return effective === 'made_to_order' || effective === 'mixed' // reorder
 }
+
+/** Layer-2: per-member ordering permission (user_organizations.ordering_permission). */
+export type MemberPermission = 'stock_only' | 'reorder_only' | 'both'
+
+/** Customer-portal role discriminator (lib/checkout/server.ts). */
+export type CustomerRole = 'org_admin' | 'staff'
+
+/**
+ * The permission actually in force for a viewer. org_admin is ALWAYS unrestricted
+ * ('both') by role; staff use their stored permission, defaulting to least-privilege.
+ */
+export function effectivePermission(
+  role: CustomerRole,
+  stored: MemberPermission | null | undefined,
+): MemberPermission {
+  if (role === 'org_admin') return 'both'
+  return stored ?? 'stock_only'
+}
+
+export interface OrderingOptions {
+  /** May this viewer draw this product from existing stock? */
+  canDrawStock: boolean
+  /** May this viewer trigger a production run (order beyond / without stock)? */
+  canReorder: boolean
+  /** Neither path is available — structural dead-zone (show disabled + contact message). */
+  deadZone: boolean
+}
+
+/**
+ * Intersection of the product's nature (the ceiling of what is POSSIBLE) and the
+ * member's permission (the cap on what they may DO). Product nature: stocked→{draw},
+ * made_to_order→{reorder}, mixed→{draw,reorder}. Permission: stock_only→{draw},
+ * reorder_only→{reorder}, both→{draw,reorder}. Live-stock gating of the draw path is
+ * applied by the caller (zero stock = transient out-of-stock, NOT a dead-zone).
+ */
+export function orderingOptions(
+  nature: FulfilmentType,
+  permission: MemberPermission,
+): OrderingOptions {
+  const productDraw = nature === 'stocked' || nature === 'mixed'
+  const productReorder = nature === 'made_to_order' || nature === 'mixed'
+  const memberDraw = permission === 'stock_only' || permission === 'both'
+  const memberReorder = permission === 'reorder_only' || permission === 'both'
+  const canDrawStock = productDraw && memberDraw
+  const canReorder = productReorder && memberReorder
+  return { canDrawStock, canReorder, deadZone: !canDrawStock && !canReorder }
+}

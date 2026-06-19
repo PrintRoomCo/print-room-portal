@@ -924,6 +924,7 @@ export async function submitCustomerOrder(
       }
     }),
     p_intent: input.intent ?? 'customer',
+    p_member_permission: input.context.orderingPermission ?? 'both',
   })
   if (error) {
     if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {

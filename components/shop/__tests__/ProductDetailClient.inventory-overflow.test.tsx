@@ -59,7 +59,10 @@ const availability = {
   'red-m': { available_qty: 0, allow_order_without_stock: false },
 } as never
 
-function renderPDP(role: 'org_admin' | 'staff' = 'org_admin') {
+function renderPDP(
+  role: 'org_admin' | 'staff' = 'org_admin',
+  orderingPermission: 'stock_only' | 'reorder_only' | 'both' = 'both',
+) {
   return render(
     <ProductDetailClient
       product={{ ...baseProduct, fulfilment_type: 'mixed' }}
@@ -68,6 +71,7 @@ function renderPDP(role: 'org_admin' | 'staff' = 'org_admin') {
       availability={availability}
       organizationId="o1"
       customerRole={role}
+      orderingPermission={orderingPermission}
       images={[]}
       colourOptions={[]}
       decorations={[]}
@@ -189,7 +193,9 @@ describe('PDP From-inventory production top-up — size grid caption', () => {
 
 describe('PDP From-inventory production top-up — restricted staff unchanged', () => {
   it('staff cannot overflow: no production hint, Add-to-cart stays blocked', () => {
-    renderPDP('staff')
+    // Restricted (stock_only) staff: member cap removes the reorder path, so
+    // the overflow-into-production scope never activates.
+    renderPDP('staff', 'stock_only')
     // Staff are inventory-only; the in-stock-only filter keeps S visible.
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
       target: { value: '28' },
