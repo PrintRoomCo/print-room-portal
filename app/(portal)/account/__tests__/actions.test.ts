@@ -5,6 +5,8 @@ vi.mock('@/lib/supabase-server-component', () => ({ getSupabaseServerComponent: 
 vi.mock('@/lib/supabase', () => ({ getSupabaseServer: vi.fn() }))
 // actions.ts imports changePassword at module scope; stub so import resolves.
 vi.mock('@/lib/supabase-auth', () => ({ changePassword: vi.fn() }))
+// Preview guard reads cookies(); stub it to the non-preview path for these tests.
+vi.mock('@/lib/preview/guard', () => ({ isPreviewRequest: vi.fn(async () => false) }))
 
 import { createLocationAction } from '../actions'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'

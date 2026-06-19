@@ -35,6 +35,10 @@ vi.mock('@/contexts/CurrencyContext', () => ({
   }),
 }))
 
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: () => ({ access: null, loading: false }),
+}))
+
 function checkoutConflict(payload: unknown) {
   return {
     status: 409,

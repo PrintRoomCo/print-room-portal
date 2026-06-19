@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { RequestReorderModal } from '../RequestReorderModal'
 
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: () => ({ access: null, loading: false }),
+}))
+
 function ReorderHarness() {
   const [open, setOpen] = useState(false)
 
