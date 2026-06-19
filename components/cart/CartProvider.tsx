@@ -29,7 +29,10 @@ export const CartContext = createContext<CartApi | null>(null)
 export function CartProvider({ children }: { children: ReactNode }) {
   const { access } = useCompany()
   const organizationId = access?.companyId ?? null
-  const storageKey = organizationId ? `pr-cart:${organizationId}` : null
+  const isPreview = access?.isPreview ?? false
+  const storageKey = organizationId
+    ? `${isPreview ? 'pr-cart-preview' : 'pr-cart'}:${organizationId}`
+    : null
   const roleKey = organizationId ? `pr-cart-role:${organizationId}` : null
   const role = access?.role ?? null
 
