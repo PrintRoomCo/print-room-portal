@@ -12,6 +12,8 @@ import {
 import type { JobTracker } from '@/lib/job-tracker'
 import type { B2BCustomerAccess } from '@/types/company'
 import { cacheTags, cacheRevalidate } from '@/lib/cache/tags'
+import { readPreviewSession } from '@/lib/preview/cookie'
+import { buildPreviewAccess } from '@/lib/preview/context'
 
 export interface PortalAccountStore {
   id: string
@@ -77,6 +79,12 @@ export const getPortalUser = cache(async (): Promise<User | null> => {
 })
 
 export const getPortalCompanyAccess = cache(async (): Promise<B2BCustomerAccess | null> => {
+  const nowSec = Math.floor(Date.now() / 1000)
+  const preview = await readPreviewSession(nowSec)
+  if (preview) {
+    const access = await buildPreviewAccess(preview)
+    if (access) return access
+  }
   const user = await getPortalUser()
   if (!user) return null
   return getCompanyAccess(user.id, user.email ?? undefined)

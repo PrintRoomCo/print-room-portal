@@ -67,4 +67,13 @@ export interface B2BCustomerAccess {
    * (catalogue + inventory shape; admins can place orders across stores).
    */
   allowsMultiStoreOrdering: boolean
+
+  /** True when this access was built for a staff preview (read-only). */
+  isPreview?: boolean
+  /** Banner copy source — who/what is being previewed. Set only in preview. */
+  previewAs?: {
+    name: string
+    role: 'org_admin' | 'staff'
+    orderingPermission: 'stock_only' | 'reorder_only' | 'both'
+  }
 }
