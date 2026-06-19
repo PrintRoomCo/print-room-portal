@@ -5,6 +5,7 @@ import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { changePassword } from '@/lib/supabase-auth'
 import { cacheTags } from '@/lib/cache/tags'
+import { isPreviewRequest } from '@/lib/preview/guard'
 
 const NZ_REGIONS = [
   { code: 'AUK', name: 'Auckland' },
@@ -42,6 +43,9 @@ export type ActionResult = {
 }
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
+  if (await isPreviewRequest()) {
+    return { success: false, errors: ['Preview only — nothing was saved.'] }
+  }
   const supabase = await getSupabaseServerComponent()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, errors: ['Not authenticated.'] }
@@ -71,6 +75,9 @@ export async function updateProfile(formData: FormData): Promise<ActionResult> {
 }
 
 export async function changePasswordAction(formData: FormData): Promise<ActionResult> {
+  if (await isPreviewRequest()) {
+    return { success: false, errors: ['Preview only — nothing was saved.'] }
+  }
   const supabase = await getSupabaseServerComponent()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return { success: false, errors: ['Not authenticated.'] }
@@ -108,6 +115,9 @@ export async function changePasswordAction(formData: FormData): Promise<ActionRe
 }
 
 export async function createLocationAction(formData: FormData): Promise<ActionResult> {
+  if (await isPreviewRequest()) {
+    return { success: false, errors: ['Preview only — nothing was saved.'] }
+  }
   const supabase = await getSupabaseServerComponent()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, errors: ['Not authenticated.'] }

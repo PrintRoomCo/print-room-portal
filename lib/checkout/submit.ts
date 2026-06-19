@@ -284,6 +284,13 @@ export async function submitCustomerOrder(
   admin: SupabaseClient,
   input: CheckoutInput
 ): Promise<CheckoutResult> {
+  // Preview is read-only — block the order RPC as belt-and-braces (the API
+  // route already rejects preview at the write gate). No CheckoutResult error
+  // variant exists, so throw.
+  if (input.context.isPreview) {
+    throw new Error('Preview only — nothing was saved.')
+  }
+
   // 0. Buyer-scope guard: a buyer (Buyer Roles step 6) is locked to their
   //    defaultStoreId. Reject any line that ships elsewhere AND any custom-
   //    shipping path. Server-side mirror of CheckoutClient's ShipToRow lock.
