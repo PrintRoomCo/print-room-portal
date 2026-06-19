@@ -81,6 +81,7 @@ function renderPDP(opts: {
       availability={opts.availability ?? availability}
       organizationId="o1"
       customerRole={opts.role}
+      orderingPermission="both"
       images={[]}
       colourOptions={[]}
       decorations={[]}
