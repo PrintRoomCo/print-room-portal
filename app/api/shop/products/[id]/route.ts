@@ -15,7 +15,7 @@ export async function GET(
   const { admin, context } = auth
   const { id } = await params
 
-  const [{ data: catalogueItem }, { data: product, error: pErr }, { data: variants }, { data: brackets }] = await Promise.all([
+  const [{ data: catalogueItem }, { data: product, error: pErr }, { data: variants }, { data: sizeRows }, { data: brackets }] = await Promise.all([
     admin.from('b2b_catalogue_items')
       .select('id, name, description, b2b_catalogues!inner(is_active)')
       .eq('source_product_id', id)
@@ -36,12 +36,15 @@ export async function GET(
       .single(),
     admin.from('product_variants')
       .select(`
-        id, color_swatch_id, size_id,
-        product_color_swatches (label, hex, position),
-        sizes (label, order_index)
+        id, color_swatch_id,
+        product_color_swatches (label, hex, position)
       `)
       .eq('product_id', id)
       .eq('is_active', true),
+    admin.from('sizes')
+      .select('id, label, order_index')
+      .eq('product_id', id)
+      .order('order_index', { ascending: true }),
     admin.from('product_pricing_tiers')
       .select('min_quantity, max_quantity, unit_price')
       .eq('product_id', id)
@@ -91,17 +94,17 @@ export async function GET(
   interface VariantRow {
     id: string
     color_swatch_id: string | null
-    size_id: number | null
     // supabase-js types many-to-one embeds as arrays regardless of cardinality —
     // in practice PostgREST returns a single object here. Handle both defensively.
     product_color_swatches:
       | { label: string | null; hex: string | null; position: number | null }
       | { label: string | null; hex: string | null; position: number | null }[]
       | null
-    sizes:
-      | { label: string | null; order_index: number | null }
-      | { label: string | null; order_index: number | null }[]
-      | null
+  }
+  interface SizeRow {
+    id: number
+    label: string | null
+    order_index: number | null
   }
   const variantRows = (variants ?? []) as unknown as VariantRow[]
   const pickOne = <T,>(v: T | T[] | null): T | null =>
@@ -109,7 +112,6 @@ export async function GET(
 
   const mappedVariants = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
-    const size = pickOne(v.sizes)
     const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
     return {
       variant_id: v.id,
@@ -119,9 +121,6 @@ export async function GET(
       color_position: swatch?.position ?? 0,
       catalogue_color_sort_order: colorConfig?.sort_order ?? null,
       catalogue_color_is_default: colorConfig?.is_default === true,
-      size_id: v.size_id,
-      size_label: size?.label ?? null,
-      size_order: size?.order_index ?? 0,
     }
   })
     .filter((v) => {
@@ -134,9 +133,15 @@ export async function GET(
       }
       const aColor = a.catalogue_color_sort_order ?? a.color_position
       const bColor = b.catalogue_color_sort_order ?? b.color_position
-      if (aColor !== bColor) return aColor - bColor
-      return a.size_order - b.size_order
+      return aColor - bColor
     })
+
+  // Per-product size list for the runtime size picker (colourway model).
+  const mappedSizes = ((sizeRows ?? []) as SizeRow[]).map((s) => ({
+    size_id: s.id,
+    size_label: s.label,
+    size_order: s.order_index ?? 0,
+  }))
 
   // Pre-order: swap brackets to period snapshot when open (spec §3.5).
   const openPeriod = await getOpenPeriodForOrg(admin, context.organizationId)
@@ -170,6 +175,7 @@ export async function GET(
       image_url: productRow.image_url,
     },
     variants: mappedVariants,
+    sizes: mappedSizes,
     brackets: finalBrackets,
   })
 }
