@@ -60,6 +60,10 @@ export function normalizePersisted(raw: unknown): CartState {
       productName: typeof l.productName === 'string' ? l.productName : '',
       variantId: typeof l.variantId === 'string' ? l.variantId : '',
       variantLabel: typeof l.variantLabel === 'string' ? l.variantLabel : '—',
+      sizeId:
+        typeof l.sizeId === 'number' ? l.sizeId : null,
+      sizeLabel:
+        typeof l.sizeLabel === 'string' ? l.sizeLabel : null,
       qty: typeof l.qty === 'number' && l.qty > 0 ? l.qty : 1,
       unitPrice: typeof l.unitPrice === 'number' ? l.unitPrice : 0,
       imageUrl: typeof l.imageUrl === 'string' ? l.imageUrl : null,

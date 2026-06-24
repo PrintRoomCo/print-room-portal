@@ -89,6 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           line.decorations ?? [],
           line.fulfilmentType,
           line.catalogueItemId ?? null,
+          line.sizeId ?? null,
         )
         const existing = s.lines.find(
           (l) =>
@@ -99,6 +100,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               l.decorations,
               l.fulfilmentType,
               l.catalogueItemId ?? null,
+              l.sizeId ?? null,
             ) ===
             incomingSig,
         )
