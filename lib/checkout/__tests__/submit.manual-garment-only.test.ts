@@ -255,6 +255,8 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
         quantity: 10,
         unit_price: 20,
         variant_id: null,
+        size_id: null,
+        size_label: null,
         catalogue_item_id: CAT_ITEM_ID,
       },
     ])
