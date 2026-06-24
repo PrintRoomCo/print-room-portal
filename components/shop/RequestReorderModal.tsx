@@ -7,6 +7,10 @@ import { useCompany } from '@/contexts/CompanyContext'
 interface RequestReorderModalProps {
   variantId: string
   variantLabel: string
+  /** SKUCOLLAPSE: optional size context (colourway model). Forwarded to the
+   *  reorder request so staff see which size to restock. */
+  sizeId?: number | null
+  sizeLabel?: string | null
   productName: string
   defaultQty: number
   onClose: () => void
@@ -16,6 +20,8 @@ interface RequestReorderModalProps {
 export function RequestReorderModal({
   variantId,
   variantLabel,
+  sizeId = null,
+  sizeLabel = null,
   productName,
   defaultQty,
   onClose,
@@ -48,7 +54,13 @@ export function RequestReorderModal({
       const res = await fetch('/api/checkout/reorder-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variant_id: variantId, requested_qty: qty, note: note || undefined }),
+        body: JSON.stringify({
+          variant_id: variantId,
+          size_id: sizeId ?? null,
+          size_label: sizeLabel ?? null,
+          requested_qty: qty,
+          note: note || undefined,
+        }),
       })
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }

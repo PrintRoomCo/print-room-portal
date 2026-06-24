@@ -8,7 +8,13 @@ export async function POST(request: Request) {
   const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
 
-  let body: { variant_id?: string; requested_qty?: number; note?: string }
+  let body: {
+    variant_id?: string
+    size_id?: number | null
+    size_label?: string | null
+    requested_qty?: number
+    note?: string
+  }
   try {
     body = await request.json()
   } catch {
@@ -30,6 +36,8 @@ export async function POST(request: Request) {
   try {
     const row = await createReorderRequest(auth.admin, auth.context, {
       variant_id: body.variant_id,
+      size_id: body.size_id ?? null,
+      size_label: body.size_label ?? null,
       requested_qty: body.requested_qty,
       note: body.note,
     })
