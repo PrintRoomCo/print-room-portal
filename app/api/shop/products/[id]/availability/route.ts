@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
-import type { VariantAvailability } from '@/lib/shop/variant-availability'
+import { availabilityKey, type VariantAvailability } from '@/lib/shop/variant-availability'
 
 export async function GET(
   _request: Request,
@@ -67,16 +67,15 @@ export async function GET(
 
   const { data: rows } = await admin
     .from('variant_availability')
-    .select('variant_id, available_qty, allow_order_without_stock')
+    .select('variant_id, size_id, available_qty, allow_order_without_stock')
     .eq('organization_id', context.organizationId)
     .in('variant_id', variantIds)
 
-  // Object-shape so the per-variant `allow_order_without_stock` flag rides
-  // alongside `available_qty` in a single round-trip. The portal mounts this
-  // as `availability[variant_id]` everywhere; consumers updated 2026-05-29.
+  // Keyed `${variant_id}::${size_id}` (size_id '' when null). One stock row per
+  // colourway×size; consumers updated 2026-06-24 (colourway model).
   const availability: Record<string, VariantAvailability> = {}
   for (const r of rows ?? []) {
-    availability[r.variant_id] = {
+    availability[availabilityKey(r.variant_id, r.size_id)] = {
       available_qty: r.available_qty,
       allow_order_without_stock: r.allow_order_without_stock === true,
     }
