@@ -55,18 +55,25 @@ const variants = [
     size_order: 1,
   },
 ]
+// SKUCOLLAPSE: availability keyed `${colourwayVariantId}::${sizeId}`. The
+// component elects the first variant of a colour as the colourway → 'red-s'.
 const availability = {
-  'red-s': { available_qty: 4, allow_order_without_stock: false },
-  'red-m': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 4, allow_order_without_stock: false },
+  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
 } as never
 
 // All-out-of-stock variant of `availability`: with no inventory on the current
 // selection, canChooseOrderIntent is false, so an org_admin lands in reorder
 // (made-to-order) mode by default — the canonical bulk-order case.
 const noStock = {
-  'red-s': { available_qty: 0, allow_order_without_stock: false },
-  'red-m': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
 } as never
+
+const SIZES = [
+  { size_id: 1, size_label: 'S', size_order: 0 },
+  { size_id: 2, size_label: 'M', size_order: 1 },
+]
 
 function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order' | 'mixed'
@@ -77,6 +84,7 @@ function renderPDP(opts: {
     <ProductDetailClient
       product={{ ...baseProduct, fulfilment_type: opts.fulfilment_type }}
       variants={variants}
+      sizes={SIZES}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
       availability={opts.availability ?? availability}
       organizationId="o1"

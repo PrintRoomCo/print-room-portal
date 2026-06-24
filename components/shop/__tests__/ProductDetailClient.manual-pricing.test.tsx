@@ -80,6 +80,7 @@ function renderPDP(decorations: DecorationOption[] = []) {
     <ProductDetailClient
       product={product}
       variants={[]}
+      sizes={[]}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 12.5 }]}
       availability={{}}
       organizationId="o1"

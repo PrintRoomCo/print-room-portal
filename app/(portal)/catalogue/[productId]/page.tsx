@@ -47,14 +47,9 @@ interface ProductDetail {
 interface RawVariant {
   id: string
   color_swatch_id: string | null
-  size_id: number | null
   product_color_swatches:
     | { label: string | null; hex: string | null; position: number | null; image_url: string | null }
     | { label: string | null; hex: string | null; position: number | null; image_url: string | null }[]
-    | null
-  sizes:
-    | { label: string | null; order_index: number | null }
-    | { label: string | null; order_index: number | null }[]
     | null
 }
 
@@ -221,6 +216,7 @@ const loadProductDetailPageData = cache(async (
   const [
     { data: product },
     { data: variants },
+    { data: sizeRows },
     { data: brackets },
     { data: availRows },
     { data: imageRows },
@@ -232,15 +228,18 @@ const loadProductDetailPageData = cache(async (
     productQuery,
     admin.from('product_variants')
       .select(`
-        id, color_swatch_id, size_id,
-        product_color_swatches (label, hex, position, image_url),
-        sizes (label, order_index)
+        id, color_swatch_id,
+        product_color_swatches (label, hex, position, image_url)
       `)
       .eq('product_id', productId)
       .eq('is_active', true),
+    admin.from('sizes')
+      .select('id, label, order_index')
+      .eq('product_id', productId)
+      .order('order_index', { ascending: true }),
     bracketsQuery,
     admin.from('variant_availability')
-      .select('variant_id, available_qty, allow_order_without_stock')
+      .select('variant_id, size_id, available_qty, allow_order_without_stock')
       .eq('organization_id', context.organizationId),
     admin.from('product_images')
       .select('id, file_url, view, alt_text, position, color_swatch_id')
@@ -279,9 +278,10 @@ const loadProductDetailPageData = cache(async (
   const addedSwatchIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
 
   const variantRows = (variants ?? []) as unknown as RawVariant[]
+  // SKUCOLLAPSE: a variant is now a colourway (no size axis). Size comes from the
+  // per-product `sizes` table (mappedSizes below), not from the variant row.
   const mappedVariantRows: MatrixVariant[] = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
-    const size = pickOne(v.sizes)
     const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
     return {
       variant_id: v.id,
@@ -292,20 +292,35 @@ const loadProductDetailPageData = cache(async (
       color_position: swatch?.position ?? 0,
       catalogue_color_sort_order: colorConfig?.sort_order ?? null,
       catalogue_color_is_default: colorConfig?.is_default === true,
-      size_id: v.size_id,
-      size_label: size?.label ?? null,
-      size_order: size?.order_index ?? 0,
+      size_id: null,
+      size_label: null,
+      size_order: 0,
     }
   })
+
+  // Per-product size list (colourway model) → the runtime size picker / grid.
+  const mappedSizes = ((sizeRows ?? []) as Array<{
+    id: number
+    label: string | null
+    order_index: number | null
+  }>).map((s) => ({
+    size_id: s.id,
+    size_label: s.label,
+    size_order: s.order_index ?? 0,
+  }))
   const { colourOptions, variants: mappedVariants } = resolveColourMatrix(mappedVariantRows, addedSwatchIds)
 
+  // SKUCOLLAPSE: keyed `${variant_id}::${size_id}` (size_id '' when null) — one
+  // stock row per colourway×size. Mirrors lib/shop/variant-availability
+  // availabilityKey + the availability API route.
   const availability: Record<string, VariantAvailability> = {}
   for (const r of (availRows ?? []) as Array<{
     variant_id: string
+    size_id: number | null
     available_qty: number
     allow_order_without_stock: boolean | null
   }>) {
-    availability[r.variant_id] = {
+    availability[`${r.variant_id}::${r.size_id ?? ''}`] = {
       available_qty: r.available_qty,
       allow_order_without_stock: r.allow_order_without_stock === true,
     }
@@ -467,6 +482,7 @@ const loadProductDetailPageData = cache(async (
         manualDecorationSeed,
       },
       variants: mappedVariants,
+      sizes: mappedSizes,
       brackets: bracketRows,
       availability,
       organizationId: context.organizationId,

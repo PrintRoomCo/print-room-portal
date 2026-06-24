@@ -59,8 +59,9 @@ function renderPDP(opts: {
           size_order: 0,
         },
       ]}
+      sizes={[{ size_id: 1, size_label: 'S', size_order: 0 }]}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
-      availability={{ v1: { available_qty: 5, allow_order_without_stock: false } }}
+      availability={{ 'v1::1': { available_qty: 5, allow_order_without_stock: false } }}
       organizationId="o1"
       customerRole={opts.role}
       orderingPermission={opts.orderingPermission ?? 'both'}

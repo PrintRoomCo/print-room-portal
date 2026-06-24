@@ -45,8 +45,9 @@ const variants = [
     size_order: 0,
   },
 ]
+// SKUCOLLAPSE: one_size colourway → stock keyed `${variantId}::` (size_id null).
 const availability = {
-  os: { available_qty: 4, allow_order_without_stock: false },
+  'os::': { available_qty: 4, allow_order_without_stock: false },
 } as never
 
 function renderPDP() {
@@ -54,6 +55,7 @@ function renderPDP() {
     <ProductDetailClient
       product={product}
       variants={variants}
+      sizes={[]}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
       availability={availability}
       organizationId="o1"

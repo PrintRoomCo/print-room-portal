@@ -44,6 +44,17 @@ function decorationMethodLabel(method: string): string {
   return DECORATION_METHOD_LABELS[method] ?? method.replace(/_/g, ' ')
 }
 
+// SKUCOLLAPSE: composite key for per-(colourway, size) qty state + availability
+// lookups. Matches the catalogue page + lib/shop/variant-availability
+// availabilityKey (size_id renders '' when null).
+const cellKey = (variantId: string, sizeId: number | null) => `${variantId}::${sizeId ?? ''}`
+
+interface SizeOption {
+  size_id: number
+  size_label: string | null
+  size_order: number
+}
+
 interface ProductData {
   id: string
   name: string
@@ -95,6 +106,9 @@ interface PricingResponse {
 interface Props {
   product: ProductData
   variants: VariantRow[]
+  /** Per-product size list (colourway model) — drives the runtime size picker /
+   *  qty grid; size is no longer carried on the variant row. */
+  sizes: SizeOption[]
   brackets: Bracket[]
   /**
    * variant_id → { available_qty, allow_order_without_stock }. Only populated
@@ -131,6 +145,7 @@ interface Props {
 export function ProductDetailClient({
   product,
   variants,
+  sizes,
   brackets,
   availability,
   customerRole,
@@ -148,7 +163,10 @@ export function ProductDetailClient({
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
     firstVariant?.color_swatch_id ?? colourOptions[0]?.id ?? null
   )
-  const [sizeId, setSizeId] = useState<number | null>(firstVariant?.size_id ?? null)
+  // Colourway model: the variant carries no size. Single-size (one_size) products
+  // resolve their lone size here; multi-size products drive size via the qty grid
+  // (per-size rows), so the single sizeId stays null there.
+  const [sizeId, setSizeId] = useState<number | null>(sizes.length === 1 ? sizes[0].size_id : null)
   // Qty per variant_id. Survives colour-switches so the user can build a
   // multi-variant order (e.g. 50 of Black M + 30 of White L) in a single PDP
   // session without losing entries when they flip swatches. Cross-colour
@@ -185,22 +203,18 @@ export function ProductDetailClient({
     return sum
   }, [variantlessQtyBySize])
 
+  // One colourway variant per colour now — size is no longer part of variant identity.
   const selectedVariant = useMemo(
-    () =>
-      variants.find(
-        (v) => v.color_swatch_id === colorSwatchId && v.size_id === sizeId
-      ) ?? null,
-    [variants, colorSwatchId, sizeId]
+    () => variants.find((v) => v.color_swatch_id === colorSwatchId) ?? null,
+    [variants, colorSwatchId]
   )
 
-  const tracksThisVariant =
-    selectedVariant != null && availability[selectedVariant.variant_id] !== undefined
-  const availableQty = selectedVariant
-    ? availability[selectedVariant.variant_id]?.available_qty
-    : undefined
+  // Availability is per (colourway, size); look up by the composite key.
+  const availKey = selectedVariant != null ? cellKey(selectedVariant.variant_id, sizeId) : null
+  const tracksThisVariant = availKey != null && availability[availKey] !== undefined
+  const availableQty = availKey ? availability[availKey]?.available_qty : undefined
   const selectedVariantBackorderable =
-    selectedVariant != null &&
-    availability[selectedVariant.variant_id]?.allow_order_without_stock === true
+    availKey != null && availability[availKey]?.allow_order_without_stock === true
   const isOutOfStock = tracksThisVariant && (availableQty ?? 0) === 0
 
   // Total in-stock across every size for the currently selected colour.
@@ -208,36 +222,39 @@ export function ProductDetailClient({
   // available" for Black, not "8 available" because S happens to be the
   // selected size.
   const colourTotalAvailable = useMemo<number | undefined>(() => {
-    if (!colorSwatchId) return undefined
+    const cwId = selectedVariant?.variant_id ?? null
+    if (!cwId) return undefined
     let total = 0
     let tracked = false
-    for (const v of variants) {
-      if (v.color_swatch_id !== colorSwatchId) continue
-      const a = availability[v.variant_id]
+    for (const s of sizes) {
+      const a = availability[cellKey(cwId, s.size_id)]
       if (a === undefined) continue
       tracked = true
       total += a.available_qty
     }
     return tracked ? total : undefined
-  }, [variants, colorSwatchId, availability])
+  }, [sizes, selectedVariant, availability])
 
+  // Size rows come from the per-product `sizes` list (the variant is a colourway);
+  // availability is per colourway×size via the composite key.
   const sizeRowsForColour = useMemo(() => {
-    return variants
-      .filter((v) => v.color_swatch_id === colorSwatchId && v.size_id != null)
-      .map((v) => {
-        const a = availability[v.variant_id]
+    const cwId = selectedVariant?.variant_id ?? null
+    if (!cwId) return []
+    return sizes
+      .map((s) => {
+        const a = availability[cellKey(cwId, s.size_id)]
         const tracked = a !== undefined
         return {
-          variantId: v.variant_id,
-          sizeId: v.size_id as number,
-          sizeLabel: v.size_label ?? '',
-          sizeOrder: v.size_order,
+          variantId: cwId,
+          sizeId: s.size_id,
+          sizeLabel: s.size_label ?? '',
+          sizeOrder: s.size_order,
           available: tracked ? a.available_qty : null,
           allowOrderWithoutStock: tracked ? a.allow_order_without_stock : false,
         }
       })
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
-  }, [variants, colorSwatchId, availability])
+  }, [sizes, selectedVariant, availability])
 
   // Backorderable variants count as "has inventory" for the gate that
   // unlocks the From-Stock vs Made-to-Order toggle and lets the customer
@@ -248,11 +265,11 @@ export function ProductDetailClient({
         (row) => (row.available ?? 0) > 0 || row.allowOrderWithoutStock,
       )
     }
-    if (!selectedVariant) return false
-    const a = availability[selectedVariant.variant_id]
+    if (!availKey) return false
+    const a = availability[availKey]
     if (!a) return false
     return a.available_qty > 0 || a.allow_order_without_stock
-  }, [sizingMode, sizeRowsForColour, selectedVariant, availability])
+  }, [sizingMode, sizeRowsForColour, availKey, availability])
 
   // The order-mode toggle is offered to an org_admin looking at a product that
   // BOTH has stock for the current selection AND has volume tiers — i.e. it can
@@ -323,7 +340,7 @@ export function ProductDetailClient({
   // colour subtotal so the user can see what's queued under the active swatch.
   const currentColourTotalQty = useMemo(() => {
     return sizeRowsForColour.reduce(
-      (sum, row) => sum + (variantQuantities[row.variantId] ?? 0),
+      (sum, row) => sum + (variantQuantities[cellKey(row.variantId, row.sizeId)] ?? 0),
       0,
     )
   }, [sizeRowsForColour, variantQuantities])
@@ -334,12 +351,25 @@ export function ProductDetailClient({
   // Resolved per-variant lines for every variant the user has touched in this
   // session, across all colours. Drives the order-summary panel between the
   // size grid and the price block.
+  // One row per touched (colourway, size) cell across every colour the user has
+  // entered. Size comes from the per-product `sizes` list; qty + availability are
+  // keyed by the (variant, size) composite.
   const orderLines = useMemo(() => {
-    return variants
-      .filter((v) => (variantQuantities[v.variant_id] ?? 0) > 0)
-      .map((v) => {
-        const qtyLine = variantQuantities[v.variant_id] ?? 0
-        const a = availability[v.variant_id]
+    const out: Array<{
+      variantId: string
+      sizeId: number | null
+      colourLabel: string
+      sizeLabel: string
+      qty: number
+      inStock: number
+      toBeMade: number
+      tracked: boolean
+    }> = []
+    for (const v of variants) {
+      for (const s of sizes) {
+        const qtyLine = variantQuantities[cellKey(v.variant_id, s.size_id)] ?? 0
+        if (qtyLine <= 0) continue
+        const a = availability[cellKey(v.variant_id, s.size_id)]
         const tracked = a !== undefined
         const stocked = tracked ? a.available_qty : 0
         const backorderable = tracked && a.allow_order_without_stock
@@ -354,17 +384,20 @@ export function ProductDetailClient({
           : tracked
             ? Math.max(0, qtyLine - stocked)
             : qtyLine
-        return {
+        out.push({
           variantId: v.variant_id,
+          sizeId: s.size_id,
           colourLabel: v.color_label ?? '',
-          sizeLabel: v.size_label ?? '',
+          sizeLabel: s.size_label ?? '',
           qty: qtyLine,
           inStock,
           toBeMade,
           tracked,
-        }
-      })
-  }, [variants, variantQuantities, availability, canChooseOrderIntent, orderIntent])
+        })
+      }
+    }
+    return out
+  }, [variants, sizes, variantQuantities, availability, canChooseOrderIntent, orderIntent])
 
   const defaultMinQty = activeMoq
   const [singleQty, setSingleQty] = useState<number>(defaultMinQty)
@@ -385,10 +418,9 @@ export function ProductDetailClient({
     if (sizingMode === 'multi_size_with_variants') {
       return orderLines.reduce((sum, line) => sum + line.toBeMade, 0)
     }
-    // one_size: a single selected variant.
+    // one_size: a single selected variant (colourway).
     if (selectedVariant) {
-      const avail = availability[selectedVariant.variant_id]?.available_qty ?? 0
-      return Math.max(0, qty - avail)
+      return Math.max(0, qty - (availableQty ?? 0))
     }
     return 0
   }, [
@@ -396,7 +428,7 @@ export function ProductDetailClient({
     sizingMode,
     orderLines,
     selectedVariant,
-    availability,
+    availableQty,
     qty,
   ])
 
@@ -685,6 +717,8 @@ export function ProductDetailClient({
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
     const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
+    // one_size: the lone product size carried onto the order line.
+    const oneSizeSizeLabel = sizes.find((s) => s.size_id === sizeId)?.size_label ?? null
 
     // Build a per-decoration qty-band ladder from `decorationPricesByQty` so
     // the cart can re-tier deco price on qty edit (same shape as the garment
@@ -784,70 +818,72 @@ export function ProductDetailClient({
       unitPrice: b.unit_price,
     }))
 
-    // Mode 1: existing multi-size with variants — one cart line per touched variant.
+    // Mode 1: multi-size with variants — one cart line per touched (colourway,
+    // size) cell. The variant is the colourway; size is an explicit line attribute.
     if (sizingMode === 'multi_size_with_variants') {
       let added = 0
       for (const variant of variants) {
-        const lineQty = variantQuantities[variant.variant_id] ?? 0
-        if (lineQty <= 0) continue
-        const variantLabel =
-          [variant.color_label, variant.size_label].filter(Boolean).join(' / ') || '—'
-        const a = availability[variant.variant_id]
-        const tracked = a !== undefined
-        const available = tracked ? a.available_qty : 0
-        const backorderable = tracked && a.allow_order_without_stock
-        const baseLine = {
-          productId: product.id,
-          productName: product.name,
-          variantId: variant.variant_id,
-          variantLabel,
-          unitPrice: pricing.unit_price,
-          imageUrl: cartImageForSwatch(variant.color_swatch_id),
-          decorations: cartDecorationsForSwatch(variant.color_swatch_id),
-          brackets: cartLineBrackets,
-          catalogueItemId: product.catalogueItemId,
-          catalogueVariantLabel: product.catalogueVariantLabel,
-          manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
-          manualDecorationBrackets: manualDecorationBracketsSnapshot,
-        }
-
-        // Org_admin From-inventory overflow: split a partial-stock variant into
-        // a stocked draw + a make_to_stock production line. The server MOQ
-        // engine then counts only the production portion and inventory draws
-        // only the stocked portion. lineSignature keys on fulfilmentType, so
-        // the two lines never merge in the cart.
-        if (
-          isInventoryOverflowScope &&
-          tracked &&
-          !backorderable &&
-          lineQty > available
-        ) {
-          if (available > 0) {
-            cart.addLine({ ...baseLine, qty: available, fulfilmentType: 'stocked' })
+        for (const s of sizes) {
+          const lineQty = variantQuantities[cellKey(variant.variant_id, s.size_id)] ?? 0
+          if (lineQty <= 0) continue
+          const variantLabel =
+            [variant.color_label, s.size_label].filter(Boolean).join(' / ') || '—'
+          const a = availability[cellKey(variant.variant_id, s.size_id)]
+          const tracked = a !== undefined
+          const available = tracked ? a.available_qty : 0
+          const backorderable = tracked && a.allow_order_without_stock
+          const baseLine = {
+            productId: product.id,
+            productName: product.name,
+            variantId: variant.variant_id,
+            variantLabel,
+            sizeId: s.size_id,
+            sizeLabel: s.size_label,
+            unitPrice: pricing.unit_price,
+            imageUrl: cartImageForSwatch(variant.color_swatch_id),
+            decorations: cartDecorationsForSwatch(variant.color_swatch_id),
+            brackets: cartLineBrackets,
+            catalogueItemId: product.catalogueItemId,
+            catalogueVariantLabel: product.catalogueVariantLabel,
+            manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
+            manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
-          cart.addLine({
-            ...baseLine,
-            qty: lineQty - available,
-            fulfilmentType: 'make_to_stock',
-          })
-          added += lineQty
-          continue
-        }
 
-        // Fulfilment decision (unchanged): toggle choice wins for org_admin;
-        // buyer/no-toggle auto-routes backorderable to make_to_stock, else
-        // stock-vs-qty.
-        const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
-          ? orderIntent === 'bulk'
-            ? 'make_to_stock'
-            : 'stocked'
-          : backorderable
-            ? 'make_to_stock'
-            : tracked && lineQty > available
+          // Org_admin From-inventory overflow: split a partial-stock cell into a
+          // stocked draw + a make_to_stock production line. lineSignature keys on
+          // fulfilmentType AND size, so the two lines never merge in the cart.
+          if (
+            isInventoryOverflowScope &&
+            tracked &&
+            !backorderable &&
+            lineQty > available
+          ) {
+            if (available > 0) {
+              cart.addLine({ ...baseLine, qty: available, fulfilmentType: 'stocked' })
+            }
+            cart.addLine({
+              ...baseLine,
+              qty: lineQty - available,
+              fulfilmentType: 'make_to_stock',
+            })
+            added += lineQty
+            continue
+          }
+
+          // Fulfilment decision: toggle choice wins for org_admin; buyer/no-toggle
+          // auto-routes backorderable to make_to_stock, else stock-vs-qty.
+          const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+            ? orderIntent === 'bulk'
               ? 'make_to_stock'
               : 'stocked'
-        cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
-        added += lineQty
+            : backorderable
+              ? 'make_to_stock'
+              : tracked && lineQty > available
+                ? 'make_to_stock'
+                : 'stocked'
+          cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
+          added += lineQty
+        }
       }
       if (added > 0) {
         setVariantQuantities({})
@@ -908,6 +944,8 @@ export function ProductDetailClient({
         productName: product.name,
         variantId: '',
         variantLabel: '—',
+        sizeId,
+        sizeLabel: oneSizeSizeLabel,
         unitPrice: pricing.unit_price,
         imageUrl: cartImageForSwatch(colorSwatchId),
         decorations: cartDecorationsForSwatch(colorSwatchId),
@@ -943,6 +981,8 @@ export function ProductDetailClient({
       productName: product.name,
       variantId: '',
       variantLabel: '—',
+      sizeId,
+      sizeLabel: oneSizeSizeLabel,
       qty,
       unitPrice: pricing.unit_price,
       imageUrl: cartImageForSwatch(colorSwatchId),
@@ -977,10 +1017,11 @@ export function ProductDetailClient({
   // scope, where exceeding stock is allowed and routed into a production run.
   if (isInventoryMode && !isInventoryOverflowScope) {
     if (sizingMode === 'multi_size_with_variants') {
-      for (const variant of variants) {
-        const requested = variantQuantities[variant.variant_id] ?? 0
+      const cells = variants.flatMap((variant) => sizes.map((s) => ({ variant, s })))
+      for (const { variant, s } of cells) {
+        const requested = variantQuantities[cellKey(variant.variant_id, s.size_id)] ?? 0
         if (requested <= 0) continue
-        const a = availability[variant.variant_id]
+        const a = availability[cellKey(variant.variant_id, s.size_id)]
         const backorderable = a?.allow_order_without_stock === true
         // Buyer / no toggle: backorderable variants auto-route to
         // make_to_stock at submit, so there's no useful prompt to surface
@@ -989,11 +1030,10 @@ export function ProductDetailClient({
         if (backorderable && !canChooseOrderIntent) continue
         const available = a?.available_qty ?? 0
         if (requested > available) {
-          const label =
-            [variant.color_label, variant.size_label].filter(Boolean).join(' / ') ||
-            'selected variant'
           inventoryIntentShortfall = {
-            label,
+            label:
+              [variant.color_label, s.size_label].filter(Boolean).join(' / ') ||
+              'selected variant',
             available,
             backorderable,
           }
@@ -1181,7 +1221,7 @@ export function ProductDetailClient({
                   {visibleSizeRows.map((row) => {
                     const trackedRow = row.available !== null
                     const stocked = trackedRow ? (row.available ?? 0) : 0
-                    const value = variantQuantities[row.variantId] ?? 0
+                    const value = variantQuantities[cellKey(row.variantId, row.sizeId)] ?? 0
                     // Backorderable lines always go to production — surface
                     // the full requested qty as "to be made" rather than
                     // counting the (zero) stock balance against it.
@@ -1191,7 +1231,7 @@ export function ProductDetailClient({
                     const showBackorderableChip =
                       trackedRow && row.allowOrderWithoutStock && stocked === 0
                     return (
-                      <tr key={row.variantId} className="border-t border-gray-100">
+                      <tr key={cellKey(row.variantId, row.sizeId)} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
                         <td className="px-5 py-3 text-xs text-gray-600">
                           {showBackorderableChip ? (
@@ -1220,10 +1260,11 @@ export function ProductDetailClient({
                               const n = Number(e.target.value)
                               setVariantQuantities((prev) => {
                                 const next = { ...prev }
+                                const k = cellKey(row.variantId, row.sizeId)
                                 if (!Number.isFinite(n) || n <= 0) {
-                                  delete next[row.variantId]
+                                  delete next[k]
                                 } else {
-                                  next[row.variantId] = Math.floor(n)
+                                  next[k] = Math.floor(n)
                                 }
                                 return next
                               })
@@ -1294,7 +1335,7 @@ export function ProductDetailClient({
                     [line.colourLabel, line.sizeLabel].filter(Boolean).join(' / ') || '—'
                   return (
                     <li
-                      key={line.variantId}
+                      key={cellKey(line.variantId, line.sizeId)}
                       className="flex items-baseline justify-between py-2.5"
                     >
                       <span className="text-gray-800">{label}</span>

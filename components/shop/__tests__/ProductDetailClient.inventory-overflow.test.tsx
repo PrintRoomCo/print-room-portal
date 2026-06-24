@@ -54,10 +54,16 @@ const variants = [
     size_order: 1,
   },
 ]
+// SKUCOLLAPSE: availability keyed `${colourwayVariantId}::${sizeId}` → 'red-s'.
 const availability = {
-  'red-s': { available_qty: 4, allow_order_without_stock: false },
-  'red-m': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 4, allow_order_without_stock: false },
+  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
 } as never
+
+const SIZES = [
+  { size_id: 1, size_label: 'S', size_order: 0 },
+  { size_id: 2, size_label: 'M', size_order: 1 },
+]
 
 function renderPDP(
   role: 'org_admin' | 'staff' = 'org_admin',
@@ -67,6 +73,7 @@ function renderPDP(
     <ProductDetailClient
       product={{ ...baseProduct, fulfilment_type: 'mixed' }}
       variants={variants}
+      sizes={SIZES}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
       availability={availability}
       organizationId="o1"
