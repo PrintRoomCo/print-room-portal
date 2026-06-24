@@ -93,7 +93,7 @@ export function CartTable({
   useEffect(() => {
     const oversells = lines.some((l) => {
       if (l.fulfilmentType === 'make_to_stock') return false
-      const avail = availability[l.variantId]
+      const avail = availability[`${l.variantId}::${l.sizeId ?? ''}`]
       return avail !== undefined && l.qty > avail
     })
     onOversellChange?.(oversells)
@@ -130,7 +130,7 @@ export function CartTable({
   return (
     <div className="space-y-3">
       {lines.map((line) => {
-        const avail = availability[line.variantId]
+        const avail = availability[`${line.variantId}::${line.sizeId ?? ''}`]
         const isMakeToStock = line.fulfilmentType === 'make_to_stock'
         const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
         const moq = moqByProduct[line.productId]
