@@ -125,6 +125,8 @@ export function CheckoutReviewClient({
             product_id: line.productId,
             product_name: line.productName,
             variant_id: line.variantId || null,
+            size_id: line.sizeId ?? null,
+            size_label: line.sizeLabel ?? null,
             qty: line.qty,
             ship_to_store_id: allCustom ? null : reviewState.perLineShipTo[line.lineId] ?? null,
             cart_line_id: line.lineId,

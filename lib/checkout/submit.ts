@@ -27,6 +27,9 @@ export interface CheckoutLineInput {
   product_id: string
   product_name: string
   variant_id?: string | null
+  /** SKUCOLLAPSE: size chosen at order time (colourway model). */
+  size_id?: number | null
+  size_label?: string | null
   qty: number
   ship_to_store_id?: string | null
   decorations?: CheckoutLineDecorationInput[]
@@ -200,6 +203,7 @@ interface QuoteItemRow {
   id: string
   product_id: string
   variant_id: string | null
+  size_id: number | null
   product_name: string
 }
 
@@ -214,10 +218,10 @@ interface QuoteItemForEmail {
   product_name: string
   quantity: number
   unit_price: number
+  size_label: string | null
   product_variants:
     | {
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
-        sizes: { label: string | null } | { label: string | null }[] | null
       }
     | null
 }
@@ -234,8 +238,10 @@ function pickOne<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? v[0] ?? null : v
 }
 
-function makeLineKey(productId: string, variantId: string | null): string {
-  return `${productId}::${variantId ?? ''}`
+// SKUCOLLAPSE: include size so two sizes of one colourway (same product_id +
+// variant_id) don't collapse into one per-line map entry.
+function makeLineKey(productId: string, variantId: string | null, sizeId: number | null = null): string {
+  return `${productId}::${variantId ?? ''}::${sizeId ?? ''}`
 }
 
 /**
@@ -638,7 +644,7 @@ export async function submitCustomerOrder(
       })
     } else {
       manualDecorationByLineKey.set(
-        makeLineKey(line.product_id, line.variant_id ?? null),
+        makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null),
         serverR,
       )
     }
@@ -654,7 +660,7 @@ export async function submitCustomerOrder(
           line.qty
         await applyManualDecorationForLine(line, decorationQty, '')
       }
-      validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), [])
+      validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), [])
       continue
     }
     const linkIds = decs.map((d) => d.linkId)
@@ -846,12 +852,12 @@ export async function submitCustomerOrder(
       )
     }
 
-    validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null), validated)
+    validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), validated)
     if (validated.length > 0) {
       const decoCatId = byId.get(validated[0].linkId)?.catalogue_item_id
       if (decoCatId) {
         decoCatalogueItemIdByLineKey.set(
-          makeLineKey(line.product_id, line.variant_id ?? null),
+          makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null),
           decoCatId,
         )
       }
@@ -871,7 +877,7 @@ export async function submitCustomerOrder(
   const decorationCostByLineKey = new Map<string, number>()
   let totalDecorationRevenue = 0
   for (const l of repriced) {
-    const lineKey = makeLineKey(l.product_id, l.variant_id ?? null)
+    const lineKey = makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)
     // Manual-final lines bill ONE combined figure (validated entries are $0
     // metadata); computed lines sum the per-placement prices.
     const manualDeco = manualDecorationByLineKey.get(lineKey)
@@ -901,13 +907,13 @@ export async function submitCustomerOrder(
     p_internal_notes: input.internal_notes ?? null,
     p_lines: repriced.map((l) => {
       const perUnitDeco =
-        decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? 0
+        decorationCostByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)) ?? 0
       // Phase 2 — the line's own catalogueItemId is the authoritative identity.
       // The decoration-derived id is only a cross-check; if they disagree, warn
       // once and still trust the line's id.
       const lineCatalogueItemId = l.catalogueItemId ?? null
       const decoCatalogueItemId =
-        decoCatalogueItemIdByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null)) ?? null
+        decoCatalogueItemIdByLineKey.get(makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)) ?? null
       if (
         lineCatalogueItemId &&
         decoCatalogueItemId &&
@@ -927,6 +933,8 @@ export async function submitCustomerOrder(
         quantity: l.qty,
         unit_price: l.unit_price + perUnitDeco,
         variant_id: l.variant_id ?? null,
+        size_id: l.size_id ?? null,
+        size_label: l.size_label ?? null,
         catalogue_item_id: lineCatalogueItemId,
       }
     }),
@@ -989,7 +997,7 @@ export async function submitCustomerOrder(
   //    creates quote_items without ship-to or decorations; we set both here.
   const { data: newLines } = await admin
     .from('quote_items')
-    .select('id, product_id, variant_id, product_name')
+    .select('id, product_id, variant_id, size_id, product_name')
     .eq('quote_id', quote_id)
   if (newLines) {
     const rows = newLines as QuoteItemRow[]
@@ -1000,6 +1008,7 @@ export async function submitCustomerOrder(
           !consumed.has(x.id) &&
           x.product_id === inLine.product_id &&
           (x.variant_id ?? null) === (inLine.variant_id ?? null) &&
+          (x.size_id ?? null) === (inLine.size_id ?? null) &&
           x.product_name === inLine.product_name,
       )
       if (!match) continue
@@ -1009,7 +1018,7 @@ export async function submitCustomerOrder(
         update.ship_to_store_id = inLine.ship_to_store_id ?? null
       }
       const validated =
-        validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null)) ?? []
+        validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null, inLine.size_id ?? null)) ?? []
       update.decorations = validated
       if (Object.keys(update).length > 0) {
         await admin.from('quote_items').update(update).eq('id', match.id)
@@ -1172,8 +1181,8 @@ export async function submitCustomerOrder(
     const { data: dealLines } = await admin
       .from('quote_items')
       .select(`
-        id, product_name, quantity, unit_price, decorations,
-        product_variants ( product_color_swatches(label), sizes(label) )
+        id, product_name, quantity, unit_price, decorations, size_label,
+        product_variants ( product_color_swatches(label) )
       `)
       .eq('quote_id', quote_id)
 
@@ -1183,14 +1192,13 @@ export async function submitCustomerOrder(
       quantity: number
       unit_price: number
       decorations: Array<{ name: string }> | null
+      size_label: string | null
       product_variants: {
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
-        sizes: { label: string | null } | { label: string | null }[] | null
       } | null
     }>).map((row) => {
       const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
-      const size = pickOne(row.product_variants?.sizes ?? null)
-      const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
+      const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
       const designName = row.decorations?.[0]?.name ?? 'No decoration'
       return {
         quoteItemId: row.id,
@@ -1410,18 +1418,16 @@ export async function submitCustomerOrder(
     const { data: lines } = await admin
       .from('quote_items')
       .select(
-        `product_name, quantity, unit_price,
+        `product_name, quantity, unit_price, size_label,
          product_variants (
-           product_color_swatches (label),
-           sizes (label)
+           product_color_swatches (label)
          )`
       )
       .eq('quote_id', quote_id)
     const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
     emailLines = lineRows.map((l) => {
       const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
-      const size = pickOne(l.product_variants?.sizes ?? null)
-      const variantLabel = [swatch?.label, size?.label].filter(Boolean).join(' / ') || '—'
+      const variantLabel = [swatch?.label, l.size_label].filter(Boolean).join(' / ') || '—'
       return {
         productName: l.product_name,
         variantLabel,
