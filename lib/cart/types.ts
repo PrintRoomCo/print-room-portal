@@ -38,6 +38,11 @@ export interface CartLine {
   productName: string
   variantId: string
   variantLabel: string
+  /** Runtime size pick (colourway model). sizeId is the `sizes.id`; sizeLabel is
+   *  the denormalised snapshot shown in the cart and sent to the order line.
+   *  Null/absent on genuinely sizeless (one-size) products + legacy lines. */
+  sizeId?: number | null
+  sizeLabel?: string | null
   qty: number
   unitPrice: number
   imageUrl: string | null
@@ -163,8 +168,9 @@ export function lineSignature(
   decorations: CartLineDecoration[],
   fulfilmentType: CartLineFulfilmentType = 'stocked',
   catalogueItemId: string | null = null,
+  sizeId: number | null = null,
 ): string {
-  return `${catalogueItemId ?? productId}::${variantId}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
+  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
 }
 
 /**

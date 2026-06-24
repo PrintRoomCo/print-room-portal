@@ -72,6 +72,20 @@ describe('lineSignature', () => {
   })
 })
 
+describe('lineSignature includes size', () => {
+  it('same product+colourway+label, different size → different signatures', () => {
+    const base = ['p1', 'cw1', 'Black', [] as never[], 'stocked' as const, null] as const
+    const sigS = lineSignature(...base, 10)
+    const sigL = lineSignature(...base, 20)
+    expect(sigS).not.toBe(sigL)
+  })
+  it('null size is stable', () => {
+    const a = lineSignature('p1', 'cw1', '—', [], 'stocked', null, null)
+    const b = lineSignature('p1', 'cw1', '—', [], 'stocked', null, null)
+    expect(a).toBe(b)
+  })
+})
+
 describe('recomputeProductTierPrices', () => {
   // Canonical garment ladder used by every test below. Maps the price drop
   // pattern from the live engine: small qty = high amortization, qty 1000+ = cheap.
