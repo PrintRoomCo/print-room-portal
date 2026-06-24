@@ -22,14 +22,33 @@ export async function GET() {
   const { data: eventRows, error: eventErr } = await auth.admin
     .from('variant_inventory_events')
     .select(
-      'id, variant_id, reason, delta_stock, delta_committed, note, reference_quote_item_id, staff_user_id, created_at',
+      'id, variant_id, size_id, reason, delta_stock, delta_committed, note, reference_quote_item_id, staff_user_id, created_at',
     )
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(EVENT_LIMIT)
   if (eventErr) return NextResponse.json({ error: eventErr.message }, { status: 500 })
 
-  const events = (eventRows ?? []) as InventoryEvent[]
+  const rawEvents = (eventRows ?? []) as Array<Omit<InventoryEvent, 'size_label'>>
+  // SKUCOLLAPSE: the event row carries size_id only; resolve labels from the
+  // per-product sizes table so the audit feed can show which size moved.
+  const sizeIds = Array.from(
+    new Set(rawEvents.map((e) => e.size_id).filter((x): x is number => x != null)),
+  )
+  const sizeLabelById = new Map<number, string>()
+  if (sizeIds.length > 0) {
+    const { data: sizeRows } = await auth.admin
+      .from('sizes')
+      .select('id, label')
+      .in('id', sizeIds)
+    for (const s of (sizeRows ?? []) as Array<{ id: number; label: string | null }>) {
+      if (s.label) sizeLabelById.set(s.id, s.label)
+    }
+  }
+  const events: InventoryEvent[] = rawEvents.map((e) => ({
+    ...e,
+    size_label: e.size_id != null ? sizeLabelById.get(e.size_id) ?? null : null,
+  }))
 
   const refIds = Array.from(
     new Set(events.map((e) => e.reference_quote_item_id).filter((x): x is string => !!x)),

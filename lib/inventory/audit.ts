@@ -1,6 +1,10 @@
 export interface InventoryEvent {
   id: string
   variant_id: string
+  /** SKUCOLLAPSE: size of the colourway this event touched. size_label is
+   *  resolved from size_id by the caller (not stored on the event row). */
+  size_id: number | null
+  size_label: string | null
   reason: string
   delta_stock: number
   delta_committed: number
@@ -24,6 +28,8 @@ export interface AuditResolvers {
 export interface AuditEntry {
   id: string
   variantId: string
+  sizeId: number | null
+  sizeLabel: string | null
   reason: string
   deltaStock: number
   deltaCommitted: number
@@ -65,6 +71,8 @@ export function buildAuditEntries(
     return {
       id: e.id,
       variantId: e.variant_id,
+      sizeId: e.size_id,
+      sizeLabel: e.size_label,
       reason: e.reason,
       deltaStock: e.delta_stock,
       deltaCommitted: e.delta_committed,

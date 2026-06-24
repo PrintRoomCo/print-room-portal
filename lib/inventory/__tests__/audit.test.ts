@@ -18,6 +18,8 @@ function event(over: Partial<InventoryEvent> = {}): InventoryEvent {
   return {
     id: over.id ?? 'e1',
     variant_id: over.variant_id ?? 'v1',
+    size_id: over.size_id ?? null,
+    size_label: over.size_label ?? null,
     reason: over.reason ?? 'order_commit',
     delta_stock: over.delta_stock ?? -5,
     delta_committed: over.delta_committed ?? 0,
@@ -78,5 +80,14 @@ describe('buildAuditEntries', () => {
       resolvers(),
     )
     expect(entry).toMatchObject({ deltaStock: -3, deltaCommitted: 3, note: 'partial ship', variantId: 'v1' })
+  })
+
+  it('passes size_id/size_label through to the entry (colourway model)', () => {
+    const [entry] = buildAuditEntries(
+      [event({ size_id: 2, size_label: 'M', reference_quote_item_id: null })],
+      resolvers(),
+    )
+    expect(entry.sizeId).toBe(2)
+    expect(entry.sizeLabel).toBe('M')
   })
 })

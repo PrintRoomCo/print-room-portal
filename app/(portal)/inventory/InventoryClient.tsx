@@ -124,6 +124,7 @@ export function InventoryClient() {
                 <tr>
                   <th className="px-4 py-3 font-medium">When</th>
                   <th className="px-4 py-3 font-medium">Movement</th>
+                  <th className="px-4 py-3 font-medium">Size</th>
                   <th className="px-4 py-3 text-right font-medium">Δ Stock</th>
                   <th className="px-4 py-3 font-medium">Who</th>
                   <th className="px-4 py-3 font-medium">Where</th>
@@ -132,13 +133,13 @@ export function InventoryClient() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                       Loading…
                     </td>
                   </tr>
                 ) : visibleEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                       No movements recorded.
                     </td>
                   </tr>
@@ -156,6 +157,7 @@ export function InventoryClient() {
                         {e.reason}
                         {e.note ? <span className="text-gray-400"> · {e.note}</span> : null}
                       </td>
+                      <td className="px-4 py-3 text-gray-700">{e.sizeLabel ?? '—'}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{e.deltaStock}</td>
                       <td className="px-4 py-3 text-gray-900">{e.who}</td>
                       <td className="px-4 py-3 text-gray-700">{e.where ?? '—'}</td>
