@@ -165,30 +165,6 @@ export function CartTable({
                   {line.productName}
                 </p>
                 <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
-                {line.decorations.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    {line.decorations.map((d) => {
-                      const icon = d.snapshotUrl ?? d.artworkUrl
-                      return (
-                        <span
-                          key={d.linkId}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-[11px] text-gray-700"
-                          title={d.name}
-                        >
-                          {icon ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={icon}
-                              alt=""
-                              className="h-4 w-4 rounded-sm bg-white object-contain"
-                            />
-                          ) : null}
-                          <span className="font-medium">{d.name}</span>
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
               </div>
 
               {/* Qty + remove column */}
