@@ -112,7 +112,7 @@ describe('PDP ordering permissions (dead-zone + member cap)', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
-    expect(screen.getByText(/Available to order/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Available to order/i).length).toBeGreaterThanOrEqual(1)
   })
 
   // stocked product × reorder_only member: product offers only draw, member may

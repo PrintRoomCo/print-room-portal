@@ -142,6 +142,7 @@ describe('PDP multi-size table — From-inventory available qty (Item 3, inverte
     })
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
-    expect(screen.getAllByText(/Available to order/i)).toHaveLength(2)
+    expect(screen.getAllByText(/Available to order/i)).toHaveLength(3)
+    expect(screen.queryByText('Out of stock')).not.toBeInTheDocument()
   })
 })

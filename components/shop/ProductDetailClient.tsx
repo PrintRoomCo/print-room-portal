@@ -1157,6 +1157,9 @@ export function ProductDetailClient({
                 </h1>
                 <AvailabilityBadge
                   availableQty={multiSize ? colourTotalAvailable : availableQty}
+                  availableToOrder={
+                    multiSize ? hasBackorderableOrderPath : selectedVariantBackorderable
+                  }
                 />
                 {product.sizing_type && product.sizing_type !== 'multi_size' && (
                   <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-gray-600">
