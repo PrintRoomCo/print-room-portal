@@ -48,7 +48,6 @@ export function ShipToRow({
   hideShipTo = false,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
-  const decorationCount = line.decorations.length
   const imageUrl = cartLineDisplayImageUrl(line, { catalogueFrontImageUrl })
 
   return (
@@ -69,16 +68,10 @@ export function ShipToRow({
         <div className="min-w-0 flex-1">
           <div className="text-base font-medium text-gray-900">{line.productName}</div>
           <div className="text-xs text-gray-500">{line.variantLabel}</div>
-          <div className="text-xs text-gray-500">qty {line.qty}</div>
-          {decorationCount > 0 && (
-            <div className="text-xs text-gray-500">
-              {decorationCount === 1 ? '1 decoration' : `${decorationCount} decorations`}
-            </div>
-          )}
         </div>
       </div>
-      {!hideShipTo && (
-        <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-col items-end gap-2">
+        {!hideShipTo && (
           <label className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Ship to</span>
             <select
@@ -98,17 +91,17 @@ export function ShipToRow({
               {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
             </select>
           </label>
+        )}
+        <div className="text-right">
+          <div className="text-gray-500">
+            <span className="tabular-nums text-gray-700">{format(allInUnitPrice(line))}</span>
+            {' × '}
+            <span className="tabular-nums text-gray-700">{line.qty}</span>
+          </div>
+          <div className="mt-1 font-medium text-gray-900 tabular-nums">
+            {format(allInLineTotal(line))}
+          </div>
         </div>
-      )}
-      <div className="flex w-full items-baseline justify-between border-t border-gray-100 pt-3">
-        <span className="text-gray-500">
-          <span className="tabular-nums text-gray-700">{format(allInUnitPrice(line))}</span>
-          {' × '}
-          <span className="tabular-nums text-gray-700">{line.qty}</span>
-        </span>
-        <span className="font-medium text-gray-900 tabular-nums">
-          {format(allInLineTotal(line))}
-        </span>
       </div>
     </div>
   )
