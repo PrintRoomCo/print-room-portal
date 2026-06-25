@@ -70,6 +70,11 @@ const noStock = {
   'red-s::2': { available_qty: 0, allow_order_without_stock: false },
 } as never
 
+const backorderable = {
+  'red-s::1': { available_qty: 0, allow_order_without_stock: true },
+  'red-m::2': { available_qty: 0, allow_order_without_stock: true },
+} as never
+
 const SIZES = [
   { size_id: 1, size_label: 'S', size_order: 0 },
   { size_id: 2, size_label: 'M', size_order: 1 },
@@ -127,5 +132,16 @@ describe('PDP multi-size table — From-inventory available qty (Item 3, inverte
     expect(
       screen.getByRole('columnheader', { name: 'Available' }),
     ).toBeInTheDocument()
+  })
+
+  it('legacy per-size variants display every order-without-stock size as available to order', () => {
+    renderPDP({
+      fulfilment_type: 'made_to_order',
+      role: 'org_admin',
+      availability: backorderable,
+    })
+    expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
+    expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
+    expect(screen.getAllByText(/Available to order/i)).toHaveLength(2)
   })
 })

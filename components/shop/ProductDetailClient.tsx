@@ -203,14 +203,47 @@ export function ProductDetailClient({
     return sum
   }, [variantlessQtyBySize])
 
-  // One colourway variant per colour now — size is no longer part of variant identity.
-  const selectedVariant = useMemo(
-    () => variants.find((v) => v.color_swatch_id === colorSwatchId) ?? null,
-    [variants, colorSwatchId]
+  const variantsForSelectedColour = useMemo(
+    () => variants.filter((v) => v.color_swatch_id === colorSwatchId),
+    [variants, colorSwatchId],
   )
 
-  // Availability is per (colourway, size); look up by the composite key.
-  const availKey = selectedVariant != null ? cellKey(selectedVariant.variant_id, sizeId) : null
+  // Prefer the post-SKUCOLLAPSE sizeless colourway variant, but keep supporting
+  // legacy products whose product_variants rows still carry size_id.
+  const selectedVariant = useMemo(
+    () =>
+      variantsForSelectedColour.find((v) => v.size_id == null) ??
+      variantsForSelectedColour[0] ??
+      null,
+    [variantsForSelectedColour],
+  )
+
+  const variantForSize = useMemo(
+    () => (candidateSizeId: number | null) => {
+      const exact = variantsForSelectedColour.find((v) => v.size_id === candidateSizeId)
+      const hasAvailability = (variant: VariantRow) =>
+        availability[cellKey(variant.variant_id, candidateSizeId)] !== undefined
+
+      if (exact && hasAvailability(exact)) return exact
+
+      const availableVariant = variantsForSelectedColour.find(hasAvailability)
+      if (availableVariant) return availableVariant
+
+      return (
+        exact ??
+        variantsForSelectedColour.find((v) => v.size_id == null) ??
+        variantsForSelectedColour[0] ??
+        null
+      )
+    },
+    [variantsForSelectedColour, availability],
+  )
+
+  const selectedCellVariant = variantForSize(sizeId)
+
+  // Availability is per (variant, size); look up by the composite key.
+  const availKey =
+    selectedCellVariant != null ? cellKey(selectedCellVariant.variant_id, sizeId) : null
   const tracksThisVariant = availKey != null && availability[availKey] !== undefined
   const availableQty = availKey ? availability[availKey]?.available_qty : undefined
   const selectedVariantBackorderable =
@@ -222,39 +255,42 @@ export function ProductDetailClient({
   // available" for Black, not "8 available" because S happens to be the
   // selected size.
   const colourTotalAvailable = useMemo<number | undefined>(() => {
-    const cwId = selectedVariant?.variant_id ?? null
-    if (!cwId) return undefined
     let total = 0
     let tracked = false
     for (const s of sizes) {
-      const a = availability[cellKey(cwId, s.size_id)]
+      const variant = variantForSize(s.size_id)
+      if (!variant) continue
+      const a = availability[cellKey(variant.variant_id, s.size_id)]
       if (a === undefined) continue
       tracked = true
       total += a.available_qty
     }
     return tracked ? total : undefined
-  }, [sizes, selectedVariant, availability])
+  }, [sizes, variantForSize, availability])
 
   // Size rows come from the per-product `sizes` list (the variant is a colourway);
   // availability is per colourway×size via the composite key.
   const sizeRowsForColour = useMemo(() => {
-    const cwId = selectedVariant?.variant_id ?? null
-    if (!cwId) return []
+    if (variantsForSelectedColour.length === 0) return []
     return sizes
-      .map((s) => {
-        const a = availability[cellKey(cwId, s.size_id)]
+      .flatMap((s) => {
+        const variant = variantForSize(s.size_id)
+        if (!variant) return []
+        const a = availability[cellKey(variant.variant_id, s.size_id)]
         const tracked = a !== undefined
-        return {
-          variantId: cwId,
-          sizeId: s.size_id,
-          sizeLabel: s.size_label ?? '',
-          sizeOrder: s.size_order,
-          available: tracked ? a.available_qty : null,
-          allowOrderWithoutStock: tracked ? a.allow_order_without_stock : false,
-        }
+        return [
+          {
+            variantId: variant.variant_id,
+            sizeId: s.size_id,
+            sizeLabel: s.size_label ?? '',
+            sizeOrder: s.size_order,
+            available: tracked ? a.available_qty : null,
+            allowOrderWithoutStock: tracked ? a.allow_order_without_stock : false,
+          },
+        ]
       })
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
-  }, [sizes, selectedVariant, availability])
+  }, [sizes, variantsForSelectedColour.length, variantForSize, availability])
 
   // Backorderable variants count as "has inventory" for the gate that
   // unlocks the From-Stock vs Made-to-Order toggle and lets the customer
@@ -318,8 +354,17 @@ export function ProductDetailClient({
   // and drop the "Available" status column below. Reorder/MTO mode is
   // unchanged; CartTable remains the oversell net.
   const visibleSizeRows = isInventoryMode
-    ? sizeRowsForColour.filter((row) => row.available !== null && row.available > 0)
+    ? sizeRowsForColour.filter(
+        (row) =>
+          row.available !== null &&
+          (row.available > 0 || row.allowOrderWithoutStock),
+      )
     : sizeRowsForColour
+
+  const hasBackorderableOrderPath = sizeRowsForColour.some(
+    (row) => row.allowOrderWithoutStock,
+  )
+  const isUnavailableToOrder = options.deadZone && !hasBackorderableOrderPath
 
   // MOQ exists to make a new production run economical — it does not apply when
   // drawing down stock that has already been made. In inventory mode the only
@@ -1072,7 +1117,10 @@ export function ProductDetailClient({
   }
 
   const canSubmitSelection =
-    canAddToCart && inventoryIntentShortfall == null && madeMoqShortfall == null &&
+    !isUnavailableToOrder &&
+    canAddToCart &&
+    inventoryIntentShortfall == null &&
+    madeMoqShortfall == null &&
     !preOrderClosed
 
   return (
@@ -1124,7 +1172,7 @@ export function ProductDetailClient({
               <ProductDetailsCondensed product={product} />
             </header>
 
-          {!options.deadZone && sizingMode === 'multi_size_with_variants' && (
+          {!isUnavailableToOrder && sizingMode === 'multi_size_with_variants' && (
             <VariantPicker
               variants={variants}
               colorOptions={pickerColourOptions}
@@ -1140,7 +1188,7 @@ export function ProductDetailClient({
             />
           )}
 
-          {!options.deadZone && product.lead_time_days != null && !isInventoryMode && (
+          {!isUnavailableToOrder && product.lead_time_days != null && !isInventoryMode && (
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs text-gray-500">
                 Lead time ~{product.lead_time_days} days
@@ -1169,7 +1217,7 @@ export function ProductDetailClient({
             </section>
           )}
 
-          {options.deadZone ? (
+          {isUnavailableToOrder ? (
             <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
               unavailable to order right now. contact the print room for more information
             </div>

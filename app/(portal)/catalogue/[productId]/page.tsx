@@ -47,9 +47,14 @@ interface ProductDetail {
 interface RawVariant {
   id: string
   color_swatch_id: string | null
+  size_id: number | null
   product_color_swatches:
     | { label: string | null; hex: string | null; position: number | null; image_url: string | null }
     | { label: string | null; hex: string | null; position: number | null; image_url: string | null }[]
+    | null
+  sizes:
+    | { label: string | null; order_index: number | null }
+    | { label: string | null; order_index: number | null }[]
     | null
 }
 
@@ -228,8 +233,9 @@ const loadProductDetailPageData = cache(async (
     productQuery,
     admin.from('product_variants')
       .select(`
-        id, color_swatch_id,
-        product_color_swatches (label, hex, position, image_url)
+        id, color_swatch_id, size_id,
+        product_color_swatches (label, hex, position, image_url),
+        sizes (label, order_index)
       `)
       .eq('product_id', productId)
       .eq('is_active', true),
@@ -278,10 +284,12 @@ const loadProductDetailPageData = cache(async (
   const addedSwatchIds = new Set(catalogueColors.map((row) => row.color_swatch_id))
 
   const variantRows = (variants ?? []) as unknown as RawVariant[]
-  // SKUCOLLAPSE: a variant is now a colourway (no size axis). Size comes from the
-  // per-product `sizes` table (mappedSizes below), not from the variant row.
+  // SKUCOLLAPSE: a variant is normally a colourway (no size axis). Some legacy
+  // supplier rows still carry size_id; preserve it so the client can resolve the
+  // inventory row and cart line for each size correctly.
   const mappedVariantRows: MatrixVariant[] = variantRows.map((v) => {
     const swatch = pickOne(v.product_color_swatches)
+    const size = pickOne(v.sizes)
     const colorConfig = v.color_swatch_id ? colorConfigById.get(v.color_swatch_id) : null
     return {
       variant_id: v.id,
@@ -292,9 +300,9 @@ const loadProductDetailPageData = cache(async (
       color_position: swatch?.position ?? 0,
       catalogue_color_sort_order: colorConfig?.sort_order ?? null,
       catalogue_color_is_default: colorConfig?.is_default === true,
-      size_id: null,
-      size_label: null,
-      size_order: 0,
+      size_id: v.size_id == null ? null : Number(v.size_id),
+      size_label: size?.label ?? null,
+      size_order: size?.order_index ?? 0,
     }
   })
 
