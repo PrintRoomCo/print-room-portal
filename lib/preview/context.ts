@@ -85,14 +85,22 @@ export async function buildPreviewAccess(payload: PreviewPayload): Promise<B2BCu
   // multi-membership user resolving to a different org than the preview target.
   if (!access || access.companyId !== payload.org) return null
 
+  const role = membership.role === 'staff' ? 'staff' : 'org_admin'
+
   return {
     ...access,
     isPreview: true,
     previewAs: {
       name: profile?.full_name || access.email || 'member',
-      role: membership.role === 'staff' ? 'staff' : 'org_admin',
-      orderingPermission:
-        ((membership.ordering_permission as 'stock_only' | 'reorder_only' | 'both') ?? 'stock_only'),
+      role,
+      // EFFECTIVE permission (org_admin -> 'both'), matching buildPreviewContext
+      // and the PDP. The raw stored value can be a stale 'stock_only' on an admin
+      // row (DB column default), which would otherwise make the banner read
+      // "stock only" for someone who can actually order anything.
+      orderingPermission: effectivePermission(
+        role,
+        ((membership.ordering_permission as MemberPermission | undefined) ?? null),
+      ),
     },
   }
 }
