@@ -11,6 +11,7 @@ import {
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
+import { useCartLineFrontImages } from './useCartLineFrontImages'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -39,6 +40,7 @@ export function CartTable({
   const [availability, setAvailability] = useState<AvailabilityMap>({})
   const [moqByProduct, setMoqByProduct] = useState<MoqMap>({})
   const [loading, setLoading] = useState(false)
+  const frontImageByLineId = useCartLineFrontImages(lines)
 
   useEffect(() => {
     if (lines.length === 0) {
@@ -138,7 +140,9 @@ export function CartTable({
         const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
         const unitPrice = allInUnitPrice(line)
         const lineTotal = allInLineTotal(line)
-        const imageUrl = cartLineDisplayImageUrl(line)
+        const imageUrl = cartLineDisplayImageUrl(line, {
+          catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
+        })
         return (
           <article
             key={line.lineId}
@@ -165,6 +169,11 @@ export function CartTable({
                   {line.productName}
                 </p>
                 <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
+                {isMadeToOrder && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Produced before dispatch.
+                  </p>
+                )}
               </div>
 
               {/* Qty + remove column */}

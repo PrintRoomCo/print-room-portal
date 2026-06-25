@@ -287,6 +287,18 @@ describe('cartLineDisplayImageUrl', () => {
       ),
     ).toBe('https://cdn.example/front.png')
   })
+
+  it('uses an explicitly resolved catalogue front image before older snapshots', () => {
+    expect(
+      cartLineDisplayImageUrl(
+        {
+          imageUrl: 'https://cdn.example/marketing.jpg',
+          decorations: [{ snapshotUrl: 'https://cdn.example/stale-snapshot.png' }],
+        },
+        { catalogueFrontImageUrl: 'https://cdn.example/front.png' },
+      ),
+    ).toBe('https://cdn.example/front.png')
+  })
 })
 
 describe('isGenericCustomDecorationName', () => {

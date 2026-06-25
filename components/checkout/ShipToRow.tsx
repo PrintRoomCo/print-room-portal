@@ -20,6 +20,7 @@ interface ShipToRowProps {
   disabled?: boolean
   /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
   allowCustom?: boolean
+  catalogueFrontImageUrl?: string | null
   /**
    * When true, hide the per-line ship-to control. Used by CheckoutClient when the
    * whole order routes to inventory (order-level "Add all to my inventory") —
@@ -35,11 +36,12 @@ export function ShipToRow({
   onChange,
   disabled,
   allowCustom = true,
+  catalogueFrontImageUrl = null,
   hideShipTo = false,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
   const decorationCount = line.decorations.length
-  const imageUrl = cartLineDisplayImageUrl(line)
+  const imageUrl = cartLineDisplayImageUrl(line, { catalogueFrontImageUrl })
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 bg-white py-5 text-sm first:pt-0 last:pb-0">

@@ -1,8 +1,86 @@
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getCollectionWithDesigns, getAvailableDesigns, getCollectionByQuoteId } from '@/lib/collections-detail'
 import { getLatestJobTrackerByQuoteId } from '@/lib/job-tracker-queries'
+import {
+  groupCatalogueFrontImageRows,
+  pickCatalogueFrontImage,
+  type CatalogueFrontImageRow,
+} from '@/lib/shop/catalogue-front-image'
+
+type QuoteWithLineItems = Record<string, unknown> & {
+  line_items?: unknown[] | null
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+async function withCatalogueFrontLineImages(
+  adminClient: SupabaseClient,
+  quote: QuoteWithLineItems,
+): Promise<QuoteWithLineItems> {
+  const lineItems = Array.isArray(quote.line_items) ? quote.line_items : []
+  const lineRecords = lineItems.filter(
+    (item): item is Record<string, unknown> => !!item && typeof item === 'object',
+  )
+  const catalogueItemIds = Array.from(
+    new Set(
+      lineRecords
+        .map((item) => stringValue(item.catalogue_item_id ?? item.catalogueItemId))
+        .filter((id): id is string => id != null),
+    ),
+  )
+  if (catalogueItemIds.length === 0) return quote
+
+  const variantIds = Array.from(
+    new Set(
+      lineRecords
+        .map((item) => stringValue(item.variant_id ?? item.variantId))
+        .filter((id): id is string => id != null),
+    ),
+  )
+
+  const [{ data: imageRows }, { data: variantRows }] = await Promise.all([
+    adminClient
+      .from('b2b_catalogue_item_images')
+      .select('catalogue_item_id, color_swatch_id, image_url, view, source, position')
+      .in('catalogue_item_id', catalogueItemIds)
+      .eq('is_published', true),
+    variantIds.length > 0
+      ? adminClient
+          .from('product_variants')
+          .select('id, color_swatch_id')
+          .in('id', variantIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const rowsByItemId = groupCatalogueFrontImageRows(
+    (imageRows ?? []) as CatalogueFrontImageRow[],
+  )
+  const swatchByVariantId = new Map<string, string | null>()
+  for (const row of (variantRows ?? []) as Array<{ id: string; color_swatch_id: string | null }>) {
+    swatchByVariantId.set(row.id, row.color_swatch_id)
+  }
+
+  return {
+    ...quote,
+    line_items: lineItems.map((item) => {
+      if (!item || typeof item !== 'object') return item
+      const record = item as Record<string, unknown>
+      const catalogueItemId = stringValue(record.catalogue_item_id ?? record.catalogueItemId)
+      if (!catalogueItemId) return item
+      const variantId = stringValue(record.variant_id ?? record.variantId)
+      const imageUrl = pickCatalogueFrontImage(
+        rowsByItemId.get(catalogueItemId) ?? [],
+        variantId ? swatchByVariantId.get(variantId) ?? null : null,
+      )
+      return imageUrl ? { ...record, image_url: imageUrl, imageUrl } : item
+    }),
+  }
+}
 
 export async function GET(
   _request: Request,
@@ -35,9 +113,11 @@ export async function GET(
       getLatestJobTrackerByQuoteId(quote.id),
     ])
 
+    const quoteWithImages = await withCatalogueFrontLineImages(adminClient, quote as QuoteWithLineItems)
+
     return NextResponse.json({
       mode: 'quote',
-      quote,
+      quote: quoteWithImages,
       linkedCollection,
       tracker,
     })

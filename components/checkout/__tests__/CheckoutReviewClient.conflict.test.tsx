@@ -191,7 +191,7 @@ describe('CheckoutReviewClient line display', () => {
     )
   })
 
-  it('hides the generic custom decoration label on review lines', () => {
+  it('hides the generic custom decoration label on review lines', async () => {
     mocks.lines[0] = {
       ...mocks.lines[0],
       catalogueItemId: null,
@@ -213,5 +213,9 @@ describe('CheckoutReviewClient line display', () => {
     renderReview()
 
     expect(screen.queryByText('Custom decoration')).not.toBeInTheDocument()
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/checkout/review-images',
+      expect.objectContaining({ method: 'POST' }),
+    ))
   })
 })

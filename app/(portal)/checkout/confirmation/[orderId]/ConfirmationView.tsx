@@ -26,6 +26,7 @@ export interface ConfirmationLine {
   quantity: number
   unitPrice: number
   imageUrl: string | null
+  catalogueFrontImageUrl?: string | null
   decorations: ConfirmationDecoration[]
 }
 
@@ -158,7 +159,9 @@ export function ConfirmationView(props: ConfirmationViewProps) {
               ) : (
                 lines.map((line) => {
                   const lineTotal = line.unitPrice * line.quantity
-                  const imageUrl = cartLineDisplayImageUrl(line)
+                  const imageUrl = cartLineDisplayImageUrl(line, {
+                    catalogueFrontImageUrl: line.catalogueFrontImageUrl ?? null,
+                  })
                   const visibleDecorations = line.decorations.filter(
                     (d) => !isGenericCustomDecorationName(d.name),
                   )

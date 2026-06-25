@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
+import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { TierBadge } from '@/components/pricing/TierBadge'
@@ -55,7 +56,7 @@ export function CheckoutReviewClient({
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  const [frontImageByLineId, setFrontImageByLineId] = useState<Record<string, string>>({})
+  const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   useEffect(() => {
     setReviewState(readCheckoutReviewState())
@@ -67,55 +68,6 @@ export function CheckoutReviewClient({
     for (const store of stores) map.set(store.id, store)
     return map
   }, [stores])
-
-  const reviewImageLines = useMemo(
-    () =>
-      cart.lines
-        .filter((line) => line.catalogueItemId || line.productId)
-        .map((line) => ({
-          lineId: line.lineId,
-          catalogueItemId: line.catalogueItemId ?? null,
-          productId: line.productId,
-          variantId: line.variantId || null,
-        })),
-    [cart.lines],
-  )
-  const reviewImageKey = useMemo(
-    () =>
-      reviewImageLines
-        .map((line) => `${line.lineId}:${line.catalogueItemId}:${line.productId}:${line.variantId ?? ''}`)
-        .join('|'),
-    [reviewImageLines],
-  )
-
-  useEffect(() => {
-    if (reviewImageLines.length === 0) {
-      setFrontImageByLineId({})
-      return
-    }
-
-    const controller = new AbortController()
-
-    fetch('/api/checkout/review-images', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lines: reviewImageLines }),
-      signal: controller.signal,
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { imagesByLineId?: Record<string, string> } | null) => {
-        if (!controller.signal.aborted) {
-          setFrontImageByLineId(data?.imagesByLineId ?? {})
-        }
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted && error?.name !== 'AbortError') {
-          setFrontImageByLineId({})
-        }
-      })
-
-    return () => controller.abort()
-  }, [reviewImageKey, reviewImageLines])
 
   const breakdown = useMemo(
     () =>

@@ -8,6 +8,11 @@ import {
   type ConfirmationLine,
   type ConfirmationAddress,
 } from './ConfirmationView'
+import {
+  groupCatalogueFrontImageRows,
+  pickCatalogueFrontImage,
+  type CatalogueFrontImageRow,
+} from '@/lib/shop/catalogue-front-image'
 
 const GST_RATE = 0.15
 
@@ -36,12 +41,14 @@ interface QuoteItemRow {
   // below rather than embedded here.
   product_id: string | null
   product_name: string | null
+  catalogue_item_id: string | null
   quantity: number | null
   unit_price: number | null
   decorations: unknown
   ship_to_store_id: string | null
   product_variants:
     | {
+        color_swatch_id: string | null
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
         sizes: { label: string | null } | { label: string | null }[] | null
       }
@@ -153,8 +160,9 @@ export default async function ConfirmationPage({
   const { data: rawLines, error: linesError } = await admin
     .from('quote_items')
     .select(
-      `id, product_id, product_name, quantity, unit_price, decorations, ship_to_store_id,
+      `id, product_id, product_name, catalogue_item_id, quantity, unit_price, decorations, ship_to_store_id,
        product_variants (
+         color_swatch_id,
          product_color_swatches (label),
          sizes (label)
        )`,
@@ -206,6 +214,31 @@ export default async function ConfirmationPage({
     }
   }
 
+  const catalogueItemIds = Array.from(
+    new Set(
+      lineRows
+        .map((r) => r.catalogue_item_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  )
+  let catalogueImageRowsByItemId = new Map<string, CatalogueFrontImageRow[]>()
+  if (catalogueItemIds.length > 0) {
+    const { data: catalogueImageRows, error: catalogueImageErr } = await admin
+      .from('b2b_catalogue_item_images')
+      .select('catalogue_item_id, color_swatch_id, image_url, view, source, position')
+      .in('catalogue_item_id', catalogueItemIds)
+      .eq('is_published', true)
+    if (catalogueImageErr) {
+      console.error('[confirmation] catalogue_image_lookup_failed', {
+        orderId,
+        message: catalogueImageErr.message,
+      })
+    }
+    catalogueImageRowsByItemId = groupCatalogueFrontImageRows(
+      (catalogueImageRows ?? []) as CatalogueFrontImageRow[],
+    )
+  }
+
   const lines: ConfirmationLine[] = lineRows.map((row) => {
     const variant = row.product_variants
     const swatch = pickOne(variant?.product_color_swatches ?? null)
@@ -214,13 +247,21 @@ export default async function ConfirmationPage({
       [swatch?.label, size?.label].filter(Boolean).join(' / ') || null
     const productImage =
       row.product_id ? productImageById.get(row.product_id) ?? null : null
+    const catalogueFrontImage =
+      row.catalogue_item_id
+        ? pickCatalogueFrontImage(
+            catalogueImageRowsByItemId.get(row.catalogue_item_id) ?? [],
+            variant?.color_swatch_id ?? null,
+          )
+        : null
     return {
       id: row.id,
       productName: row.product_name ?? 'Item',
       variantLabel,
       quantity: Number(row.quantity ?? 0),
       unitPrice: Number(row.unit_price ?? 0),
-      imageUrl: productImage,
+      imageUrl: catalogueFrontImage ?? productImage,
+      catalogueFrontImageUrl: catalogueFrontImage,
       decorations: asDecorations(row.decorations),
     }
   })

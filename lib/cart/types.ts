@@ -130,7 +130,7 @@ export function cartLineDisplayImageUrl(line: {
   decorations?: Array<{ snapshotUrl?: string | null }>
 }, options: { catalogueFrontImageUrl?: string | null } = {}): string | null {
   const snapshotUrl = line.decorations?.find((d) => d.snapshotUrl)?.snapshotUrl
-  return snapshotUrl ?? options.catalogueFrontImageUrl ?? line.imageUrl ?? null
+  return options.catalogueFrontImageUrl ?? snapshotUrl ?? line.imageUrl ?? null
 }
 
 export function isGenericCustomDecorationName(name: string | null | undefined): boolean {

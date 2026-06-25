@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
+import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
 import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
@@ -53,6 +54,7 @@ export function CheckoutClient({
   const cart = useCart()
   const router = useRouter()
   const { format } = useCurrency()
+  const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   const idempotencyKey = useRef<string>(crypto.randomUUID())
 
@@ -253,6 +255,7 @@ export function CheckoutClient({
                 line={line}
                 stores={stores}
                 value={perLineShipTo[line.lineId] ?? null}
+                catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
                 onChange={(next) =>
                   setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
                 }

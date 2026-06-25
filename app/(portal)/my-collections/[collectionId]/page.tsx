@@ -648,6 +648,7 @@ interface QuoteItem {
     artworkUrl?: string | null
   }> | null
   image_url?: string | null
+  imageUrl?: string | null
 }
 
 interface ProofFile {
@@ -760,7 +761,9 @@ function QuoteDetail({
                       (d) => !isGenericCustomDecorationName(d?.name),
                     )
                     const itemImage =
-                      rawDecorations.find((d) => d?.snapshotUrl)?.snapshotUrl ?? item.image_url
+                      item.image_url ??
+                      item.imageUrl ??
+                      rawDecorations.find((d) => d?.snapshotUrl)?.snapshotUrl
                     const qty = Number(item.quantity || 0)
                     const unitPrice = Number(item.unit_price || 0)
                     const lineTotal =

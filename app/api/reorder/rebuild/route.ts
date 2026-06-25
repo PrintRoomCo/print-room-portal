@@ -6,6 +6,11 @@ import {
   type QuoteItemRebuildRow,
   type RebuildLine,
 } from '@/lib/reorder/rebuild'
+import {
+  groupCatalogueFrontImageRows,
+  pickCatalogueFrontImage,
+  type CatalogueFrontImageRow,
+} from '@/lib/shop/catalogue-front-image'
 
 function pickOne<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
       `product_id, variant_id, product_name, quantity, decorations,
        ship_to_store_id, catalogue_item_id, catalogue_variant_label,
        qty_from_stock, qty_to_make,
-       product_variants ( product_color_swatches(label), sizes(label) )`,
+       product_variants ( color_swatch_id, product_color_swatches(label), sizes(label) )`,
     )
     .eq('quote_id', quoteId)
   if (itemsErr) return NextResponse.json({ error: itemsErr.message }, { status: 500 })
@@ -72,11 +77,41 @@ export async function POST(request: Request) {
     }
   }
 
+  const catalogueItemIds = Array.from(
+    new Set(
+      raw
+        .map((r) => r.catalogue_item_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  )
+  let catalogueImageRowsByItemId = new Map<string, CatalogueFrontImageRow[]>()
+  if (catalogueItemIds.length > 0) {
+    const { data: catalogueImages } = await auth.admin
+      .from('b2b_catalogue_item_images')
+      .select('catalogue_item_id, color_swatch_id, image_url, view, source, position')
+      .in('catalogue_item_id', catalogueItemIds)
+      .eq('is_published', true)
+    catalogueImageRowsByItemId = groupCatalogueFrontImageRows(
+      (catalogueImages ?? []) as CatalogueFrontImageRow[],
+    )
+  }
+
   const rows: QuoteItemRebuildRow[] = raw.map((r) => {
     const pv = pickOne(r.product_variants as unknown)
     const swatch = pv ? pickOne((pv as Record<string, unknown>).product_color_swatches) : null
     const size = pv ? pickOne((pv as Record<string, unknown>).sizes) : null
     const productId = typeof r.product_id === 'string' ? r.product_id : null
+    const catalogueItemId = (r.catalogue_item_id as string | null) ?? null
+    const selectedSwatchId =
+      pv && typeof (pv as Record<string, unknown>).color_swatch_id === 'string'
+        ? ((pv as Record<string, unknown>).color_swatch_id as string)
+        : null
+    const catalogueFrontImage = catalogueItemId
+      ? pickCatalogueFrontImage(
+          catalogueImageRowsByItemId.get(catalogueItemId) ?? [],
+          selectedSwatchId,
+        )
+      : null
     return {
       product_id: productId,
       variant_id: (r.variant_id as string | null) ?? null,
@@ -84,13 +119,13 @@ export async function POST(request: Request) {
       quantity: Number(r.quantity ?? 0),
       decorations: r.decorations,
       ship_to_store_id: (r.ship_to_store_id as string | null) ?? null,
-      catalogue_item_id: (r.catalogue_item_id as string | null) ?? null,
+      catalogue_item_id: catalogueItemId,
       catalogue_variant_label: (r.catalogue_variant_label as string | null) ?? null,
       qty_from_stock: Number(r.qty_from_stock ?? 0),
       qty_to_make: Number(r.qty_to_make ?? 0),
       colour_label: (swatch as { label?: string } | null)?.label ?? null,
       size_label: (size as { label?: string } | null)?.label ?? null,
-      image_url: productId ? imageByProductId.get(productId) ?? null : null,
+      image_url: catalogueFrontImage ?? (productId ? imageByProductId.get(productId) ?? null : null),
     }
   })
 
