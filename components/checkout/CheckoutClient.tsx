@@ -76,23 +76,14 @@ export function CheckoutClient({
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'review'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  // Admin-only "send this batch to inventory instead of a customer address"
-  // routing. Only meaningful for orgs that track stock; buyers never see the
-  // toggles. Per-line ticks live in `inventoryByLine`; the order-level intent
-  // is derived (all-on / all-off / mixed-blocker).
+  // Inventory routing is order-level only — the whole order either ships to
+  // customer addresses or lands on the org's inventory shelf. There is no
+  // per-line inventory choice (mixed orders aren't supported), so this is a
+  // single opt-in toggle, default OFF. Offered only to inventory-tracking org
+  // admins; buyers and non-stock tenants never see it.
   const canRouteToInventory =
     !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
-  const hasMakeToStockLines = cart.lines.some((l) => l.fulfilmentType === 'make_to_stock')
-  // Inventory routing is opt-in. `make_to_stock` means qty exceeds available
-  // stock so the line must be PRODUCED — it does NOT mean the order lands on the
-  // inventory shelf. Destination is the order-level `intent` (derived below from
-  // the admin's ticks: all-on → 'inventory', else 'customer'). Default every line
-  // OFF so a backordered order ships to the customer unless the admin opts in.
-  const [inventoryByLine, setInventoryByLine] = useState<Record<string, boolean>>(() => {
-    const m: Record<string, boolean> = {}
-    for (const l of cart.lines) m[l.lineId] = false
-    return m
-  })
+  const [addToInventory, setAddToInventory] = useState(false)
 
   useEffect(() => {
     setPerLineShipTo((prev) => {
@@ -111,51 +102,9 @@ export function CheckoutClient({
     })
   }, [cart.lines, initialStoreId])
 
-  useEffect(() => {
-    if (!canRouteToInventory) return
-    setInventoryByLine((prev) => {
-      let changed = false
-      const next: Record<string, boolean> = {}
-      for (const line of cart.lines) {
-        if (Object.prototype.hasOwnProperty.call(prev, line.lineId)) {
-          // Preserve the admin's explicit choice for existing lines.
-          next[line.lineId] = prev[line.lineId]
-        } else {
-          // New line — default to customer-route; inventory stays opt-in.
-          next[line.lineId] = false
-          changed = true
-        }
-      }
-      if (Object.keys(prev).length !== Object.keys(next).length) changed = true
-      return changed ? next : prev
-    })
-  }, [cart.lines, canRouteToInventory])
+  const inventoryMode = canRouteToInventory && addToInventory
+  const intent: 'customer' | 'inventory' = inventoryMode ? 'inventory' : 'customer'
 
-  const inventoryFlags = cart.lines.map((l) => inventoryByLine[l.lineId] ?? false)
-  const allInventory =
-    canRouteToInventory && inventoryFlags.length > 0 && inventoryFlags.every(Boolean)
-  const noneInventory = !canRouteToInventory || inventoryFlags.every((v) => !v)
-  const mixedInventory = canRouteToInventory && !allInventory && !noneInventory
-  const intent: 'customer' | 'inventory' | null = mixedInventory
-    ? null
-    : allInventory
-      ? 'inventory'
-      : 'customer'
-  const inventoryMode = intent === 'inventory'
-
-  function setAllInventory(next: boolean) {
-    setInventoryByLine((prev) => {
-      const updated: Record<string, boolean> = {}
-      for (const line of cart.lines) {
-        updated[line.lineId] = next
-      }
-      // Preserve any other keys (defensive; shouldn't happen post-effect).
-      for (const k of Object.keys(prev)) {
-        if (!(k in updated)) updated[k] = prev[k]
-      }
-      return updated
-    })
-  }
   const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
   const allCustom = Object.values(perLineShipTo).every((v) => v === null)
   const mixedCustom = !inventoryMode && anyCustom && !allCustom
@@ -189,12 +138,10 @@ export function CheckoutClient({
     !customerCodeMissing &&
     !mixedCustom &&
     !customIncomplete &&
-    !buyerMisconfigured &&
-    !mixedInventory &&
-    intent !== null
+    !buyerMisconfigured
 
   function proceedToReview() {
-    if (!canSubmitOrder || intent === null) return
+    if (!canSubmitOrder) return
     setSubmitting('review')
     setBanner(null)
     try {
@@ -312,20 +259,6 @@ export function CheckoutClient({
                 disabled={submitting !== false || lockToBuyerDefault}
                 allowCustom={!isBuyer}
                 hideShipTo={inventoryMode}
-                inventoryEnabled={
-                  canRouteToInventory
-                    ? inventoryByLine[line.lineId] ?? false
-                    : undefined
-                }
-                onInventoryChange={
-                  canRouteToInventory
-                    ? (next) =>
-                        setInventoryByLine((prev) => ({
-                          ...prev,
-                          [line.lineId]: next,
-                        }))
-                    : undefined
-                }
               />
             )
           })}
@@ -333,8 +266,8 @@ export function CheckoutClient({
         {canRouteToInventory && (
           <div className="mt-5 flex justify-end">
             <AddAllToInventoryToggle
-              checked={allInventory}
-              onChange={setAllInventory}
+              checked={addToInventory}
+              onChange={setAddToInventory}
               disabled={submitting !== false}
             />
           </div>
@@ -353,17 +286,6 @@ export function CheckoutClient({
           </div>
         </details>
       </section>
-
-      {mixedInventory && (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
-        >
-          {hasMakeToStockLines
-            ? 'Some items exceed current stock. Route the full order to inventory, or untick the inventory switches to ship directly.'
-            : 'All lines must go to the same destination — either tick "Add all to my inventory" or untick all.'}
-        </div>
-      )}
 
       {mixedCustom && (
         <p className="mt-3 text-sm text-red-600">

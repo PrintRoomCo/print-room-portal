@@ -2,7 +2,6 @@
 
 import Image from 'next/image'
 import { cartLineDisplayImageUrl, type CartLine } from '@/lib/cart/types'
-import { Switch } from '@/components/ui/Switch'
 
 export interface StoreOption {
   id: string
@@ -22,18 +21,11 @@ interface ShipToRowProps {
   /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
   allowCustom?: boolean
   /**
-   * When true, hide the ship-to <select>. Used by CheckoutClient when the
-   * order routes to inventory — the per-line inventory toggle stays
-   * visible so customers can untick individual lines back to customer-route.
+   * When true, hide the per-line ship-to control. Used by CheckoutClient when the
+   * whole order routes to inventory (order-level "Add all to my inventory") —
+   * there is no per-line destination in that mode.
    */
   hideShipTo?: boolean
-  /**
-   * Per-line "Add to my inventory" toggle state. Pass `undefined` to omit
-   * the toggle entirely (e.g. for buyers or tenants without inventory
-   * tracking).
-   */
-  inventoryEnabled?: boolean
-  onInventoryChange?: (next: boolean) => void
 }
 
 export function ShipToRow({
@@ -44,11 +36,8 @@ export function ShipToRow({
   disabled,
   allowCustom = true,
   hideShipTo = false,
-  inventoryEnabled,
-  onInventoryChange,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
-  const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
   const decorationCount = line.decorations.length
   const imageUrl = cartLineDisplayImageUrl(line)
 
@@ -78,8 +67,8 @@ export function ShipToRow({
           )}
         </div>
       </div>
-      <div className="flex flex-col items-end gap-2">
-        {!hideShipTo && (
+      {!hideShipTo && (
+        <div className="flex flex-col items-end gap-2">
           <label className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Ship to</span>
             <select
@@ -99,20 +88,8 @@ export function ShipToRow({
               {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
             </select>
           </label>
-        )}
-        {showInventoryToggle && (
-          <label className="flex items-center gap-2">
-            <span className="text-xs text-gray-600">Add to inventory</span>
-            <Switch
-              checked={inventoryEnabled}
-              onChange={onInventoryChange}
-              disabled={disabled}
-              size="sm"
-              ariaLabel={`Add ${line.productName} (${line.variantLabel}) to my inventory`}
-            />
-          </label>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
