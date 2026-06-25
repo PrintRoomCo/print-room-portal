@@ -2,11 +2,27 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { SupportedCurrency, ExchangeRates } from '@/lib/currency/types';
+import { CURRENCY_STORAGE_KEY } from '@/lib/currency/types';
 import { fetchExchangeRates } from '@/lib/currency/exchange-rates';
-import { detectCurrencyFromBrowser } from '@/lib/currency/detect';
 import { formatCurrency, convertNZD } from '@/lib/currency/format';
 
-const STORAGE_KEY = 'prs-currency';
+const STORAGE_KEY = CURRENCY_STORAGE_KEY;
+// 1 year — keep the preference around long enough to feel permanent.
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+function persistCurrency(c: SupportedCurrency) {
+  try {
+    localStorage.setItem(STORAGE_KEY, c);
+  } catch {
+    // localStorage unavailable
+  }
+  try {
+    // Cookie lets the server render the right currency on first paint (no flash).
+    document.cookie = `${STORAGE_KEY}=${c}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
+  } catch {
+    // document unavailable
+  }
+}
 
 interface CurrencyContextValue {
   currency: SupportedCurrency;
@@ -36,19 +52,31 @@ function getStoredCurrency(): SupportedCurrency | null {
 export function CurrencyProvider({
   children,
   initialRates = null,
+  initialCurrency = 'NZD',
 }: {
   children: React.ReactNode
   initialRates?: ExchangeRates | null
+  initialCurrency?: SupportedCurrency
 }) {
-  const [currency, setCurrencyState] = useState<SupportedCurrency>('NZD');
+  // `initialCurrency` is resolved server-side (saved cookie -> geo country -> NZD)
+  // so the first paint already shows the right currency.
+  const [currency, setCurrencyState] = useState<SupportedCurrency>(initialCurrency);
   const [rates, setRates] = useState<ExchangeRates | null>(initialRates);
   const [loading, setLoading] = useState(!initialRates);
 
-  // Initialize: load saved preference or detect from browser, then fetch rates
+  // Reconcile with a legacy localStorage preference: users who picked a currency
+  // before the cookie existed have it in localStorage but not in the cookie the
+  // server reads. Honour it and backfill the cookie so the next load is correct.
   useEffect(() => {
     const saved = getStoredCurrency();
-    const detected = saved ?? detectCurrencyFromBrowser();
-    setCurrencyState(detected);
+    if (saved && saved !== initialCurrency) {
+      // Intentional: localStorage isn't readable during SSR, so the first render
+      // must use the server's `initialCurrency` (avoids a hydration mismatch) and
+      // we correct to a legacy saved preference here, on mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCurrencyState(saved);
+      persistCurrency(saved);
+    }
 
     if (initialRates) {
       setLoading(false);
@@ -67,15 +95,11 @@ export function CurrencyProvider({
     return () => {
       stale = true;
     };
-  }, [initialRates]);
+  }, [initialRates, initialCurrency]);
 
   const setCurrency = useCallback((c: SupportedCurrency) => {
     setCurrencyState(c);
-    try {
-      localStorage.setItem(STORAGE_KEY, c);
-    } catch {
-      // localStorage unavailable
-    }
+    persistCurrency(c);
   }, []);
 
   const convert = useCallback(

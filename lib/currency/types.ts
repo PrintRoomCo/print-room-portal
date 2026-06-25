@@ -1,6 +1,10 @@
 export type SupportedCurrency = 'NZD' | 'AUD' | 'USD' | 'GBP' | 'EUR';
 export type ExchangeRates = Record<SupportedCurrency, number>;
 
+// Shared by the client (localStorage + cookie write) and the server
+// (cookie read) so a visitor's saved preference survives navigation.
+export const CURRENCY_STORAGE_KEY = 'prs-currency';
+
 export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
   'NZD',
   'AUD',
