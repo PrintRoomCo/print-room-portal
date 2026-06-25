@@ -128,9 +128,13 @@ export function allInLineTotal(line: CartLine): number {
 export function cartLineDisplayImageUrl(line: {
   imageUrl?: string | null
   decorations?: Array<{ snapshotUrl?: string | null }>
-}): string | null {
+}, options: { catalogueFrontImageUrl?: string | null } = {}): string | null {
   const snapshotUrl = line.decorations?.find((d) => d.snapshotUrl)?.snapshotUrl
-  return snapshotUrl ?? line.imageUrl ?? null
+  return snapshotUrl ?? options.catalogueFrontImageUrl ?? line.imageUrl ?? null
+}
+
+export function isGenericCustomDecorationName(name: string | null | undefined): boolean {
+  return (name ?? '').trim().toLowerCase() === 'custom decoration'
 }
 
 /**

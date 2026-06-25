@@ -47,8 +47,16 @@ function checkoutConflict(payload: unknown) {
   } as unknown as Response
 }
 
+function okJson(payload: unknown) {
+  return {
+    status: 200,
+    ok: true,
+    json: vi.fn().mockResolvedValue(payload),
+  } as unknown as Response
+}
+
 function renderReview() {
-  render(
+  return render(
     <CheckoutReviewClient
       stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
       customerCode="CUST-1"
@@ -56,6 +64,19 @@ function renderReview() {
       defaultDepositPercent={null}
     />,
   )
+}
+
+function mockCheckoutFetch(response: Response) {
+  vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.includes('/api/checkout/review-images')) {
+      return Promise.resolve(okJson({ imagesByLineId: {} }))
+    }
+    if (url.includes('/api/checkout')) {
+      return Promise.resolve(response)
+    }
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+  })
 }
 
 beforeEach(() => {
@@ -101,7 +122,7 @@ beforeEach(() => {
 describe('CheckoutReviewClient conflict handling', () => {
   it('keeps unit price drift visible on the review page instead of routing to cart', async () => {
     const user = userEvent.setup()
-    vi.mocked(fetch).mockResolvedValueOnce(
+    mockCheckoutFetch(
       checkoutConflict({
         error: 'unit_price_drift',
         priceDrift: [
@@ -134,7 +155,7 @@ describe('CheckoutReviewClient conflict handling', () => {
 
   it('keeps OUT_OF_STOCK visible on the review page instead of routing to cart', async () => {
     const user = userEvent.setup()
-    vi.mocked(fetch).mockResolvedValueOnce(checkoutConflict({ error: 'OUT_OF_STOCK' }))
+    mockCheckoutFetch(checkoutConflict({ error: 'OUT_OF_STOCK' }))
 
     renderReview()
 
@@ -148,5 +169,49 @@ describe('CheckoutReviewClient conflict handling', () => {
     expect(mocks.push).not.toHaveBeenCalledWith('/cart')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.clear).not.toHaveBeenCalled()
+  })
+})
+
+describe('CheckoutReviewClient line display', () => {
+  it('uses the catalogue front image when the cart line stored the product fallback', async () => {
+    mocks.lines[0] = {
+      ...mocks.lines[0],
+      imageUrl: 'https://cdn.example/marketing.jpg',
+    }
+    vi.mocked(fetch).mockResolvedValue(
+      okJson({ imagesByLineId: { 'line-1': 'https://cdn.example/front.png' } }),
+    )
+
+    const { container } = renderReview()
+
+    await waitFor(() =>
+      expect(container.querySelector('img')?.getAttribute('src')).toContain(
+        'https://cdn.example/front.png',
+      ),
+    )
+  })
+
+  it('hides the generic custom decoration label on review lines', () => {
+    mocks.lines[0] = {
+      ...mocks.lines[0],
+      catalogueItemId: null,
+      decorations: [
+        {
+          linkId: 'deco-1',
+          decorationId: 'org-deco-1',
+          name: 'Custom decoration',
+          method: 'custom',
+          positionLabel: null,
+          unitPrice: 0,
+          artworkUrl: null,
+          snapshotUrl: null,
+        },
+      ],
+    }
+    vi.mocked(fetch).mockResolvedValue(okJson({ imagesByLineId: {} }))
+
+    renderReview()
+
+    expect(screen.queryByText('Custom decoration')).not.toBeInTheDocument()
   })
 })

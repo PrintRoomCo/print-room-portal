@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cartLineDisplayImageUrl,
+  isGenericCustomDecorationName,
   pickBracket,
   recomputeProductTierPrices,
   type CartLine,
@@ -273,5 +274,26 @@ describe('cartLineDisplayImageUrl', () => {
         decorations: [{ snapshotUrl: 'https://cdn.example/designer-snapshot.png' }],
       }),
     ).toBe('https://cdn.example/designer-snapshot.png')
+  })
+
+  it('uses the catalogue front image before the stored product fallback', () => {
+    expect(
+      cartLineDisplayImageUrl(
+        {
+          imageUrl: 'https://cdn.example/marketing.jpg',
+          decorations: [],
+        },
+        { catalogueFrontImageUrl: 'https://cdn.example/front.png' },
+      ),
+    ).toBe('https://cdn.example/front.png')
+  })
+})
+
+describe('isGenericCustomDecorationName', () => {
+  it('matches only the generic custom decoration label', () => {
+    expect(isGenericCustomDecorationName('Custom decoration')).toBe(true)
+    expect(isGenericCustomDecorationName(' custom decoration ')).toBe(true)
+    expect(isGenericCustomDecorationName('Front logo')).toBe(false)
+    expect(isGenericCustomDecorationName(null)).toBe(false)
   })
 })

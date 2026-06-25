@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { cartLineDisplayImageUrl } from '@/lib/cart/types'
+import { cartLineDisplayImageUrl, isGenericCustomDecorationName } from '@/lib/cart/types'
 
 const LABEL_CAP =
   'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
@@ -159,6 +159,9 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                 lines.map((line) => {
                   const lineTotal = line.unitPrice * line.quantity
                   const imageUrl = cartLineDisplayImageUrl(line)
+                  const visibleDecorations = line.decorations.filter(
+                    (d) => !isGenericCustomDecorationName(d.name),
+                  )
                   return (
                     <article
                       key={line.id}
@@ -183,9 +186,9 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                         {line.variantLabel && (
                           <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
                         )}
-                        {line.decorations.length > 0 && (
+                        {visibleDecorations.length > 0 && (
                           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                            {line.decorations.map((d, i) => {
+                            {visibleDecorations.map((d, i) => {
                               const icon = d.snapshotUrl ?? d.artworkUrl
                               return (
                                 <span

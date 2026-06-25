@@ -15,6 +15,7 @@ import {
   allInUnitPrice,
   cartLineDisplayImageUrl,
   decorationPerUnit,
+  isGenericCustomDecorationName,
 } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCompany } from '@/contexts/CompanyContext'
@@ -54,6 +55,7 @@ export function CheckoutReviewClient({
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
+  const [frontImageByLineId, setFrontImageByLineId] = useState<Record<string, string>>({})
 
   useEffect(() => {
     setReviewState(readCheckoutReviewState())
@@ -65,6 +67,54 @@ export function CheckoutReviewClient({
     for (const store of stores) map.set(store.id, store)
     return map
   }, [stores])
+
+  const reviewImageLines = useMemo(
+    () =>
+      cart.lines
+        .filter((line) => line.catalogueItemId)
+        .map((line) => ({
+          lineId: line.lineId,
+          catalogueItemId: line.catalogueItemId as string,
+          variantId: line.variantId || null,
+        })),
+    [cart.lines],
+  )
+  const reviewImageKey = useMemo(
+    () =>
+      reviewImageLines
+        .map((line) => `${line.lineId}:${line.catalogueItemId}:${line.variantId ?? ''}`)
+        .join('|'),
+    [reviewImageLines],
+  )
+
+  useEffect(() => {
+    if (reviewImageLines.length === 0) {
+      setFrontImageByLineId({})
+      return
+    }
+
+    const controller = new AbortController()
+
+    fetch('/api/checkout/review-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: reviewImageLines }),
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { imagesByLineId?: Record<string, string> } | null) => {
+        if (!controller.signal.aborted) {
+          setFrontImageByLineId(data?.imagesByLineId ?? {})
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted && error?.name !== 'AbortError') {
+          setFrontImageByLineId({})
+        }
+      })
+
+    return () => controller.abort()
+  }, [reviewImageKey, reviewImageLines])
 
   const breakdown = useMemo(
     () =>
@@ -378,7 +428,12 @@ export function CheckoutReviewClient({
           {cart.lines.map((line) => {
             const unitPrice = allInUnitPrice(line)
             const lineTotal = allInLineTotal(line)
-            const imageUrl = cartLineDisplayImageUrl(line)
+            const imageUrl = cartLineDisplayImageUrl(line, {
+              catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
+            })
+            const visibleDecorations = line.decorations.filter(
+              (decoration) => !isGenericCustomDecorationName(decoration.name),
+            )
             return (
               <article key={line.lineId} className="py-5 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -401,9 +456,9 @@ export function CheckoutReviewClient({
                         {line.variantLabel}
                       </p>
                       <p className="text-xs text-gray-500">qty {line.qty}</p>
-                      {line.decorations.length > 0 && (
+                      {visibleDecorations.length > 0 && (
                         <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                          {line.decorations.map((decoration) => (
+                          {visibleDecorations.map((decoration) => (
                             <li key={decoration.linkId}>
                               {decoration.name}
                             </li>

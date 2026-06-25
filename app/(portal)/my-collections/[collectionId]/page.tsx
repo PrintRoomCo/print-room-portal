@@ -18,6 +18,7 @@ import {
 import type { CollectionWithDesigns, DesignSubmission } from '@/lib/collections'
 import type { JobTracker } from '@/lib/job-tracker'
 import { getPortalTrackerPath } from '@/lib/job-tracker'
+import { isGenericCustomDecorationName } from '@/lib/cart/types'
 
 interface Quote {
   id: string
@@ -754,9 +755,12 @@ function QuoteDetail({
               ) : (
                 <div className="space-y-4">
                   {items.map((item, index) => {
-                    const decorations = Array.isArray(item.decorations) ? item.decorations : []
+                    const rawDecorations = Array.isArray(item.decorations) ? item.decorations : []
+                    const decorations = rawDecorations.filter(
+                      (d) => !isGenericCustomDecorationName(d?.name),
+                    )
                     const itemImage =
-                      decorations.find((d) => d?.snapshotUrl)?.snapshotUrl ?? item.image_url
+                      rawDecorations.find((d) => d?.snapshotUrl)?.snapshotUrl ?? item.image_url
                     const qty = Number(item.quantity || 0)
                     const unitPrice = Number(item.unit_price || 0)
                     const lineTotal =
