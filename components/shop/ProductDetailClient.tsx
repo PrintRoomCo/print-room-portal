@@ -1176,14 +1176,6 @@ export function ProductDetailClient({
             />
           )}
 
-          {!isUnavailableToOrder && product.lead_time_days != null && !isInventoryMode && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-gray-500">
-                Lead time ~{product.lead_time_days} days
-              </span>
-            </div>
-          )}
-
           {isUnavailableToOrder ? (
             <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
               unavailable to order right now. contact the print room for more information
