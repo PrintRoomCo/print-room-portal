@@ -5,7 +5,7 @@ import { requireB2BCustomerCached, type AuthFailure } from '@/lib/checkout/serve
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
-import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { resolveCatalogueItemForPdp } from '@/lib/shop/resolve-catalogue-item'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
@@ -82,50 +82,16 @@ const loadProductDetailPageData = cache(async (
   const { admin, context } = auth
 
   // Per-member access filter — gate before we reach the product table.
-  // Preview exception: when launched from the editor for a specific item,
-  // force-show that exact skin (bypass grant + is_active), still org-scoped.
-  let catItem: {
-    id: string
-    name: string | null
-    description: string | null
-    sku_override: string | null
-    moq_override: number | null
-    variant_label: string | null
-    fulfilment_type_override: FulfilmentType | null
-    price_mode: 'computed' | 'manual_final' | null
-  } | null
-
-  const catItemSelect =
-    'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, b2b_catalogues!inner(organization_id, is_active)'
-
-  if (context.isPreview && context.previewItemId) {
-    const { data } = await admin
-      .from('b2b_catalogue_items')
-      .select(catItemSelect)
-      .eq('id', context.previewItemId)
-      .eq('source_product_id', productId)
-      .eq('b2b_catalogues.organization_id', context.organizationId)
-      .maybeSingle()
-    catItem = data as typeof catItem
-  } else {
-    const grantedItemIds = await getGrantedCatalogueItemIds(
-      admin,
-      context.membershipId,
-      context.organizationId,
-    )
-    if (grantedItemIds.length === 0) return { status: 'not-found' }
-    const { data } = await admin
-      .from('b2b_catalogue_items')
-      .select(catItemSelect)
-      .eq('source_product_id', productId)
-      .eq('is_active', true)
-      .eq('b2b_catalogues.organization_id', context.organizationId)
-      .eq('b2b_catalogues.is_active', true)
-      .in('id', grantedItemIds)
-      .limit(1)
-      .maybeSingle()
-    catItem = data as typeof catItem
-  }
+  // Editor preview force-shows the exact in-edit skin; a stale or cross-product
+  // preview item falls back to the member's normal granted access for this
+  // product instead of hard-404ing (see resolveCatalogueItemForPdp).
+  const catItem = await resolveCatalogueItemForPdp(admin, {
+    productId,
+    organizationId: context.organizationId,
+    membershipId: context.membershipId,
+    isPreview: context.isPreview === true,
+    previewItemId: context.previewItemId ?? null,
+  })
 
   if (!catItem) return { status: 'not-found' }
 
