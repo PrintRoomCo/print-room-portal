@@ -388,18 +388,21 @@ export function CheckoutClient({
       )}
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label htmlFor="required-by" className="block text-sm font-medium text-gray-700">
-            Required by (optional)
-          </label>
-          <input
-            id="required-by"
-            type="date"
-            value={requiredBy}
-            onChange={(e) => setRequiredBy(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-          />
-        </div>
+        {/* Required-by is hidden for staff-role customers (isBuyer === role 'staff'). */}
+        {!isBuyer && (
+          <div>
+            <label htmlFor="required-by" className="block text-sm font-medium text-gray-700">
+              Required by (optional)
+            </label>
+            <input
+              id="required-by"
+              type="date"
+              value={requiredBy}
+              onChange={(e) => setRequiredBy(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            />
+          </div>
+        )}
         <div>
           <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
             Notes (optional)
