@@ -92,7 +92,7 @@ describe('CheckoutClient review step', () => {
   })
 
   it('defaults make-to-stock lines to customer intent (inventory is opt-in)', async () => {
-    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'make_to_stock' }]
+    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'made_to_order' }]
     const user = userEvent.setup()
     render(
       <CheckoutClient
@@ -106,7 +106,7 @@ describe('CheckoutClient review step', () => {
       />,
     )
 
-    // make_to_stock means the qty must be produced — it does NOT auto-route to
+    // made_to_order means the qty must be produced — it does NOT auto-route to
     // the inventory shelf. The switch starts OFF; the order ships to the
     // customer by default.
     const inventorySwitch = screen.getByRole('switch', { name: /add all lines to my inventory/i })
@@ -122,7 +122,7 @@ describe('CheckoutClient review step', () => {
   })
 
   it('routes the order to inventory only when the admin opts in', async () => {
-    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'make_to_stock' }]
+    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'made_to_order' }]
     const user = userEvent.setup()
     render(
       <CheckoutClient

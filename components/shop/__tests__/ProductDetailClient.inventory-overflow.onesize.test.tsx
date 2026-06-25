@@ -81,7 +81,7 @@ beforeEach(() => {
 })
 
 describe('PDP From-inventory production top-up — cart split (one_size)', () => {
-  it('overflowing one_size order adds a stocked line + a make_to_stock line', async () => {
+  it('overflowing one_size order adds a stocked line + a made_to_order line', async () => {
     renderPDP()
     // 28 ordered, 4 in stock -> 4 stocked + 24 made (meets MOQ 24).
     fireEvent.change(screen.getByLabelText('Quantity'), {
@@ -98,7 +98,7 @@ describe('PDP From-inventory production top-up — cart split (one_size)', () =>
       expect.objectContaining({ qty: 4, fulfilmentType: 'stocked' }),
     )
     expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({ qty: 24, fulfilmentType: 'make_to_stock' }),
+      expect.objectContaining({ qty: 24, fulfilmentType: 'made_to_order' }),
     )
   })
 })

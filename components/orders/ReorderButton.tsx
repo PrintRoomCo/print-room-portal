@@ -30,7 +30,7 @@ export function ReorderButton({ tracker }: ReorderButtonProps) {
 
   // Org-admin only. Staff (renamed `buyer`) are restricted to From-inventory
   // ordering, so they must not re-buy a past order that may contain
-  // `make_to_stock` (production) lines via EITHER branch (rebuild or legacy
+  // `made_to_order` (production) lines via EITHER branch (rebuild or legacy
   // modal). Gated on derived `isOrgAdmin`, so the buyer→staff rename does not
   // touch it. Placed AFTER all hooks so the early return never reorders hooks.
   if (!(access?.isOrgAdmin ?? false)) return null

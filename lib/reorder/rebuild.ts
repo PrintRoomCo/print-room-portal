@@ -53,13 +53,13 @@ export interface BuildRebuildResult {
 }
 
 /**
- * A line is 'make_to_stock' if any quantity is destined for a new production
+ * A line is 'made_to_order' if any quantity is destined for a new production
  * run; otherwise it draws purely from existing stock ('stocked'). Mixed lines
- * (both > 0) collapse to 'make_to_stock' — the conservative choice that keeps
+ * (both > 0) collapse to 'made_to_order' — the conservative choice that keeps
  * MOQ applicable, matching submit.ts's MOQ treatment.
  */
 export function deriveFulfilmentType(row: { qty_to_make: number }): CartLineFulfilmentType {
-  return row.qty_to_make > 0 ? 'make_to_stock' : 'stocked'
+  return row.qty_to_make > 0 ? 'made_to_order' : 'stocked'
 }
 
 function variantLabelFrom(row: QuoteItemRebuildRow): string {

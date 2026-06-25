@@ -50,7 +50,7 @@ export interface CheckoutLineInput {
    * down existing inventory and are exempt from MOQ — the stock is already
    * made. Absent on legacy carts; treated as MOQ-applicable (conservative).
    */
-  fulfilment_type?: 'stocked' | 'make_to_stock'
+  fulfilment_type?: 'stocked' | 'made_to_order'
   /**
    * Phase 2 — catalogue-item identity carried from the cart line. Threaded into
    * submit_b2b_order's p_lines so the order records which skin sold. camelCase

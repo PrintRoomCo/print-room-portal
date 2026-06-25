@@ -114,7 +114,7 @@ interface Props {
    * variant_id → { available_qty, allow_order_without_stock }. Only populated
    * for variants the org tracks; key presence still signals "tracked". The
    * flag lets a zero-stock variant remain orderable (line becomes
-   * make_to_stock, surfaces an "Available to order" chip on the size grid).
+   * made_to_order, surfaces an "Available to order" chip on the size grid).
    */
   availability: Record<string, VariantAvailability>
   organizationId: string
@@ -421,7 +421,7 @@ export function ProductDetailClient({
         const forceBulkOrder = canChooseOrderIntent && orderIntent === 'bulk'
         // Backorderable variant behaves like the bulk path at line level —
         // entire qty goes to production, none drawn from stock — even though
-        // it's a tracked SKU. Matches the "make_to_stock" cart fulfilment.
+        // it's a tracked SKU. Matches the "made_to_order" cart fulfilment.
         const treatAsBulk = forceBulkOrder || backorderable
         const inStock = treatAsBulk ? 0 : tracked ? Math.min(qtyLine, stocked) : 0
         const toBeMade = treatAsBulk
@@ -895,7 +895,7 @@ export function ProductDetailClient({
           }
 
           // Org_admin From-inventory overflow: split a partial-stock cell into a
-          // stocked draw + a make_to_stock production line. lineSignature keys on
+          // stocked draw + a made_to_order production line. lineSignature keys on
           // fulfilmentType AND size, so the two lines never merge in the cart.
           if (
             isInventoryOverflowScope &&
@@ -909,22 +909,22 @@ export function ProductDetailClient({
             cart.addLine({
               ...baseLine,
               qty: lineQty - available,
-              fulfilmentType: 'make_to_stock',
+              fulfilmentType: 'made_to_order',
             })
             added += lineQty
             continue
           }
 
           // Fulfilment decision: toggle choice wins for org_admin; buyer/no-toggle
-          // auto-routes backorderable to make_to_stock, else stock-vs-qty.
-          const fulfilmentType: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+          // auto-routes backorderable to made_to_order, else stock-vs-qty.
+          const fulfilmentType: 'stocked' | 'made_to_order' = canChooseOrderIntent
             ? orderIntent === 'bulk'
-              ? 'make_to_stock'
+              ? 'made_to_order'
               : 'stocked'
             : backorderable
-              ? 'make_to_stock'
+              ? 'made_to_order'
               : tracked && lineQty > available
-                ? 'make_to_stock'
+                ? 'made_to_order'
                 : 'stocked'
           cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
           added += lineQty
@@ -955,7 +955,7 @@ export function ProductDetailClient({
           unitPrice: pricing.unit_price,
           imageUrl: cartImageForSwatch(colorSwatchId),
           decorations: cartDecorationsForSwatch(colorSwatchId),
-          fulfilmentType: 'make_to_stock',
+          fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
           catalogueVariantLabel: product.catalogueVariantLabel,
@@ -974,9 +974,9 @@ export function ProductDetailClient({
     // Mode 3: one_size — single cart line, no variant. Same fulfilment
     // decision as multi-size: toggle choice wins when present (PDP shortfall
     // already enforced From-Stock vs zero-stock); buyer flow auto-routes
-    // backorderable to make_to_stock.
+    // backorderable to made_to_order.
     // Mode 3 org_admin From-inventory overflow: split into a stocked draw + a
-    // make_to_stock production line, mirroring Mode 1.
+    // made_to_order production line, mirroring Mode 1.
     if (
       isInventoryOverflowScope &&
       tracksThisVariant &&
@@ -1006,20 +1006,20 @@ export function ProductDetailClient({
       cart.addLine({
         ...oneSizeBase,
         qty: qty - avail,
-        fulfilmentType: 'make_to_stock',
+        fulfilmentType: 'made_to_order',
       })
       showToast('Added to cart')
       return
     }
 
-    const oneSizeFulfilment: 'stocked' | 'make_to_stock' = canChooseOrderIntent
+    const oneSizeFulfilment: 'stocked' | 'made_to_order' = canChooseOrderIntent
       ? orderIntent === 'bulk'
-        ? 'make_to_stock'
+        ? 'made_to_order'
         : 'stocked'
       : selectedVariantBackorderable
-        ? 'make_to_stock'
+        ? 'made_to_order'
         : tracksThisVariant && qty > (availableQty ?? 0)
-          ? 'make_to_stock'
+          ? 'made_to_order'
           : 'stocked'
     cart.addLine({
       productId: product.id,
@@ -1069,7 +1069,7 @@ export function ProductDetailClient({
         const a = availability[cellKey(variant.variant_id, s.size_id)]
         const backorderable = a?.allow_order_without_stock === true
         // Buyer / no toggle: backorderable variants auto-route to
-        // make_to_stock at submit, so there's no useful prompt to surface
+        // made_to_order at submit, so there's no useful prompt to surface
         // (customer has no choice to switch). Org_admin with toggle: let
         // the shortfall message fire so they can switch to Made to Order.
         if (backorderable && !canChooseOrderIntent) continue

@@ -56,7 +56,7 @@ export interface CartLine {
   decorations: CartLineDecoration[]
   /**
    * 'stocked' — drawn from the org's existing on-hand stock.
-   * 'make_to_stock' — qty exceeds available stock, so the line is PRODUCED
+   * 'made_to_order' — qty exceeds available stock, so the line is PRODUCED
    * (backorder; MOQ-applicable). This is a production signal only — it does NOT
    * decide the destination. Whether the order ships to the customer or lands on
    * the inventory shelf is the order-level checkout `intent` ('customer' default
@@ -94,7 +94,7 @@ export interface CartLine {
   manualDecorationBrackets?: CartLineBracket[]
 }
 
-export type CartLineFulfilmentType = 'stocked' | 'make_to_stock'
+export type CartLineFulfilmentType = 'stocked' | 'made_to_order'
 
 export interface CartState {
   lines: CartLine[]

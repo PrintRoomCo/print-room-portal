@@ -24,8 +24,8 @@ function row(over: Partial<QuoteItemRebuildRow> = {}): QuoteItemRebuildRow {
 }
 
 describe('deriveFulfilmentType', () => {
-  it('is make_to_stock when any qty is destined for production', () => {
-    expect(deriveFulfilmentType({ qty_to_make: 5 })).toBe('make_to_stock')
+  it('is made_to_order when any qty is destined for production', () => {
+    expect(deriveFulfilmentType({ qty_to_make: 5 })).toBe('made_to_order')
   })
   it('is stocked when nothing is made (pure stock draw)', () => {
     expect(deriveFulfilmentType({ qty_to_make: 0 })).toBe('stocked')

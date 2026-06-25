@@ -54,7 +54,7 @@ export function CartTable({
     // The endpoint returns Record<variantId, VariantAvailability> per
     // 2026-05-29 shape change; CartTable's oversell guard only needs the
     // numeric qty, so collapse to number at the boundary. Backorderable
-    // lines bypass this guard via fulfilmentType === 'make_to_stock' which
+    // lines bypass this guard via fulfilmentType === 'made_to_order' which
     // ProductDetailClient sets at PDP-add time.
     Promise.all(
       productIds.map(async (id) => {
@@ -92,7 +92,7 @@ export function CartTable({
 
   useEffect(() => {
     const oversells = lines.some((l) => {
-      if (l.fulfilmentType === 'make_to_stock') return false
+      if (l.fulfilmentType === 'made_to_order') return false
       const avail = availability[`${l.variantId}::${l.sizeId ?? ''}`]
       return avail !== undefined && l.qty > avail
     })
@@ -131,8 +131,8 @@ export function CartTable({
     <div className="space-y-3">
       {lines.map((line) => {
         const avail = availability[`${line.variantId}::${line.sizeId ?? ''}`]
-        const isMakeToStock = line.fulfilmentType === 'make_to_stock'
-        const isOversell = !isMakeToStock && avail !== undefined && line.qty > avail
+        const isMadeToOrder = line.fulfilmentType === 'made_to_order'
+        const isOversell = !isMadeToOrder && avail !== undefined && line.qty > avail
         const moq = moqByProduct[line.productId]
         const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
         const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
@@ -230,9 +230,9 @@ export function CartTable({
             </div>
 
             {/* Inline status messages */}
-            {(isMakeToStock || isOversell || isMoqShort) && (
+            {(isMadeToOrder || isOversell || isMoqShort) && (
               <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
-                {isMakeToStock && (
+                {isMadeToOrder && (
                   <p className="text-amber-700">
                     <span className="font-medium">Made to order</span> — this will be
                     produced before dispatch.

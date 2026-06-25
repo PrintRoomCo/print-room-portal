@@ -37,10 +37,10 @@ beforeEach(() => {
 })
 
 describe('CartTable fulfilment copy', () => {
-  it('describes a make_to_stock line as produced before dispatch, not an inventory shelf', async () => {
+  it('describes a made_to_order line as produced before dispatch, not an inventory shelf', async () => {
     render(
       <CartTable
-        lines={[makeLine({ fulfilmentType: 'make_to_stock' })]}
+        lines={[makeLine({ fulfilmentType: 'made_to_order' })]}
         onUpdateQty={() => {}}
         onRemove={() => {}}
       />,

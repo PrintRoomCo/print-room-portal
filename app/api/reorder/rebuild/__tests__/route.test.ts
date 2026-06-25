@@ -105,7 +105,7 @@ describe('POST /api/reorder/rebuild', () => {
       qty: 30,
       unitPrice: 12.54,
       imageUrl: 'https://img/p1.png',
-      fulfilmentType: 'make_to_stock',
+      fulfilmentType: 'made_to_order',
     })
     expect(json.degradedCount).toBe(0)
   })

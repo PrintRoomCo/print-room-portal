@@ -1,4 +1,10 @@
-import type { CartLine, CartLineBracket, CartLineDecoration, CartState } from './types'
+import type {
+  CartLine,
+  CartLineBracket,
+  CartLineDecoration,
+  CartLineFulfilmentType,
+  CartState,
+} from './types'
 
 /**
  * Pure cart-persistence normalizers. Extracted from CartProvider so the
@@ -45,6 +51,18 @@ export function normalizeDecorations(raw: unknown): CartLineDecoration[] {
   return out
 }
 
+/**
+ * Validate a persisted cart line's fulfilment type. Back-compat: carts saved
+ * before the make_to_stock → made_to_order rename still hold the old literal, so
+ * map it forward on load (keeping the line's production status). `raw` is typed
+ * `unknown` because it comes straight from untrusted localStorage JSON.
+ */
+export function normalizeFulfilmentType(raw: unknown): CartLineFulfilmentType | undefined {
+  if (raw === 'make_to_stock' || raw === 'made_to_order') return 'made_to_order'
+  if (raw === 'stocked') return 'stocked'
+  return undefined
+}
+
 export function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
   const lines = (raw as { lines?: unknown }).lines
@@ -72,10 +90,7 @@ export function normalizePersisted(raw: unknown): CartState {
           ? (l.shipToStoreId ?? null)
           : null,
       decorations: normalizeDecorations(l.decorations),
-      fulfilmentType:
-        l.fulfilmentType === 'make_to_stock' || l.fulfilmentType === 'stocked'
-          ? l.fulfilmentType
-          : undefined,
+      fulfilmentType: normalizeFulfilmentType(l.fulfilmentType),
       brackets: normalizeBrackets(l.brackets),
       // Phase 2 — catalogue identity must survive the localStorage round-trip,
       // else the order line loses which skin sold on reload.

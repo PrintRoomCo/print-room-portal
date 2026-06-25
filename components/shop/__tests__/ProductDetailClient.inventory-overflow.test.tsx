@@ -136,7 +136,7 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
     )
   })
 
-  it('overflowing variant adds a stocked line + a make_to_stock line', async () => {
+  it('overflowing variant adds a stocked line + a made_to_order line', async () => {
     renderPDP('org_admin')
     // 28 of S, 4 in stock -> 4 stocked + 24 made (meets MOQ 24).
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
@@ -160,7 +160,7 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
       expect.objectContaining({
         variantId: 'red-s',
         qty: 24,
-        fulfilmentType: 'make_to_stock',
+        fulfilmentType: 'made_to_order',
       }),
     )
   })

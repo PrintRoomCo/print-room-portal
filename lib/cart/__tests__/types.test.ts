@@ -55,7 +55,7 @@ describe('lineSignature', () => {
 
   it('differs when fulfilment type differs', () => {
     expect(lineSignature('p1', 'v1', 'Black / M', noDeco, 'stocked'))
-      .not.toBe(lineSignature('p1', 'v1', 'Black / M', noDeco, 'make_to_stock'))
+      .not.toBe(lineSignature('p1', 'v1', 'Black / M', noDeco, 'made_to_order'))
   })
 
   it('separates two skins of one product by catalogueItemId (phase 2)', () => {
@@ -193,7 +193,7 @@ describe('recomputeProductTierPrices', () => {
   it('same product + same signature + different fulfilmentType: aggregate qty for tier', () => {
     const lines = [
       line({ lineId: 'a', qty: 50, fulfilmentType: 'stocked', unitPrice: 12.54 }),
-      line({ lineId: 'b', qty: 50, fulfilmentType: 'make_to_stock', unitPrice: 12.54 }),
+      line({ lineId: 'b', qty: 50, fulfilmentType: 'made_to_order', unitPrice: 12.54 }),
     ]
     const out = recomputeProductTierPrices(lines)
     expect(out[0].unitPrice).toBe(11.24)
