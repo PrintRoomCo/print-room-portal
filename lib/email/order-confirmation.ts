@@ -1,5 +1,17 @@
 import { sendEmail, type SendEmailResult } from '@/lib/email/client'
 import { getSupabaseServer } from '@/lib/supabase'
+import {
+  wrapBrandedEmail,
+  escapeHtml,
+  BRAND_FONT,
+  BRAND_MONO,
+  BRAND_ACCENT,
+  INK,
+  BODY,
+  MUTED,
+  LINE,
+  SURFACE,
+} from '@/lib/email/shared'
 
 export interface OrderConfirmationParams {
   to: string
@@ -45,18 +57,23 @@ function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+/** True when the variant label carries real content (not an empty/placeholder dash). */
+function hasVariant(label: string): boolean {
+  const v = label.trim()
+  return v.length > 0 && v !== '-' && v !== '—'
 }
 
-export async function sendOrderConfirmation(
-  params: OrderConfirmationParams
-): Promise<SendEmailResult> {
+/**
+ * Build the order-confirmation email — subject, branded HTML, and plain-text
+ * fallback — as a pure function (no network, no DB). Kept separate from
+ * {@link sendOrderConfirmation} so the rendered output can be unit-tested and
+ * previewed without sending anything.
+ */
+export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
+  subject: string
+  html: string
+  text: string
+} {
   const paymentTerms = formatPaymentTerms(params.paymentTerms)
   const contractNotes =
     params.pricingMode === 'contract' && params.contractNotes
@@ -69,6 +86,10 @@ export async function sendOrderConfirmation(
       ).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' })}. ` +
       `Your final price can only stay the same or drop as your network's total volume grows.`
     : null
+
+  // ── Line-item rows ──────────────────────────────────────────────────────
+  const cellBase = `padding:14px 0;border-bottom:1px solid ${LINE};vertical-align:top;`
+  const numCell = `${cellBase}text-align:right;font-family:${BRAND_MONO};font-size:14px;white-space:nowrap;padding-left:16px;`
   const lineRowsHtml = params.lines
     .map((line) => {
       const productName = escapeHtml(line.productName)
@@ -78,73 +99,100 @@ export async function sendOrderConfirmation(
       const lineTotal = formatMoney(line.unitPrice * line.quantity)
 
       return `<tr>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${productName}<br/><span style="color:#6b7280;font-size:12px;">${variantLabel}</span></td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;">${quantity}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;">${unitPrice}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;">${lineTotal}</td>
-      </tr>`
+              <td style="${cellBase}">
+                <span style="font-family:${BRAND_FONT};font-size:15px;font-weight:600;color:${INK};">${productName}</span>${
+                  hasVariant(line.variantLabel)
+                    ? `<br/><span style="font-family:${BRAND_FONT};font-size:12px;color:${MUTED};">${variantLabel}</span>`
+                    : ''
+                }
+              </td>
+              <td style="${numCell}color:${BODY};">${quantity}</td>
+              <td style="${numCell}color:${BODY};">${unitPrice}</td>
+              <td style="${numCell}color:${INK};">${lineTotal}</td>
+            </tr>`
     })
     .join('')
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Order received - ${escapeHtml(params.orderRef)}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f5f2ed;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#111827;">
-  <div style="width:100%;background-color:#f5f2ed;padding:24px 0;">
-    <div style="max-width:640px;margin:0 auto;padding:0 16px;">
-      <div style="background-color:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-        <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
-          <strong style="font-size:16px;color:#111827;">THE PRINT ROOM</strong>
-        </div>
-        <div style="padding:24px;">
-          <h1 style="margin:0 0 8px;font-size:24px;line-height:1.3;color:#111827;">Order received</h1>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${escapeHtml(params.customerName)}, thanks - we have received your order ${escapeHtml(params.orderRef)} and will be in touch with next steps.</p>
-          <table style="width:100%;border-collapse:collapse;font-size:14px;">
-            <thead>
-              <tr style="color:#6b7280;">
-                <th style="padding:8px;border-bottom:1px solid #d1d5db;text-align:left;">Item</th>
-                <th style="padding:8px;border-bottom:1px solid #d1d5db;text-align:right;">Qty</th>
-                <th style="padding:8px;border-bottom:1px solid #d1d5db;text-align:right;">Unit</th>
-                <th style="padding:8px;border-bottom:1px solid #d1d5db;text-align:right;">Line</th>
-              </tr>
-            </thead>
-            <tbody>${lineRowsHtml}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3" style="padding:10px 8px;text-align:right;font-weight:700;">Total</td>
-                <td style="padding:10px 8px;text-align:right;font-weight:700;">${formatMoney(params.totalAmount)}</td>
-              </tr>
-            </tfoot>
-          </table>
-          ${provisionalNote ? `<p style="margin:18px 0 0;padding:14px 16px;border-radius:10px;background-color:#fefce8;border:1px solid #fde68a;font-size:13px;color:#92400e;">${escapeHtml(provisionalNote)}</p>` : ''}
-          <div style="margin:18px 0 0;padding:14px 16px;border-radius:10px;background-color:#f3f4f6;font-size:13px;color:#374151;">
-            <div>Payment terms: <strong>${escapeHtml(paymentTerms)}</strong></div>
-            ${contractNotes ? `<div style="margin-top:6px;color:#4b5563;">${escapeHtml(contractNotes)}</div>` : ''}
-            ${requiredBy ? `<div style="margin-top:6px;">Required by: <strong>${escapeHtml(requiredBy)}</strong></div>` : ''}
-          </div>
-          <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#4b5563;">Questions? Reply to this email or contact hello@theprint-room.co.nz.</p>
-          <p style="margin:16px 0 0;font-size:13px;color:#111827;">Thanks,<br/><strong>The Print Room Team</strong></p>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`
+  const headCell = `padding:0 0 10px;border-bottom:2px solid ${INK};font-family:${BRAND_FONT};font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${MUTED};`
+  const labelStyle = `font-family:${BRAND_FONT};font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${MUTED};`
 
+  // ── Body content (wrapped by the branded shell) ─────────────────────────
+  const body = `
+            <p style="margin:0 0 10px;font-family:${BRAND_FONT};font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">Order confirmation</p>
+            <h1 class="b-h1" style="margin:0 0 18px;font-family:${BRAND_FONT};font-size:30px;line-height:1.12;font-weight:700;letter-spacing:-0.02em;color:${INK};">Order received</h1>
+
+            <p style="margin:0 0 4px;${labelStyle}">Your reference</p>
+            <p style="margin:0 0 22px;font-family:${BRAND_MONO};font-size:18px;font-weight:700;letter-spacing:0.02em;color:${BRAND_ACCENT};">${escapeHtml(params.orderRef)}</p>
+
+            <p style="margin:0 0 26px;font-family:${BRAND_FONT};font-size:15px;line-height:1.65;color:${BODY};">Hi ${escapeHtml(params.customerName)}, thanks for your order. We've received it and we're on it. We'll be in touch with the next steps shortly.</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+              <thead>
+                <tr>
+                  <th align="left" style="${headCell}text-align:left;">Item</th>
+                  <th align="right" style="${headCell}text-align:right;padding-left:16px;">Qty</th>
+                  <th align="right" style="${headCell}text-align:right;padding-left:16px;">Unit</th>
+                  <th align="right" style="${headCell}text-align:right;padding-left:16px;">Total</th>
+                </tr>
+              </thead>
+              <tbody>${lineRowsHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" style="padding:18px 0 0;text-align:right;${labelStyle}">Total</td>
+                  <td style="padding:18px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
+                </tr>
+              </tfoot>
+            </table>
+${
+  provisionalNote
+    ? `
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;">
+              <tr>
+                <td style="padding:14px 18px;background-color:${SURFACE};border-left:4px solid ${BRAND_ACCENT};font-family:${BRAND_FONT};font-size:13px;line-height:1.6;color:${BODY};">${escapeHtml(provisionalNote)}</td>
+              </tr>
+            </table>`
+    : ''
+}
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;background-color:${SURFACE};border-radius:12px;">
+              <tr>
+                <td style="padding:18px 20px;font-family:${BRAND_FONT};">
+                  <div style="${labelStyle}margin:0 0 4px;">Payment terms</div>
+                  <div style="font-size:15px;font-weight:600;color:${INK};">${escapeHtml(paymentTerms)}</div>${
+                    contractNotes
+                      ? `
+                  <div style="margin-top:10px;font-size:13px;line-height:1.6;color:${BODY};">${escapeHtml(contractNotes)}</div>`
+                      : ''
+                  }${
+                    requiredBy
+                      ? `
+                  <div style="margin-top:14px;${labelStyle}">Required by</div>
+                  <div style="font-size:15px;font-weight:600;color:${INK};">${escapeHtml(requiredBy)}</div>`
+                      : ''
+                  }
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:30px 0 0;font-family:${BRAND_FONT};font-size:15px;line-height:1.65;color:${BODY};">Thanks,<br/><span style="color:${INK};font-weight:700;">The Print Room team</span></p>`
+
+  const subject = `Order received - ${params.orderRef}`
+  const html = wrapBrandedEmail(`Order received - ${escapeHtml(params.orderRef)}`, body, {
+    preheader: `Order ${params.orderRef} received. We're on it.`,
+  })
+
+  // ── Plain-text fallback ─────────────────────────────────────────────────
   const textLines = params.lines
     .map(
       (line) =>
-        `${line.productName} ${line.variantLabel} x ${line.quantity} @ ${formatMoney(line.unitPrice)} = ${formatMoney(line.unitPrice * line.quantity)}`
+        `${line.productName}${hasVariant(line.variantLabel) ? ` (${line.variantLabel})` : ''} x ${line.quantity} @ ${formatMoney(line.unitPrice)} = ${formatMoney(line.unitPrice * line.quantity)}`
     )
     .join('\n')
 
   const text =
     `Order received - ${params.orderRef}\n\n` +
-    `Hi ${params.customerName}, thanks - we have received your order.\n\n` +
+    `Hi ${params.customerName}, thanks for your order. We've received it and we're on it. We'll be in touch with the next steps shortly.\n\n` +
+    `Your reference: ${params.orderRef}\n\n` +
     `${textLines}\n\n` +
     `Total: ${formatMoney(params.totalAmount)}\n` +
     `Payment terms: ${paymentTerms}\n` +
@@ -152,16 +200,19 @@ export async function sendOrderConfirmation(
     (requiredBy ? `Required by: ${requiredBy}\n` : '') +
     (provisionalNote ? `\n${provisionalNote}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
-    `Thanks,\nThe Print Room Team`
+    `Thanks,\nThe Print Room team`
+
+  return { subject, html, text }
+}
+
+export async function sendOrderConfirmation(
+  params: OrderConfirmationParams
+): Promise<SendEmailResult> {
+  const { subject, html, text } = buildOrderConfirmationEmail(params)
 
   let result: SendEmailResult
   try {
-    result = await sendEmail({
-      to: params.to,
-      subject: `Order received - ${params.orderRef}`,
-      html,
-      text,
-    })
+    result = await sendEmail({ to: params.to, subject, html, text })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     result = { success: false, error: message, messageId: null }

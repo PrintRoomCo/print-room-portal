@@ -136,7 +136,10 @@ describe('ProductDetailClient manual_final pricing', () => {
   it('renders artwork-less included decorations as read-only product info', () => {
     renderPDP([detailsOnlyDecoration])
 
-    expect(screen.getByText('Includes')).toBeInTheDocument()
+    // The "Includes N decoration." pricing line was removed 2026-06-26 (customer-
+    // facing cleanup); the read-only decoration card below is now the only surface
+    // that an included decoration shows on.
+    expect(screen.queryByText(/Includes \d+ decoration/i)).not.toBeInTheDocument()
     expect(screen.getByText('Embroidery — Left chest')).toBeInTheDocument()
     expect(screen.getByText('Included logo')).toBeInTheDocument()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()

@@ -254,6 +254,7 @@ export function CheckoutClient({
                 key={line.lineId}
                 line={line}
                 stores={stores}
+                format={format}
                 value={perLineShipTo[line.lineId] ?? null}
                 catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
                 onChange={(next) =>

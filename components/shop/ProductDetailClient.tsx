@@ -1205,12 +1205,6 @@ export function ProductDetailClient({
                   )
                 })}
               </ul>
-              {pricedDecorations.length > 0 && (
-                <p className="mt-3 text-xs text-gray-500">
-                  Includes {pricedDecorations.length} decoration
-                  {pricedDecorations.length === 1 ? '' : 's'}.
-                </p>
-              )}
             </section>
           )}
 

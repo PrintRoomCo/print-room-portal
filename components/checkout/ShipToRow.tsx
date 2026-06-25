@@ -1,7 +1,12 @@
 'use client'
 
 import Image from 'next/image'
-import { cartLineDisplayImageUrl, type CartLine } from '@/lib/cart/types'
+import {
+  allInLineTotal,
+  allInUnitPrice,
+  cartLineDisplayImageUrl,
+  type CartLine,
+} from '@/lib/cart/types'
 
 export interface StoreOption {
   id: string
@@ -17,6 +22,8 @@ interface ShipToRowProps {
   /** `null` = custom address for this line (triggers all-or-none enforcement at the parent). */
   value: string | null
   onChange: (nextStoreId: string | null) => void
+  /** Currency formatter from the parent (CheckoutClient already holds one). */
+  format: (amount: number) => string
   disabled?: boolean
   /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
   allowCustom?: boolean
@@ -34,6 +41,7 @@ export function ShipToRow({
   stores,
   value,
   onChange,
+  format,
   disabled,
   allowCustom = true,
   catalogueFrontImageUrl = null,
@@ -92,6 +100,16 @@ export function ShipToRow({
           </label>
         </div>
       )}
+      <div className="flex w-full items-baseline justify-between border-t border-gray-100 pt-3">
+        <span className="text-gray-500">
+          <span className="tabular-nums text-gray-700">{format(allInUnitPrice(line))}</span>
+          {' × '}
+          <span className="tabular-nums text-gray-700">{line.qty}</span>
+        </span>
+        <span className="font-medium text-gray-900 tabular-nums">
+          {format(allInLineTotal(line))}
+        </span>
+      </div>
     </div>
   )
 }
