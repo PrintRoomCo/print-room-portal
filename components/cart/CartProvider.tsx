@@ -38,6 +38,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [state, setState] = useState<CartState>({ lines: [] })
   const [hydrated, setHydrated] = useState(false)
+  const imageResolutionKey = state.lines
+    .map((line) =>
+      [
+        line.lineId,
+        line.catalogueItemId ?? '',
+        line.productId,
+        line.variantId,
+      ].join(':'),
+    )
+    .join('|')
 
   useEffect(() => {
     if (!storageKey) {
@@ -77,6 +87,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // quota exceeded or storage unavailable — ignore, cart survives in memory
     }
   }, [state, storageKey, hydrated])
+
+  useEffect(() => {
+    if (!hydrated || isPreview || state.lines.length === 0) return
+
+    const lines = state.lines.map((line) => ({
+      lineId: line.lineId,
+      catalogueItemId: line.catalogueItemId ?? null,
+      productId: line.productId,
+      variantId: line.variantId || null,
+    }))
+    let cancelled = false
+
+    fetch('/api/checkout/review-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { imagesByLineId?: Record<string, string> } | null) => {
+        if (cancelled) return
+        const imagesByLineId = data?.imagesByLineId ?? {}
+        setState((current) => {
+          let changed = false
+          const next = current.lines.map((line) => {
+            const imageUrl = imagesByLineId[line.lineId]
+            if (!imageUrl || line.imageUrl === imageUrl) return line
+            changed = true
+            return { ...line, imageUrl }
+          })
+          return changed ? { lines: next } : current
+        })
+      })
+      .catch(() => {
+        // Non-blocking cosmetic hydration; keep the persisted image if lookup fails.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hydrated, imageResolutionKey, isPreview])
 
   const api: CartApi = {
     lines: state.lines,
