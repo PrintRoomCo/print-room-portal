@@ -5,11 +5,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *
  * Rules (mirror of `auth_member_has_catalogue_item` RLS helper):
  *   0. `org_admin` membership role implicitly grants access to every active
- *      item in every active catalogue in the org — grants are a buyer-scoping
- *      tool, not an admin gate.
- *   1. Otherwise, member must have a catalogue grant for the item's catalogue.
- *   2. Within a granted catalogue, item visibility is:
- *      - "all items" when zero item-grants exist for (member, catalogue) → every active item.
+ *      item in every active catalogue in the org.
+ *   1. Otherwise, resolve the member's VISIBLE catalogues:
+ *      - zero catalogue-grants  → every active catalogue in the org (default).
+ *      - one+ catalogue-grants  → only those granted catalogues (whitelist).
+ *   2. Within each visible catalogue, item visibility is:
+ *      - "all items" when zero item-grants exist for (member, catalogue).
  *      - "whitelist" when one or more item-grants exist → only the explicit set.
  *
  * Returned set is the union across all granted catalogues.
@@ -38,7 +39,7 @@ export async function getGrantedCatalogueItemIds(
     return ((adminItems ?? []) as Array<{ id: string }>).map((r) => r.id)
   }
 
-  // 1. Catalogues granted to this membership (intersected with org's active catalogues).
+  // 1. Catalogues explicitly granted to this membership (∩ org's active catalogues).
   const { data: grantedRows } = await admin
     .from('b2b_member_catalogue_grants')
     .select('catalogue_id, b2b_catalogues!inner(id, organization_id, is_active)')
@@ -49,14 +50,28 @@ export async function getGrantedCatalogueItemIds(
   const grantedCatalogueIds = ((grantedRows ?? []) as Array<{ catalogue_id: string }>)
     .map((r) => r.catalogue_id)
 
-  if (grantedCatalogueIds.length === 0) return []
+  // 2. Resolve VISIBLE catalogues. Auto-grant default: a member with zero
+  //    catalogue grants sees every active catalogue in their org; one+ grant
+  //    flips that catalogue set to a strict whitelist.
+  let visibleCatalogueIds: string[]
+  if (grantedCatalogueIds.length === 0) {
+    const { data: activeCats } = await admin
+      .from('b2b_catalogues')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+    visibleCatalogueIds = ((activeCats ?? []) as Array<{ id: string }>).map((r) => r.id)
+  } else {
+    visibleCatalogueIds = grantedCatalogueIds
+  }
 
-  // 2. Active items in those catalogues, plus item grants for this membership.
+  if (visibleCatalogueIds.length === 0) return []
+
   const [{ data: items }, { data: itemGrants }] = await Promise.all([
     admin
       .from('b2b_catalogue_items')
       .select('id, catalogue_id')
-      .in('catalogue_id', grantedCatalogueIds)
+      .in('catalogue_id', visibleCatalogueIds)
       .eq('is_active', true),
     admin
       .from('b2b_member_catalogue_item_grants')
