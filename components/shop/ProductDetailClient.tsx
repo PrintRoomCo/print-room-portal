@@ -29,21 +29,6 @@ type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 type CustomerRole = 'org_admin' | 'staff'
 type OrderIntent = 'inventory' | 'bulk'
 
-const DECORATION_METHOD_LABELS: Record<string, string> = {
-  screenprint: 'Screen print',
-  embroidery: 'Embroidery',
-  heatpress: 'Heat press',
-  supacolour: 'Supacolour',
-  dtf: 'DTF',
-  // Neutral method for image-first "custom mockup" baked decorations (no artwork,
-  // no specific method) — the decoration is in the mockup photo.
-  custom: 'Custom decoration',
-}
-
-function decorationMethodLabel(method: string): string {
-  return DECORATION_METHOD_LABELS[method] ?? method.replace(/_/g, ' ')
-}
-
 // SKUCOLLAPSE: composite key for per-(colourway, size) qty state + availability
 // lookups. Matches the catalogue page + lib/shop/variant-availability
 // availabilityKey (size_id renders '' when null).
@@ -1197,27 +1182,6 @@ export function ProductDetailClient({
                 Lead time ~{product.lead_time_days} days
               </span>
             </div>
-          )}
-
-          {swatchVisibleDecorations.length > 0 && (
-            <section className="rounded-[24px] bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                Includes
-              </p>
-              <ul className="mt-3 space-y-2 text-sm text-gray-800">
-                {swatchVisibleDecorations.map((d) => {
-                  const label = d.positionLabel
-                    ? `${decorationMethodLabel(d.method)} — ${d.positionLabel}`
-                    : decorationMethodLabel(d.method)
-                  return (
-                    <li key={d.linkId} className="flex items-center justify-between gap-3">
-                      <span>{label}</span>
-                      <span className="text-xs text-gray-500">{d.name}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
           )}
 
           {isUnavailableToOrder ? (
