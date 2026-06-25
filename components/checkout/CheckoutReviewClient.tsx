@@ -71,10 +71,11 @@ export function CheckoutReviewClient({
   const reviewImageLines = useMemo(
     () =>
       cart.lines
-        .filter((line) => line.catalogueItemId)
+        .filter((line) => line.catalogueItemId || line.productId)
         .map((line) => ({
           lineId: line.lineId,
-          catalogueItemId: line.catalogueItemId as string,
+          catalogueItemId: line.catalogueItemId ?? null,
+          productId: line.productId,
           variantId: line.variantId || null,
         })),
     [cart.lines],
@@ -82,7 +83,7 @@ export function CheckoutReviewClient({
   const reviewImageKey = useMemo(
     () =>
       reviewImageLines
-        .map((line) => `${line.lineId}:${line.catalogueItemId}:${line.variantId ?? ''}`)
+        .map((line) => `${line.lineId}:${line.catalogueItemId}:${line.productId}:${line.variantId ?? ''}`)
         .join('|'),
     [reviewImageLines],
   )

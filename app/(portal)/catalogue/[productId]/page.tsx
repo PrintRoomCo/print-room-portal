@@ -12,6 +12,7 @@ import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
 import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
+import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
 import { resolveColourMatrix, type MatrixVariant } from '@/lib/shop/colour-matrix'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 import {
@@ -403,12 +404,17 @@ const loadProductDetailPageData = cache(async (
     variant_label: string | null
     fulfilment_type_override: FulfilmentType | null
   } | null
+  const catalogueFallbackImageUrl = pickPreferredGalleryImageUrl(
+    images,
+    colourOptions[0]?.id ?? null,
+    productRow.image_url,
+  )
 
   const displayProduct = {
     ...productRow,
     name: stripTrailingSku(catItemForked?.name ?? productRow.name, productRow.sku),
     description: cleanDescription(catItemForked?.description ?? productRow.description),
-    image_url: productRow.image_url,
+    image_url: catalogueFallbackImageUrl,
     sku: catItemForked?.sku_override ?? productRow.sku,
   }
 

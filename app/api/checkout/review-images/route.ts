@@ -5,8 +5,13 @@ import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
 
 interface ReviewImageLineInput {
   lineId: string
-  catalogueItemId: string
+  catalogueItemId: string | null
+  productId: string | null
   variantId: string | null
+}
+
+interface ResolvedReviewImageLine extends ReviewImageLineInput {
+  resolvedCatalogueItemId: string
 }
 
 interface CatalogueImageRow {
@@ -21,15 +26,25 @@ interface CatalogueImageRow {
 function asReviewImageLine(value: unknown): ReviewImageLineInput | null {
   if (!value || typeof value !== 'object') return null
   const row = value as Record<string, unknown>
-  if (typeof row.lineId !== 'string' || typeof row.catalogueItemId !== 'string') {
+  if (typeof row.lineId !== 'string') {
     return null
   }
+  const catalogueItemId =
+    typeof row.catalogueItemId === 'string' && row.catalogueItemId.length > 0
+      ? row.catalogueItemId
+      : null
+  const productId =
+    typeof row.productId === 'string' && row.productId.length > 0
+      ? row.productId
+      : null
+  if (!catalogueItemId && !productId) return null
   const variantId = typeof row.variantId === 'string' && row.variantId.length > 0
     ? row.variantId
     : null
   return {
     lineId: row.lineId,
-    catalogueItemId: row.catalogueItemId,
+    catalogueItemId,
+    productId,
     variantId,
   }
 }
@@ -95,7 +110,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ imagesByLineId: {} })
   }
 
-  const itemIds = unique(lines.map((line) => line.catalogueItemId))
   const grantedItemIds = new Set(
     await getGrantedCatalogueItemIds(
       auth.admin,
@@ -103,8 +117,45 @@ export async function POST(request: Request) {
       auth.context.organizationId,
     ),
   )
-  const allowedItemIds = itemIds.filter((id) => grantedItemIds.has(id))
-  const allowedLines = lines.filter((line) => grantedItemIds.has(line.catalogueItemId))
+
+  const productFallbackIds = unique(
+    lines
+      .filter((line) => !line.catalogueItemId)
+      .map((line) => line.productId),
+  )
+  const itemIdByProductId = new Map<string, string>()
+  if (productFallbackIds.length > 0) {
+    const { data: productItems, error: productItemsError } = await auth.admin
+      .from('b2b_catalogue_items')
+      .select('id, source_product_id, b2b_catalogues!inner(organization_id, is_active)')
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', auth.context.organizationId)
+      .eq('b2b_catalogues.is_active', true)
+      .in('source_product_id', productFallbackIds)
+
+    if (productItemsError) {
+      return NextResponse.json({ error: productItemsError.message }, { status: 500 })
+    }
+
+    for (const row of (productItems ?? []) as Array<{ id: string; source_product_id: string }>) {
+      if (!grantedItemIds.has(row.id) || itemIdByProductId.has(row.source_product_id)) continue
+      itemIdByProductId.set(row.source_product_id, row.id)
+    }
+  }
+
+  const allowedLines: ResolvedReviewImageLine[] = []
+  for (const line of lines) {
+    const resolvedCatalogueItemId =
+      line.catalogueItemId && grantedItemIds.has(line.catalogueItemId)
+        ? line.catalogueItemId
+        : line.productId
+          ? itemIdByProductId.get(line.productId) ?? null
+          : null
+    if (resolvedCatalogueItemId) {
+      allowedLines.push({ ...line, resolvedCatalogueItemId })
+    }
+  }
+  const allowedItemIds = unique(allowedLines.map((line) => line.resolvedCatalogueItemId))
 
   if (allowedItemIds.length === 0 || allowedLines.length === 0) {
     return NextResponse.json({ imagesByLineId: {} })
@@ -147,7 +198,10 @@ export async function POST(request: Request) {
   const imagesByLineId: Record<string, string> = {}
   for (const line of allowedLines) {
     const selectedSwatchId = line.variantId ? variantSwatchById.get(line.variantId) ?? null : null
-    const imageUrl = pickFrontImage(rowsByItemId.get(line.catalogueItemId) ?? [], selectedSwatchId)
+    const imageUrl = pickFrontImage(
+      rowsByItemId.get(line.resolvedCatalogueItemId) ?? [],
+      selectedSwatchId,
+    )
     if (imageUrl) imagesByLineId[line.lineId] = imageUrl
   }
 
