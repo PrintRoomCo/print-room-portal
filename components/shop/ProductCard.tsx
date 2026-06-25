@@ -11,7 +11,8 @@ interface ProductCardData {
   name: string
   sku: string | null
   image_url: string | null
-  /** Garment family (preferred) or category, uppercased on render. */
+  /** Garment family (preferred) or category. No longer shown on the card — */
+  /** kept on the data shape so the page query can stay consistent. */
   type: string | null
   /**
    * All-in price range, decoration included. `price_high` = most expensive
@@ -57,15 +58,11 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-3 px-2 pb-1">
-        <dl className="grid min-w-0 grid-cols-[auto_auto_auto] items-baseline gap-x-4 gap-y-0.5 text-[10px] leading-tight">
+        <dl className="grid min-w-0 grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-0.5 text-[10px] leading-tight">
           <dt className="font-medium uppercase tracking-wider text-gray-400">Product</dt>
-          <dt className="font-medium uppercase tracking-wider text-gray-400">Type</dt>
           <dt className="font-medium uppercase tracking-wider text-gray-400">Price</dt>
           <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
             {product.name}
-          </dd>
-          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
-            {formatType(product.type)}
           </dd>
           <dd className="whitespace-nowrap font-medium uppercase tracking-wider text-gray-900">
             {product.price_status === 'missing' ? (
@@ -103,9 +100,4 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
     </article>
   )
-}
-
-function formatType(t: string | null): string {
-  if (!t) return '—'
-  return t.replace(/_/g, ' ').toUpperCase()
 }
