@@ -5,6 +5,7 @@ import { getSupabaseServer } from '@/lib/supabase'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { readPreviewSession } from '@/lib/preview/cookie'
 import { buildPreviewContext } from '@/lib/preview/context'
+import { effectivePermission, type MemberPermission } from '@/lib/shop/fulfilment-mode'
 
 export interface B2BCustomerContext {
   userId: string
@@ -43,7 +44,13 @@ export interface B2BCustomerContext {
    * customers. Mirrors submit_b2b_order's top-level branch.
    */
   moqExempt: boolean
-  /** Layer-2 ordering permission (user_organizations.ordering_permission). org_admin ignores it. */
+  /**
+   * EFFECTIVE Layer-2 ordering permission, already resolved via
+   * effectivePermission(role, stored): org_admin is always 'both'; staff use
+   * their stored user_organizations.ordering_permission (default 'stock_only').
+   * Consumers (checkout submit, PDP) can use this directly without re-applying
+   * the role rule.
+   */
   orderingPermission: import('@/lib/shop/fulfilment-mode').MemberPermission
   /** True when this context was built for a staff preview (read-only). */
   isPreview?: boolean
@@ -112,12 +119,19 @@ export async function requireB2BCustomer(
     return { kind: 'missing_customer_code' }
   }
 
+  const role: B2BCustomerContext['role'] =
+    (membership as { role?: string }).role === 'staff' ? 'staff' : 'org_admin'
+  const storedPermission =
+    (membership as { ordering_permission?: string }).ordering_permission as
+      | MemberPermission
+      | undefined
+
   return {
     admin,
     context: {
       userId: user.id,
       membershipId: membership.id,
-      role: ((membership as { role?: string }).role === 'staff' ? 'staff' : 'org_admin'),
+      role,
       email: profile?.email ?? user.email ?? '',
       fullName: profile?.full_name ?? '',
       organizationId: org.id,
@@ -135,10 +149,12 @@ export async function requireB2BCustomer(
       allowsMultiStoreOrdering:
         (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
       moqExempt: Boolean((org as { moq_exempt?: boolean | null }).moq_exempt),
-      orderingPermission:
-        ((membership as { ordering_permission?: string }).ordering_permission as
-          | import('@/lib/shop/fulfilment-mode').MemberPermission
-          | undefined) ?? 'stock_only',
+      // EFFECTIVE permission: org_admin is always elevated to 'both' (role
+      // overrides the stored value), staff fall back to least-privilege. This
+      // mirrors the PDP (effectivePermission) so the store UI and the checkout
+      // RPC agree — otherwise an admin row left at 'stock_only' is shown a
+      // made_to_order product but rejected by submit_b2b_order (PERMISSION_DENIED).
+      orderingPermission: effectivePermission(role, storedPermission ?? null),
     } satisfies B2BCustomerContext,
   }
 }

@@ -155,6 +155,20 @@ export async function POST(request: Request) {
     if (msg.includes('OUT_OF_STOCK')) {
       return NextResponse.json({ error: 'OUT_OF_STOCK' }, { status: 409 })
     }
+    // submit_b2b_order raises PERMISSION_DENIED when the member's ordering
+    // permission forbids the line's fulfilment (e.g. a stock_only member on a
+    // made_to_order product). It's an authorisation outcome, not a server
+    // fault — surface it as 403 with a readable message rather than a bare 500.
+    if (msg.includes('PERMISSION_DENIED')) {
+      return NextResponse.json(
+        {
+          error: 'PERMISSION_DENIED',
+          message:
+            "Your account isn't permitted to place this type of order. Contact your organisation admin.",
+        },
+        { status: 403 },
+      )
+    }
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

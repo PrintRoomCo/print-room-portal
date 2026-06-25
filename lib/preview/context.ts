@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getCompanyAccess } from '@/lib/company'
+import { effectivePermission, type MemberPermission } from '@/lib/shop/fulfilment-mode'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import type { B2BCustomerAccess } from '@/types/company'
 import type { PreviewPayload } from '@/lib/preview/token'
@@ -28,10 +29,13 @@ export async function buildPreviewContext(
   ])
   if (!org) return null
 
+  const role: B2BCustomerContext['role'] =
+    (membership as { role?: string }).role === 'staff' ? 'staff' : 'org_admin'
+
   const context: B2BCustomerContext = {
     userId: membership.user_id,
     membershipId: membership.id,
-    role: ((membership as { role?: string }).role === 'staff' ? 'staff' : 'org_admin'),
+    role,
     email: profile?.email ?? '',
     fullName: profile?.full_name ?? '',
     organizationId: org.id,
@@ -49,9 +53,14 @@ export async function buildPreviewContext(
     allowsMultiStoreOrdering:
       (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
     moqExempt: false,
-    orderingPermission:
+    // EFFECTIVE permission (org_admin -> 'both'), matching requireB2BCustomer so
+    // staff "preview as member" of an admin doesn't hit a spurious checkout
+    // PERMISSION_DENIED the real member would never see.
+    orderingPermission: effectivePermission(
+      role,
       ((membership as { ordering_permission?: string }).ordering_permission as
-        B2BCustomerContext['orderingPermission'] | undefined) ?? 'stock_only',
+        MemberPermission | undefined) ?? null,
+    ),
     isPreview: true,
     previewItemId: payload.itemId ?? null,
   }
