@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase-auth', () => ({ changePassword: vi.fn() }))
 // Preview guard reads cookies(); stub it to the non-preview path for these tests.
 vi.mock('@/lib/preview/guard', () => ({ isPreviewRequest: vi.fn(async () => false) }))
 
-import { createLocationAction } from '../actions'
+import { createLocationAction, updateOrgLogoAction, removeOrgLogoAction } from '../actions'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 
@@ -38,6 +38,60 @@ function makeAdmin(opts: {
     return b
   }
   return { from: vi.fn((t: string) => builder(t)) }
+}
+
+/**
+ * Admin stub for the org-logo actions. Adds a `.storage` surface and an
+ * `organizations.update().eq()` chain on top of the membership lookup.
+ * `__upload` / `__orgUpdate` record calls so tests can assert side effects.
+ */
+function makeLogoAdmin(opts: {
+  membership: { data: unknown; error: unknown }
+  uploadResult?: { error: unknown }
+}) {
+  const upload = vi.fn()
+  const orgUpdate = vi.fn()
+
+  function from(table: string): AnyRow {
+    const b: AnyRow = {
+      select: () => b,
+      eq: () => b,
+      single: async () =>
+        table === 'user_organizations' ? opts.membership : { data: null, error: null },
+      update: (payload: unknown) => {
+        if (table === 'organizations') orgUpdate(payload)
+        return { eq: async () => ({ error: null }) }
+      },
+    }
+    return b
+  }
+
+  const bucket = {
+    upload: (...args: unknown[]) => {
+      upload(...args)
+      return Promise.resolve(opts.uploadResult ?? { error: null })
+    },
+    getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.example/${path}` } }),
+    list: async () => ({ data: [], error: null }),
+    remove: async () => ({ error: null }),
+  }
+
+  return {
+    from: vi.fn(from),
+    storage: { from: vi.fn(() => bucket) },
+    __upload: upload,
+    __orgUpdate: orgUpdate,
+  }
+}
+
+function makeFile(type: string, size: number): File {
+  return new File([new Uint8Array(size)], 'logo', { type })
+}
+
+function logoFormData(file: File): FormData {
+  const fd = new FormData()
+  fd.set('logo', file)
+  return fd
 }
 
 function mockAuth(user: { id: string } | null) {
@@ -85,5 +139,91 @@ describe('createLocationAction — org_admin guard', () => {
 
     expect(result.success).toBe(true)
     expect(storesInsert).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('updateOrgLogoAction — org_admin guard + validation', () => {
+  it('rejects a non-admin member and never uploads', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'buyer' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await updateOrgLogoAction(logoFormData(makeFile('image/png', 10)))
+
+    expect(result.success).toBe(false)
+    expect(admin.__upload).not.toHaveBeenCalled()
+    expect(admin.__orgUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unsupported file type', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await updateOrgLogoAction(logoFormData(makeFile('image/gif', 10)))
+
+    expect(result.success).toBe(false)
+    expect(admin.__upload).not.toHaveBeenCalled()
+  })
+
+  it('rejects a file larger than 2 MB', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await updateOrgLogoAction(logoFormData(makeFile('image/png', 2 * 1024 * 1024 + 1)))
+
+    expect(result.success).toBe(false)
+    expect(admin.__upload).not.toHaveBeenCalled()
+  })
+
+  it('uploads a valid logo and writes logo_url', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await updateOrgLogoAction(logoFormData(makeFile('image/png', 50)))
+
+    expect(result.success).toBe(true)
+    expect(admin.__upload).toHaveBeenCalledTimes(1)
+    expect(admin.__orgUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ logo_url: expect.stringContaining('org-logos/org-1/') }),
+    )
+  })
+})
+
+describe('removeOrgLogoAction — org_admin guard', () => {
+  it('rejects a non-admin member', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'buyer' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await removeOrgLogoAction()
+
+    expect(result.success).toBe(false)
+    expect(admin.__orgUpdate).not.toHaveBeenCalled()
+  })
+
+  it('clears logo_url for an org_admin', async () => {
+    mockAuth({ id: 'u-1' })
+    const admin = makeLogoAdmin({
+      membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+    })
+    vi.mocked(getSupabaseServer).mockReturnValue(admin as never)
+
+    const result = await removeOrgLogoAction()
+
+    expect(result.success).toBe(true)
+    expect(admin.__orgUpdate).toHaveBeenCalledWith({ logo_url: null })
   })
 })

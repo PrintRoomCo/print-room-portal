@@ -8,6 +8,7 @@ const base = {
   lastName: 'B',
   companyId: 'org1',
   companyName: 'Org',
+  logoUrl: null,
   locationIds: [] as string[],
   tier: 'bronze',
   tierLabel: null,

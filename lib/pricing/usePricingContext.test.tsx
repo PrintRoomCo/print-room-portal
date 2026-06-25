@@ -17,6 +17,7 @@ function makeAccess(overrides: Partial<B2BCustomerAccess>): B2BCustomerAccess {
     lastName: '',
     companyId: null,
     companyName: null,
+    logoUrl: null,
     locationIds: [],
     role: 'org_admin',
     tier: 'bronze',
