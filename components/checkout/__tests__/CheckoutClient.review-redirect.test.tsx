@@ -91,7 +91,37 @@ describe('CheckoutClient review step', () => {
     })
   })
 
-  it('lets make-to-stock lines ship directly when Add all to inventory is toggled off', async () => {
+  it('defaults make-to-stock lines to customer intent (inventory is opt-in)', async () => {
+    mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'make_to_stock' }]
+    const user = userEvent.setup()
+    render(
+      <CheckoutClient
+        stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
+        customerCode="CUST-1"
+        paymentTerms="net20"
+        defaultDepositPercent={null}
+        defaultStoreId={null}
+        isBuyer={false}
+        tenantType="franchise"
+      />,
+    )
+
+    // make_to_stock means the qty must be produced — it does NOT auto-route to
+    // the inventory shelf. The switch starts OFF; the order ships to the
+    // customer by default.
+    const inventorySwitch = screen.getByRole('switch', { name: /add all lines to my inventory/i })
+    expect(inventorySwitch).toHaveAttribute('aria-checked', 'false')
+
+    await user.click(screen.getByRole('button', { name: /review order/i }))
+
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
+    expect(JSON.parse(sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY) ?? '{}')).toMatchObject({
+      intent: 'customer',
+      perLineShipTo: { 'line-1': 'store-1' },
+    })
+  })
+
+  it('routes the order to inventory only when the admin opts in', async () => {
     mocks.lines = [{ ...mocks.lines[0], fulfilmentType: 'make_to_stock' }]
     const user = userEvent.setup()
     render(
@@ -107,18 +137,14 @@ describe('CheckoutClient review step', () => {
     )
 
     const inventorySwitch = screen.getByRole('switch', { name: /add all lines to my inventory/i })
-    expect(inventorySwitch).toHaveAttribute('aria-checked', 'true')
-
     await user.click(inventorySwitch)
-    expect(inventorySwitch).toHaveAttribute('aria-checked', 'false')
+    expect(inventorySwitch).toHaveAttribute('aria-checked', 'true')
 
     await user.click(screen.getByRole('button', { name: /review order/i }))
 
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
-    const raw = sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY)
-    expect(JSON.parse(raw ?? '{}')).toMatchObject({
-      intent: 'customer',
-      perLineShipTo: { 'line-1': 'store-1' },
+    expect(JSON.parse(sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY) ?? '{}')).toMatchObject({
+      intent: 'inventory',
     })
   })
 })

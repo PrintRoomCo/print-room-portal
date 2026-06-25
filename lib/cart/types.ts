@@ -55,10 +55,12 @@ export interface CartLine {
    */
   decorations: CartLineDecoration[]
   /**
-   * 'stocked' — ships from org's existing inventory.
-   * 'make_to_stock' — qty exceeds available stock; goes into production and
-   * lands in the org's inventory shelf (not direct ship). Absent on legacy
-   * persisted lines; treat as 'stocked' when undefined.
+   * 'stocked' — drawn from the org's existing on-hand stock.
+   * 'make_to_stock' — qty exceeds available stock, so the line is PRODUCED
+   * (backorder; MOQ-applicable). This is a production signal only — it does NOT
+   * decide the destination. Whether the order ships to the customer or lands on
+   * the inventory shelf is the order-level checkout `intent` ('customer' default
+   * vs 'inventory'). Absent on legacy persisted lines; treat as 'stocked'.
    */
   fulfilmentType?: CartLineFulfilmentType
   /**

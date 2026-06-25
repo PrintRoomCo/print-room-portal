@@ -34,12 +34,6 @@ interface ShipToRowProps {
    */
   inventoryEnabled?: boolean
   onInventoryChange?: (next: boolean) => void
-  /**
-   * When true, the toggle is forced ON and read-only. Used for
-   * `fulfilmentType === 'make_to_stock'` lines — qty exceeds available
-   * stock so they must go to production → inventory.
-   */
-  inventoryToggleForced?: boolean
 }
 
 export function ShipToRow({
@@ -52,7 +46,6 @@ export function ShipToRow({
   hideShipTo = false,
   inventoryEnabled,
   onInventoryChange,
-  inventoryToggleForced = false,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
   const showInventoryToggle = inventoryEnabled !== undefined && onInventoryChange !== undefined
@@ -108,23 +101,16 @@ export function ShipToRow({
           </label>
         )}
         {showInventoryToggle && (
-          <div className="flex flex-col items-end gap-0.5">
-            <label className="flex items-center gap-2">
-              <span className="text-xs text-gray-600">Add to inventory</span>
-              <Switch
-                checked={inventoryEnabled}
-                onChange={onInventoryChange}
-                disabled={disabled || inventoryToggleForced}
-                size="sm"
-                ariaLabel={`Add ${line.productName} (${line.variantLabel}) to my inventory`}
-              />
-            </label>
-            {inventoryToggleForced && (
-              <span className="text-[10px] text-amber-700">
-                over current stock — production required
-              </span>
-            )}
-          </div>
+          <label className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">Add to inventory</span>
+            <Switch
+              checked={inventoryEnabled}
+              onChange={onInventoryChange}
+              disabled={disabled}
+              size="sm"
+              ariaLabel={`Add ${line.productName} (${line.variantLabel}) to my inventory`}
+            />
+          </label>
         )}
       </div>
     </div>

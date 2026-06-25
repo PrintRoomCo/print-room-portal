@@ -83,15 +83,14 @@ export function CheckoutClient({
   const canRouteToInventory =
     !isBuyer && (tenantType === 'studio_plus_inventory' || tenantType === 'franchise')
   const hasMakeToStockLines = cart.lines.some((l) => l.fulfilmentType === 'make_to_stock')
+  // Inventory routing is opt-in. `make_to_stock` means qty exceeds available
+  // stock so the line must be PRODUCED — it does NOT mean the order lands on the
+  // inventory shelf. Destination is the order-level `intent` (derived below from
+  // the admin's ticks: all-on → 'inventory', else 'customer'). Default every line
+  // OFF so a backordered order ships to the customer unless the admin opts in.
   const [inventoryByLine, setInventoryByLine] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
-    if (canRouteToInventory) {
-      // Auto-engage per make_to_stock line: qty exceeded available stock on
-      // the PDP, so those lines must go to production → inventory shelf.
-      for (const l of cart.lines) {
-        m[l.lineId] = l.fulfilmentType === 'make_to_stock'
-      }
-    }
+    for (const l of cart.lines) m[l.lineId] = false
     return m
   })
 
@@ -118,13 +117,12 @@ export function CheckoutClient({
       let changed = false
       const next: Record<string, boolean> = {}
       for (const line of cart.lines) {
-        const forced = line.fulfilmentType === 'make_to_stock'
         if (Object.prototype.hasOwnProperty.call(prev, line.lineId)) {
-          // Keep prior choice unless the line is now forced-on.
-          next[line.lineId] = forced ? true : prev[line.lineId]
-          if (next[line.lineId] !== prev[line.lineId]) changed = true
+          // Preserve the admin's explicit choice for existing lines.
+          next[line.lineId] = prev[line.lineId]
         } else {
-          next[line.lineId] = forced
+          // New line — default to customer-route; inventory stays opt-in.
+          next[line.lineId] = false
           changed = true
         }
       }
