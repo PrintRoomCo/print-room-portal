@@ -2,10 +2,18 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { CurrencyDisplayPreferenceSection } from '@/components/account/CurrencyDisplayPreferenceSection'
-import { updateProfile, changePasswordAction, createLocationAction, type ActionResult } from './actions'
+import {
+  updateProfile,
+  changePasswordAction,
+  createLocationAction,
+  updateOrgLogoAction,
+  removeOrgLogoAction,
+  type ActionResult,
+} from './actions'
 import { formatPrice } from '@/lib/format/price'
 import { formatCurrency } from '@/lib/currency/format'
 import type { SupportedCurrency } from '@/lib/currency/types'
@@ -80,6 +88,9 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
   const [locationResult, setLocationResult] = useState<ActionResult | null>(null)
   const [locationSubmitting, setLocationSubmitting] = useState(false)
 
+  const [logoResult, setLogoResult] = useState<ActionResult | null>(null)
+  const [logoSubmitting, setLogoSubmitting] = useState(false)
+
   const fetchAccountData = useCallback((signal?: AbortSignal) => {
     return fetch('/api/account-data', { signal })
       .then((res) => (res.ok ? res.json() : { stores: [], recentQuotes: [] }))
@@ -153,6 +164,16 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
     }
   }, [locationResult, showAddStore, fetchAccountData])
 
+  // The header logo is read from company-access (cached in CompanyContext), so a
+  // full reload is the simplest way to repaint it after a change — same approach
+  // the profile save uses above.
+  useEffect(() => {
+    if (logoResult?.success) {
+      const timer = setTimeout(() => window.location.reload(), 1200)
+      return () => clearTimeout(timer)
+    }
+  }, [logoResult])
+
   async function handleProfileSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (profileSubmitting) return
@@ -184,6 +205,29 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
     const result = await createLocationAction(formData)
     setLocationResult(result)
     setLocationSubmitting(false)
+  }
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Reset the input so re-selecting the same file still fires onChange.
+    e.target.value = ''
+    if (!file || logoSubmitting) return
+    setLogoSubmitting(true)
+    setLogoResult(null)
+    const formData = new FormData()
+    formData.set('logo', file)
+    const result = await updateOrgLogoAction(formData)
+    setLogoResult(result)
+    setLogoSubmitting(false)
+  }
+
+  async function handleLogoRemove() {
+    if (logoSubmitting) return
+    setLogoSubmitting(true)
+    setLogoResult(null)
+    const result = await removeOrgLogoAction()
+    setLogoResult(result)
+    setLogoSubmitting(false)
   }
 
   if (dataLoading) {
@@ -352,6 +396,78 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
           )}
         </div>
       </div>
+
+      {/* Organisation Logo — org admins only. Replaces the Print Room mark in
+          the top header bar for everyone in the org. */}
+      {access.isCompanyUser && access.isOrgAdmin && (
+        <div className="card-elevated p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Organisation Logo</h2>
+          </div>
+
+          {logoResult?.success && (
+            <div className="glass-success-box p-3 mb-4">
+              <p className="text-sm">{logoResult.message}</p>
+            </div>
+          )}
+          {logoResult?.errors && (
+            <div className="glass-error-box p-3 mb-4">
+              {logoResult.errors.map((error, i) => (
+                <p key={i} className="text-sm">{error}</p>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-5">
+            <div className="flex h-16 w-32 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-2">
+              {access.logoUrl ? (
+                <Image
+                  src={access.logoUrl}
+                  alt={access.companyName ?? 'Organisation logo'}
+                  width={128}
+                  height={64}
+                  unoptimized
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <span className="text-center text-xs text-gray-400">
+                  Using the Print Room default
+                </span>
+              )}
+            </div>
+
+            <div className="flex-1 space-y-2">
+              <p className="text-sm text-gray-600">
+                Shown in the header instead of the Print Room logo. PNG, JPG, WebP, or SVG, up to 2&nbsp;MB.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label
+                  className={`btn-secondary cursor-pointer ${logoSubmitting ? 'pointer-events-none opacity-60' : ''}`}
+                >
+                  {logoSubmitting ? 'Uploading…' : access.logoUrl ? 'Replace logo' : 'Upload logo'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="sr-only"
+                    onChange={handleLogoChange}
+                    disabled={logoSubmitting}
+                  />
+                </label>
+                {access.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={handleLogoRemove}
+                    disabled={logoSubmitting}
+                    className="text-sm text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CurrencyDisplayPreferenceSection fetchedAt={ratesFetchedAt} />
 

@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store/
 
+# git worktrees (linked checkouts of this repo)
+.worktrees/
+
 # next.js
 .next/
 out/

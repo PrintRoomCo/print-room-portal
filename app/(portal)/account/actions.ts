@@ -180,3 +180,132 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
 
   return { success: true, message: `Store "${storeName}" has been created successfully!` }
 }
+
+// Org header logo — public bucket reused from artworks; logos live under an
+// org-scoped prefix. See docs/superpowers/specs/2026-06-25-org-header-logo-design.md.
+const LOGO_BUCKET = 'org-artworks'
+const LOGO_MAX_BYTES = 2 * 1024 * 1024 // 2 MB
+const LOGO_EXT_BY_TYPE: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/svg+xml': 'svg',
+}
+
+/**
+ * Shared guard for the org-logo actions: preview → auth → membership → role.
+ * Mirrors the inline checks in createLocationAction; both logo actions need the
+ * same gate, so it lives here once. Returns the org id on success, or a ready
+ * ActionResult to return verbatim on any failure.
+ */
+async function resolveOrgAdmin(): Promise<
+  { ok: true; organizationId: string } | { ok: false; result: ActionResult }
+> {
+  if (await isPreviewRequest()) {
+    return { ok: false, result: { success: false, errors: ['Preview only — nothing was saved.'] } }
+  }
+
+  const supabase = await getSupabaseServerComponent()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, result: { success: false, errors: ['Not authenticated.'] } }
+
+  const adminClient = getSupabaseServer()
+  const { data: membership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id, role')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!membership) {
+    return { ok: false, result: { success: false, errors: ['No company associated with your account.'] } }
+  }
+  if (membership.role !== 'org_admin') {
+    return { ok: false, result: { success: false, errors: ['Only organisation admins can change the logo.'] } }
+  }
+  return { ok: true, organizationId: membership.organization_id as string }
+}
+
+export async function updateOrgLogoAction(formData: FormData): Promise<ActionResult> {
+  const auth = await resolveOrgAdmin()
+  if (!auth.ok) return auth.result
+
+  const file = formData.get('logo')
+  if (!(file instanceof File) || file.size === 0) {
+    return { success: false, errors: ['Please choose a logo image to upload.'] }
+  }
+
+  const ext = LOGO_EXT_BY_TYPE[file.type]
+  if (!ext) {
+    return { success: false, errors: ['Logo must be a PNG, JPG, WebP, or SVG image.'] }
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    return { success: false, errors: ['Logo must be 2 MB or smaller.'] }
+  }
+
+  const adminClient = getSupabaseServer()
+  const path = `org-logos/${auth.organizationId}/logo-${Date.now()}.${ext}`
+
+  const { error: uploadError } = await adminClient.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true })
+
+  if (uploadError) {
+    console.error('[Account] Logo upload error:', uploadError)
+    return { success: false, errors: ['Failed to upload logo. Please try again.'] }
+  }
+
+  const { data: urlData } = adminClient.storage.from(LOGO_BUCKET).getPublicUrl(path)
+  const publicUrl = urlData?.publicUrl
+  if (!publicUrl) {
+    return { success: false, errors: ['Failed to resolve the uploaded logo URL.'] }
+  }
+
+  const { error } = await adminClient
+    .from('organizations')
+    .update({ logo_url: publicUrl })
+    .eq('id', auth.organizationId)
+
+  if (error) {
+    console.error('[Account] Logo save error:', error)
+    return { success: false, errors: ['Failed to save logo.'] }
+  }
+
+  // No tag revalidation needed: the header reads the logo via
+  // getPortalCompanyAccess (request-memoised, not persistently cached) and
+  // /api/company-access (dynamic), so the client's post-save reload picks it up.
+  return { success: true, message: 'Logo updated successfully!' }
+}
+
+export async function removeOrgLogoAction(): Promise<ActionResult> {
+  const auth = await resolveOrgAdmin()
+  if (!auth.ok) return auth.result
+
+  const adminClient = getSupabaseServer()
+
+  // Best-effort: clear stored objects under the org's logo prefix. Storage
+  // cleanup must never block clearing the pointer, so failures are swallowed.
+  try {
+    const prefix = `org-logos/${auth.organizationId}`
+    const { data: existing } = await adminClient.storage.from(LOGO_BUCKET).list(prefix)
+    if (existing && existing.length > 0) {
+      await adminClient.storage
+        .from(LOGO_BUCKET)
+        .remove(existing.map((f: { name: string }) => `${prefix}/${f.name}`))
+    }
+  } catch (cleanupError) {
+    console.error('[Account] Logo cleanup error (non-fatal):', cleanupError)
+  }
+
+  const { error } = await adminClient
+    .from('organizations')
+    .update({ logo_url: null })
+    .eq('id', auth.organizationId)
+
+  if (error) {
+    console.error('[Account] Logo remove error:', error)
+    return { success: false, errors: ['Failed to remove logo.'] }
+  }
+
+  // See updateOrgLogoAction: the post-save reload refreshes the header.
+  return { success: true, message: 'Logo removed.' }
+}

@@ -58,6 +58,7 @@ export async function getCompanyAccess(
       lastName,
       companyId: null,
       companyName: profile.company_name || null,
+      logoUrl: null,
       locationIds: [],
       role: 'org_admin',
       tier: 'bronze',
@@ -90,6 +91,7 @@ export async function getCompanyAccess(
       lastName,
       companyId: null,
       companyName: profile.company_name || null,
+      logoUrl: null,
       locationIds: [],
       role: 'org_admin',
       tier: 'bronze',
@@ -158,6 +160,7 @@ export async function getCompanyAccess(
     lastName,
     companyId: orgMembership.organization_id,
     companyName: org?.name || profile.company_name || null,
+    logoUrl: (org as { logo_url?: string | null } | null)?.logo_url ?? null,
     locationIds,
     role,
     tier,
@@ -179,6 +182,7 @@ interface AccessInput {
   lastName: string
   companyId: string | null
   companyName: string | null
+  logoUrl: string | null
   locationIds: string[]
   role: 'org_admin' | 'staff'
   tier: string
@@ -250,6 +254,7 @@ async function buildAccessForIndividual(
     lastName: '',
     companyId: null,
     companyName: null,
+    logoUrl: null,
     locationIds: [],
     role: 'org_admin',
     tier: 'bronze',

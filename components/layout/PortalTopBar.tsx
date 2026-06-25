@@ -8,6 +8,7 @@ import {
   usePortalDrawer,
   type PortalTopBarContextValue,
 } from './PortalTopBarContext'
+import { useCompany } from '@/contexts/CompanyContext'
 import { CurrencyPicker } from './CurrencyPicker'
 import { TopBarCartPill } from './TopBarCartPill'
 import { AccountMenu } from './AccountMenu'
@@ -18,6 +19,8 @@ import { activeFilterCount } from '@/lib/shop/filter-params'
 export function PortalTopBar() {
   const ctx = useTopBarContextValue()
   const drawer = usePortalDrawer()
+  const { access } = useCompany()
+  const orgLogoUrl = access?.logoUrl ?? null
 
   const hasFilterRow = !!(
     ctx?.kind === 'listing' &&
@@ -71,20 +74,35 @@ export function PortalTopBar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Centre: brand mark only, no wordmark */}
+        {/* Centre: brand mark. Org admins can replace the Print Room mark with
+            their own logo (see AccountClient → Organisation logo). The org logo
+            gets a wider slot for wordmark-style logos and is served unoptimized
+            so any aspect ratio / SVG renders without next.config image tweaks. */}
         <Link
           href="/account"
-          aria-label="The Print Room"
+          aria-label={orgLogoUrl ? (access?.companyName ?? 'Home') : 'The Print Room'}
           className="flex shrink-0 items-center"
         >
-          <Image
-            src="/print-room-logo.png"
-            alt=""
-            width={28}
-            height={28}
-            priority
-            className="h-7 w-7 object-contain"
-          />
+          {orgLogoUrl ? (
+            <Image
+              src={orgLogoUrl}
+              alt={access?.companyName ?? ''}
+              width={140}
+              height={28}
+              priority
+              unoptimized
+              className="h-7 w-auto max-w-[140px] object-contain"
+            />
+          ) : (
+            <Image
+              src="/print-room-logo.png"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="h-7 w-7 object-contain"
+            />
+          )}
         </Link>
 
         {/* Spacer */}

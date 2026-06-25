@@ -13,6 +13,8 @@ export interface B2BCustomerAccess {
   lastName: string
   companyId: string | null
   companyName: string | null
+  /** Org-uploaded header logo (public URL). Null = fall back to the Print Room mark. */
+  logoUrl: string | null
   locationIds: string[]
   role: 'org_admin' | 'staff'
   tier: string
