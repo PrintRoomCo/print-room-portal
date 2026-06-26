@@ -540,7 +540,8 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
         )}
       </div>
 
-      {/* Recent Orders */}
+      {/* Recent Orders — hidden for now (2026-06-26): flip this guard to true to restore. */}
+      {false && (
       <div className="card-elevated">
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center justify-between">
@@ -604,6 +605,7 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
           </div>
         )}
       </div>
+      )}
 
       {/* Locations */}
       {access.isCompanyUser && (
