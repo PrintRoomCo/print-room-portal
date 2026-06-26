@@ -80,6 +80,18 @@ describe('buildOrderConfirmationEmail', () => {
     expect(withoutNotes.html).not.toContain('Agreed rate card v3')
   })
 
+  it('never renders a Required-by line, even when a date is supplied', () => {
+    // Chris: payment is 20th of month following delivery, so a "required by"
+    // date on the confirmation is misleading. Suppressed regardless of input.
+    const { html, text } = buildOrderConfirmationEmail({
+      ...baseParams,
+      requiredBy: 'Fri 18 July',
+    })
+    expect(html).not.toContain('Required by')
+    expect(html).not.toContain('Fri 18 July')
+    expect(text).not.toContain('Required by')
+  })
+
   it('renders the provisional-pricing note when a period close is supplied', () => {
     const { html, text } = buildOrderConfirmationEmail({
       ...baseParams,

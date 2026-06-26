@@ -79,7 +79,6 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
     params.pricingMode === 'contract' && params.contractNotes
       ? params.contractNotes
       : null
-  const requiredBy = params.requiredBy ?? null
   const provisionalNote = params.provisionalUntil
     ? `Pricing is provisional until your ordering window closes on ${new Date(
         params.provisionalUntil,
@@ -163,12 +162,6 @@ ${
                       ? `
                   <div style="margin-top:10px;font-size:13px;line-height:1.6;color:${BODY};">${escapeHtml(contractNotes)}</div>`
                       : ''
-                  }${
-                    requiredBy
-                      ? `
-                  <div style="margin-top:14px;${labelStyle}">Required by</div>
-                  <div style="font-size:15px;font-weight:600;color:${INK};">${escapeHtml(requiredBy)}</div>`
-                      : ''
                   }
                 </td>
               </tr>
@@ -197,7 +190,6 @@ ${
     `Total: ${formatMoney(params.totalAmount)}\n` +
     `Payment terms: ${paymentTerms}\n` +
     (contractNotes ? `${contractNotes}\n` : '') +
-    (requiredBy ? `Required by: ${requiredBy}\n` : '') +
     (provisionalNote ? `\n${provisionalNote}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room team`
