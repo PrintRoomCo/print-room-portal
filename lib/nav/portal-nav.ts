@@ -57,15 +57,19 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiresOrgAdmin: false,
     requiredTenantTypes: null,
   },
-  {
-    name: 'Proofs',
-    href: '/proofs',
-    iconKey: 'proofs',
-    requiresCompany: true,
-    requiresLeavers: false,
-    requiresOrgAdmin: false,
-    requiredTenantTypes: null,
-  },
+  // Proofs tab hidden for now (2026-06-26) — re-enable by uncommenting.
+  // Sidebar's hand-drawn 'proofs' row is gated on this nav item, so it goes
+  // inert automatically while this is commented out. The /proofs route still
+  // exists; this only removes the tab from the customer portal navigation.
+  // {
+  //   name: 'Proofs',
+  //   href: '/proofs',
+  //   iconKey: 'proofs',
+  //   requiresCompany: true,
+  //   requiresLeavers: false,
+  //   requiresOrgAdmin: false,
+  //   requiredTenantTypes: null,
+  // },
   {
     name: 'Inventory',
     href: '/inventory',

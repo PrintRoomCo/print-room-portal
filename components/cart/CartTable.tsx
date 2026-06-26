@@ -169,11 +169,6 @@ export function CartTable({
                   {line.productName}
                 </p>
                 <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
-                {isMadeToOrder && (
-                  <p className="mt-2 text-xs text-gray-500">
-                    Produced before dispatch.
-                  </p>
-                )}
               </div>
 
               {/* Qty + remove column */}
