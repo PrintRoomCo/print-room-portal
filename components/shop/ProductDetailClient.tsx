@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
+import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
@@ -142,6 +143,7 @@ export function ProductDetailClient({
   preOrderClosed = false,
 }: Props) {
   const cart = useCart()
+  const cartDrawer = useCartDrawer()
   const { format } = useCurrency()
 
   const firstVariant = variants[0] ?? null
@@ -611,8 +613,6 @@ export function ProductDetailClient({
     }
   }, [qty, decorations, brackets, isManualPricing])
 
-  const [toast, setToast] = useState<string | null>(null)
-
   const selectedLinkIds = useMemo<ReadonlySet<string>>(
     () => new Set(decorations.map((d) => d.linkId)),
     [decorations],
@@ -738,11 +738,6 @@ export function ProductDetailClient({
       ),
     [brackets, isManualPricing, manualDecorationAt, pricedDecorations, decorationPriceAt],
   )
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2500)
-  }
 
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
@@ -917,7 +912,7 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantQuantities({})
-        showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
+        cartDrawer.setOpen(true)
       }
       return
     }
@@ -951,7 +946,7 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantlessQtyBySize({})
-        showToast(`Added ${added} item${added === 1 ? '' : 's'} to cart`)
+        cartDrawer.setOpen(true)
       }
       return
     }
@@ -993,7 +988,7 @@ export function ProductDetailClient({
         qty: qty - avail,
         fulfilmentType: 'made_to_order',
       })
-      showToast('Added to cart')
+      cartDrawer.setOpen(true)
       return
     }
 
@@ -1024,7 +1019,7 @@ export function ProductDetailClient({
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
-    showToast('Added to cart')
+    cartDrawer.setOpen(true)
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'
@@ -1483,12 +1478,6 @@ export function ProductDetailClient({
           )}
           </div>
         </div>
-
-        {toast && (
-          <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg transition-opacity">
-            {toast}
-          </div>
-        )}
       </div>
     </div>
   )
