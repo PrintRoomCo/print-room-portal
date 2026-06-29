@@ -1231,20 +1231,29 @@ export function ProductDetailClient({
                       : Math.max(0, value - stocked)
                     const showBackorderableChip =
                       trackedRow && row.allowOrderWithoutStock && stocked === 0
+                    // Untracked rows (no inventory record) only ever reach this
+                    // table on the production path — isInventoryMode filters them
+                    // out (visibleSizeRows requires available !== null) — so a
+                    // made-to-order/in-house size is genuinely available to order,
+                    // exactly like a backorderable row. Surface the same pill
+                    // rather than a bare "—".
+                    const showAvailableToOrderChip = showBackorderableChip || !trackedRow
                     return (
                       <tr key={cellKey(row.variantId, row.sizeId)} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
                         <td className="px-5 py-3 text-xs text-gray-600">
-                          {showBackorderableChip ? (
+                          {showAvailableToOrderChip ? (
                             <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
                               Available to order
                             </span>
-                          ) : !trackedRow ? '—' : `${stocked}`}
+                          ) : `${stocked}`}
                           {/* "to be made" is a reorder/MTO concept — qty beyond
                               stock that goes to production. In From-inventory mode
                               the shortfall guard already caps orders at available
-                              stock, so we show only the available count there. */}
-                          {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showBackorderableChip && (
+                              stock, so we show only the available count there.
+                              Suppressed when the pill already says "Available to
+                              order" (matches backorderable-row behaviour). */}
+                          {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showAvailableToOrderChip && (
                             <span className="ml-1 text-amber-700">
                               ({backorder} to be made)
                             </span>

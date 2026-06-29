@@ -146,3 +146,19 @@ describe('PDP multi-size table — From-inventory available qty (Item 3, inverte
     expect(screen.queryByText('Out of stock')).not.toBeInTheDocument()
   })
 })
+
+describe('PDP multi-size table — made-to-order rows with no inventory record (2026-06-29)', () => {
+  it('shows "Available to order" per untracked size instead of a — placeholder', () => {
+    // made_to_order + org_admin + NO availability rows → every size is untracked
+    // (available === null), the canonical MTO/in-house product case. The product
+    // is still fully orderable via production (deadZone false, !isInventoryMode),
+    // so each size row should read "Available to order" rather than "—".
+    renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin', availability: {} as never })
+    expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
+    expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
+    // One mint pill per untracked size row. The header AvailabilityBadge renders
+    // nothing here (colourTotalAvailable is undefined), so the only matches are
+    // the two in-table cells — and the "—" placeholder is gone.
+    expect(screen.getAllByText(/Available to order/i)).toHaveLength(2)
+  })
+})
