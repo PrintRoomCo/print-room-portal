@@ -73,6 +73,7 @@ type ProductDetailLoadResult =
 
 interface ProductDetailPageProps {
   params: Promise<{ productId: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 const loadProductDetailPageData = cache(async (
@@ -490,12 +491,32 @@ export async function generateMetadata({
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: ProductDetailPageProps) {
   const { productId } = await params
-  const result = await loadProductDetailPageData(productId)
+  const [result, sp] = await Promise.all([
+    loadProductDetailPageData(productId),
+    searchParams,
+  ])
 
   if (result.status === 'auth-failure') return handleAuthFailure(result.failure)
   if (result.status === 'not-found') notFound()
 
-  return <ProductDetailClient {...result.data} />
+  // `?color=` deep-link from the catalogue grid's exploded tiles. Validate it
+  // against the colours this product actually exposes so a stale link can never
+  // preselect a missing colour. Resolved here (not in the cached loader, which
+  // is keyed on productId only) so the per-request colour never poisons the cache.
+  const colorParam = typeof sp.color === 'string' ? sp.color : null
+  const availableSwatchIds = new Set<string>([
+    ...(result.data.colourOptions ?? []).map((c) => c.id),
+    ...result.data.variants
+      .map((v) => v.color_swatch_id)
+      .filter((x): x is string => !!x),
+  ])
+  const initialColorSwatchId =
+    colorParam && availableSwatchIds.has(colorParam) ? colorParam : null
+
+  return (
+    <ProductDetailClient {...result.data} initialColorSwatchId={initialColorSwatchId} />
+  )
 }

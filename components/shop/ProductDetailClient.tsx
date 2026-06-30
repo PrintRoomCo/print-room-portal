@@ -126,6 +126,11 @@ interface Props {
    * with a "Ordering opens with the next window" message.
    */
   preOrderClosed?: boolean
+  /**
+   * Colour swatch id to preselect, from the catalogue grid's `?color=` deep-link.
+   * Clamped to a known colour at init; ignored if it doesn't match this product.
+   */
+  initialColorSwatchId?: string | null
 }
 
 export function ProductDetailClient({
@@ -141,13 +146,22 @@ export function ProductDetailClient({
   decorations,
   effectiveMoq,
   preOrderClosed = false,
+  initialColorSwatchId = null,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
 
   const firstVariant = variants[0] ?? null
+  // Deep-link preselect: honour `?color=` when it names a colour this product
+  // actually has; otherwise fall back to the first variant / first colour option.
+  const knownSwatchIds = new Set<string>([
+    ...variants.map((v) => v.color_swatch_id).filter((x): x is string => !!x),
+    ...colourOptions.map((c) => c.id),
+  ])
   const [colorSwatchId, setColorSwatchId] = useState<string | null>(
-    firstVariant?.color_swatch_id ?? colourOptions[0]?.id ?? null
+    (initialColorSwatchId && knownSwatchIds.has(initialColorSwatchId)
+      ? initialColorSwatchId
+      : null) ?? firstVariant?.color_swatch_id ?? colourOptions[0]?.id ?? null
   )
   // Colourway model: the variant carries no size. Single-size (one_size) products
   // resolve their lone size here; multi-size products drive size via the qty grid
