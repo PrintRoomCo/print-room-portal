@@ -1,7 +1,6 @@
 'use client'
 
 import * as Dialog from '@radix-ui/react-dialog'
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
@@ -88,45 +87,35 @@ export function CartDrawer() {
             />
           </div>
 
-          <div className="sticky bottom-0 border-t border-gray-200/70 bg-white px-5 py-4">
-            {cart.lines.length > 0 ? (
-              <>
-                <PeriodSavingsBar
-                  cartCatalogueItemIds={cart.lines
-                    .map((l) => l.catalogueItemId)
-                    .filter((v): v is string => Boolean(v))}
-                  compact
-                />
-                <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-sm text-gray-500">Total</span>
-                  <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
-                    {format(breakdown.total)}
-                  </span>
-                </div>
-                {(oversell || moqShort) && (
-                  <p className="mt-2 text-xs text-rose-700">
-                    Resolve cart quantity warnings before checkout.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={proceedToCheckout}
-                  disabled={!canCheckout}
-                  className="mt-4 w-full rounded-full bg-[rgb(var(--accent-mint))] px-5 py-3 text-sm font-medium text-[rgb(var(--accent-mint-ink))] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Proceed to Checkout
-                </button>
-              </>
-            ) : (
-              <Link
-                href="/catalogue"
-                onClick={() => drawer.setOpen(false)}
-                className="block w-full rounded-full bg-gray-900 px-5 py-3 text-center text-sm font-medium text-white transition-opacity duration-150 hover:opacity-90"
+          {cart.lines.length > 0 && (
+            <div className="sticky bottom-0 border-t border-gray-200/70 bg-white px-5 py-4">
+              <PeriodSavingsBar
+                cartCatalogueItemIds={cart.lines
+                  .map((l) => l.catalogueItemId)
+                  .filter((v): v is string => Boolean(v))}
+                compact
+              />
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-gray-500">Total</span>
+                <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
+                  {format(breakdown.total)}
+                </span>
+              </div>
+              {(oversell || moqShort) && (
+                <p className="mt-2 text-xs text-rose-700">
+                  Resolve cart quantity warnings before checkout.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={proceedToCheckout}
+                disabled={!canCheckout}
+                className="mt-4 w-full rounded-full bg-[rgb(var(--accent-mint))] px-5 py-3 text-sm font-medium text-[rgb(var(--accent-mint-ink))] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Browse catalogue
-              </Link>
-            )}
-          </div>
+                Proceed to Checkout
+              </button>
+            </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
