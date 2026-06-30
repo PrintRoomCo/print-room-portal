@@ -15,6 +15,7 @@ import {
   resolveDecorationsForPricing,
 } from '@/lib/shop/decoration-filter'
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
+import { applyVolumeDisplayFloor } from '@/lib/shop/volume-display-floor'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
 import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
@@ -131,6 +132,13 @@ interface Props {
    * Clamped to a known colour at init; ignored if it doesn't match this product.
    */
   initialColorSwatchId?: string | null
+  /**
+   * Staff-set qty the customer Volume-pricing widget is advertised to start at
+   * (e.g. 100 → first band shows "100–249"). DISPLAY ONLY — the cart/checkout
+   * `brackets` snapshot is the full ladder, so price paid and MOQ are unchanged.
+   * Null = show the full ladder.
+   */
+  volumeDisplayFloorQty?: number | null
 }
 
 export function ProductDetailClient({
@@ -147,6 +155,7 @@ export function ProductDetailClient({
   effectiveMoq,
   preOrderClosed = false,
   initialColorSwatchId = null,
+  volumeDisplayFloorQty = null,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -749,6 +758,23 @@ export function ProductDetailClient({
     [brackets, isManualPricing, manualDecorationAt, pricedDecorations, decorationPriceAt],
   )
 
+  // Customer Volume-pricing widget rows: combine each garment band with its
+  // decoration figure, then apply the staff-set display floor. Relabel only —
+  // the cart's `brackets` snapshot stays the full ladder, so the price paid at
+  // any qty (and the MOQ) are unchanged; this just changes what's advertised.
+  const displayVolumeBrackets = useMemo(
+    () =>
+      applyVolumeDisplayFloor(
+        brackets.map((b, i) => ({
+          min_quantity: b.min_quantity,
+          max_quantity: b.max_quantity,
+          unit_price: Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0),
+        })),
+        volumeDisplayFloorQty,
+      ),
+    [brackets, decorationPerUnitAtBracket, volumeDisplayFloorQty],
+  )
+
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
     const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
@@ -1189,24 +1215,21 @@ export function ProductDetailClient({
             <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
 
-          {brackets.length > 0 && !isInventoryMode && (
+          {displayVolumeBrackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
                 Volume pricing
               </p>
               <ul className="mt-4 grid grid-cols-2 gap-y-2 text-sm text-gray-700 md:grid-cols-3">
-                {brackets.map((b, i) => {
-                  const allInUnit = Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0)
-                  return (
-                    <li key={i} className="tabular-nums">
-                      <span className="font-medium text-gray-900">
-                        {b.min_quantity}
-                        {b.max_quantity ? `–${b.max_quantity}` : '+'}
-                      </span>{' '}
-                      <span className="text-gray-500">@ {format(allInUnit)}</span>
-                    </li>
-                  )
-                })}
+                {displayVolumeBrackets.map((b, i) => (
+                  <li key={i} className="tabular-nums">
+                    <span className="font-medium text-gray-900">
+                      {b.min_quantity}
+                      {b.max_quantity ? `–${b.max_quantity}` : '+'}
+                    </span>{' '}
+                    <span className="text-gray-500">@ {format(b.unit_price)}</span>
+                  </li>
+                ))}
               </ul>
             </section>
           )}

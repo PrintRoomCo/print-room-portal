@@ -11,10 +11,13 @@ export type PdpCatalogueItem = {
   variant_label: string | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
   price_mode: 'computed' | 'manual_final' | null
+  /** Staff-set qty the customer Volume-pricing widget is advertised to start at
+   *  (e.g. 100 → first band shows "100–249"). Null = show the full ladder. */
+  volume_display_floor_qty: number | null
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, volume_display_floor_qty, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string
