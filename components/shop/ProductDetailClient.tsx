@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
-import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
@@ -144,7 +143,6 @@ export function ProductDetailClient({
   preOrderClosed = false,
 }: Props) {
   const cart = useCart()
-  const cartDrawer = useCartDrawer()
   const { format } = useCurrency()
 
   const firstVariant = variants[0] ?? null
@@ -910,7 +908,6 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantQuantities({})
-        cartDrawer.setOpen(true)
       }
       return
     }
@@ -944,7 +941,6 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantlessQtyBySize({})
-        cartDrawer.setOpen(true)
       }
       return
     }
@@ -986,7 +982,6 @@ export function ProductDetailClient({
         qty: qty - avail,
         fulfilmentType: 'made_to_order',
       })
-      cartDrawer.setOpen(true)
       return
     }
 
@@ -1017,7 +1012,6 @@ export function ProductDetailClient({
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
-    cartDrawer.setOpen(true)
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'

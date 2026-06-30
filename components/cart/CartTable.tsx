@@ -26,9 +26,6 @@ interface CartTableProps {
 type AvailabilityMap = Record<string, number | undefined>
 type MoqMap = Record<string, number | undefined>
 
-const LABEL_CAP =
-  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
-
 export function CartTable({
   lines,
   onUpdateQty,
@@ -247,7 +244,7 @@ export function CartTable({
       })}
 
       {loading && (
-        <p className={`px-2 ${LABEL_CAP}`}>Checking availability…</p>
+        <p className="px-2 text-[11px] font-medium text-gray-500">Checking availability…</p>
       )}
     </div>
   )
