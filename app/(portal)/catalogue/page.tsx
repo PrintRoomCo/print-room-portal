@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import Link from 'next/link'
 import { requireB2BCustomerCached } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
-import { ProductCard } from '@/components/shop/ProductCard'
+import { CatalogueGrid } from '@/components/shop/CatalogueGrid'
 import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
 import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
@@ -284,7 +283,7 @@ export default async function CataloguePage({
       ? admin
           .from('b2b_catalogue_item_colors')
           .select(
-            'catalogue_item_id, sort_order, product_color_swatches(hex, label, position)',
+            'catalogue_item_id, sort_order, color_swatch_id, product_color_swatches(hex, label, position)',
           )
           .in('catalogue_item_id', scopedItemIds)
           .order('sort_order', { ascending: true, nullsFirst: false })
@@ -292,6 +291,7 @@ export default async function CataloguePage({
           data: [] as Array<{
             catalogue_item_id: string
             sort_order: number | null
+            color_swatch_id: string | null
             product_color_swatches:
               | { hex: string | null; label: string | null; position: number | null }
               | { hex: string | null; label: string | null; position: number | null }[]
@@ -369,36 +369,48 @@ export default async function CataloguePage({
     stockByProduct.set(pv.product_id, cur + (Number.isFinite(r.available_qty) ? r.available_qty : 0))
   }
 
-  // Card swatches per product — deduped by hex, capped at 8 to keep the card
-  // tidy; ProductCard renders the first 5 + "+N" overflow indicator. Source
-  // ordering: catalogue sort_order (already applied in query) → swatch position.
-  const swatchesByProduct = new Map<
+  // Per-product colour breakdown for the grid's explode: id + label + hex + the
+  // colour's own thumbnail (front mockup for that swatch, else product image).
+  // Deduped by hex; ordering is catalogue sort_order (already applied in query)
+  // → swatch position. Drives both the exploded per-colour tiles and the
+  // collapsed card's swatch dots.
+  const coloursByProductForGrid = new Map<
     string,
-    Array<{ hex: string | null; label: string | null }>
+    Array<{ swatchId: string; label: string | null; hex: string | null; imageUrl: string | null }>
   >()
-  const seenHexByProduct = new Map<string, Set<string>>()
+  const seenSwatchHexByProduct = new Map<string, Set<string>>()
   for (const r of (swatchRows ?? []) as Array<{
     catalogue_item_id: string
     sort_order: number | null
+    color_swatch_id: string | null
     product_color_swatches:
       | { hex: string | null; label: string | null; position: number | null }
       | { hex: string | null; label: string | null; position: number | null }[]
       | null
   }>) {
     const productId = productIdByItemId.get(r.catalogue_item_id)
-    if (!productId) continue
+    if (!productId || !r.color_swatch_id) continue
     const swatch = Array.isArray(r.product_color_swatches)
       ? r.product_color_swatches[0]
       : r.product_color_swatches
     if (!swatch) continue
-    const list = swatchesByProduct.get(productId) ?? []
-    const seen = seenHexByProduct.get(productId) ?? new Set<string>()
-    const key = (swatch.hex ?? '').toLowerCase()
-    if (key && seen.has(key)) continue
-    if (key) seen.add(key)
-    list.push({ hex: swatch.hex, label: swatch.label })
-    swatchesByProduct.set(productId, list)
-    seenHexByProduct.set(productId, seen)
+    const seen = seenSwatchHexByProduct.get(productId) ?? new Set<string>()
+    const hexKey = (swatch.hex ?? '').toLowerCase()
+    if (hexKey && seen.has(hexKey)) continue
+    if (hexKey) seen.add(hexKey)
+    seenSwatchHexByProduct.set(productId, seen)
+    const list = coloursByProductForGrid.get(productId) ?? []
+    list.push({
+      swatchId: r.color_swatch_id,
+      label: swatch.label,
+      hex: swatch.hex,
+      imageUrl: pickCatalogueItemThumbnail(
+        null,
+        imagesByProduct.get(productId) ?? [],
+        r.color_swatch_id,
+      ),
+    })
+    coloursByProductForGrid.set(productId, list)
   }
 
   // Decoration overlay per catalogue item at BOTH the floor (cheapest volume)
@@ -493,7 +505,7 @@ export default async function CataloguePage({
       price_status: priceHigh > 0 ? ('ok' as const) : ('missing' as const),
       has_stock: lowPrice.hasStock,
       total_stock: stockTotal,
-      swatches: swatchesByProduct.get(p.id) ?? [],
+      colours: coloursByProductForGrid.get(p.id) ?? [],
     }
   })
 
@@ -539,16 +551,8 @@ export default async function CataloguePage({
             />
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mt-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5">
-            {products.map((p) => (
-              <Link
-                key={p.id}
-                href={`/catalogue/${p.id}`}
-                className="block transition-transform duration-150 active:scale-[0.99]"
-              >
-                <ProductCard product={p} />
-              </Link>
-            ))}
+          <div className="mt-4 md:mt-6">
+            <CatalogueGrid products={products} />
           </div>
         )}
       </div>
