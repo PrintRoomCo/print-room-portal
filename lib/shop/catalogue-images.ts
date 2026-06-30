@@ -184,6 +184,17 @@ function imagePriority(
     return 2
   }
   if (scope === 'catalogue' && imageColor == null) return 3
+  // With no colour selected there is nothing to mismatch against — keep a
+  // published catalogue staff image rather than silently dropping it. Backstop
+  // for the 2026-06-30 blank-PDP bug (a variant-less item has no selected
+  // colour, so its own decorated image would otherwise fall through to null).
+  if (
+    scope === 'catalogue' &&
+    (source === 'staff_upload' || source === 'staff_pick') &&
+    selectedColorSwatchId == null
+  ) {
+    return 3
+  }
   if (scope === 'master' && imageColor && imageColor === selectedColorSwatchId) return 4
   if (scope === 'master' && imageColor == null) {
     const view = (image.view ?? '').toLowerCase()
