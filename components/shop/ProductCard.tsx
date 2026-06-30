@@ -59,8 +59,8 @@ export function ProductCard({ product }: ProductCardProps) {
 
       <div className="mt-3 flex items-end justify-between gap-3 px-2 pb-1">
         <dl className="grid min-w-0 grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-0.5 text-[10px] leading-tight">
-          <dt className="font-medium uppercase tracking-wider text-gray-400">Product</dt>
-          <dt className="font-medium uppercase tracking-wider text-gray-400">Price</dt>
+          <dt className="font-medium tracking-wider text-gray-400">Product</dt>
+          <dt className="font-medium tracking-wider text-gray-400">Price</dt>
           <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
             {product.name}
           </dd>

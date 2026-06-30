@@ -62,8 +62,8 @@ export function CartDrawer() {
         <Dialog.Content className="fixed bottom-0 right-0 top-0 z-[90] flex w-full max-w-[440px] flex-col overflow-hidden bg-[#FAFAFA] shadow-2xl outline-none data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-full data-[state=open]:animate-in data-[state=open]:slide-in-from-right-full motion-reduce:transition-none sm:bottom-3 sm:right-3 sm:top-3 sm:rounded-[28px]">
           <div className="flex items-center justify-between border-b border-gray-200/70 bg-white px-5 py-4">
             <div className="min-w-0">
-              <Dialog.Title className="font-dm-sans text-sm font-medium uppercase tracking-[0.12em] text-gray-900">
-                CART <span className="text-gray-500">({itemCount})</span>
+              <Dialog.Title className="font-dm-sans text-sm font-medium text-gray-900">
+                Cart <span className="text-gray-500">({itemCount})</span>
               </Dialog.Title>
             </div>
             <Dialog.Close asChild>
