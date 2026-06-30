@@ -7,9 +7,15 @@ import type { ChecklistItem } from '../types';
 
 export interface OnboardingChecklistProps {
   items: ChecklistItem[];
+  /**
+   * Optional data-tour selector applied to the collapsed badge (the real
+   * fixed-position element). A wrapping div would collapse to a zero-rect and
+   * break the spotlight cutout, so the attr lands on the badge itself.
+   */
+  dataTour?: string;
 }
 
-export function OnboardingChecklist({ items }: OnboardingChecklistProps) {
+export function OnboardingChecklist({ items, dataTour }: OnboardingChecklistProps) {
   const { progress, isChecklistOpen, setChecklistOpen } = useTour();
   const [mounted, setMounted] = useState(false);
 
@@ -38,6 +44,7 @@ export function OnboardingChecklist({ items }: OnboardingChecklistProps) {
         className="oonb-checklist-badge"
         aria-label={`Onboarding checklist: ${doneCount} of ${total} done`}
         onClick={() => setChecklistOpen(true)}
+        data-tour={dataTour}
       >
         <ProgressRing
           percent={total === 0 ? 0 : (doneCount / total) * 100}
