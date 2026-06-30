@@ -12,10 +12,8 @@ import {
   writeCheckoutReviewState,
   type CustomAddress,
 } from './checkoutReviewState'
-import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
-import { TierBadge } from '@/components/pricing/TierBadge'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -117,7 +115,6 @@ export function CheckoutClient({
   }
   const customIncomplete = Object.values(customAddressErrors).some(Boolean)
 
-  const pricingCtx = usePricingContext()
   const breakdown = useMemo(
     () =>
       computeOrderBreakdown({
@@ -235,9 +232,6 @@ export function CheckoutClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <div className="mb-4 flex justify-end">
-          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-        </div>
         {inventoryMode && (
           <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
             <p className="font-medium text-gray-900">Print Room warehouse</p>

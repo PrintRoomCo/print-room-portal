@@ -7,9 +7,7 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
-import { TierBadge } from '@/components/pricing/TierBadge'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
-import { usePricingContext } from '@/lib/pricing/usePricingContext'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import {
   allInLineTotal,
@@ -48,7 +46,6 @@ export function CheckoutReviewClient({
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
-  const pricingCtx = usePricingContext()
   const { format } = useCurrency()
   const { access } = useCompany()
   const isPreview = access?.isPreview ?? false
@@ -374,9 +371,6 @@ export function CheckoutReviewClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <div className="mb-4 flex justify-end">
-          <TierBadge label={pricingCtx.tierLabel} pricingMode={pricingCtx.pricingMode} />
-        </div>
         <div className="divide-y divide-gray-100">
           {cart.lines.map((line) => {
             const unitPrice = allInUnitPrice(line)
