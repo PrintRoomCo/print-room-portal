@@ -3,6 +3,7 @@
 import {
   createContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -14,6 +15,7 @@ import {
   type CartState,
 } from '@/lib/cart/types'
 import { normalizePersisted } from '@/lib/cart/normalize'
+import { summariseCartAdds } from '@/lib/cart/added-toast'
 
 export interface CartApi {
   lines: CartLine[]
@@ -38,6 +40,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [state, setState] = useState<CartState>({ lines: [] })
   const [hydrated, setHydrated] = useState(false)
+
+  // Coalesce a burst of addLine() calls (a multi-size PDP add, or a Reorder
+  // loop) into a single "added to cart" toast: buffer the payloads and flush
+  // one summarised `pr:cart-added` event on the next tick. CartAddedToasts
+  // (mounted in PortalShell) renders it.
+  const pendingAddsRef = useRef<Array<Omit<CartLine, 'lineId'>>>([])
+  const addFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (addFlushRef.current) clearTimeout(addFlushRef.current)
+    }
+  }, [])
   const imageResolutionKey = state.lines
     .map((line) =>
       [
@@ -128,9 +142,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [hydrated, imageResolutionKey, isPreview])
 
+  function queueAddedToast(line: Omit<CartLine, 'lineId'>) {
+    if (typeof window === 'undefined') return
+    pendingAddsRef.current.push(line)
+    if (addFlushRef.current != null) return
+    addFlushRef.current = setTimeout(() => {
+      addFlushRef.current = null
+      const adds = pendingAddsRef.current
+      pendingAddsRef.current = []
+      const summary = summariseCartAdds(adds)
+      if (summary) {
+        window.dispatchEvent(new CustomEvent('pr:cart-added', { detail: summary }))
+      }
+    }, 60)
+  }
+
   const api: CartApi = {
     lines: state.lines,
-    addLine: (line) =>
+    addLine: (line) => {
       setState((s) => {
         const incomingSig = lineSignature(
           line.productId,
@@ -191,7 +220,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
               },
             ]
         return { lines: recomputeProductTierPrices(merged) }
-      }),
+      })
+      queueAddedToast(line)
+    },
     updateLine: (lineId, patch) =>
       setState((s) => {
         const next = s.lines.map((l) =>

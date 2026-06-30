@@ -6,6 +6,7 @@ import { RoleChangeNotice } from './RoleChangeNotice'
 import { PortalTopBar } from './PortalTopBar'
 import { PortalTopBarProvider } from './PortalTopBarContext'
 import { CartDrawer } from '@/components/cart/CartDrawer'
+import { CartAddedToasts } from '@/components/cart/CartAddedToasts'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const { access } = useCompany()
@@ -33,6 +34,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       </a>
       <PortalTopBar />
       <CartDrawer />
+      <CartAddedToasts />
       <Sidebar customer={access}>
         {children}
         <RoleChangeNotice />
