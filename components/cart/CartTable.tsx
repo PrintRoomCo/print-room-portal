@@ -168,45 +168,17 @@ export function CartTable({
                 <p className="font-dm-sans text-base font-medium text-gray-900 md:text-lg">
                   {line.productName}
                 </p>
-                <p className={`mt-1 ${LABEL_CAP}`}>{line.variantLabel}</p>
+                <p className="mt-1 text-sm text-gray-500">{line.variantLabel}</p>
               </div>
 
-              {/* Qty + remove column */}
-              <div className="flex shrink-0 flex-col items-end gap-3">
-                <div className="flex items-center gap-1">
-                  <QtyChip
-                    onClick={() => onUpdateQty(line.lineId, Math.max(1, line.qty - 1))}
-                    disabled={line.qty <= 1}
-                    label="Decrease quantity"
-                  >
-                    −
-                  </QtyChip>
-                  <input
-                    type="number"
-                    min={1}
-                    value={line.qty}
-                    onChange={(e) => {
-                      const next = Number(e.target.value)
-                      if (Number.isInteger(next) && next > 0) onUpdateQty(line.lineId, next)
-                    }}
-                    aria-label="Quantity"
-                    className="w-14 rounded-full bg-gray-50 px-2 py-1.5 text-center text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-                  />
-                  <QtyChip
-                    onClick={() => onUpdateQty(line.lineId, line.qty + 1)}
-                    label="Increase quantity"
-                  >
-                    +
-                  </QtyChip>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(line.lineId)}
-                  className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-gray-900"
-                >
-                  Remove
-                </button>
-              </div>
+              {/* Remove */}
+              <button
+                type="button"
+                onClick={() => onRemove(line.lineId)}
+                className="shrink-0 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
+              >
+                Remove
+              </button>
             </div>
 
             {/* Inline status messages */}
@@ -233,14 +205,42 @@ export function CartTable({
               </div>
             )}
 
-            {/* Price row */}
-            <div className="mt-4 flex items-baseline justify-between border-t border-gray-100 pt-3 text-sm">
-              <span className="text-gray-500">
-                Unit · <span className="tabular-nums text-gray-700">{format(unitPrice)}</span>
-              </span>
-              <span className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
-                {format(lineTotal)}
-              </span>
+            {/* Quantity + price row */}
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-gray-100 pt-4">
+              <div className="flex items-center gap-1.5">
+                <QtyChip
+                  onClick={() => onUpdateQty(line.lineId, Math.max(1, line.qty - 1))}
+                  disabled={line.qty <= 1}
+                  label="Decrease quantity"
+                >
+                  −
+                </QtyChip>
+                <input
+                  type="number"
+                  min={1}
+                  value={line.qty}
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
+                    if (Number.isInteger(next) && next > 0) onUpdateQty(line.lineId, next)
+                  }}
+                  aria-label="Quantity"
+                  className="w-14 rounded-full bg-gray-50 px-2 py-1.5 text-center text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                />
+                <QtyChip
+                  onClick={() => onUpdateQty(line.lineId, line.qty + 1)}
+                  label="Increase quantity"
+                >
+                  +
+                </QtyChip>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500">
+                  Unit · <span className="tabular-nums text-gray-700">{format(unitPrice)}</span>
+                </p>
+                <p className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
+                  {format(lineTotal)}
+                </p>
+              </div>
             </div>
           </article>
         )
