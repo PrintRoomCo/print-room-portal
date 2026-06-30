@@ -18,6 +18,7 @@ import {
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
+import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
 import {
   PILL_LABELS,
   effectivePermission,
@@ -162,13 +163,10 @@ export function ProductDetailClient({
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({})
   const [orderIntent, setOrderIntent] = useState<OrderIntent>('inventory')
 
-  type SizingMode = 'multi_size_with_variants' | 'multi_size_variantless' | 'one_size'
-
-  const sizingMode: SizingMode = useMemo(() => {
-    if (product.sizing_type === 'one_size') return 'one_size'
-    if (variants.length > 0) return 'multi_size_with_variants'
-    return 'multi_size_variantless'
-  }, [product.sizing_type, variants.length])
+  const sizingMode: SizingMode = useMemo(
+    () => resolveSizingMode(product.sizing_type, variants.length, sizes.length),
+    [product.sizing_type, variants.length, sizes.length],
+  )
 
   // Back-compat alias for the existing variant-driven render paths. True only
   // when we still have product_variants to drive the colour×size grid.
@@ -1155,7 +1153,9 @@ export function ProductDetailClient({
               <ProductDetailsCondensed product={product} />
             </header>
 
-          {!isUnavailableToOrder && sizingMode === 'multi_size_with_variants' && (
+          {!isUnavailableToOrder &&
+            (sizingMode === 'multi_size_with_variants' ||
+              (sizingMode === 'one_size' && colourOptions.length > 1)) && (
             <VariantPicker
               variants={variants}
               colorOptions={pickerColourOptions}
