@@ -7,6 +7,7 @@ vi.mock('../client', () => ({
 
 import { mondayApiCall } from '../client'
 import { pushOrderDeal, type OrderDealData } from '../deal-item'
+import { PRODUCTION_BOARD_ID, PRODUCTION_COLUMNS } from '../column-ids'
 
 const mockedCall = vi.mocked(mondayApiCall)
 
@@ -45,30 +46,88 @@ const fixture: OrderDealData = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // Order path targets the Production board now; exercise the default (no override).
+  delete process.env.MONDAY_PRODUCTION_BOARD_ID
+  delete process.env.MONDAY_PRODUCTION_DEMO_GROUP_ID
+  // Legacy CRM Deals board env — the order path no longer reads it. Kept set so
+  // the reorder path (which still uses it) stays resolvable in this suite.
   process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
-describe('pushOrderDeal — happy path', () => {
-  it('creates one item with order-mode column values and order ref in long text', async () => {
+describe('pushOrderDeal — Production board target', () => {
+  it('creates the order item on the Production board, Pre-production group', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-99', name: 'x' } })
-    // 3 subitem responses
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
 
-    const result = await pushOrderDeal(fixture)
+    await pushOrderDeal(fixture)
 
-    expect(result.itemId).toBe('item-99')
+    const [, itemVars] = mockedCall.mock.calls[0]
+    const vars = itemVars as { boardId: string; groupId: string }
+    expect(vars.boardId).toBe(String(PRODUCTION_BOARD_ID))
+    expect(vars.groupId).toBe('topics')
+  })
+
+  it('honours MONDAY_PRODUCTION_BOARD_ID override when set', async () => {
+    process.env.MONDAY_PRODUCTION_BOARD_ID = '9999999'
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+
+    await pushOrderDeal(fixture)
+
+    const [, itemVars] = mockedCall.mock.calls[0]
+    expect((itemVars as { boardId: string }).boardId).toBe('9999999')
+  })
+})
+
+describe('pushOrderDeal — Production column mapping', () => {
+  it('maps order fields onto Production columns and drops CRM-only columns', async () => {
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-99', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+
+    await pushOrderDeal(fixture)
+
     // 1 create_item + 3 create_subitem = 4 calls total
     expect(mockedCall).toHaveBeenCalledTimes(4)
 
     const [, itemVars] = mockedCall.mock.calls[0]
     const cv = JSON.parse((itemVars as { columnValues: string }).columnValues)
-    expect(cv.color_mkzhwkjn).toEqual({ label: 'Portal - Order' })
-    expect(cv.deal_stage).toEqual({ label: 'New' })
-    const longText = cv.long_text_mkzjhs9j.text as string
-    expect(longText).toContain('ORD-2026-0042')
-    expect(longText).toContain('• Logo Front: Basic Tee — Black / M × 10')
-    expect(longText).toContain('• Crew Back: Heavy Hood — Navy / L × 5')
-    expect(longText).toContain('• No decoration: Cap — OS × 20')
+
+    // Production columns populated.
+    expect(cv[PRODUCTION_COLUMNS.customerEmail]).toEqual({
+      email: 'buyer@acme.test',
+      text: 'buyer@acme.test',
+    })
+    expect(cv[PRODUCTION_COLUMNS.poRef]).toBe('ORD-2026-0042')
+    expect(cv[PRODUCTION_COLUMNS.quoteTotal]).toBe(1234.5)
+    expect(cv[PRODUCTION_COLUMNS.inHandDate]).toEqual({ date: '2026-06-15' })
+    expect(cv[PRODUCTION_COLUMNS.mainStatus]).toEqual({
+      label: 'Need: Mockup (Quote Approved)',
+    })
+
+    const jobSpecs = cv[PRODUCTION_COLUMNS.jobSpecs].text as string
+    expect(jobSpecs).toContain('ORD-2026-0042')
+    expect(jobSpecs).toContain('• Logo Front: Basic Tee — Black / M × 10')
+    expect(jobSpecs).toContain('• Crew Back: Heavy Hood — Navy / L × 5')
+    expect(jobSpecs).toContain('• No decoration: Cap — OS × 20')
+
+    // CRM Deals-only columns must NOT be sent to a Production item — they don't
+    // exist on that board and would trigger a ColumnValueException.
+    expect(cv.color_mkzhwkjn).toBeUndefined() // deal_source
+    expect(cv.deal_stage).toBeUndefined()
+    expect(cv.long_text_mkzjhs9j).toBeUndefined() // Deals full-form-response
+    expect(cv.text_mkzjv77f).toBeUndefined() // Deals customer name
+    expect(cv.text_mkzj78dx).toBeUndefined() // Deals product summary
+  })
+
+  it('omits the in-hand date column when the order has no required-by date', async () => {
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+
+    await pushOrderDeal({ ...fixture, inHandDate: null })
+
+    const [, itemVars] = mockedCall.mock.calls[0]
+    const cv = JSON.parse((itemVars as { columnValues: string }).columnValues)
+    expect(cv[PRODUCTION_COLUMNS.inHandDate]).toBeUndefined()
   })
 })
 

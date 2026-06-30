@@ -9,6 +9,7 @@ import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
+import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 
@@ -1260,6 +1261,9 @@ export async function submitCustomerOrder(
         .from('job_trackers')
         .update({
           monday_item_id: Number(itemId),
+          // Orders now land on the Production board — stamp it so tracker-based
+          // Monday deep links resolve there, not a dead Deals URL.
+          monday_board_id: PRODUCTION_BOARD_ID,
           last_synced_at: new Date().toISOString(),
         })
         .eq('quote_id', quote_id)

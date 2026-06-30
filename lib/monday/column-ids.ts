@@ -18,6 +18,10 @@ export const MONDAY_ACCOUNT_SLUG = 'theprint-room-group'
 export const PRODUCTION_COLUMNS = {
   customerEmail: 'email_mkqjpxt3',
   poRef: 'text_mkqxcmvz',
+  // "Job Specs ℹ️" — long-text column holding the order breakdown
+  // (customer / email / total / line items) for items the customer-order
+  // Monday push creates. Verified on board 1992701981 (2026-07-01).
+  jobSpecs: 'long_text_mkrr4994',
   artworkFiles: 'file_mkpesta8',
   proofPdf: 'file_mkqjp7kh',
   completedMedia: 'file_mks0gm29',

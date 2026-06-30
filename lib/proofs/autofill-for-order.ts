@@ -20,6 +20,7 @@ import { loadOrderProofAssembly } from '@/lib/proofs/order-assembly'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { sendProofEmail } from '@/lib/email/send-proof-email'
+import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 
 export interface AutofillOrderRow {
   orderId: string
@@ -300,8 +301,10 @@ function resolveStaffPortalUrl(): string | null {
 function resolveMondayItemUrl(itemId: string | null): string | null {
   if (!itemId) return null
   const prefix = process.env.MONDAY_BOARD_URL_PREFIX || 'https://theprint-room-group.monday.com'
-  const boardId = process.env.MONDAY_REORDERS_BOARD_ID
-  if (!boardId) return null
+  // Orders live on the Production board now (not the CRM Deals board), so the AM
+  // deep link must point there or it opens a dead Deals URL. MONDAY_PRODUCTION_BOARD_ID
+  // overrides the default. NOTE: mirror this in the staff-portal twin of this file.
+  const boardId = process.env.MONDAY_PRODUCTION_BOARD_ID || String(PRODUCTION_BOARD_ID)
   return `${prefix.replace(/\/+$/, '')}/boards/${boardId}/pulses/${itemId}`
 }
 
@@ -464,8 +467,8 @@ async function notifyAmBestEffort(args: {
     const proofLink = staffPortalUrl ? `${staffPortalUrl}/proofs/${proofId}` : null
 
     // Best-effort fetch of orders.monday_item_id so the AM can jump straight
-    // into the Deals board. Null when the Monday push at checkout failed or
-    // the env var is unset; resolveMondayItemUrl returns null in either case.
+    // into the Production item. Null when the Monday push at checkout failed;
+    // resolveMondayItemUrl returns null when there is no item id.
     let mondayItemId: string | null = null
     try {
       const { data: orderMondayRow } = await admin
