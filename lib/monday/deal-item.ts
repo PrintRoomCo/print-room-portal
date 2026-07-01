@@ -1,15 +1,17 @@
 /**
  * Monday.com order + reorder integration.
  *
- * Mode-discriminated helpers write to DIFFERENT boards:
- *  - 'reorder' — CRM Deals board (MONDAY_REORDERS_BOARD_ID), "New Deals" group.
- *    Preserved verbatim from the retired lib/monday/reorder.ts. No sub-items;
- *    lines packed into a long-text breakdown. An AM/CRM routing concern.
- *  - 'order'   — Production board (PRODUCTION_BOARD_ID, override
- *    MONDAY_PRODUCTION_BOARD_ID), "Pre-production" group. New customer orders
- *    from /checkout land here so they flow straight into production. Columns are
- *    mapped to the Production board schema (PRODUCTION_COLUMNS); CRM-Deals-only
- *    fields are dropped. Adds one sub-item per cart line.
+ * Both modes write to the Production board (PRODUCTION_BOARD_ID, override
+ * MONDAY_PRODUCTION_BOARD_ID) "Pre-production" group via getProductionBoardId():
+ *  - 'order'   — new /checkout orders. One sub-item per cart line; Intent tagged
+ *    "Order". Columns mapped to the Production schema (PRODUCTION_COLUMNS).
+ *  - 'reorder' — repeat of a completed job. No sub-items; the full breakdown is
+ *    packed into the Job Specs long-text. Intent tagged "Reorder" and the item
+ *    name ends "- Reorder" so it reads apart from orders in the shared group.
+ *
+ * CRM-Deals-only fields (deal_stage, deal_source, Deals name/phone/company text
+ * columns) are dropped — they don't exist on the Production board and sending
+ * them would fail create_item with a ColumnValueException.
  */
 
 import { mondayApiCall } from './client'
@@ -24,41 +26,26 @@ import {
 } from '@/lib/job-tracker'
 import type { ReorderEditedItem } from '@/lib/config/reorder'
 
-// === Shared board config (was lib/monday/reorder.ts) ===
+// === Shared Production-board config (both order and reorder modes) ===
 
-function getBoardId(): string {
-  const id = process.env.MONDAY_REORDERS_BOARD_ID
-  if (!id) {
-    throw new Error(
-      'MONDAY_REORDERS_BOARD_ID is not configured — set it to the CRM Deals board id (e.g. 2046357917).'
-    )
-  }
-  return id
+/**
+ * Board the portal pushes orders AND reorders to. Defaults to the Production
+ * board; MONDAY_PRODUCTION_BOARD_ID overrides it (e.g. a staging board in
+ * preview). Both modes resolve through here so the destination never forks.
+ */
+function getProductionBoardId(): string {
+  return process.env.MONDAY_PRODUCTION_BOARD_ID || String(PRODUCTION_BOARD_ID)
 }
 
-// "New Deals" group on the Deals board (2046357917).
-const DEALS_GROUP_ID = 'topics'
+// "Pre-production" group on the Production board (1992701981), verified
+// 2026-07-01. Shares the literal 'topics' with the old Deals "New Deals" group
+// by coincidence; kept as a distinct constant so the two never get conflated.
+const PREPRODUCTION_GROUP_ID = 'topics'
 
 export interface PushOrderDealOptions {
   /** organizations.is_test — route the deal item to the demo group. */
   demo?: boolean
 }
-
-// Column ids on the CRM Deals board (2046357917).
-// Mirrors print-room-chatbot-api/api/services/monday-quote.ts QUOTE_COLUMNS.
-const COL_CUSTOMER_NAME = 'text_mkzjv77f'
-const COL_EMAIL = 'email_mkzjab7s'
-const COL_PHONE = 'text_mkzjfbgj'
-const COL_COMPANY = 'text_mkzjmfef'
-const COL_PRODUCT = 'text_mkzj78dx'
-const COL_FULL_FORM_RESPONSE = 'long_text_mkzjhs9j'
-const COL_DEAL_STAGE = 'deal_stage'
-const COL_DEAL_SOURCE = 'color_mkzhwkjn'
-const COL_QTY = 'text_mkzjj9j5'
-const COL_IN_HAND_DATE = 'date_mm0p5fzc'
-
-const DEAL_SOURCE_LABEL = 'Portal - Reorder'
-const DEAL_STAGE_LABEL = 'New'
 
 // === REORDER MODE (preserved verbatim from lib/monday/reorder.ts) ===
 
@@ -79,25 +66,6 @@ export interface ReorderData {
   originalItems: QuoteDataItem[]
   designNamesByInstanceId?: Record<string, string>
   editedItems?: ReorderEditedItem[]
-}
-
-function formatProductsCompact(
-  items: QuoteDataItem[],
-  designNamesByInstanceId?: Record<string, string>
-): string {
-  if (!items || items.length === 0) {
-    return 'Reorder — details on original job'
-  }
-  return items
-    .map((item) => {
-      const designName = getItemDesignName(item, designNamesByInstanceId)
-      const productName = getItemDisplayName(item)
-      const qty = getItemTotalQty(item)
-      const parts = [`${designName} / ${productName}`]
-      if (qty > 0) parts.push(`x${qty}`)
-      return parts.join(' ')
-    })
-    .join(', ')
 }
 
 function formatItemBreakdown(
@@ -282,21 +250,33 @@ export async function createReorderItem(
   const companyLabel = data.customerCompany ? ` - ${data.customerCompany}` : ''
   const itemName = `${data.customerName}${companyLabel} - Reorder`
 
+  // Only columns that exist on the Production board (1992701981) are sent —
+  // a CRM-Deals-only id here would fail the whole create_item with a
+  // ColumnValueException. The customer name lives in the item NAME; the full
+  // breakdown (lines, address, notes, artwork/proof URLs) goes into Job Specs.
   const columnValues: Record<string, unknown> = {
-    [COL_CUSTOMER_NAME]: data.customerName,
-    [COL_EMAIL]: { email: data.customerEmail, text: data.customerEmail },
-    [COL_PRODUCT]: formatProductsCompact(data.originalItems, data.designNamesByInstanceId),
-    [COL_FULL_FORM_RESPONSE]: { text: buildFullFormResponse(data) },
-    [COL_DEAL_STAGE]: { label: DEAL_STAGE_LABEL },
-    [COL_DEAL_SOURCE]: { label: DEAL_SOURCE_LABEL },
-    [COL_IN_HAND_DATE]: { date: data.inHandDate },
+    [PRODUCTION_COLUMNS.customerEmail]: {
+      email: data.customerEmail,
+      text: data.customerEmail,
+    },
+    [PRODUCTION_COLUMNS.jobSpecs]: { text: buildFullFormResponse(data) },
+    // Tag the shared Pre-production group so staff can filter reorders apart
+    // from fresh orders (which are tagged "Order").
+    [PRODUCTION_COLUMNS.intent]: { label: 'Reorder' },
   }
 
-  if (data.customerPhone) columnValues[COL_PHONE] = data.customerPhone
-  if (data.customerCompany) columnValues[COL_COMPANY] = data.customerCompany
+  // "Job Reference" — original quote no. preferred, else the job reference.
+  const ref = data.originalQuoteNumber || data.originalJobReference
+  if (ref) columnValues[PRODUCTION_COLUMNS.poRef] = ref
+
+  // Guard like the order path — never hand the date column an empty string.
+  // The reorder route already validates inHandDate, so this is defense-in-depth.
+  if (data.inHandDate) {
+    columnValues[PRODUCTION_COLUMNS.inHandDate] = { date: data.inHandDate }
+  }
 
   const qty = totalQuantity(data)
-  if (qty > 0) columnValues[COL_QTY] = String(qty)
+  if (qty > 0) columnValues[PRODUCTION_COLUMNS.qty] = String(qty)
 
   const mutation = `
     mutation CreateReorder($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
@@ -314,8 +294,8 @@ export async function createReorderItem(
   `
 
   const result = await mondayApiCall<MondayCreateItemResponse>(mutation, {
-    boardId: getBoardId(),
-    groupId: DEALS_GROUP_ID,
+    boardId: getProductionBoardId(),
+    groupId: PREPRODUCTION_GROUP_ID,
     itemName,
     columnValues: JSON.stringify(columnValues),
   })
@@ -371,23 +351,11 @@ export function buildReorderDataFromTracker(
 
 // === ORDER MODE — Production board (was CRM Deals) ===
 
-// "Pre-production" group on the Production board (1992701981), verified
-// 2026-07-01. Shares the literal 'topics' with the Deals board's group by
-// coincidence; kept as a distinct constant so the two never get conflated.
-const PREPRODUCTION_GROUP_ID = 'topics'
-
 // "Job Status" (PRODUCTION_COLUMNS.mainStatus) label stamped on brand-new portal
 // orders. MUST be an existing label on that column (verified 2026-07-01) — an
-// empty string leaves the status unset.
+// empty string leaves the status unset. Reorders deliberately leave Job Status
+// unset (a reorder re-runs an already-approved job, so "needs mockup" is wrong).
 const ORDER_INITIAL_JOB_STATUS = 'Need: Mockup (Quote Approved)'
-
-/**
- * Board the customer-order push targets. Defaults to the Production board;
- * MONDAY_PRODUCTION_BOARD_ID overrides it (e.g. a staging board in preview).
- */
-function getOrderBoardId(): string {
-  return process.env.MONDAY_PRODUCTION_BOARD_ID || String(PRODUCTION_BOARD_ID)
-}
 
 /**
  * Demo orders (org.is_test) route to a dedicated demo group when
@@ -495,6 +463,9 @@ function buildOrderColumnValues(data: OrderDealData): Record<string, unknown> {
   if (ORDER_INITIAL_JOB_STATUS) {
     columnValues[PRODUCTION_COLUMNS.mainStatus] = { label: ORDER_INITIAL_JOB_STATUS }
   }
+  // Tag the shared Pre-production group so staff can filter fresh orders apart
+  // from reorders (which are tagged "Reorder"). Label created on demand.
+  columnValues[PRODUCTION_COLUMNS.intent] = { label: 'Order' }
 
   return columnValues
 }
@@ -522,7 +493,7 @@ export async function createOrderDealItem(
   `
 
   const result = await mondayApiCall<MondayCreateItemResponse>(mutation, {
-    boardId: getOrderBoardId(),
+    boardId: getProductionBoardId(),
     groupId: resolveOrderGroupId(opts?.demo),
     itemName,
     columnValues: JSON.stringify(columnValues),

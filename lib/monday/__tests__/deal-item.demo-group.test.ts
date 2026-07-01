@@ -42,8 +42,6 @@ beforeEach(() => {
   vi.resetAllMocks()
   delete process.env.MONDAY_PRODUCTION_BOARD_ID
   delete process.env.MONDAY_PRODUCTION_DEMO_GROUP_ID
-  // Legacy CRM Deals board env — order path no longer reads it (reorder still does).
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
   mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
   mockedCall.mockResolvedValue({ create_subitem: { id: 'sub-1' } })
 })

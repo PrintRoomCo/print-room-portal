@@ -199,7 +199,6 @@ function buildInput(): CheckoutInput {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('submitCustomerOrder — Monday push failure', () => {

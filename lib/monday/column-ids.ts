@@ -17,10 +17,22 @@ export const MONDAY_ACCOUNT_SLUG = 'theprint-room-group'
 
 export const PRODUCTION_COLUMNS = {
   customerEmail: 'email_mkqjpxt3',
+  // Board title is "Job Reference" — holds the order ref / PO for fresh orders
+  // and the original quote/job ref for reorders. Verified on board 1992701981
+  // (2026-07-01).
   poRef: 'text_mkqxcmvz',
-  // "Job Specs ℹ️" — long-text column holding the order breakdown
-  // (customer / email / total / line items) for items the customer-order
-  // Monday push creates. Verified on board 1992701981 (2026-07-01).
+  // "QTY" — total quantity (text column). Fresh orders leave this blank and
+  // carry per-line quantities in Job Specs; reorders have one aggregate quantity
+  // worth surfacing here. Verified on board 1992701981 (2026-07-01).
+  qty: 'text_mkr4b1sm',
+  // "Intent" — status column distinguishing portal Order vs Reorder items that
+  // share the Pre-production group. The "Order"/"Reorder" labels are created on
+  // demand (create_labels_if_missing) — the column otherwise ships with monday's
+  // default labels. Verified on board 1992701981 (2026-07-01).
+  intent: 'color_mm3fdn3a',
+  // "Job Specs ℹ️" — long-text column holding the order/reorder breakdown
+  // (customer / email / total / line items) for items the portal Monday push
+  // creates. Verified on board 1992701981 (2026-07-01).
   jobSpecs: 'long_text_mkrr4994',
   artworkFiles: 'file_mkpesta8',
   proofPdf: 'file_mkqjp7kh',

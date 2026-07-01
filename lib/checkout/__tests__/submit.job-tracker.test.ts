@@ -227,7 +227,6 @@ function baseSelects(): SelectMatcher[] {
 beforeEach(() => {
   vi.clearAllMocks()
   createJobTrackerShellForOrderMock.mockResolvedValue({ trackerId: 't-test', trackerToken: 'TOKEN-X' })
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', () => {

@@ -231,7 +231,6 @@ function buildInput(lines: CheckoutLineInput[]): CheckoutInput {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('submitCustomerOrder manual_final garment-only pricing', () => {

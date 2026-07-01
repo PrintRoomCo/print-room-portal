@@ -49,9 +49,6 @@ beforeEach(() => {
   // Order path targets the Production board now; exercise the default (no override).
   delete process.env.MONDAY_PRODUCTION_BOARD_ID
   delete process.env.MONDAY_PRODUCTION_DEMO_GROUP_ID
-  // Legacy CRM Deals board env — the order path no longer reads it. Kept set so
-  // the reorder path (which still uses it) stays resolvable in this suite.
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('pushOrderDeal — Production board target', () => {
@@ -103,6 +100,8 @@ describe('pushOrderDeal — Production column mapping', () => {
     expect(cv[PRODUCTION_COLUMNS.mainStatus]).toEqual({
       label: 'Need: Mockup (Quote Approved)',
     })
+    // Intent tag separates fresh orders from reorders in the shared group.
+    expect(cv[PRODUCTION_COLUMNS.intent]).toEqual({ label: 'Order' })
 
     const jobSpecs = cv[PRODUCTION_COLUMNS.jobSpecs].text as string
     expect(jobSpecs).toContain('ORD-2026-0042')

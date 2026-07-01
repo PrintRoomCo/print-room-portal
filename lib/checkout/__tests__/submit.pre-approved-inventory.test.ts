@@ -239,7 +239,6 @@ function baseSelects(): SelectMatcher[] {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('submitCustomerOrder — pre-approved inventory write-through', () => {

@@ -167,7 +167,6 @@ function buildInput(permission: B2BCustomerContext['orderingPermission']): Check
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 // ---------------------------------------------------------------------------

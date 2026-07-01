@@ -264,7 +264,6 @@ function buildStub(isTest: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.MONDAY_REORDERS_BOARD_ID = '2046357917'
 })
 
 describe('submitCustomerOrder — demo Monday group routing', () => {
