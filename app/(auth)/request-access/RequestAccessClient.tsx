@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { submitAccessRequest } from './actions'
-import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
+import AuthScene from '@/components/auth/AuthScene'
 
 const INDUSTRY_OPTIONS = [
   'Corporate / Professional Services',
@@ -83,185 +82,162 @@ export default function RequestAccess() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex">
-        <AuthBrandPanel heading="Join Us" />
-        <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
-          <div className="flex items-center justify-center p-6 lg:p-8 min-h-screen">
-            <div className="w-full max-w-md text-center">
-              <div className="mb-8">
-                <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} style={{ width: 'auto', height: 'auto' }} className="h-8 w-auto mx-auto" />
-              </div>
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[rgb(var(--color-primary))] flex items-center justify-center shadow-lg shadow-[rgb(var(--color-primary))]/30">
-                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-4">Request Submitted!</h1>
-              <p className="text-gray-600 mb-8">
-                Thank you for your interest. Our team will review your application and get back to you within 1-2 business days.
-              </p>
-              <Link
-                href="/sign-in"
-                className="inline-flex items-center justify-center py-3 px-6 rounded-full text-sm font-semibold text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30"
-              >
-                Back to Sign In
-              </Link>
-            </div>
+      <AuthScene heading="Join Us">
+        <div className="w-full max-w-md text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[rgb(var(--color-primary))] flex items-center justify-center shadow-lg shadow-[rgb(var(--color-primary))]/30">
+            <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
           </div>
+          {/* AuthScene renders the page's single <h1> ("Join Us") — keep this an <h2>. */}
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Request Submitted!</h2>
+          <p className="text-gray-600 mb-8">
+            Thank you for your interest. Our team will review your application and get back to you within 1-2 business days.
+          </p>
+          <Link href="/sign-in" className="auth-btn">
+            Back to sign in
+          </Link>
         </div>
-      </div>
+      </AuthScene>
     )
   }
 
   return (
-    <div className="min-h-screen flex">
-      <AuthBrandPanel heading="Join Us" />
-      <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
-        <div className="flex items-center justify-center p-6 lg:p-8">
-          <div className="w-full max-w-lg py-8">
-            <div className="mb-8 text-center">
-              <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} style={{ width: 'auto', height: 'auto' }} className="h-8 w-auto mx-auto" />
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-2xl font-semibold text-gray-900">Request B2B Access</h2>
-              <p className="text-sm text-gray-500 mt-2">
-                Fill in your details below and our team will set up your account.
-              </p>
-            </div>
-
-            {error && (
-              <div role="alert" className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
-                <p className="text-sm text-red-600">{error}</p>
-              </div>
-            )}
-
-            {/* Customer Type Toggle */}
-            <div className="mb-6 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCustomerType('company')}
-                className={`flex-1 py-2.5 px-4 rounded-full text-sm font-medium transition-all duration-300 ${customerType === 'company' ? 'bg-[rgb(var(--color-primary))] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                Company
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomerType('creative')}
-                className={`flex-1 py-2.5 px-4 rounded-full text-sm font-medium transition-all duration-300 ${customerType === 'creative' ? 'bg-[rgb(var(--color-primary))] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                Individual / Creative
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="request-first-name" className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                  <input id="request-first-name" type="text" name="firstName" required autoComplete="given-name" className="input-glass" />
-                </div>
-                <div>
-                  <label htmlFor="request-last-name" className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                  <input id="request-last-name" type="text" name="lastName" required autoComplete="family-name" className="input-glass" />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="request-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input id="request-email" type="email" name="email" required autoComplete="email" placeholder="you@company.com" className="input-glass" />
-              </div>
-
-              <div>
-                <label htmlFor="request-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input id="request-phone" type="tel" name="phone" autoComplete="tel" placeholder="+64 21 123 4567" className="input-glass" />
-              </div>
-
-              {customerType === 'company' && (
-                <div>
-                  <label htmlFor="request-company-name" className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
-                  <input id="request-company-name" type="text" name="companyName" required autoComplete="organization" className="input-glass" />
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="request-industry" className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                <select id="request-industry" name="industry" className="input-glass appearance-none cursor-pointer">
-                  <option value="">Select your industry...</option>
-                  {INDUSTRY_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="request-estimated-volume" className="block text-sm font-medium text-gray-700 mb-1">Estimated Volume</label>
-                <select id="request-estimated-volume" name="estimatedVolume" className="input-glass appearance-none cursor-pointer">
-                  <option value="">Select estimated volume...</option>
-                  {VOLUME_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="request-referral-source" className="block text-sm font-medium text-gray-700 mb-1">How did you hear about us?</label>
-                <select id="request-referral-source" name="referralSource" className="input-glass appearance-none cursor-pointer">
-                  <option value="">Select...</option>
-                  {REFERRAL_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="request-message" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea id="request-message" name="message" rows={3} placeholder="Tell us about your needs..." className="textarea-glass" />
-              </div>
-
-              {hcaptchaSitekey && !useCaptchaFreeFallback && (
-                <div className="flex justify-center">
-                  <HCaptcha
-                    ref={captchaRef}
-                    sitekey={hcaptchaSitekey}
-                    onVerify={(token) => setCaptchaToken(token)}
-                    onExpire={() => setCaptchaToken(null)}
-                  />
-                </div>
-              )}
-
-              {!useCaptchaFreeFallback && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseCaptchaFreeFallback(true)
-                    setCaptchaToken(null)
-                    setError(null)
-                    captchaRef.current?.resetCaptcha()
-                  }}
-                  className="w-full text-center text-sm font-medium text-[rgb(var(--color-brand-blue))] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pr-blue"
-                >
-                  Trouble with the captcha? Send us your request via email
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-dark))] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-primary))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-primary))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit Request'}
-              </button>
-
-              <p className="text-center text-sm text-gray-600">
-                Already have an account?{' '}
-                <Link href="/sign-in" className="text-[rgb(var(--color-primary))] font-medium hover:underline">
-                  Sign in
-                </Link>
-              </p>
-            </form>
-          </div>
+    <AuthScene heading="Join Us">
+      <div className="w-full max-w-lg">
+        <div className="mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900">Request B2B Access</h2>
+          <p className="text-sm text-gray-500 mt-2">
+            Fill in your details below and our team will set up your account.
+          </p>
         </div>
+
+        {error && (
+          <div role="alert" className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        {/* Customer Type Toggle */}
+        <div className="mb-6 inline-flex w-full rounded-full border border-[hsl(var(--border))] p-1 text-sm">
+          <button
+            type="button"
+            onClick={() => setCustomerType('company')}
+            className={`flex-1 rounded-full px-4 py-2 font-medium transition ${customerType === 'company' ? 'bg-[rgb(var(--color-primary))] text-white' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            Company
+          </button>
+          <button
+            type="button"
+            onClick={() => setCustomerType('creative')}
+            className={`flex-1 rounded-full px-4 py-2 font-medium transition ${customerType === 'creative' ? 'bg-[rgb(var(--color-primary))] text-white' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            Individual / Creative
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="request-first-name" className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+              <input id="request-first-name" type="text" name="firstName" required autoComplete="given-name" className="auth-field" />
+            </div>
+            <div>
+              <label htmlFor="request-last-name" className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+              <input id="request-last-name" type="text" name="lastName" required autoComplete="family-name" className="auth-field" />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="request-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <input id="request-email" type="email" name="email" required autoComplete="email" placeholder="you@company.com" className="auth-field" />
+          </div>
+
+          <div>
+            <label htmlFor="request-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <input id="request-phone" type="tel" name="phone" autoComplete="tel" placeholder="+64 21 123 4567" className="auth-field" />
+          </div>
+
+          {customerType === 'company' && (
+            <div>
+              <label htmlFor="request-company-name" className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+              <input id="request-company-name" type="text" name="companyName" required autoComplete="organization" className="auth-field" />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="request-industry" className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+            <select id="request-industry" name="industry" className="auth-field">
+              <option value="">Select your industry...</option>
+              {INDUSTRY_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="request-estimated-volume" className="block text-sm font-medium text-gray-700 mb-1">Estimated Volume</label>
+            <select id="request-estimated-volume" name="estimatedVolume" className="auth-field">
+              <option value="">Select estimated volume...</option>
+              {VOLUME_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="request-referral-source" className="block text-sm font-medium text-gray-700 mb-1">How did you hear about us?</label>
+            <select id="request-referral-source" name="referralSource" className="auth-field">
+              <option value="">Select...</option>
+              {REFERRAL_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="request-message" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+            <textarea id="request-message" name="message" rows={3} placeholder="Tell us about your needs..." className="auth-field" />
+          </div>
+
+          {hcaptchaSitekey && !useCaptchaFreeFallback && (
+            <div className="flex justify-center">
+              <HCaptcha
+                ref={captchaRef}
+                sitekey={hcaptchaSitekey}
+                onVerify={(token) => setCaptchaToken(token)}
+                onExpire={() => setCaptchaToken(null)}
+              />
+            </div>
+          )}
+
+          {!useCaptchaFreeFallback && (
+            <button
+              type="button"
+              onClick={() => {
+                setUseCaptchaFreeFallback(true)
+                setCaptchaToken(null)
+                setError(null)
+                captchaRef.current?.resetCaptcha()
+              }}
+              className="w-full text-center text-sm font-medium text-pr-charcoal underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pr-charcoal"
+            >
+              Trouble with the captcha? Send us your request via email
+            </button>
+          )}
+
+          <button type="submit" disabled={isSubmitting} className="auth-btn">
+            {isSubmitting ? 'Submitting...' : 'Submit request'}
+          </button>
+
+          <p className="text-center text-sm text-gray-600">
+            Already have an account?{' '}
+            <Link href="/sign-in" className="font-medium text-pr-charcoal underline-offset-4 hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </form>
       </div>
-    </div>
+    </AuthScene>
   )
 }

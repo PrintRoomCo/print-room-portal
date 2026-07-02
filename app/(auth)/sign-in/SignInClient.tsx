@@ -2,10 +2,9 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { useAuth } from '@/contexts/AuthContext'
-import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
+import AuthScene from '@/components/auth/AuthScene'
 
 export default function SignInPage() {
   return (
@@ -113,219 +112,199 @@ function SignIn() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Brand */}
-      <AuthBrandPanel heading="Welcome Back" />
+    <AuthScene heading="Welcome Back">
+      <div className="w-full max-w-md">
+        {/* Mode Tabs */}
+        <div className="mb-8 inline-flex w-full rounded-full border border-[hsl(var(--border))] p-1 text-sm">
+          {(['code', 'password'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              className={`flex-1 rounded-full px-4 py-2 font-medium transition ${
+                mode === m
+                  ? 'bg-[rgb(var(--color-primary))] text-white'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {m === 'code' ? 'Email code' : 'Password'}
+            </button>
+          ))}
+        </div>
 
-      {/* Right Panel - Form */}
-      <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
-        <div className="flex items-center justify-center p-6 lg:p-8 min-h-screen">
-          <div className="w-full max-w-md py-8">
-            {/* Logo */}
-            <div className="mb-8 text-center">
-              <Image
-                src="/print-room-logo.png"
-                alt="The Print Room"
-                width={128}
-                height={32}
-                style={{ width: 'auto', height: 'auto' }}
-                className="h-8 w-auto mx-auto"
+        {/* Info / Error */}
+        {info && !error && (
+          <div className="mb-6 p-4 rounded-2xl bg-blue-50 border border-blue-200/50">
+            <p className="text-sm text-blue-700">{info}</p>
+          </div>
+        )}
+        {displayError && (
+          <div
+            role="alert"
+            className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]"
+          >
+            <p className="text-sm text-red-600">{displayError}</p>
+          </div>
+        )}
+
+        {mode === 'password' ? (
+          <form onSubmit={handlePasswordSubmit} suppressHydrationWarning>
+            <div className="space-y-4" suppressHydrationWarning>
+              <div suppressHydrationWarning>
+                <label
+                  htmlFor="signin-email"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                >
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="signin-email"
+                  type="email"
+                  name="email"
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="auth-field"
+                  suppressHydrationWarning
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="signin-password"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                >
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="signin-password"
+                  type="password"
+                  name="password"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="auth-field"
+                />
+              </div>
+            </div>
+            <div className="mt-3 text-right">
+              <a
+                href="/reset-password"
+                className="text-sm text-pr-charcoal underline-offset-4 hover:underline"
+              >
+                Forgot password?
+              </a>
+            </div>
+            {hcaptchaSitekey && (
+              <div className="mt-6 flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hcaptchaSitekey}
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+            )}
+            <button type="submit" disabled={isSubmitting} className="auth-btn mt-8">
+              {isSubmitting ? 'Signing in...' : 'Sign in'}
+            </button>
+          </form>
+        ) : codeStage === 'request' ? (
+          <form onSubmit={handleRequestCode}>
+            <div>
+              <label
+                htmlFor="signin-code-email"
+                className="block text-sm font-medium text-gray-700 mb-1.5"
+              >
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="signin-code-email"
+                type="email"
+                name="email"
+                placeholder="you@company.com"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="auth-field"
               />
             </div>
-
-            {/* Mode Tabs */}
-            <div className="mb-6 flex gap-2 rounded-full bg-gray-100 p-1 text-sm">
-              <button
-                type="button"
-                onClick={() => switchMode('code')}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition ${
-                  mode === 'code'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+            {hcaptchaSitekey && (
+              <div className="mt-6 flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hcaptchaSitekey}
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+            )}
+            <button type="submit" disabled={isSubmitting || !email} className="auth-btn mt-8">
+              {isSubmitting ? 'Sending code...' : 'Send code'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode}>
+            <div>
+              <label
+                htmlFor="signin-code"
+                className="block text-sm font-medium text-gray-700 mb-1.5"
               >
-                Email code
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode('password')}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition ${
-                  mode === 'password'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Password
-              </button>
+                6-digit code <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="signin-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="123456"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                className="auth-field tracking-widest text-center text-lg"
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Sent to <span className="font-medium">{email}</span>.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCodeStage('request')
+                    setCode('')
+                    setInfo(null)
+                  }}
+                  className="font-medium text-pr-charcoal underline-offset-4 hover:underline"
+                >
+                  Use a different email
+                </button>
+              </p>
             </div>
+            <button
+              type="submit"
+              disabled={isSubmitting || code.length !== 6}
+              className="auth-btn mt-8"
+            >
+              {isSubmitting ? 'Verifying...' : 'Verify & sign in'}
+            </button>
+          </form>
+        )}
 
-            {/* Info / Error */}
-            {info && !error && (
-              <div className="mb-6 p-4 rounded-2xl bg-blue-50 border border-blue-200/50">
-                <p className="text-sm text-blue-700">{info}</p>
-              </div>
-            )}
-            {displayError && (
-              <div
-                role="alert"
-                className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200/50 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.1)]"
-              >
-                <p className="text-sm text-red-600">{displayError}</p>
-              </div>
-            )}
-
-            {mode === 'password' ? (
-              <form onSubmit={handlePasswordSubmit} suppressHydrationWarning>
-                <div className="space-y-4" suppressHydrationWarning>
-                  <div suppressHydrationWarning>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      placeholder="you@company.com"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="input-glass"
-                      suppressHydrationWarning
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      name="password"
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="input-glass"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 text-right">
-                  <a
-                    href="/reset-password"
-                    className="text-sm text-[rgb(var(--color-brand-blue))] hover:underline"
-                  >
-                    Forgot password?
-                  </a>
-                </div>
-                {hcaptchaSitekey && (
-                  <div className="mt-6 flex justify-center">
-                    <HCaptcha
-                      ref={captchaRef}
-                      sitekey={hcaptchaSitekey}
-                      onVerify={(token) => setCaptchaToken(token)}
-                      onExpire={() => setCaptchaToken(null)}
-                    />
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="mt-8 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-brand-blue))] hover:bg-[rgb(var(--color-brand-blue))]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-brand-blue))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-brand-blue))]/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
-                >
-                  {isSubmitting ? 'Signing in...' : 'Sign In'}
-                </button>
-              </form>
-            ) : codeStage === 'request' ? (
-              <form onSubmit={handleRequestCode}>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input-glass"
-                  />
-                </div>
-                {hcaptchaSitekey && (
-                  <div className="mt-6 flex justify-center">
-                    <HCaptcha
-                      ref={captchaRef}
-                      sitekey={hcaptchaSitekey}
-                      onVerify={(token) => setCaptchaToken(token)}
-                      onExpire={() => setCaptchaToken(null)}
-                    />
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !email}
-                  className="mt-8 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-brand-blue))] hover:bg-[rgb(var(--color-brand-blue))]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-brand-blue))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-brand-blue))]/40 hover:-translate-y-0.5"
-                >
-                  {isSubmitting ? 'Sending code...' : 'Send code'}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyCode}>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    6-digit code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                    className="input-glass tracking-widest text-center text-lg"
-                    autoFocus
-                  />
-                  <p className="mt-2 text-xs text-gray-500">
-                    Sent to <span className="font-medium">{email}</span>.{' '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCodeStage('request')
-                        setCode('')
-                        setInfo(null)
-                      }}
-                      className="text-[rgb(var(--color-brand-blue))] hover:underline"
-                    >
-                      Use a different email
-                    </button>
-                  </p>
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || code.length !== 6}
-                  className="mt-8 w-full py-3.5 px-6 rounded-full text-sm font-semibold uppercase tracking-wide text-white bg-[rgb(var(--color-brand-blue))] hover:bg-[rgb(var(--color-brand-blue))]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-[rgb(var(--color-brand-blue))]/30 hover:shadow-xl hover:shadow-[rgb(var(--color-brand-blue))]/40 hover:-translate-y-0.5"
-                >
-                  {isSubmitting ? 'Verifying...' : 'Verify & sign in'}
-                </button>
-              </form>
-            )}
-
-            <p className="mt-6 text-center text-sm text-gray-600">
-              Don&apos;t have an account?{' '}
-              <a
-                href="/request-access"
-                className="text-[rgb(var(--color-brand-blue))] font-medium hover:underline"
-              >
-                Request access
-              </a>
-            </p>
-          </div>
-        </div>
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Don&apos;t have an account?{' '}
+          <a
+            href="/request-access"
+            className="font-medium text-pr-charcoal underline-offset-4 hover:underline"
+          >
+            Request access
+          </a>
+        </p>
       </div>
-    </div>
+    </AuthScene>
   )
 }

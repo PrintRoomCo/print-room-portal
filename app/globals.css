@@ -436,6 +436,38 @@
   .quantity-value {
     @apply w-12 text-center text-sm font-medium text-gray-900 bg-transparent;
   }
+
+  /* ============================================
+   * AUTH PAGES (sign-in / request-access)
+   * Flat, clean fields + charcoal button. Scoped names so they don't
+   * touch the shared .input-glass / .btn-* used across the portal.
+   * ============================================ */
+
+  .auth-field {
+    @apply w-full rounded-lg border border-[hsl(var(--border))] bg-white px-4 py-2.5 text-foreground placeholder:text-gray-400 transition-colors duration-200;
+  }
+
+  .auth-field:focus {
+    @apply border-[rgb(var(--color-primary))] outline-none;
+    box-shadow: 0 0 0 3px rgba(30, 35, 38, 0.08);
+  }
+
+  select.auth-field {
+    @apply cursor-pointer appearance-none;
+  }
+
+  textarea.auth-field {
+    @apply resize-none;
+  }
+
+  .auth-btn {
+    @apply inline-flex w-full items-center justify-center rounded-full bg-[rgb(var(--color-primary))] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-[rgb(var(--color-primary-dark))] disabled:cursor-not-allowed disabled:opacity-50;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .auth-btn:hover {
+    box-shadow: var(--shadow-md);
+  }
 }
 
 /* ============================================
