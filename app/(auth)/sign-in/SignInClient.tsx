@@ -133,16 +133,6 @@ function SignIn() {
               />
             </div>
 
-            {/* Title */}
-            <div className="mb-8 text-center">
-              <h2 className="text-2xl font-semibold text-gray-900">Sign In</h2>
-              <p className="text-sm text-gray-500 mt-2">
-                {mode === 'code'
-                  ? 'Get a one-time code emailed to you'
-                  : 'Sign in with your email and password'}
-              </p>
-            </div>
-
             {/* Mode Tabs */}
             <div className="mb-6 flex gap-2 rounded-full bg-gray-100 p-1 text-sm">
               <button
