@@ -1,0 +1,104 @@
+// lib/xero/__tests__/build-payload.test.ts
+import { describe, it, expect } from 'vitest'
+import {
+  buildDraftInvoicePayload,
+  buildLineFromQuoteItem,
+  dueDateFor,
+  type BuildPayloadArgs,
+  type QuoteItemForXero,
+} from '../draft-invoice'
+
+const baseArgs: BuildPayloadArgs = {
+  contactId: 'contact-1',
+  orderRef: 'ORD-2026-0042',
+  today: '2026-07-02',
+  paymentTerms: 'net20',
+  currency: 'NZD',
+  accountCode: '200',
+  taxType: 'OUTPUT2',
+  lineAmountTypes: 'Exclusive',
+  brandingThemeId: null,
+  lines: [
+    { description: 'Basic Tee — Black / M (Logo Front)', quantity: 10, unitAmount: 12.5 },
+    { description: 'Cap — OS', quantity: 20, unitAmount: 8 },
+  ],
+}
+
+describe('dueDateFor', () => {
+  it('adds 20 days for net20', () => expect(dueDateFor('net20', '2026-07-02')).toBe('2026-07-22'))
+  it('adds 30 days for net30 (crossing a month)', () => expect(dueDateFor('net30', '2026-07-02')).toBe('2026-08-01'))
+  it('returns undefined for prepay/null/unknown', () => {
+    expect(dueDateFor('prepay', '2026-07-02')).toBeUndefined()
+    expect(dueDateFor(null, '2026-07-02')).toBeUndefined()
+    expect(dueDateFor('weird', '2026-07-02')).toBeUndefined()
+  })
+})
+
+describe('buildDraftInvoicePayload', () => {
+  it('builds an ACCREC DRAFT with GST-exclusive lines', () => {
+    const p = buildDraftInvoicePayload(baseArgs)
+    expect(p.Type).toBe('ACCREC')
+    expect(p.Status).toBe('DRAFT')
+    expect(p.Contact).toEqual({ ContactID: 'contact-1' })
+    expect(p.LineAmountTypes).toBe('Exclusive')
+    expect(p.Reference).toBe('ORD-2026-0042')
+    expect(p.Date).toBe('2026-07-02')
+    expect(p.DueDate).toBe('2026-07-22')
+    expect(p.CurrencyCode).toBe('NZD')
+    expect(p.LineItems).toEqual([
+      { Description: 'Basic Tee — Black / M (Logo Front)', Quantity: 10, UnitAmount: 12.5, AccountCode: '200', TaxType: 'OUTPUT2' },
+      { Description: 'Cap — OS', Quantity: 20, UnitAmount: 8, AccountCode: '200', TaxType: 'OUTPUT2' },
+    ])
+  })
+
+  it('omits DueDate when payment terms give none, and omits branding when unset', () => {
+    const p = buildDraftInvoicePayload({ ...baseArgs, paymentTerms: null })
+    expect('DueDate' in p).toBe(false)
+    expect('BrandingThemeID' in p).toBe(false)
+  })
+
+  it('includes BrandingThemeID when set', () => {
+    const p = buildDraftInvoicePayload({ ...baseArgs, brandingThemeId: 'bt-9' })
+    expect(p.BrandingThemeID).toBe('bt-9')
+  })
+})
+
+describe('buildLineFromQuoteItem', () => {
+  const row: QuoteItemForXero = {
+    product_name: 'Basic Tee',
+    quantity: 10,
+    unit_price: 12.5,
+    size_label: 'M',
+    decorations: [{ name: 'Logo Front' }],
+    product_variants: { product_color_swatches: { label: 'Black' } },
+  }
+
+  it('composes product + variant + design description', () => {
+    expect(buildLineFromQuoteItem(row)).toEqual({
+      description: 'Basic Tee — Black / M (Logo Front)',
+      quantity: 10,
+      unitAmount: 12.5,
+    })
+  })
+
+  it('handles array-shaped swatch embeds and missing decoration', () => {
+    const r: QuoteItemForXero = {
+      ...row,
+      decorations: null,
+      product_variants: { product_color_swatches: [{ label: 'Navy' }] },
+    }
+    expect(buildLineFromQuoteItem(r)).toEqual({
+      description: 'Basic Tee — Navy / M',
+      quantity: 10,
+      unitAmount: 12.5,
+    })
+  })
+
+  it('degrades to product name only when no variant/decoration', () => {
+    const r: QuoteItemForXero = {
+      product_name: 'Sticker Pack', quantity: 5, unit_price: 3,
+      size_label: null, decorations: [], product_variants: null,
+    }
+    expect(buildLineFromQuoteItem(r)).toEqual({ description: 'Sticker Pack', quantity: 5, unitAmount: 3 })
+  })
+})

@@ -9,6 +9,9 @@ export const AUDIT_ACTIONS = {
   ORDER_JOB_TRACKER_CREATED: 'order.job_tracker_created',
   ORDER_JOB_TRACKER_CREATE_FAILED: 'order.job_tracker_create_failed',
   ORDER_JOB_TRACKER_MONDAY_LINK_FAILED: 'order.job_tracker_monday_link_failed',
+  ORDER_XERO_DRAFTED: 'order.xero_drafted',
+  ORDER_XERO_MANUAL_REVIEW: 'order.xero_manual_review',
+  ORDER_XERO_DRAFT_FAILED: 'order.xero_draft_failed',
 
   PROOF_AUTOFILL_SUCCEEDED: 'proof.autofill_succeeded',
   PROOF_AUTOFILL_SKIPPED: 'proof.autofill_skipped',

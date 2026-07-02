@@ -12,6 +12,8 @@ import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
+import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
+import { postItemUpdate } from '@/lib/monday/updates'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -1396,6 +1398,73 @@ export async function submitCustomerOrder(
         orderId: order_id,
         err: auditErr instanceof Error ? auditErr.message : String(auditErr),
       })
+    }
+  }
+
+  // 5c. Best-effort Xero DRAFT invoice for fully-billable orders. Mirrors the
+  //     Monday/email side-effects: never throws, audits on failure. Ineligible
+  //     orders (test org, prepay org, or ANY stock-draw line) are flagged
+  //     xero_invoice_status='manual_review' for Charlotte instead of drafted.
+  //     Stock-draw is read from the cart lines' fulfilment_type — the submit RPC
+  //     payload does not persist per-line stock qty (see the p_lines map above).
+  try {
+    const drawsStock = input.lines.some((l) => l.fulfilment_type === 'stocked')
+    const { data: xeroOrgRow } = await admin
+      .from('organizations')
+      .select('is_test')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    const xeroIsTestOrg = Boolean((xeroOrgRow as { is_test?: boolean } | null)?.is_test)
+
+    const xeroResult = await createDraftInvoiceForOrder(admin, {
+      orderId: order_id,
+      orderRef: order_ref,
+      quoteId: quote_id,
+      organizationId: input.context.organizationId,
+      organizationName: input.context.organizationName,
+      actorUserId: input.context.userId,
+      ordererEmail: input.context.email ?? null,
+      paymentTerms: input.context.paymentTerms ?? null,
+      isTestOrg: xeroIsTestOrg,
+      drawsStock,
+      existingInvoiceId: null, // fresh order — no prior draft
+      today: new Date().toISOString().slice(0, 10),
+    })
+
+    // Surface a manual-invoice flag where Charlotte works (best-effort within
+    // this already-best-effort block). The orchestrator already set the DB
+    // status + audit; this is just the human-visible nudge on the Monday card.
+    if (xeroResult.status === 'manual_review' && mondayItemId) {
+      try {
+        await postItemUpdate(
+          mondayItemId,
+          `⚠️ Manual invoice required — this order was not auto-drafted in Xero ` +
+            `(reason: ${xeroResult.reason}). Please raise the invoice manually.`,
+        )
+      } catch (noteErr) {
+        console.error('[Checkout] Xero manual-review Monday note failed (swallowed)', {
+          orderId: order_id,
+          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+        })
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[Checkout] Xero draft invoice failed (swallowed)', { orderId: order_id, err: message })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, quote_id, error: message },
+        },
+        admin,
+      )
+    } catch {
+      // truly best-effort
     }
   }
 
