@@ -1,4 +1,5 @@
 // lib/xero/draft-invoice.ts
+import { xeroFetch } from './client'
 
 export interface XeroInvoiceLineInput {
   description: string
@@ -113,4 +114,63 @@ export function buildLineFromQuoteItem(row: QuoteItemForXero): XeroInvoiceLineIn
     .filter(Boolean)
     .join(' ')
   return { description, quantity: Number(row.quantity), unitAmount: Number(row.unit_price) }
+}
+
+// --- contact resolution --------------------------------------------------------
+
+interface XeroContactsResponse {
+  Contacts?: Array<{ ContactID: string }>
+}
+
+export interface ResolveContactArgs {
+  /** organizations.xero_contact_id, if already cached. */
+  cachedContactId: string | null
+  orgName: string
+  email: string | null
+}
+
+export interface ResolvedContact {
+  contactId: string
+  /** True when we POSTed a brand-new contact (caller should cache it). */
+  created: boolean
+}
+
+function contactNameWhere(orgName: string): string {
+  // Xero `where` uses double-quoted string literals; escape embedded quotes.
+  const escaped = orgName.replace(/"/g, '\\"')
+  return `/Contacts?where=${encodeURIComponent(`Name=="${escaped}"`)}`
+}
+
+/**
+ * Resolve the org's Xero ContactID: cache → single name match → create. Handles
+ * Xero's unique-name-on-create by re-querying (covers a first-order race between
+ * two checkouts for a brand-new org).
+ */
+export async function resolveXeroContactId(args: ResolveContactArgs): Promise<ResolvedContact> {
+  if (args.cachedContactId) return { contactId: args.cachedContactId, created: false }
+
+  const where = contactNameWhere(args.orgName)
+  const found = await xeroFetch<XeroContactsResponse>(where)
+  if (found.Contacts && found.Contacts.length === 1) {
+    return { contactId: found.Contacts[0].ContactID, created: false }
+  }
+
+  try {
+    const created = await xeroFetch<XeroContactsResponse>('/Contacts', {
+      method: 'POST',
+      body: JSON.stringify({
+        Contacts: [{ Name: args.orgName, ...(args.email ? { EmailAddress: args.email } : {}) }],
+      }),
+    })
+    const id = created.Contacts?.[0]?.ContactID
+    if (!id) throw new Error('Xero contact create returned no ContactID')
+    return { contactId: id, created: true }
+  } catch (e) {
+    // Unique-name collision (race or pre-existing dup) — re-query and reuse.
+    const retry = await xeroFetch<XeroContactsResponse>(where)
+    if (retry.Contacts && retry.Contacts.length >= 1) {
+      return { contactId: retry.Contacts[0].ContactID, created: false }
+    }
+    throw e
+  }
 }
