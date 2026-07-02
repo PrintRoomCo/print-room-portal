@@ -73,7 +73,6 @@ type ProductDetailLoadResult =
 
 interface ProductDetailPageProps {
   params: Promise<{ productId: string }>
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 const loadProductDetailPageData = cache(async (
@@ -83,17 +82,24 @@ const loadProductDetailPageData = cache(async (
   if ('kind' in auth) return { status: 'auth-failure', failure: auth }
   const { admin, context } = auth
 
-  // Per-member access filter — gate before we reach the product table.
-  // Editor preview force-shows the exact in-edit skin; a stale or cross-product
-  // preview item falls back to the member's normal granted access for this
-  // product instead of hard-404ing (see resolveCatalogueItemForPdp).
-  const catItem = await resolveCatalogueItemForPdp(admin, {
-    productId,
-    organizationId: context.organizationId,
-    membershipId: context.membershipId,
-    isPreview: context.isPreview === true,
-    previewItemId: context.previewItemId ?? null,
-  })
+  // Per-member access filter — gate before we even reach the product table.
+  const grantedItemIds = await getGrantedCatalogueItemIds(
+    admin,
+    context.membershipId,
+    context.organizationId,
+  )
+  if (grantedItemIds.length === 0) return { status: 'not-found' }
+
+  const { data: catItem } = await admin
+    .from('b2b_catalogue_items')
+    .select('id, name, description, image_url, moq_override, b2b_catalogues!inner(is_active)')
+    .eq('source_product_id', productId)
+    .eq('is_active', true)
+    .eq('b2b_catalogues.organization_id', context.organizationId)
+    .eq('b2b_catalogues.is_active', true)
+    .in('id', grantedItemIds)
+    .limit(1)
+    .maybeSingle()
 
   if (!catItem) return { status: 'not-found' }
 
@@ -402,8 +408,6 @@ const loadProductDetailPageData = cache(async (
     description: string | null
     sku_override: string | null
     moq_override: number | null
-    variant_label: string | null
-    fulfilment_type_override: FulfilmentType | null
   } | null
   const catalogueFallbackImageUrl = pickPreferredGalleryImageUrl(
     images,
@@ -444,10 +448,7 @@ const loadProductDetailPageData = cache(async (
         supports_labels: displayProduct.supports_labels,
         garment_family: displayProduct.garment_family,
         default_sizes: displayProduct.default_sizes,
-        fulfilment_type: effectiveFulfilment(
-          catItemForked?.fulfilment_type_override ?? null,
-          displayProduct.fulfilment_type,
-        ),
+        fulfilment_type: displayProduct.fulfilment_type ?? 'made_to_order',
         brand_name: brandName,
         category_name: categoryName,
         // Phase 2 — catalogue-item identity threaded to the client so it can ride
@@ -474,9 +475,6 @@ const loadProductDetailPageData = cache(async (
       decorations,
       effectiveMoq,
       preOrderClosed,
-      // Display-only: relabel the Volume-pricing widget's first band to start at
-      // this qty (cart/checkout brackets are untouched, so price & MOQ unchanged).
-      volumeDisplayFloorQty: catItem.volume_display_floor_qty ?? null,
     },
   }
 })
@@ -494,32 +492,12 @@ export async function generateMetadata({
 
 export default async function ProductDetailPage({
   params,
-  searchParams,
 }: ProductDetailPageProps) {
   const { productId } = await params
-  const [result, sp] = await Promise.all([
-    loadProductDetailPageData(productId),
-    searchParams,
-  ])
+  const result = await loadProductDetailPageData(productId)
 
   if (result.status === 'auth-failure') return handleAuthFailure(result.failure)
   if (result.status === 'not-found') notFound()
 
-  // `?color=` deep-link from the catalogue grid's exploded tiles. Validate it
-  // against the colours this product actually exposes so a stale link can never
-  // preselect a missing colour. Resolved here (not in the cached loader, which
-  // is keyed on productId only) so the per-request colour never poisons the cache.
-  const colorParam = typeof sp.color === 'string' ? sp.color : null
-  const availableSwatchIds = new Set<string>([
-    ...(result.data.colourOptions ?? []).map((c) => c.id),
-    ...result.data.variants
-      .map((v) => v.color_swatch_id)
-      .filter((x): x is string => !!x),
-  ])
-  const initialColorSwatchId =
-    colorParam && availableSwatchIds.has(colorParam) ? colorParam : null
-
-  return (
-    <ProductDetailClient {...result.data} initialColorSwatchId={initialColorSwatchId} />
-  )
+  return <ProductDetailClient {...result.data} />
 }

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { submitAccessRequest } from './actions'
+import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
 
 const INDUSTRY_OPTIONS = [
   'Corporate / Professional Services',
@@ -83,7 +84,7 @@ export default function RequestAccess() {
   if (success) {
     return (
       <div className="min-h-screen flex">
-        <LeftPanel />
+        <AuthBrandPanel heading="Join Us" />
         <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
           <div className="flex items-center justify-center p-6 lg:p-8 min-h-screen">
             <div className="w-full max-w-md text-center">
@@ -111,7 +112,7 @@ export default function RequestAccess() {
 
   return (
     <div className="min-h-screen flex">
-      <LeftPanel />
+      <AuthBrandPanel heading="Join Us" />
       <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
         <div className="flex items-center justify-center p-6 lg:p-8">
           <div className="w-full max-w-lg py-8">
@@ -257,25 +258,6 @@ export default function RequestAccess() {
             </form>
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function LeftPanel() {
-  return (
-    <div className="hidden lg:flex lg:w-1/2 bg-pr-blue p-8 xl:p-12 flex-col justify-between h-screen sticky top-0 overflow-hidden">
-      <div className="flex-shrink-0">
-        <Image src="/print-room-logo.png" alt="The Print Room" width={192} height={48} style={{ width: 'auto', height: 'auto' }} className="h-10 xl:h-12 w-auto brightness-0 invert" />
-      </div>
-      <div className="space-y-4 xl:space-y-6 flex-1 flex flex-col justify-center py-6">
-        <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">Join Our B2B Program</h1>
-        <p className="text-white/80 text-base xl:text-lg max-w-md">
-          Get access to exclusive pricing, custom product catalogs, and dedicated account management.
-        </p>
-      </div>
-      <div className="text-white/50 text-xs xl:text-sm flex-shrink-0">
-        &copy; {new Date().getFullYear()} The Print Room. All rights reserved.
       </div>
     </div>
   )

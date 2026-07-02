@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { useAuth } from '@/contexts/AuthContext'
+import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
 
 export default function SignInPage() {
   return (
@@ -114,7 +115,7 @@ function SignIn() {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Brand */}
-      <LeftPanel />
+      <AuthBrandPanel heading="Welcome Back" />
 
       {/* Right Panel - Form */}
       <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
@@ -334,67 +335,6 @@ function SignIn() {
             </p>
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function LeftPanel() {
-  return (
-    <div className="hidden lg:flex lg:w-1/2 bg-pr-blue p-8 xl:p-12 flex-col justify-between h-screen sticky top-0 overflow-hidden">
-      <div className="flex-shrink-0">
-        <Image
-          src="/print-room-logo.png"
-          alt="The Print Room"
-          width={192}
-          height={48}
-          style={{ width: 'auto', height: 'auto' }}
-          className="h-10 xl:h-12 w-auto brightness-0 invert"
-        />
-      </div>
-
-      <div className="space-y-4 xl:space-y-6 flex-1 flex flex-col justify-center py-6">
-        <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
-          Welcome Back
-        </h1>
-        <p className="text-white/80 text-base xl:text-lg max-w-md">
-          Sign in to access your B2B dashboard, manage projects, and explore your
-          custom product catalog.
-        </p>
-
-        <ul className="space-y-2 xl:space-y-3 mt-4 xl:mt-6">
-          {[
-            'Access your custom designs',
-            'View project history & tracking',
-            'Browse your exclusive catalog',
-            'Manage team members',
-            'Download reports & invoices',
-          ].map((feature) => (
-            <li
-              key={feature}
-              className="flex items-center gap-2 xl:gap-3 text-white/90 text-sm xl:text-base"
-            >
-              <svg
-                className="w-4 h-4 xl:w-5 xl:h-5 text-white/60 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              {feature}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="text-white/50 text-xs xl:text-sm flex-shrink-0">
-        &copy; {new Date().getFullYear()} The Print Room. All rights reserved.
       </div>
     </div>
   )
