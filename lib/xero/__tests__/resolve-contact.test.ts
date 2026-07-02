@@ -28,7 +28,7 @@ describe('resolveXeroContactId', () => {
       .mockResolvedValueOnce({ Contacts: [{ ContactID: 'new-1' }] }) // create
     const r = await resolveXeroContactId({ cachedContactId: null, orgName: 'Acme', email: 'ap@acme.test' })
     expect(r).toEqual({ contactId: 'new-1', created: true })
-    const [, init] = mockFetch.mock.calls[1]
+    const init = mockFetch.mock.calls[1][1]!
     expect(init.method).toBe('POST')
     expect(init.body).toContain('"Name":"Acme"')
     expect(init.body).toContain('"EmailAddress":"ap@acme.test"')
