@@ -1,5 +1,10 @@
 // lib/xero/draft-invoice.ts
 import { xeroFetch } from './client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { recordAuditEvent } from '@/lib/audit/recordEvent'
+import { AUDIT_ACTIONS } from '@/lib/audit/actions'
+import { getXeroConfig, isXeroEnabled } from './config'
+import { evaluateXeroEligibility } from './eligibility'
 
 export interface XeroInvoiceLineInput {
   description: string
@@ -173,4 +178,150 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
     }
     throw e
   }
+}
+
+// --- orchestrator --------------------------------------------------------------
+
+interface XeroInvoicesResponse {
+  Invoices?: Array<{ InvoiceID: string; InvoiceNumber?: string }>
+}
+
+export interface CreateDraftInvoiceArgs {
+  orderId: string
+  orderRef: string
+  quoteId: string
+  organizationId: string
+  organizationName: string
+  actorUserId: string | null
+  ordererEmail: string | null
+  paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
+  isTestOrg: boolean
+  drawsStock: boolean
+  existingInvoiceId: string | null
+  today: string // 'YYYY-MM-DD'
+}
+
+export interface CreateDraftInvoiceResult {
+  status: 'drafted' | 'manual_review' | 'skipped'
+  reason: string
+  invoiceId?: string
+  invoiceNumber?: string
+}
+
+/**
+ * Create one order's Xero DRAFT invoice, or flag it for manual review.
+ * Best-effort contract: on a Xero/DB error it THROWS — the caller (submit.ts
+ * step 5c) wraps this in try/catch and audits ORDER_XERO_DRAFT_FAILED. It never
+ * rolls back the order.
+ */
+export async function createDraftInvoiceForOrder(
+  admin: SupabaseClient,
+  args: CreateDraftInvoiceArgs,
+): Promise<CreateDraftInvoiceResult> {
+  const elig = evaluateXeroEligibility({
+    xeroEnabled: isXeroEnabled(),
+    existingInvoiceId: args.existingInvoiceId,
+    isTestOrg: args.isTestOrg,
+    paymentTerms: args.paymentTerms,
+    drawsStock: args.drawsStock,
+  })
+
+  if (!elig.eligible) {
+    // prepay + stock-draw are billable-but-uncostable in v1 → Charlotte's queue.
+    if (elig.reason === 'prepay_org' || elig.reason === 'draws_stock') {
+      await admin.from('orders').update({ xero_invoice_status: 'manual_review' }).eq('id', args.orderId)
+      await recordAuditEvent(
+        {
+          orgId: args.organizationId,
+          actorUserId: args.actorUserId,
+          action: AUDIT_ACTIONS.ORDER_XERO_MANUAL_REVIEW,
+          targetType: 'order',
+          targetId: args.orderId,
+          metadata: { order_ref: args.orderRef, reason: elig.reason },
+        },
+        admin,
+      )
+      return { status: 'manual_review', reason: elig.reason }
+    }
+    // test_org → record a 'skipped' status (keeps the ledger clean, no nag).
+    if (elig.reason === 'test_org') {
+      await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
+    }
+    // 'disabled' / 'already_drafted' → fully inert (no write, no audit).
+    return { status: 'skipped', reason: elig.reason }
+  }
+
+  const cfg = getXeroConfig()
+
+  // Contact — read the cached id, resolve, and cache back if newly created.
+  const { data: orgRow } = await admin
+    .from('organizations')
+    .select('xero_contact_id')
+    .eq('id', args.organizationId)
+    .maybeSingle()
+  const cachedContactId = (orgRow as { xero_contact_id: string | null } | null)?.xero_contact_id ?? null
+  const { contactId, created } = await resolveXeroContactId({
+    cachedContactId,
+    orgName: args.organizationName,
+    email: args.ordererEmail,
+  })
+  if (created || !cachedContactId) {
+    await admin.from('organizations').update({ xero_contact_id: contactId }).eq('id', args.organizationId)
+  }
+
+  // Lines — read the persisted quote_items (canonical, decoration already folded).
+  const { data: itemRows } = await admin
+    .from('quote_items')
+    .select(
+      `product_name, quantity, unit_price, size_label, decorations,
+       product_variants ( product_color_swatches(label) )`,
+    )
+    .eq('quote_id', args.quoteId)
+  const lines = ((itemRows ?? []) as unknown as QuoteItemForXero[]).map(buildLineFromQuoteItem)
+
+  const payload = buildDraftInvoicePayload({
+    contactId,
+    orderRef: args.orderRef,
+    today: args.today,
+    paymentTerms: args.paymentTerms,
+    currency: cfg.currency,
+    accountCode: cfg.salesAccountCode,
+    taxType: cfg.taxType,
+    lineAmountTypes: cfg.lineAmountTypes,
+    brandingThemeId: cfg.brandingThemeId,
+    lines,
+  })
+
+  // Idempotency-Key (order id) closes the write→persist crash gap: a retry with
+  // the same key returns the already-created draft instead of a duplicate.
+  const res = await xeroFetch<XeroInvoicesResponse>('/Invoices', {
+    method: 'POST',
+    idempotencyKey: args.orderId,
+    body: JSON.stringify({ Invoices: [payload] }),
+  })
+  const inv = res.Invoices?.[0]
+  if (!inv?.InvoiceID) throw new Error('Xero invoice create returned no InvoiceID')
+
+  await admin
+    .from('orders')
+    .update({
+      xero_invoice_id: inv.InvoiceID,
+      xero_invoice_number: inv.InvoiceNumber ?? null,
+      xero_invoice_status: 'drafted',
+    })
+    .eq('id', args.orderId)
+
+  await recordAuditEvent(
+    {
+      orgId: args.organizationId,
+      actorUserId: args.actorUserId,
+      action: AUDIT_ACTIONS.ORDER_XERO_DRAFTED,
+      targetType: 'order',
+      targetId: args.orderId,
+      metadata: { order_ref: args.orderRef, xero_invoice_id: inv.InvoiceID, xero_invoice_number: inv.InvoiceNumber ?? null },
+    },
+    admin,
+  )
+
+  return { status: 'drafted', reason: 'ok', invoiceId: inv.InvoiceID, invoiceNumber: inv.InvoiceNumber }
 }
