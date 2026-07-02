@@ -121,8 +121,8 @@ function SignIn() {
       <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
         <div className="flex items-center justify-center p-6 lg:p-8 min-h-screen">
           <div className="w-full max-w-md py-8">
-            {/* Mobile Logo */}
-            <div className="lg:hidden mb-8 text-center">
+            {/* Logo */}
+            <div className="mb-8 text-center">
               <Image
                 src="/print-room-logo.png"
                 alt="The Print Room"

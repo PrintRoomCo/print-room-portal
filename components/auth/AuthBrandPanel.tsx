@@ -1,5 +1,3 @@
-import Image from 'next/image'
-
 /**
  * Readymag-style brand panel for the auth pages (sign-in, request-access).
  *
@@ -60,7 +58,7 @@ export default function AuthBrandPanel({
   heading: string
 }) {
   return (
-    <div className="relative hidden h-screen flex-col justify-between overflow-hidden bg-pr-blue p-8 lg:flex lg:w-1/2 xl:p-12">
+    <div className="relative hidden h-screen flex-col justify-end overflow-hidden bg-pr-blue p-8 lg:flex lg:w-1/2 xl:p-12">
       {/* Faint radial lift so the flat blue field reads with a touch of depth. */}
       <div
         aria-hidden
@@ -70,18 +68,6 @@ export default function AuthBrandPanel({
             'radial-gradient(120% 90% at 50% 40%, rgba(255,255,255,0.12), rgba(255,255,255,0) 62%)',
         }}
       />
-
-      {/* Logo */}
-      <div className="relative z-10 flex-shrink-0">
-        <Image
-          src="/print-room-logo.png"
-          alt="The Print Room"
-          width={192}
-          height={48}
-          style={{ width: 'auto', height: 'auto' }}
-          className="h-10 w-auto brightness-0 invert xl:h-12"
-        />
-      </div>
 
       {/* Centered composition: rotating cog + heading, then focal diamond. */}
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-12 px-8 xl:gap-16">

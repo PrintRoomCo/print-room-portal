@@ -88,6 +88,9 @@ export default function RequestAccess() {
         <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
           <div className="flex items-center justify-center p-6 lg:p-8 min-h-screen">
             <div className="w-full max-w-md text-center">
+              <div className="mb-8">
+                <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} style={{ width: 'auto', height: 'auto' }} className="h-8 w-auto mx-auto" />
+              </div>
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[rgb(var(--color-primary))] flex items-center justify-center shadow-lg shadow-[rgb(var(--color-primary))]/30">
                 <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -116,7 +119,7 @@ export default function RequestAccess() {
       <div className="flex-1 min-h-screen overflow-y-auto bg-gray-50">
         <div className="flex items-center justify-center p-6 lg:p-8">
           <div className="w-full max-w-lg py-8">
-            <div className="lg:hidden mb-8 text-center">
+            <div className="mb-8 text-center">
               <Image src="/print-room-logo.png" alt="The Print Room" width={128} height={32} style={{ width: 'auto', height: 'auto' }} className="h-8 w-auto mx-auto" />
             </div>
 
