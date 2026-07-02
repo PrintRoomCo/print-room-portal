@@ -5,6 +5,9 @@ node_modules/
 # git worktrees (linked checkouts of this repo)
 .worktrees/
 
+# Claude Code local state (settings.local.json, native worktrees under .claude/worktrees)
+.claude/
+
 # next.js
 .next/
 out/
