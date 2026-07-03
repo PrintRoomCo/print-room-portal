@@ -148,59 +148,6 @@ export const MERCH_SHAPES: MerchShape[] = [
       },
     ],
   },
-  {
-    name: 'cap',
-    color: '#273150',
-    box: { x: 10, y: 6, w: 84, h: 80 },
-    paths: [
-      {
-        id: 'brim',
-        fill: '#1D2540',
-        // Short round work-cap visor seen from above, narrower than the
-        // crown's full width: the outer edge drops from the left root,
-        // rounds under the front and pokes out past the crown to a
-        // squared-off right tip; the whole inner edge is buried under the
-        // crown fill so the attachment can never open a hairline gap.
-        // Painted first — the crown overlaps it.
-        path: 'M34 66 Q34 80 56 86 Q76 86 88 72 Q94 64 94 56 Q86 46 76 46 Q56 50 44 58 Q37 61 34 66 Z',
-      },
-      {
-        id: 'brim-stitching',
-        stroke: '#F8FAFF',
-        strokeWidth: 1,
-        // Six concentric visor rows at even ~2.7-unit spacing, each a clean
-        // inward offset of the visor's outer edge. Painted BEFORE the crown
-        // so every row's left end (and the top rows' right ends) overshoots
-        // underneath the crown fill and is cropped by it — each visible row
-        // emerges from under the crown and sweeps across to the visor tip
-        // with no stray line ends, matching the tight rows in the reference.
-        path: 'M37 66 Q36 78 56 84 Q75 84 86 70 Q92 63 91 55 M39 66 Q38 76 56 81 Q74 81 84 69 Q89 62 89 53 M42 66 Q39 74 56 78 Q73 79 82 67 Q87 61 86 51 M45 66 Q41 72 56 75 Q72 76 80 65 Q84 60 83 49 M47 66 Q43 70 56 73 Q71 74 78 63 Q82 59 78 52 M50 66 Q45 68 56 70 Q70 71 76 62 Q79 58 76 53',
-      },
-      {
-        id: 'crown',
-        // Tall dark-denim dome viewed from the front three-quarter top:
-        // the dome sticks up prominently with a rounded apex, steep sides
-        // and a hem that dips at the front and tucks behind the visor,
-        // leaving a small step where the visor tip emerges on the right.
-        path: 'M10 50 Q10 14 44 6 Q76 12 80 48 Q78 60 64 66 Q46 72 30 68 Q12 62 10 50 Z',
-      },
-      {
-        id: 'crown-panel-stitching',
-        stroke: '#F8FAFF',
-        strokeWidth: 0.85,
-        // Reference-style crown seams: three double-needle panel seams radiate
-        // from one crown point and land cleanly on the lower band.
-        path: 'M45 9 C37 17 28 34 21 58 M47 10 C40 19 32 37 26 62 M45.5 9 C44.3 26 43.8 47 44 67 M48 10 C49.2 28 50 49 51 67 M47 9.5 C56 17 66 35 74 57 M49.2 10.8 C59 20 69 37 77 52',
-      },
-      {
-        id: 'band-stitching',
-        stroke: '#F8FAFF',
-        strokeWidth: 0.95,
-        // Two quiet stitch rows following the crown band above the visor.
-        path: 'M13 50 Q16 61 31 66 Q46 70 62 64 Q74 57 77 47 M15 48 Q18 58 32 64 Q46 68 61 62 Q72 55 75 46',
-      },
-    ],
-  },
 ]
 
 function pathToSvg(shape: MerchShape, part: MerchPath): string {
