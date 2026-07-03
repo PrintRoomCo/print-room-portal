@@ -112,7 +112,7 @@ function SignIn() {
   }
 
   return (
-    <AuthScene heading="Welcome Back">
+    <AuthScene heading="Welcome Back" headingHidden>
       <div className="w-full max-w-md">
         {/* Mode Tabs */}
         <div className="mb-8 inline-flex w-full rounded-full border border-[hsl(var(--border))] p-1 text-sm">
@@ -294,16 +294,6 @@ function SignIn() {
             </button>
           </form>
         )}
-
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don&apos;t have an account?{' '}
-          <a
-            href="/request-access"
-            className="font-medium text-pr-charcoal underline-offset-4 hover:underline"
-          >
-            Request access
-          </a>
-        </p>
       </div>
     </AuthScene>
   )

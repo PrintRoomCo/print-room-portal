@@ -103,7 +103,7 @@ export default function RequestAccess() {
   }
 
   return (
-    <AuthScene heading="Join Us">
+    <AuthScene heading="Join Us" merchFloorOffset={760}>
       <div className="w-full max-w-lg">
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-gray-900">Request B2B Access</h2>
