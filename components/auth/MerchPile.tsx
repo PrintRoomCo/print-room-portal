@@ -22,9 +22,9 @@ import { MERCH_SHAPES, merchTextureUrl, MerchSvg } from './merch-shapes'
 
 // Per-shape body-size multiplier (canvas pile). Kept close to 1 so the merch
 // lands as a compressed cluster without one product dominating the heap.
-const SIZE_MULT = [1.14, 1.18, 1.04, 1.08, 1.18]
+const SIZE_MULT = [1.14, 1.18, 1.04, 1.08, 1.18, 1.12]
 // Per-shape resting tilt (deg) for the static fallback pile.
-const FALLBACK_TILT = [-8, 5, -4, 7, -6]
+const FALLBACK_TILT = [-8, 5, -4, 7, -6, 5]
 const TEXTURE_PX = 512
 // Air drag. The mouse spring has no damping of its own, so a held piece never
 // stops swaying/bobbing around a stationary cursor at the pile's low drag —

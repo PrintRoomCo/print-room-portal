@@ -28,6 +28,12 @@ export type MerchShape = {
    *  rest) exactly where the artwork ends — no transparent padding. */
   box: { x: number; y: number; w: number; h: number }
   paths: MerchPath[]
+  /** Escape hatch for a fully pre-drawn asset (e.g. detailed reference art that
+   *  can't be expressed as flat house-style paths): a URL to a self-contained
+   *  SVG whose intrinsic size already matches `box`'s aspect. When set, `paths`
+   *  is ignored — the texture is this URL and the fallback renders it as an
+   *  <img>. The physics body is still the `box` rectangle. */
+  textureUrl?: string
 }
 
 export const MERCH_SHAPES: MerchShape[] = [
@@ -148,6 +154,19 @@ export const MERCH_SHAPES: MerchShape[] = [
       },
     ],
   },
+  {
+    name: 'cap',
+    // Detailed neon-doodle navy cap: pre-drawn reference art served from
+    // public/merch, NOT a house-style flat cutout. Rendered verbatim so it
+    // matches the reference exactly. `color` is only a fallback background tint.
+    color: '#10264f',
+    // Aspect ratio matches the asset's intrinsic 441×512 (a tight crop of the
+    // hat), so the sprite scales through the shared texture pipeline undistorted
+    // and the physics rectangle hugs the artwork.
+    box: { x: 7, y: 0, w: 86, h: 100 },
+    textureUrl: '/merch/neon-cap.svg',
+    paths: [],
+  },
 ]
 
 function pathToSvg(shape: MerchShape, part: MerchPath): string {
@@ -169,6 +188,8 @@ function pathToSvg(shape: MerchShape, part: MerchPath): string {
  * when a body is drawn large).
  */
 export function merchTextureUrl(shape: MerchShape, scale = 512): string {
+  // Pre-drawn asset shapes carry their own self-contained SVG; use it directly.
+  if (shape.textureUrl) return shape.textureUrl
   const { x, y, w, h } = shape.box
   const width = Math.round((w / 100) * scale)
   const height = Math.round((h / 100) * scale)
@@ -183,6 +204,19 @@ export function MerchSvg({
   shape,
   ...props
 }: { shape: MerchShape } & React.SVGProps<SVGSVGElement>) {
+  // Pre-drawn asset shape: render its self-contained SVG as an <img>.
+  if (shape.textureUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={shape.textureUrl}
+        alt=""
+        aria-hidden
+        className={props.className}
+        style={props.style}
+      />
+    )
+  }
   return (
     <svg
       viewBox={`${shape.box.x} ${shape.box.y} ${shape.box.w} ${shape.box.h}`}
