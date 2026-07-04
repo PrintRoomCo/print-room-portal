@@ -6,7 +6,7 @@
  *   1. `merchTextureUrl()` builds an <svg> data URL used as a Matter.js body
  *      sprite texture (the interactive canvas pile), and
  *   2. `<MerchSvg>` renders the same drawing as a real element for the static
- *      fallback (reduced motion / touch / SSR, no canvas, no physics).
+ *      fallback (reduced motion / no pointer / SSR, no canvas, no physics).
  */
 
 type MerchPath = {
@@ -199,7 +199,7 @@ export function merchTextureUrl(shape: MerchShape, scale = 512): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
-/** Static <svg> for the reduced-motion / touch / SSR fallback (no canvas). */
+/** Static <svg> for the reduced-motion / no-pointer / SSR fallback (no canvas). */
 export function MerchSvg({
   shape,
   ...props
