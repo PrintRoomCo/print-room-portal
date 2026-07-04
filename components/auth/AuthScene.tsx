@@ -24,8 +24,11 @@ export default function AuthScene({
 }) {
   return (
     // No bottom padding — the merch pile must sit on (and be cropped by) the
-    // true bottom edge of the page.
-    <div className="relative flex min-h-screen w-full select-none flex-col items-center overflow-hidden bg-white px-4 pt-10 sm:pt-12">
+    // true bottom edge of the page. Height is svh, not vh: on iOS Safari 100vh
+    // is the LARGE viewport (bottom address bar collapsed), so a vh-sized stage
+    // ran under the bar and the merch landed behind it. 100svh is the visible
+    // area above the bar; plain min-h-screen stays as the no-svh fallback.
+    <div className="relative flex min-h-screen w-full select-none flex-col items-center overflow-hidden bg-white px-4 pt-10 supports-[min-height:100svh]:min-h-svh sm:pt-12">
       {/* Page heading — the single announced <h1> for each auth page.
           `headingHidden` keeps it for screen readers but removes it visually. */}
       <h1
