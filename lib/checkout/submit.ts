@@ -392,11 +392,75 @@ export async function submitCustomerOrder(
     )
   }
 
+  const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
+    admin
+      .from('products')
+      .select('id, moq, fulfilment_type')
+      .in('id', productIds),
+    admin
+      .from('b2b_catalogue_items')
+      .select('id, source_product_id, moq_override, fulfilment_type_override')
+      .in('source_product_id', productIds)
+      .in('id', Array.from(grantedItemIds)),
+  ])
+  const productRows = (productMoqRows ?? []) as Array<{
+    id: string
+    moq: number | null
+    fulfilment_type: string | null
+  }>
+  const catItemRows = (catItemMoqRows ?? []) as Array<{
+    id: string
+    source_product_id: string
+    moq_override: number | null
+    fulfilment_type_override: string | null
+  }>
+  const productMoqById = new Map(productRows.map((r) => [r.id, r.moq]))
+  const overrideByProductId = new Map(
+    catItemRows.map((r) => [r.source_product_id, r.moq_override]),
+  )
+
+  // Server-side fulfilment truth (2026-07-06). 'stocked' is a stock-DRAW claim
+  // that exempts a line from MOQ (below) and trips the Xero draws_stock gate
+  // (step 5c) — so it may only stand when the product's effective nature
+  // actually allows a draw. submit_b2b_order resolves fulfilment the same way
+  // (catalogue override ?? product base) and never draws on-hand stock for
+  // made_to_order/pre_order natures, so a 'stocked' claim there is always
+  // wrong — the old PDP fallback bug, stale persisted carts, or a hostile
+  // client. Coerce in place so every downstream reader of input.lines sees
+  // the truth. Absent claims (legacy carts) stay absent: MOQ-conservative.
+  const natureByProductId = new Map(productRows.map((r) => [r.id, r.fulfilment_type]))
+  const natureOverrideByCatItemId = new Map(
+    catItemRows.map((r) => [r.id, r.fulfilment_type_override]),
+  )
+  const natureOverrideByProductId = new Map<string, string>()
+  for (const r of catItemRows) {
+    if (
+      r.fulfilment_type_override != null &&
+      !natureOverrideByProductId.has(r.source_product_id)
+    ) {
+      natureOverrideByProductId.set(r.source_product_id, r.fulfilment_type_override)
+    }
+  }
+  for (const line of input.lines) {
+    if (line.fulfilment_type !== 'stocked') continue
+    const effectiveNature =
+      (line.catalogueItemId != null
+        ? natureOverrideByCatItemId.get(line.catalogueItemId)
+        : null) ??
+      natureOverrideByProductId.get(line.product_id) ??
+      natureByProductId.get(line.product_id) ??
+      'made_to_order'
+    if (effectiveNature !== 'stocked' && effectiveNature !== 'mixed') {
+      line.fulfilment_type = 'made_to_order'
+    }
+  }
+
   // Qty per product destined for a NEW production run — i.e. excluding lines
   // fulfilled from existing stock. MOQ is checked against this, not the grand
   // total: stock that has already been made carries no minimum. A line only
-  // escapes MOQ when it explicitly declares fulfilment_type 'stocked'; an
-  // absent value (legacy carts) conservatively still counts toward MOQ.
+  // escapes MOQ when it declares fulfilment_type 'stocked' AND the claim
+  // survived the nature coercion above; an absent value (legacy carts)
+  // conservatively still counts toward MOQ. Built AFTER coercion on purpose.
   const productionQtyByProductId = new Map<string, number>()
   for (const line of input.lines) {
     if (line.fulfilment_type === 'stocked') continue
@@ -405,29 +469,6 @@ export async function submitCustomerOrder(
       (productionQtyByProductId.get(line.product_id) ?? 0) + line.qty,
     )
   }
-
-  const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
-    admin
-      .from('products')
-      .select('id, moq')
-      .in('id', productIds),
-    admin
-      .from('b2b_catalogue_items')
-      .select('source_product_id, moq_override')
-      .in('source_product_id', productIds)
-      .in('id', Array.from(grantedItemIds)),
-  ])
-  const productMoqById = new Map(
-    ((productMoqRows ?? []) as Array<{ id: string; moq: number | null }>).map(
-      (r) => [r.id, r.moq],
-    ),
-  )
-  const overrideByProductId = new Map(
-    ((catItemMoqRows ?? []) as Array<{
-      source_product_id: string
-      moq_override: number | null
-    }>).map((r) => [r.source_product_id, r.moq_override]),
-  )
   const moqViolations: MoqViolation[] = []
   // Report a violation per offending line (not per product) so the cart UI
   // can highlight every row affected, consistent with DecorationDriftError.

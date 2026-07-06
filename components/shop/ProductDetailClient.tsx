@@ -22,6 +22,7 @@ import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
 import {
   PILL_LABELS,
   effectivePermission,
+  lineFulfilment,
   orderingOptions,
   type MemberPermission,
 } from '@/lib/shop/fulfilment-mode'
@@ -931,17 +932,20 @@ export function ProductDetailClient({
             continue
           }
 
-          // Fulfilment decision: toggle choice wins for org_admin; buyer/no-toggle
-          // auto-routes backorderable to made_to_order, else stock-vs-qty.
-          const fulfilmentType: 'stocked' | 'made_to_order' = canChooseOrderIntent
-            ? orderIntent === 'bulk'
-              ? 'made_to_order'
-              : 'stocked'
-            : backorderable
-              ? 'made_to_order'
-              : tracked && lineQty > available
-                ? 'made_to_order'
-                : 'stocked'
+          // Fulfilment decision: toggle choice wins for org_admin; otherwise a
+          // line only claims a stock draw when one is actually possible —
+          // drawable product (nature × permission) + tracked cell with enough
+          // stock. Untracked cells of made_to_order products are production
+          // runs, NOT 'stocked' (fix 2026-07-06; see lineFulfilment).
+          const fulfilmentType = lineFulfilment({
+            canDrawStock: options.canDrawStock,
+            canChooseOrderIntent,
+            orderIntent,
+            tracked,
+            available,
+            backorderable,
+            lineQty,
+          })
           cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
           added += lineQty
         }
@@ -1025,15 +1029,15 @@ export function ProductDetailClient({
       return
     }
 
-    const oneSizeFulfilment: 'stocked' | 'made_to_order' = canChooseOrderIntent
-      ? orderIntent === 'bulk'
-        ? 'made_to_order'
-        : 'stocked'
-      : selectedVariantBackorderable
-        ? 'made_to_order'
-        : tracksThisVariant && qty > (availableQty ?? 0)
-          ? 'made_to_order'
-          : 'stocked'
+    const oneSizeFulfilment = lineFulfilment({
+      canDrawStock: options.canDrawStock,
+      canChooseOrderIntent,
+      orderIntent,
+      tracked: tracksThisVariant,
+      available: availableQty ?? 0,
+      backorderable: selectedVariantBackorderable,
+      lineQty: qty,
+    })
     cart.addLine({
       productId: product.id,
       productName: product.name,
