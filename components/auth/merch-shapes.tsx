@@ -167,6 +167,98 @@ export const MERCH_SHAPES: MerchShape[] = [
     textureUrl: '/merch/neon-cap.svg',
     paths: [],
   },
+  {
+    name: 'tee-blue',
+    color: '#2B3990',
+    box: { x: 9, y: 10, w: 82, h: 82 },
+    paths: [
+      {
+        id: 'body',
+        path: 'M38 10 Q50 13 62 10 L74 14 L91 22 L81 44 L72 42 V92 H28 V42 L19 44 L9 22 L26 14 Z',
+      },
+      {
+        id: 'neck',
+        fill: '#1E2326',
+        path: 'M38 10 Q50 13 62 10 Q50 24 38 10 Z',
+      },
+    ],
+  },
+  {
+    name: 'crew-yellow',
+    color: '#F1FFA5',
+    box: { x: 2, y: 10, w: 96, h: 82 },
+    paths: [
+      {
+        id: 'body',
+        path: 'M38 10 Q50 13 62 10 L74 14 L98 46 L97 78 L95 80 V88 H83 V80 L81 78 L76 46 V80 L70 84 V92 H30 V84 L24 80 V46 L19 78 L17 80 V88 H5 V80 L3 78 L2 46 L26 14 Z',
+      },
+      {
+        id: 'ribbing',
+        fill: '#D9EA70',
+        path: 'M30 84 H70 V92 H30 Z M83 80 H95 V88 H83 Z M5 80 H17 V88 H5 Z M38 10 Q50 13 62 10 Q50 29 38 10 Z',
+      },
+      {
+        id: 'neck',
+        fill: '#A4D200',
+        path: 'M41 12 Q50 15 59 12 Q50 23 41 12 Z',
+      },
+    ],
+  },
+  {
+    name: 'mug-mint',
+    color: '#BAECB7',
+    box: { x: 8, y: 8, w: 88, h: 84 },
+    paths: [
+      {
+        id: 'body',
+        path: 'M30 8 H96 L92 76 H84 L86 92 H40 L42 76 H34 L33 58 H14 L8 52 V26 L14 20 H31 Z M30 27 H18 L14 31 V47 L18 51 H30 Z',
+        fillRule: 'evenodd',
+      },
+    ],
+  },
+  {
+    name: 'bottle-charcoal',
+    color: '#1E2326',
+    box: { x: 25, y: 10, w: 50, h: 88 },
+    paths: [
+      {
+        id: 'body',
+        path: 'M34 25 H66 V30 Q75 30 75 42 V92 Q75 98 69 98 H31 Q25 98 25 92 V42 Q25 30 34 30 Z',
+      },
+      {
+        id: 'cap',
+        fill: '#F1FFA5',
+        path: 'M38 10 H62 V14 H68 V26 H32 V14 H38 Z',
+      },
+    ],
+  },
+  {
+    name: 'tote-blue',
+    color: '#2B3990',
+    box: { x: 9, y: 4, w: 82, h: 90 },
+    paths: [
+      {
+        id: 'handle',
+        path: 'M24 40 L24 14 L34 4 L66 4 L76 14 L76 40 L70 40 L70 17 L63 10 L37 10 L30 17 L30 40 Z',
+      },
+      {
+        id: 'body',
+        path: 'M12 40 H88 L91 92 Q50 96 9 92 Z',
+      },
+      {
+        id: 'dots',
+        fill: '#F1FFA5',
+        path: 'M12 56 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 M38 56 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 M68 60 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 M22 80 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 M50 80 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 M78 40 A10 10 0 0 1 58 40 Z',
+      },
+    ],
+  },
+  {
+    name: 'cap-cream',
+    color: '#F3E6CF',
+    box: { x: 7, y: 0, w: 86, h: 100 },
+    textureUrl: '/merch/neon-cap-cream.svg',
+    paths: [],
+  },
 ]
 
 function pathToSvg(shape: MerchShape, part: MerchPath): string {

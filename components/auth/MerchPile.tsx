@@ -23,16 +23,16 @@ import { MERCH_SHAPES, merchTextureUrl, MerchSvg } from './merch-shapes'
 
 // Per-shape body-size multiplier (canvas pile). Kept close to 1 so the merch
 // lands as a compressed cluster without one product dominating the heap.
-const SIZE_MULT = [1.14, 1.18, 1.04, 1.08, 1.18, 1.12]
+const SIZE_MULT = [1.14, 1.18, 1.04, 1.08, 1.18, 1.12, 1.08, 1.1, 0.98, 1.02, 1.1, 1.04]
 // Per-shape resting tilt (deg) for the static fallback pile.
-const FALLBACK_TILT = [-8, 5, -4, 7, -6, 5]
+const FALLBACK_TILT = [-8, 5, -4, 7, -6, 5, 6, -5, 8, -7, 4, -6]
 // Landing lane per shape for the sky drop, alternating centre-out. Consecutive
 // spawns land on OPPOSITE sides of centre, and the outer lanes belong to the
 // highest (last-arriving) pieces — so every piece rains onto empty floor
 // beside the settled ones. A monotonic left-to-right column instead stacked
 // each piece onto the previous one's shoulder and cascaded the heap sideways
 // into a tower.
-const DROP_LANE = [-0.5, 0.5, -1.5, 1.5, -2.5, 2.5]
+const DROP_LANE = [-0.5, 0.5, -1.5, 1.5, -2.5, 2.5, -3.3, 3.3, -2, 2, -1, 1]
 const TEXTURE_PX = 512
 // Air drag. The mouse spring has no damping of its own, so a held piece never
 // stops swaying/bobbing around a stationary cursor at the pile's low drag —
@@ -155,7 +155,7 @@ function startPile(
 
   // Body scale. The outlined shapes fill their viewBox, so a measured base
   // keeps the heap heavy and legible without pushing into the form. Below
-  // ~570px (phones) the 170px floor would swamp the screen — six ~170px slabs
+  // ~570px (phones) the 170px floor would swamp the screen — twelve ~170px slabs
   // on a ~390px viewport — so the floor gives way to 30vw there. Desktop
   // widths resolve exactly as before.
   const base = Math.max(Math.min(170, W * 0.3), Math.min(W * 0.17, 245))
