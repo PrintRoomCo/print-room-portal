@@ -468,6 +468,42 @@
   .auth-btn:hover {
     box-shadow: var(--shadow-md);
   }
+
+  .sign-in-mode-switch {
+    @apply relative mb-8 grid w-full grid-cols-2 rounded-full border-0 p-1 text-sm;
+    background: rgb(var(--color-brand-yellow));
+  }
+
+  .sign-in-mode-indicator {
+    @apply pointer-events-none absolute inset-y-0 rounded-full transition-transform duration-200 ease-spring;
+    left: 0;
+    width: 50%;
+    background: rgb(71, 123, 242);
+  }
+
+  .sign-in-mode-switch[data-mode='password'] .sign-in-mode-indicator {
+    transform: translateX(100%);
+  }
+
+  .sign-in-mode-option {
+    @apply relative z-10 rounded-full border-0 bg-transparent px-4 py-2.5 font-semibold text-black transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    --tw-ring-color: rgba(71, 123, 242, 0.45);
+  }
+
+  .sign-in-pill-field {
+    @apply rounded-full font-medium text-black;
+  }
+
+  .sign-in-submit {
+    @apply inline-flex w-full items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold text-black transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed;
+    background: rgb(71, 123, 242);
+    border-color: rgba(30, 35, 38, 0.18);
+    --tw-ring-color: rgba(71, 123, 242, 0.45);
+  }
+
+  .sign-in-submit:hover:not(:disabled) {
+    background: rgb(71, 123, 242);
+  }
 }
 
 /* ============================================

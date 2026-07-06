@@ -115,17 +115,15 @@ function SignIn() {
     <AuthScene heading="Welcome Back" headingHidden>
       <div className="w-full max-w-md">
         {/* Mode Tabs */}
-        <div className="mb-8 inline-flex w-full rounded-full border border-[hsl(var(--border))] p-1 text-sm">
+        <div className="sign-in-mode-switch" data-mode={mode}>
+          <span className="sign-in-mode-indicator" aria-hidden="true" />
           {(['code', 'password'] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => switchMode(m)}
-              className={`flex-1 rounded-full px-4 py-2 font-medium transition ${
-                mode === m
-                  ? 'bg-[rgb(var(--color-primary))] text-white'
-                  : 'text-gray-500 hover:text-gray-800'
-              }`}
+              className="sign-in-mode-option"
+              aria-pressed={mode === m}
             >
               {m === 'code' ? 'Email code' : 'Password'}
             </button>
@@ -153,7 +151,7 @@ function SignIn() {
               <div suppressHydrationWarning>
                 <label
                   htmlFor="signin-email"
-                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                  className="block text-sm font-semibold text-black mb-1.5"
                 >
                   Email <span className="text-red-500">*</span>
                 </label>
@@ -166,14 +164,14 @@ function SignIn() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="auth-field"
+                  className="auth-field sign-in-pill-field"
                   suppressHydrationWarning
                 />
               </div>
               <div>
                 <label
                   htmlFor="signin-password"
-                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                  className="block text-sm font-semibold text-black mb-1.5"
                 >
                   Password <span className="text-red-500">*</span>
                 </label>
@@ -186,14 +184,14 @@ function SignIn() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="auth-field"
+                  className="auth-field sign-in-pill-field"
                 />
               </div>
             </div>
             <div className="mt-3 text-right">
               <a
                 href="/reset-password"
-                className="text-sm text-pr-charcoal underline-offset-4 hover:underline"
+                className="text-sm font-semibold text-black underline-offset-4 hover:underline"
               >
                 Forgot password?
               </a>
@@ -208,7 +206,7 @@ function SignIn() {
                 />
               </div>
             )}
-            <button type="submit" disabled={isSubmitting} className="auth-btn mt-8">
+            <button type="submit" disabled={isSubmitting} className="sign-in-submit mt-8">
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
@@ -217,7 +215,7 @@ function SignIn() {
             <div>
               <label
                 htmlFor="signin-code-email"
-                className="block text-sm font-medium text-gray-700 mb-1.5"
+                className="block text-sm font-semibold text-black mb-1.5"
               >
                 Email <span className="text-red-500">*</span>
               </label>
@@ -230,7 +228,7 @@ function SignIn() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="auth-field"
+                className="auth-field sign-in-pill-field"
               />
             </div>
             {hcaptchaSitekey && (
@@ -243,7 +241,7 @@ function SignIn() {
                 />
               </div>
             )}
-            <button type="submit" disabled={isSubmitting || !email} className="auth-btn mt-8">
+            <button type="submit" disabled={isSubmitting || !email} className="sign-in-submit mt-8">
               {isSubmitting ? 'Sending code...' : 'Send code'}
             </button>
           </form>
@@ -288,7 +286,7 @@ function SignIn() {
             <button
               type="submit"
               disabled={isSubmitting || code.length !== 6}
-              className="auth-btn mt-8"
+              className="sign-in-submit mt-8"
             >
               {isSubmitting ? 'Verifying...' : 'Verify & sign in'}
             </button>
