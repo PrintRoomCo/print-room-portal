@@ -92,3 +92,42 @@ export function orderingOptions(
   const canReorder = productReorder && memberReorder
   return { canDrawStock, canReorder, deadZone: !canDrawStock && !canReorder }
 }
+
+/** Context for the per-line fulfilment decision on the PDP add-to-cart paths. */
+export interface LineFulfilmentContext {
+  /** orderingOptions().canDrawStock — product nature × member permission. */
+  canDrawStock: boolean
+  /** True when the PDP offers the From-inventory / Reorder toggle for this selection. */
+  canChooseOrderIntent: boolean
+  /** The toggle's current value; ignored when there is no toggle. */
+  orderIntent: 'inventory' | 'bulk'
+  /** This (colourway, size) cell has an inventory row (variant_inventory). */
+  tracked: boolean
+  /** Available qty for the cell; 0 when untracked. */
+  available: number
+  /** allow_order_without_stock for the cell. */
+  backorderable: boolean
+  /** Requested quantity for this line. */
+  lineQty: number
+}
+
+/**
+ * Which fulfilment a cart line should claim. 'stocked' is a stock-DRAW claim:
+ * it exempts the line from MOQ and trips the Xero draws_stock gate at submit,
+ * so it may only be claimed when a draw is actually possible — the viewer can
+ * draw this product (nature stocked/mixed × member permission) AND either the
+ * org_admin toggle chose From-inventory or the cell is tracked with enough
+ * stock. Everything else is a production run. Mirrors submit_b2b_order, which
+ * never draws on-hand stock for made_to_order/pre_order natures. (Fix 2026-07-06:
+ * the old inline ternary DEFAULTED to 'stocked', mis-tagging untracked
+ * made_to_order lines and blocking Xero auto-drafts.)
+ */
+export function lineFulfilment(ctx: LineFulfilmentContext): 'stocked' | 'made_to_order' {
+  if (ctx.canChooseOrderIntent) {
+    return ctx.orderIntent === 'bulk' ? 'made_to_order' : 'stocked'
+  }
+  if (!ctx.canDrawStock) return 'made_to_order'
+  if (ctx.backorderable) return 'made_to_order'
+  if (ctx.tracked) return ctx.lineQty > ctx.available ? 'made_to_order' : 'stocked'
+  return 'made_to_order'
+}
