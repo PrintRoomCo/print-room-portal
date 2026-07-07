@@ -77,10 +77,9 @@ export async function sendTrackerStatusEmail(
       : ''
 
   const body = `
-            <p style="margin:0 0 10px;font-family:${BRAND_FONT};font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">Order update</p>
             <h1 class="b-h1" style="margin:0 0 18px;font-family:${BRAND_FONT};font-size:30px;line-height:1.12;font-weight:700;letter-spacing:-0.02em;color:${INK};">Your order status has changed</h1>
 
-            <p style="margin:0 0 4px;${LABEL_STYLE}">Your reference</p>
+            <p style="margin:0 0 4px;${LABEL_STYLE}text-transform:none;">Your Reference</p>
             <p style="margin:0 0 ${subLine ? 6 : 24}px;font-family:${BRAND_MONO};font-size:18px;font-weight:700;letter-spacing:0.02em;color:${BRAND_ACCENT};">${safeRef}</p>${subLine}
 
             <p style="margin:0 0 26px;font-family:${BRAND_FONT};font-size:15px;line-height:1.65;color:${BODY};">Kia ora — your order is now <strong style="color:${INK};font-weight:700;">${safeStatus}</strong>. Follow the tracker any time to see the latest.</p>
