@@ -292,6 +292,14 @@ function SignIn() {
             </button>
           </form>
         )}
+
+        <a
+          href="/api/demo/enter"
+          className="sign-in-submit mt-4"
+          style={{ textAlign: 'center', display: 'block' }}
+        >
+          Explore the demo
+        </a>
       </div>
     </AuthScene>
   )
