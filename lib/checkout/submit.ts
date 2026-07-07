@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
+import { resolveOrderEmailRecipient } from './order-email-recipient'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
@@ -1571,8 +1572,16 @@ export async function submitCustomerOrder(
         emailTotalAmount ??
         repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
 
+      const { data: emailOrgFlag } = await admin
+        .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
+      const emailRecipient = resolveOrderEmailRecipient({
+        isTestOrg: Boolean((emailOrgFlag as { is_test?: boolean } | null)?.is_test),
+        customerEmail: input.context.email,
+        testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+      })
+
       const result = await sendOrderConfirmation({
-        to: input.context.email,
+        to: emailRecipient,
         customerName: emailCustomerName,
         orderId: order_id,
         orderRef: order_ref,
