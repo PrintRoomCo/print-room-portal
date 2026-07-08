@@ -50,6 +50,8 @@ function SignIn() {
   const errorMessages: Record<string, string> = {
     access_denied: 'Your account could not be verified. Please contact support if this persists.',
     unauthorized: 'You do not have access to this portal. Please contact your account manager.',
+    demo_unavailable: 'The demo is temporarily unavailable. Please try again shortly.',
+    demo_failed: 'Could not start the demo session. Please try again.',
   }
 
   const displayError =
