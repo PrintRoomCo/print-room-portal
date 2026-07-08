@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
+import { resolveOrderEmailRecipient } from './order-email-recipient'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
@@ -1571,8 +1572,20 @@ export async function submitCustomerOrder(
         emailTotalAmount ??
         repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
 
+      const { data: emailOrgFlag, error: emailOrgErr } = await admin
+        .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
+      // Fail closed: if we can't confirm is_test, route to the test inbox rather than risk emailing a real customer.
+      const isTestOrgForEmail = emailOrgErr
+        ? true
+        : Boolean((emailOrgFlag as { is_test?: boolean } | null)?.is_test)
+      const emailRecipient = resolveOrderEmailRecipient({
+        isTestOrg: isTestOrgForEmail,
+        customerEmail: input.context.email,
+        testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+      })
+
       const result = await sendOrderConfirmation({
-        to: input.context.email,
+        to: emailRecipient,
         customerName: emailCustomerName,
         orderId: order_id,
         orderRef: order_ref,
