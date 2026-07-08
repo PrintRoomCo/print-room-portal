@@ -1572,10 +1572,14 @@ export async function submitCustomerOrder(
         emailTotalAmount ??
         repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
 
-      const { data: emailOrgFlag } = await admin
+      const { data: emailOrgFlag, error: emailOrgErr } = await admin
         .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
+      // Fail closed: if we can't confirm is_test, route to the test inbox rather than risk emailing a real customer.
+      const isTestOrgForEmail = emailOrgErr
+        ? true
+        : Boolean((emailOrgFlag as { is_test?: boolean } | null)?.is_test)
       const emailRecipient = resolveOrderEmailRecipient({
-        isTestOrg: Boolean((emailOrgFlag as { is_test?: boolean } | null)?.is_test),
+        isTestOrg: isTestOrgForEmail,
         customerEmail: input.context.email,
         testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
       })
