@@ -6,23 +6,26 @@ import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { usePortalDrawer } from './PortalTopBarContext'
 import type { B2BCustomerAccess } from '@/types/company'
-import { PORTAL_NAV_ITEMS, getNavigationItems, type PortalNavItem, type NavIconKey } from '@/lib/nav/portal-nav'
+import { getNavigationItems, type PortalNavItem, type NavIconKey } from '@/lib/nav/portal-nav'
 
 interface SidebarProps {
   children: React.ReactNode
   customer: B2BCustomerAccess
 }
 
-// Identifiers for the four hand-drawn rows rendered inside the inline SVG
-// menu. Order = display order. Anything in `PORTAL_NAV_ITEMS` not listed here
-// (e.g. Leavers Quotes, Inventory) falls back to a classic Link row beneath the SVG.
-type SvgRowId = 'tracking' | 'catalogue' | 'orders' | 'proofs'
-const SVG_ROWS: ReadonlyArray<{ id: SvgRowId; label: string; href: string }> = [
-  { id: 'tracking',  label: 'Tracking',  href: '/tracking' },
-  { id: 'catalogue', label: 'Catalogue', href: '/catalogue' },
-  { id: 'orders',    label: 'Orders',    href: '/my-collections' },
-  { id: 'proofs',    label: 'Proofs',    href: '/proofs' },
-]
+// Identifiers for nav items rendered inside the hand-drawn inline SVG menu.
+// Display order comes from PORTAL_NAV_ITEMS so the nav model stays canonical.
+type SvgRowId = Extract<NavIconKey, 'tracking' | 'catalogue' | 'orders' | 'proofs'>
+const SVG_ROW_IDS: ReadonlySet<NavIconKey> = new Set([
+  'tracking',
+  'catalogue',
+  'orders',
+  'proofs',
+])
+
+function isSvgRowItem(item: PortalNavItem): item is PortalNavItem & { iconKey: SvgRowId } {
+  return SVG_ROW_IDS.has(item.iconKey)
+}
 
 export function Sidebar({ children, customer }: SidebarProps) {
   const pathname = usePathname() ?? ''
@@ -36,19 +39,19 @@ export function Sidebar({ children, customer }: SidebarProps) {
 
   // SVG menu rows the current user is allowed to see. Permission gating
   // flows through `navigation` (already filtered by getNavigationItems).
-  const visibleRows = SVG_ROWS
-    .filter((row) => navigation.some((n) => n.href === row.href))
-    .map((row) => ({
-      ...row,
+  const visibleRows = navigation
+    .filter(isSvgRowItem)
+    .map((item) => ({
+      id: item.iconKey,
+      label: item.name,
+      href: item.href,
       isActive:
-        pathname === row.href || pathname.startsWith(row.href + '/'),
+        pathname === item.href || pathname.startsWith(item.href + '/'),
     }))
 
   // Anything else still in `navigation` (e.g. Leavers Quotes) renders as
   // a classic Link below the SVG so we don't drop it silently.
-  const extraItems = navigation.filter(
-    (n) => !SVG_ROWS.some((r) => r.href === n.href),
-  )
+  const extraItems = navigation.filter((item) => !isSvgRowItem(item))
 
   // Row geometry (SVG units = viewBox).
   // - 80-tall rows give icons room to read and a 64-tall hit area, which

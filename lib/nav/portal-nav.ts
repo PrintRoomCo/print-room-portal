@@ -31,19 +31,19 @@ export interface NavAccess {
 // Sidebar's extraItems list — that's the path Leavers Quotes and Inventory take.
 export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
   {
-    name: 'Tracking',
-    href: '/tracking',
-    iconKey: 'tracking',
-    requiresCompany: false,
+    name: 'Catalogue',
+    href: '/catalogue',
+    iconKey: 'catalogue',
+    requiresCompany: true,
     requiresLeavers: false,
     requiresOrgAdmin: false,
     requiredTenantTypes: null,
   },
   {
-    name: 'Catalogue',
-    href: '/catalogue',
-    iconKey: 'catalogue',
-    requiresCompany: true,
+    name: 'Tracking',
+    href: '/tracking',
+    iconKey: 'tracking',
+    requiresCompany: false,
     requiresLeavers: false,
     requiresOrgAdmin: false,
     requiredTenantTypes: null,
