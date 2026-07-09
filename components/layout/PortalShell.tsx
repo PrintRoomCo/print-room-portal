@@ -1,6 +1,9 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Sidebar } from './Sidebar'
+import { useAuth } from '@/contexts/AuthContext'
 import { useCompany } from '@/contexts/CompanyContext'
 import { RoleChangeNotice } from './RoleChangeNotice'
 import { PortalTopBar } from './PortalTopBar'
@@ -9,7 +12,20 @@ import { CartDrawer } from '@/components/cart/CartDrawer'
 import { CartAddedToasts } from '@/components/cart/CartAddedToasts'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
-  const { access } = useCompany()
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
+  const { access, loading: companyLoading } = useCompany()
+  const signedOutWithoutAccess = !authLoading && !user && !access
+
+  useEffect(() => {
+    if (signedOutWithoutAccess) {
+      router.replace('/sign-in')
+    }
+  }, [router, signedOutWithoutAccess])
+
+  if ((authLoading || companyLoading || signedOutWithoutAccess) && !access) {
+    return null
+  }
 
   if (!access) {
     return (
