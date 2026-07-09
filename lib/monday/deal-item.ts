@@ -16,7 +16,12 @@
 
 import { mondayApiCall } from './client'
 import type { MondayCreateItemResponse } from './types'
-import { PRODUCTION_BOARD_ID, PRODUCTION_COLUMNS } from './column-ids'
+import {
+  PRODUCTION_BOARD_ID,
+  PRODUCTION_COLUMNS,
+  PRODUCTION_SUBITEM_COLUMNS,
+  type ProductionSubitemSizeKey,
+} from './column-ids'
 import type { JobTracker, QuoteDataItem } from '@/lib/job-tracker'
 import {
   getItemColorName,
@@ -381,6 +386,8 @@ export interface OrderLineForMonday {
   quoteItemId: string
   productName: string
   variantLabel: string
+  colorName: string | null
+  sizeLabel: string | null
   /**
    * Decoration name. Defaults to "No decoration" when the line has no
    * decorations attached (resolved at the caller, not here).
@@ -503,11 +510,91 @@ export async function createOrderDealItem(
   return { itemId: result.create_item.id, itemName: result.create_item.name }
 }
 
+// Maps portal size labels (quote_items.size_label, i.e. sizes.label) onto the
+// Subitems board's size columns (PRODUCTION_SUBITEM_COLUMNS.sizes). Keys are
+// matched UPPER-CASED (see normalizeSizeLabel). The board's size columns are
+// dual-labelled ("XXS / 6", "SML / 10", "MED / 12", …), so numeric AU/women's
+// sizes route onto the same column as their letter equivalent — verified
+// against board 1992701983 (2026-07-09).
+const SIZE_LABEL_ALIASES: Record<string, ProductionSubitemSizeKey> = {
+  // One-size / sizeless variants → "One Size"
+  OS: 'ONE',
+  'O/S': 'ONE',
+  'ONE SIZE': 'ONE',
+  ONESIZE: 'ONE',
+  '1SIZE': 'ONE',
+  // Extra-small letter aliases (board column is "XXS / 6")
+  '2XS': 'XXS',
+  // Numeric AU/women's sizing → the board's dual-labelled letter columns.
+  '6': 'XXS',
+  '8': 'XS',
+  '10': 'S',
+  '12': 'M',
+  '14': 'L',
+  '16': 'XL',
+  '18': '2XL',
+  '20': '3XL',
+  '22': '4XL',
+  '24': '5XL',
+  // Extra-large letter aliases
+  '2XL': '2XL',
+  XXL: '2XL',
+  '3XL': '3XL',
+  XXXL: '3XL',
+  '4XL': '4XL',
+  XXXXL: '4XL',
+  '5XL': '5XL',
+  XXXXXL: '5XL',
+  // Kids age/shoe ranges carrying a country suffix (columns are "4-8" / "9-13")
+  '4-8 US': '4-8',
+  '9-13 US': '9-13',
+}
+
+function normalizeSizeLabel(
+  sizeLabel: string | null,
+): ProductionSubitemSizeKey {
+  const raw = sizeLabel?.trim()
+  if (!raw) return 'ONE'
+  const upper = raw.toUpperCase()
+  if (upper in SIZE_LABEL_ALIASES) return SIZE_LABEL_ALIASES[upper]
+  if (upper in PRODUCTION_SUBITEM_COLUMNS.sizes) {
+    return upper as ProductionSubitemSizeKey
+  }
+  // No matching size column exists on the Subitems board, so the quantity will
+  // land in "One Size" — almost always wrong (e.g. 7XL, workwear cm sizes,
+  // waist sizes). Warn so an unmapped size surfaces instead of silently
+  // corrupting the production board; add an alias above if it has a home.
+  console.warn(
+    `[Monday Order] Unmapped size label "${raw}" — quantity routed to the "One Size" column. Add an alias to SIZE_LABEL_ALIASES if this size maps to a board column.`,
+  )
+  return 'ONE'
+}
+
+function buildOrderSubitemColumnValues(
+  line: OrderLineForMonday,
+): Record<string, unknown> {
+  const columnValues: Record<string, unknown> = {
+    [PRODUCTION_SUBITEM_COLUMNS.fallbackGarment]: line.productName,
+  }
+
+  if (line.colorName?.trim()) {
+    columnValues[PRODUCTION_SUBITEM_COLUMNS.fallbackColor] = line.colorName.trim()
+  }
+
+  if (Number.isFinite(line.quantity) && line.quantity > 0) {
+    const sizeKey = normalizeSizeLabel(line.sizeLabel)
+    columnValues[PRODUCTION_SUBITEM_COLUMNS.sizes[sizeKey]] = line.quantity
+  }
+
+  return columnValues
+}
+
 export async function createOrderDealSubitem(
   parentItemId: string,
   line: OrderLineForMonday,
 ): Promise<{ subitemId: string }> {
-  const itemName = `${line.designName}: ${line.productName} — ${line.variantLabel} × ${line.quantity}`
+  const itemName = `${line.designName}: ${line.productName}`
+  const columnValues = buildOrderSubitemColumnValues(line)
 
   const mutation = `
     mutation CreateOrderSubitem($parentItemId: ID!, $itemName: String!, $columnValues: JSON) {
@@ -520,7 +607,7 @@ export async function createOrderDealSubitem(
   const result = await mondayApiCall<MondayCreateSubitemResponse>(mutation, {
     parentItemId,
     itemName,
-    columnValues: JSON.stringify({}),
+    columnValues: JSON.stringify(columnValues),
   })
   return { subitemId: result.create_subitem.id }
 }

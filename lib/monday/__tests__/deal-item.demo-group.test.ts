@@ -24,6 +24,8 @@ const fixture: OrderDealData = {
       quoteItemId: 'qi-1',
       productName: 'Basic Tee',
       variantLabel: 'Black / M',
+      colorName: 'Black',
+      sizeLabel: 'M',
       designName: 'No decoration',
       quantity: 5,
     },

@@ -1249,6 +1249,8 @@ export async function submitCustomerOrder(
         quoteItemId: row.id,
         productName: row.product_name,
         variantLabel,
+        colorName: swatch?.label ?? null,
+        sizeLabel: row.size_label,
         designName,
         quantity: row.quantity,
       }

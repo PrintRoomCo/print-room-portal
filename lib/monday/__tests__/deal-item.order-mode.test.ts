@@ -7,7 +7,11 @@ vi.mock('../client', () => ({
 
 import { mondayApiCall } from '../client'
 import { pushOrderDeal, type OrderDealData } from '../deal-item'
-import { PRODUCTION_BOARD_ID, PRODUCTION_COLUMNS } from '../column-ids'
+import {
+  PRODUCTION_BOARD_ID,
+  PRODUCTION_COLUMNS,
+  PRODUCTION_SUBITEM_COLUMNS,
+} from '../column-ids'
 
 const mockedCall = vi.mocked(mondayApiCall)
 
@@ -24,6 +28,8 @@ const fixture: OrderDealData = {
       quoteItemId: 'qi-1',
       productName: 'Basic Tee',
       variantLabel: 'Black / M',
+      colorName: 'Black',
+      sizeLabel: 'M',
       designName: 'Logo Front',
       quantity: 10,
     },
@@ -31,6 +37,8 @@ const fixture: OrderDealData = {
       quoteItemId: 'qi-2',
       productName: 'Heavy Hood',
       variantLabel: 'Navy / L',
+      colorName: 'Navy',
+      sizeLabel: 'L',
       designName: 'Crew Back',
       quantity: 5,
     },
@@ -38,6 +46,8 @@ const fixture: OrderDealData = {
       quoteItemId: 'qi-3',
       productName: 'Cap',
       variantLabel: 'OS',
+      colorName: null,
+      sizeLabel: 'OS',
       designName: 'No decoration',
       quantity: 20,
     },
@@ -131,7 +141,7 @@ describe('pushOrderDeal — Production column mapping', () => {
 })
 
 describe('pushOrderDeal — subitem per line', () => {
-  it('calls create_subitem once per line with design-prefixed names', async () => {
+  it('calls create_subitem once per line with compact design-prefixed names', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
 
@@ -140,9 +150,114 @@ describe('pushOrderDeal — subitem per line', () => {
     const subitemCalls = mockedCall.mock.calls.slice(1)
     expect(subitemCalls).toHaveLength(3)
     const names = subitemCalls.map((c) => (c[1] as { itemName: string }).itemName)
-    expect(names[0]).toBe('Logo Front: Basic Tee — Black / M × 10')
-    expect(names[1]).toBe('Crew Back: Heavy Hood — Navy / L × 5')
-    expect(names[2]).toBe('No decoration: Cap — OS × 20')
+    expect(names[0]).toBe('Logo Front: Basic Tee')
+    expect(names[1]).toBe('Crew Back: Heavy Hood')
+    expect(names[2]).toBe('No decoration: Cap')
+  })
+
+  it('maps product colour, size, and quantity to Production subitem columns', async () => {
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+
+    await pushOrderDeal(fixture)
+
+    const firstSubitemVars = mockedCall.mock.calls[1][1] as {
+      columnValues: string
+    }
+    const firstCv = JSON.parse(firstSubitemVars.columnValues)
+    expect(firstCv[PRODUCTION_SUBITEM_COLUMNS.fallbackGarment]).toBe('Basic Tee')
+    expect(firstCv[PRODUCTION_SUBITEM_COLUMNS.fallbackColor]).toBe('Black')
+    expect(firstCv[PRODUCTION_SUBITEM_COLUMNS.sizes.M]).toBe(10)
+
+    const oneSizeSubitemVars = mockedCall.mock.calls[3][1] as {
+      columnValues: string
+    }
+    const oneSizeCv = JSON.parse(oneSizeSubitemVars.columnValues)
+    expect(oneSizeCv[PRODUCTION_SUBITEM_COLUMNS.fallbackGarment]).toBe('Cap')
+    expect(oneSizeCv[PRODUCTION_SUBITEM_COLUMNS.fallbackColor]).toBeUndefined()
+    expect(oneSizeCv[PRODUCTION_SUBITEM_COLUMNS.sizes.ONE]).toBe(20)
+  })
+})
+
+describe('pushOrderDeal — size label normalization', () => {
+  const CASES: Array<{
+    sizeLabel: string
+    sizeKey: keyof typeof PRODUCTION_SUBITEM_COLUMNS.sizes
+  }> = [
+    // Numeric AU/women's sizing → board's dual-labelled letter columns.
+    { sizeLabel: '6', sizeKey: 'XXS' },
+    { sizeLabel: '8', sizeKey: 'XS' },
+    { sizeLabel: '10', sizeKey: 'S' },
+    { sizeLabel: '12', sizeKey: 'M' },
+    { sizeLabel: '14', sizeKey: 'L' },
+    { sizeLabel: '16', sizeKey: 'XL' },
+    { sizeLabel: '18', sizeKey: '2XL' },
+    { sizeLabel: '20', sizeKey: '3XL' },
+    { sizeLabel: '22', sizeKey: '4XL' },
+    { sizeLabel: '24', sizeKey: '5XL' },
+    // Letter aliases and suffixed kids ranges.
+    { sizeLabel: '2XS', sizeKey: 'XXS' },
+    { sizeLabel: 'XXL', sizeKey: '2XL' },
+    { sizeLabel: '4-8 US', sizeKey: '4-8' },
+    { sizeLabel: '9-13 US', sizeKey: '9-13' },
+  ]
+
+  it('routes numeric, alias, and suffixed sizes onto the correct size columns', async () => {
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+
+    await pushOrderDeal({
+      ...fixture,
+      lines: CASES.map((c, i) => ({
+        quoteItemId: `qi-${i}`,
+        productName: 'Tee',
+        variantLabel: c.sizeLabel,
+        colorName: null,
+        sizeLabel: c.sizeLabel,
+        designName: 'D',
+        quantity: i + 1,
+      })),
+    })
+
+    const subitemCalls = mockedCall.mock.calls.slice(1)
+    expect(subitemCalls).toHaveLength(CASES.length)
+    subitemCalls.forEach((call, i) => {
+      const cv = JSON.parse((call[1] as { columnValues: string }).columnValues)
+      const expectedColumn = PRODUCTION_SUBITEM_COLUMNS.sizes[CASES[i].sizeKey]
+      // Only the matched size column carries the quantity; nothing leaks to ONE.
+      expect(cv[expectedColumn]).toBe(i + 1)
+      if (CASES[i].sizeKey !== 'ONE') {
+        expect(cv[PRODUCTION_SUBITEM_COLUMNS.sizes.ONE]).toBeUndefined()
+      }
+    })
+  })
+
+  it('falls back to One Size and warns for a size with no board column', async () => {
+    mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+    mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await pushOrderDeal({
+      ...fixture,
+      lines: [
+        {
+          quoteItemId: 'qi-1',
+          productName: 'Hi-Vis',
+          variantLabel: '7XL',
+          colorName: null,
+          sizeLabel: '7XL',
+          designName: 'D',
+          quantity: 3,
+        },
+      ],
+    })
+
+    const cv = JSON.parse(
+      (mockedCall.mock.calls[1][1] as { columnValues: string }).columnValues,
+    )
+    expect(cv[PRODUCTION_SUBITEM_COLUMNS.sizes.ONE]).toBe(3)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('7XL'))
+    warn.mockRestore()
   })
 })
 
