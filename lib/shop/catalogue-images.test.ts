@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pickCatalogueColourThumbnail,
   pickCatalogueItemThumbnail,
   pickPreferredGalleryImageUrl,
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
+  type CatalogueItemImageRow,
 } from './catalogue-images'
 
 const baseImages: CatalogueAwareGalleryImage[] = [
@@ -496,5 +498,144 @@ describe('pickCatalogueItemThumbnail', () => {
         { catalogue_item_id: 'item-1', view: 'front', source: 'staff_upload', position: 0, image_url: '/lead-front.png', color_swatch_id: 'lead' },
       ], 'lead'),
     ).toBe('/lead-front.png')
+  })
+})
+
+const catalogueItemRow = (
+  overrides: Partial<CatalogueItemImageRow>,
+): CatalogueItemImageRow => ({
+  catalogue_item_id: 'item-1',
+  view: 'front',
+  source: 'staff_upload',
+  position: 0,
+  image_url: '/front.png',
+  color_swatch_id: null,
+  ...overrides,
+})
+
+describe('pickCatalogueColourThumbnail', () => {
+  it('prefers the selected-colour front over all-colours front and detail rows', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'navy',
+        swatchImageUrl: '/swatch-navy.png',
+        rows: [
+          catalogueItemRow({
+            view: 'front',
+            position: 0,
+            image_url: '/all-front.png',
+            color_swatch_id: null,
+          }),
+          catalogueItemRow({
+            view: 'detail-1',
+            position: 1,
+            image_url: '/all-detail.png',
+            color_swatch_id: null,
+          }),
+          catalogueItemRow({
+            view: 'front',
+            position: 99,
+            image_url: '/navy-front.png',
+            color_swatch_id: 'navy',
+          }),
+        ],
+      }),
+    ).toBe('/navy-front.png')
+  })
+
+  it('uses the swatch image when the selected colour has no catalogue front row', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'white',
+        swatchImageUrl: '/swatch-white.png',
+        rows: [
+          catalogueItemRow({
+            view: 'front',
+            image_url: '/all-front.png',
+            color_swatch_id: null,
+          }),
+          catalogueItemRow({
+            view: 'front',
+            image_url: '/black-front.png',
+            color_swatch_id: 'black',
+          }),
+        ],
+      }),
+    ).toBe('/swatch-white.png')
+  })
+
+  it('does not let a selected-colour detail row beat the swatch image', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'navy',
+        swatchImageUrl: '/swatch-navy.png',
+        rows: [
+          catalogueItemRow({
+            view: 'detail-1',
+            position: 0,
+            image_url: '/navy-detail.png',
+            color_swatch_id: 'navy',
+          }),
+        ],
+      }),
+    ).toBe('/swatch-navy.png')
+  })
+
+  it('uses a generic catalogue front only after selected and swatch thumbnails fail', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'white',
+        swatchImageUrl: null,
+        rows: [
+          catalogueItemRow({
+            view: 'back',
+            image_url: '/white-back.png',
+            color_swatch_id: 'white',
+          }),
+          catalogueItemRow({
+            view: 'front',
+            image_url: '/all-front.png',
+            color_swatch_id: null,
+          }),
+        ],
+      }),
+    ).toBe('/all-front.png')
+  })
+
+  it('does not treat a generic detail row as a generic front fallback', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'white',
+        swatchImageUrl: null,
+        rows: [
+          catalogueItemRow({
+            view: 'detail-1',
+            image_url: '/all-detail.png',
+            color_swatch_id: null,
+          }),
+        ],
+      }),
+    ).toBe('/product.png')
+  })
+
+  it('falls back to the product image after selected, swatch, and generic fronts fail', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'white',
+        rows: [
+          catalogueItemRow({
+            view: 'back',
+            image_url: '/all-back.png',
+            color_swatch_id: null,
+          }),
+        ],
+      }),
+    ).toBe('/product.png')
   })
 })

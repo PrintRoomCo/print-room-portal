@@ -12,7 +12,11 @@ import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { effectiveFulfilment, matchesMode, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
-import { pickCatalogueItemThumbnail, type CatalogueItemImageRow } from '@/lib/shop/catalogue-images'
+import {
+  pickCatalogueColourThumbnail,
+  pickCatalogueItemThumbnail,
+  type CatalogueItemImageRow,
+} from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 
@@ -42,6 +46,23 @@ interface ProductRow {
   garment_family: string | null
   moq: number | null
   created_at: string | null
+}
+
+type CatalogueSwatchEmbed = {
+  hex: string | null
+  label: string | null
+  position: number | null
+  image_url: string | null
+}
+
+type CatalogueSwatchRow = {
+  catalogue_item_id: string
+  sort_order: number | null
+  color_swatch_id: string | null
+  product_color_swatches:
+    | CatalogueSwatchEmbed
+    | CatalogueSwatchEmbed[]
+    | null
 }
 
 async function loadCatalogueFloorQty(admin: SupabaseClient): Promise<number> {
@@ -283,23 +304,16 @@ export default async function CataloguePage({
       ? admin
           .from('b2b_catalogue_item_colors')
           .select(
-            'catalogue_item_id, sort_order, color_swatch_id, product_color_swatches(hex, label, position)',
+            'catalogue_item_id, sort_order, color_swatch_id, product_color_swatches(hex, label, position, image_url)',
           )
           .in('catalogue_item_id', scopedItemIds)
           .order('sort_order', { ascending: true, nullsFirst: false })
       : Promise.resolve({
-          data: [] as Array<{
-            catalogue_item_id: string
-            sort_order: number | null
-            color_swatch_id: string | null
-            product_color_swatches:
-              | { hex: string | null; label: string | null; position: number | null }
-              | { hex: string | null; label: string | null; position: number | null }[]
-              | null
-          }>,
+          data: [] as CatalogueSwatchRow[],
         }),
   ])
 
+  const productImageById = new Map(rows.map((row) => [row.id, row.image_url]))
   const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
   for (const row of (catalogueImageRows ?? []) as CatalogueItemImageRow[]) {
     const productId = productIdByItemId.get(row.catalogue_item_id)
@@ -379,15 +393,7 @@ export default async function CataloguePage({
     Array<{ swatchId: string; label: string | null; hex: string | null; imageUrl: string | null }>
   >()
   const seenSwatchHexByProduct = new Map<string, Set<string>>()
-  for (const r of (swatchRows ?? []) as Array<{
-    catalogue_item_id: string
-    sort_order: number | null
-    color_swatch_id: string | null
-    product_color_swatches:
-      | { hex: string | null; label: string | null; position: number | null }
-      | { hex: string | null; label: string | null; position: number | null }[]
-      | null
-  }>) {
+  for (const r of (swatchRows ?? []) as CatalogueSwatchRow[]) {
     const productId = productIdByItemId.get(r.catalogue_item_id)
     if (!productId || !r.color_swatch_id) continue
     const swatch = Array.isArray(r.product_color_swatches)
@@ -404,11 +410,12 @@ export default async function CataloguePage({
       swatchId: r.color_swatch_id,
       label: swatch.label,
       hex: swatch.hex,
-      imageUrl: pickCatalogueItemThumbnail(
-        null,
-        imagesByProduct.get(productId) ?? [],
-        r.color_swatch_id,
-      ),
+      imageUrl: pickCatalogueColourThumbnail({
+        fallbackUrl: productImageById.get(productId) ?? null,
+        rows: imagesByProduct.get(productId) ?? [],
+        selectedColorSwatchId: r.color_swatch_id,
+        swatchImageUrl: swatch.image_url,
+      }),
     })
     coloursByProductForGrid.set(productId, list)
   }

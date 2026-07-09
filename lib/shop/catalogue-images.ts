@@ -28,6 +28,10 @@ export interface CardFallbackImage {
   image_url: string | null
 }
 
+function sortByPosition<T extends { position?: number | null }>(arr: T[]): T[] {
+  return arr.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+}
+
 /**
  * Snapshot-excluded, per-colour-aware card derive. The SINGLE source of card
  * fallback ordering, replicated identically in print-room-staff-portal and locked
@@ -46,14 +50,12 @@ export function deriveCardImageUrl(args: {
 }): string | null {
   const { images, leadColorSwatchId, masterImageUrl, normalizeView } = args
   const isFront = (v: string | null) => normalizeView(v) === 'front'
-  const byPos = (arr: CardFallbackImage[]) =>
-    arr.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
   const eligible = images.filter((i) => i.image_url && i.source !== 'designer_snapshot')
-  const allColours = byPos(eligible.filter((i) => i.color_swatch_id == null))
+  const allColours = sortByPosition(eligible.filter((i) => i.color_swatch_id == null))
   const acFront = allColours.find((i) => isFront(i.view))
   if (acFront?.image_url) return acFront.image_url
   if (leadColorSwatchId) {
-    const leadFront = byPos(
+    const leadFront = sortByPosition(
       eligible.filter((i) => i.color_swatch_id === leadColorSwatchId && isFront(i.view)),
     )[0]
     if (leadFront?.image_url) return leadFront.image_url
@@ -79,6 +81,45 @@ export function pickCatalogueItemThumbnail(
     masterImageUrl: fallbackUrl,
     normalizeView: (v) => normalizeCatalogueImageView(v),
   })
+}
+
+export function pickCatalogueColourThumbnail(args: {
+  fallbackUrl: string | null
+  rows: CatalogueItemImageRow[]
+  selectedColorSwatchId: string | null
+  swatchImageUrl?: string | null
+}): string | null {
+  const {
+    fallbackUrl,
+    rows,
+    selectedColorSwatchId,
+    swatchImageUrl = null,
+  } = args
+  const frontRows = sortByPosition(
+    rows
+      .filter((row) => row.image_url)
+      .filter((row) => isStrictFrontView(row.view, row.image_url)),
+  )
+
+  if (selectedColorSwatchId) {
+    const selectedFront = frontRows.find(
+      (row) => row.color_swatch_id === selectedColorSwatchId,
+    )
+    if (selectedFront?.image_url) return selectedFront.image_url
+  }
+
+  if (swatchImageUrl) return swatchImageUrl
+
+  const genericFront = frontRows.find((row) => row.color_swatch_id == null)
+  if (genericFront?.image_url) return genericFront.image_url
+
+  return fallbackUrl ?? null
+}
+
+function isStrictFrontView(view: string | null, imageUrl: string | null): boolean {
+  const key = (view ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (/^detail_?\d+$/.test(key)) return false
+  return normalizeCatalogueImageView(view, imageUrl) === 'front'
 }
 
 export function resolveGalleryImagesForColour(
