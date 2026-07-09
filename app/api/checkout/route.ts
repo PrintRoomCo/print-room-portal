@@ -5,6 +5,7 @@ import {
   BuyerScopeError,
   DecorationDriftError,
   MemberAccessDriftError,
+  MixedShippingAddressError,
   MoqViolationError,
   StockShortfallError,
   UnitPriceDriftError,
@@ -143,6 +144,15 @@ export async function POST(request: Request) {
           },
         },
         { status: 409 },
+      )
+    }
+    if (e instanceof MixedShippingAddressError) {
+      return NextResponse.json(
+        {
+          error:
+            'Mixed per-line custom ship-to addresses not supported in v1. Save each address as a store first.',
+        },
+        { status: 400 },
       )
     }
     if (e instanceof StockShortfallError) {

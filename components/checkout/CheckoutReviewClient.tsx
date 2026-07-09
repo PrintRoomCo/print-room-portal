@@ -104,7 +104,7 @@ export function CheckoutReviewClient({
       if (!address.address || !address.city || !address.country) {
         setBanner({
           kind: 'error',
-          msg: 'Custom shipping address is incomplete. Go back to checkout and fill in the required fields.',
+          msg: 'One-time shipping address is incomplete. Go back to checkout and fill in the required fields.',
         })
         return
       }
@@ -475,7 +475,7 @@ export function CheckoutReviewClient({
             </div>
           ) : allCustom ? (
             <div>
-              <dt className="text-gray-500">Custom shipping address</dt>
+              <dt className="text-gray-500">One-time shipping address</dt>
               <dd className="mt-1 text-gray-900">
                 {[
                   reviewState.customAddress.name,

@@ -169,6 +169,7 @@ export interface QuoteData {
     company?: string
     street?: string
     city?: string
+    state?: string
     country?: string
     postalCode?: string
   }

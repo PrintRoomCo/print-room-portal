@@ -58,7 +58,13 @@ beforeEach(() => {
   mocks.push.mockClear()
   mocks.updateLine.mockClear()
   mocks.removeLine.mockClear()
-  vi.stubGlobal('fetch', vi.fn())
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imagesByLineId: {} }),
+    }),
+  )
 })
 
 describe('CheckoutClient review step', () => {
@@ -79,7 +85,9 @@ describe('CheckoutClient review step', () => {
     await user.click(screen.getByRole('button', { name: /review order/i }))
 
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
-    expect(fetch).not.toHaveBeenCalled()
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input]) => String(input) === '/api/checkout'),
+    ).toBe(false)
 
     const raw = sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY)
     expect(raw).toBeTruthy()
@@ -145,6 +153,50 @@ describe('CheckoutClient review step', () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
     expect(JSON.parse(sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY) ?? '{}')).toMatchObject({
       intent: 'inventory',
+    })
+  })
+
+  it('lets a staff member with a default store choose a one-time address', async () => {
+    const user = userEvent.setup()
+    render(
+      <CheckoutClient
+        stores={[
+          { id: 'store-1', name: 'Main store', city: 'Auckland' },
+          { id: 'store-2', name: 'Other store', city: 'Wellington' },
+        ]}
+        customerCode="CUST-1"
+        paymentTerms="net20"
+        defaultDepositPercent={null}
+        defaultStoreId="store-1"
+        isBuyer={true}
+        tenantType="studio"
+      />,
+    )
+
+    const shipTo = screen.getByLabelText(/ship to/i)
+    expect(shipTo).toBeEnabled()
+    expect(screen.getByRole('option', { name: /pick a one-time address/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /other store/i })).not.toBeInTheDocument()
+
+    await user.selectOptions(shipTo, '__custom__')
+    await user.type(screen.getByPlaceholderText(/recipient name/i), 'Sam Buyer')
+    await user.type(screen.getByPlaceholderText(/street address/i), '12 Queen St')
+    await user.type(screen.getByPlaceholderText(/^city$/i), 'Auckland')
+    await user.clear(screen.getByPlaceholderText(/^country$/i))
+    await user.type(screen.getByPlaceholderText(/^country$/i), 'NZ')
+
+    await user.click(screen.getByRole('button', { name: /review order/i }))
+
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/review'))
+    expect(JSON.parse(sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY) ?? '{}')).toMatchObject({
+      intent: 'customer',
+      perLineShipTo: { 'line-1': null },
+      customAddress: {
+        name: 'Sam Buyer',
+        address: '12 Queen St',
+        city: 'Auckland',
+        country: 'NZ',
+      },
     })
   })
 })

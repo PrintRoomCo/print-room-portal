@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { submitCustomerOrder, BuyerScopeError } from '../submit'
+import { submitCustomerOrder, BuyerScopeError, MixedShippingAddressError } from '../submit'
 import type { B2BCustomerContext } from '../server'
 
 // The guard short-circuits before any DB call, so a never-called stub is fine.
 const adminStub = {} as unknown as Parameters<typeof submitCustomerOrder>[0]
+const pastGuardAdmin = {
+  from: () => {
+    throw new Error('past staff ship-to guard')
+  },
+} as unknown as Parameters<typeof submitCustomerOrder>[0]
 
 function ctx(overrides: Partial<B2BCustomerContext> = {}): B2BCustomerContext {
   return {
@@ -25,5 +30,42 @@ describe('submitCustomerOrder staff ship-to guard', () => {
         lines: [{ product_id: 'p1', product_name: 'Tee', qty: 10, ship_to_store_id: 'OTHER' }],
       }),
     ).rejects.toBeInstanceOf(BuyerScopeError)
+  })
+
+  it('allows a staff member to use a shared one-time shipping address', async () => {
+    await expect(
+      submitCustomerOrder(pastGuardAdmin, {
+        context: ctx(),
+        idempotency_key: 'k2',
+        custom_shipping_address: {
+          name: 'Sam Buyer',
+          address: '12 Queen St',
+          city: 'Auckland',
+          postal_code: '1010',
+          country: 'NZ',
+        },
+        lines: [{ product_id: 'p1', product_name: 'Tee', qty: 10, ship_to_store_id: null }],
+      }),
+    ).rejects.toThrow('past staff ship-to guard')
+  })
+
+  it('rejects mixing a one-time address line with saved-store lines', async () => {
+    await expect(
+      submitCustomerOrder(adminStub, {
+        context: ctx(),
+        idempotency_key: 'k3',
+        custom_shipping_address: {
+          name: 'Sam Buyer',
+          address: '12 Queen St',
+          city: 'Auckland',
+          postal_code: '1010',
+          country: 'NZ',
+        },
+        lines: [
+          { product_id: 'p1', product_name: 'Tee', qty: 10, ship_to_store_id: null },
+          { product_id: 'p2', product_name: 'Hoodie', qty: 5, ship_to_store_id: 's1' },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(MixedShippingAddressError)
   })
 })

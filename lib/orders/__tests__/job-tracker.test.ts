@@ -166,6 +166,13 @@ describe('createJobTrackerShellForOrder', () => {
       customerEmail: 'BUYER@acme.test',
       customerName: 'Acme Co',
       requiredBy: '2026-06-01',
+      shippingAddress: {
+        name: 'Sam Buyer',
+        address: '12 Queen St',
+        city: 'Auckland',
+        postal_code: '1010',
+        country: 'NZ',
+      },
     })
 
     expect(result.trackerId).toBe('t-1')
@@ -195,9 +202,23 @@ describe('createJobTrackerShellForOrder', () => {
       items: AnyRow[]
       summary: { subtotal: number; total: number; artworkTotal: number }
       currencyCode: string
+      shippingAddress?: {
+        name?: string
+        street?: string
+        city?: string
+        postalCode?: string
+        country?: string
+      }
     }
     expect(quoteData.summary).toEqual({ subtotal: 100, total: 115, artworkTotal: 10 })
     expect(quoteData.currencyCode).toBe('NZD')
+    expect(quoteData.shippingAddress).toEqual({
+      name: 'Sam Buyer',
+      street: '12 Queen St',
+      city: 'Auckland',
+      postalCode: '1010',
+      country: 'NZ',
+    })
     expect(quoteData.items).toHaveLength(1)
     const item = quoteData.items[0] as AnyRow & {
       sizes?: Record<string, number>
@@ -234,6 +255,7 @@ describe('createJobTrackerShellForOrder', () => {
       customerEmail: 'buyer@acme.test',
       customerName: 'Acme Co',
       requiredBy: null,
+      shippingAddress: null,
     })
 
     expect(result.trackerId).toBe('t-existing')
@@ -268,6 +290,7 @@ describe('createJobTrackerShellForOrder', () => {
         customerEmail: 'buyer@acme.test',
         customerName: 'Acme Co',
         requiredBy: null,
+        shippingAddress: null,
       }),
     ).rejects.toThrow(/simulated insert failure/)
   })

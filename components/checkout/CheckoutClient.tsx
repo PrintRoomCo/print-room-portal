@@ -31,9 +31,10 @@ interface CheckoutClientProps {
    */
   defaultStoreId: string | null
   /**
-   * Buyer Roles step 6 — when true, ship-to is hard-locked to defaultStoreId
-   * and the custom-address path is hidden. The DB CHECK guarantees defaultStoreId
-   * is set for buyers, but we defend against drift by surfacing a banner.
+   * Buyer Roles step 6 — when true, saved ship-tos are limited to defaultStoreId,
+   * but the one-time address path remains available. The DB CHECK guarantees
+   * defaultStoreId is set for buyers, but we defend against drift by surfacing a
+   * banner.
    */
   isBuyer: boolean
   /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
@@ -61,9 +62,10 @@ export function CheckoutClient({
   const initialStoreId = buyerDefaultIsAvailable
     ? buyerDefaultStoreId
     : stores[0]?.id ?? null
-  // Buyers: hard lock regardless of `buyerDefaultIsAvailable` (CHECK enforces it,
-  // but we'd rather fail loud via the banner below if drift occurs).
-  const lockToBuyerDefault = isBuyer || buyerDefaultIsAvailable
+  const selectableStores =
+    isBuyer && buyerDefaultIsAvailable
+      ? stores.filter((store) => store.id === buyerDefaultStoreId)
+      : stores
   const buyerMisconfigured = isBuyer && !buyerDefaultIsAvailable
   const [perLineShipTo, setPerLineShipTo] = useState<Record<string, string | null>>(() => {
     const m: Record<string, string | null> = {}
@@ -247,15 +249,15 @@ export function CheckoutClient({
               <ShipToRow
                 key={line.lineId}
                 line={line}
-                stores={stores}
+                stores={selectableStores}
                 format={format}
                 value={perLineShipTo[line.lineId] ?? null}
                 catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
                 onChange={(next) =>
                   setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
                 }
-                disabled={submitting !== false || lockToBuyerDefault}
-                allowCustom={!isBuyer}
+                disabled={submitting !== false}
+                allowCustom={!buyerMisconfigured}
                 hideShipTo={inventoryMode}
               />
             )
@@ -287,15 +289,15 @@ export function CheckoutClient({
 
       {mixedCustom && (
         <p className="mt-3 text-sm text-red-600">
-          Custom addresses can't be mixed with store ship-tos in v1. Either pick a store
-          for every line, or select "Custom address…" on every line and fill in one
-          shared address below.
+          One-time addresses can't be mixed with store ship-tos in v1. Either pick a store
+          for every line, or select "Pick a one-time address" on every line and fill in one
+          shared one-time address below.
         </p>
       )}
 
       {!inventoryMode && allCustom && (
         <section className="mt-4">
-          <h2 className="mb-3 text-sm font-medium text-gray-700">Custom shipping address</h2>
+          <h2 className="mb-3 text-sm font-medium text-gray-700">One-time shipping address</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
               id="custom-shipping-name"

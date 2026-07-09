@@ -15,9 +15,10 @@ vi.mock('@/lib/checkout/submit', () => {
   class MoqViolationError extends Error {}
   class StockShortfallError extends Error {}
   class BuyerScopeError extends Error {}
+  class MixedShippingAddressError extends Error {}
   return {
     DecorationDriftError, UnitPriceDriftError, MemberAccessDriftError,
-    MoqViolationError, StockShortfallError, BuyerScopeError,
+    MoqViolationError, StockShortfallError, BuyerScopeError, MixedShippingAddressError,
     submitCustomerOrder: vi.fn(),
   }
 })

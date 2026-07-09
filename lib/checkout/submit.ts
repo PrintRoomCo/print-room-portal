@@ -15,6 +15,7 @@ import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
+import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -187,20 +188,17 @@ export class BuyerScopeError extends Error {
   }
 }
 
+export class MixedShippingAddressError extends Error {
+  constructor() {
+    super('mixed_shipping_address')
+    this.name = 'MixedShippingAddressError'
+  }
+}
+
 interface SubmitB2BOrderRow {
   quote_id: string
   order_id: string
   order_ref: string
-}
-
-interface StoreRow {
-  id: string
-  name: string | null
-  address: string | null
-  city: string | null
-  state: string | null
-  country: string | null
-  postal_code: string | null
 }
 
 interface QuoteItemRow {
@@ -301,17 +299,21 @@ export async function submitCustomerOrder(
     throw new Error('Preview only — nothing was saved.')
   }
 
-  // 0. Buyer-scope guard: a buyer (Buyer Roles step 6) is locked to their
-  //    defaultStoreId. Reject any line that ships elsewhere AND any custom-
-  //    shipping path. Server-side mirror of CheckoutClient's ShipToRow lock.
+  const shipToStoreIds = input.lines.map((l) => l.ship_to_store_id ?? null)
+  const hasOneTimeLine = shipToStoreIds.some((sid) => sid === null)
+  const allOneTimeLines = shipToStoreIds.every((sid) => sid === null)
+  if ((hasOneTimeLine || input.custom_shipping_address) && !allOneTimeLines) {
+    throw new MixedShippingAddressError()
+  }
+
+  // 0. Buyer-scope guard: a staff-role member is locked to their defaultStoreId
+  //    for saved stores, but may use the shared one-time address path.
   if (input.context.role === 'staff') {
     const expected = input.context.defaultStoreId
-    if (input.custom_shipping_address) {
-      throw new BuyerScopeError([null], expected)
-    }
-    const mismatched = input.lines
-      .map((l) => l.ship_to_store_id ?? null)
-      .filter((sid) => sid !== expected)
+    const mismatched = shipToStoreIds.filter((sid) => {
+      if (sid === null && allOneTimeLines && input.custom_shipping_address) return false
+      return sid !== expected
+    })
     if (mismatched.length > 0) {
       throw new BuyerScopeError(mismatched, expected)
     }
@@ -327,6 +329,7 @@ export async function submitCustomerOrder(
       .single()
     if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
   }
+  const formattedShippingAddress = formatShippingAddress(shippingAddress)
 
   // 1b. Per-member access re-verify. Mid-flight: if staff revoked a catalogue
   //     or item grant between cart load and checkout, we MUST reject before
@@ -1172,6 +1175,7 @@ export async function submitCustomerOrder(
       customerEmail: input.context.email ?? null,
       customerName: input.context.organizationName,
       requiredBy: input.required_by ?? null,
+      shippingAddress,
     })
     await recordAuditEvent(
       {
@@ -1280,6 +1284,7 @@ export async function submitCustomerOrder(
         notes: input.notes ?? null,
         totalAmount,
         lines,
+        deliveryAddress: formattedShippingAddress,
       },
       { demo: isTestOrg },
     )
@@ -1473,6 +1478,7 @@ export async function submitCustomerOrder(
       drawsStock,
       existingInvoiceId: null, // fresh order — no prior draft
       today: new Date().toISOString().slice(0, 10),
+      deliveryAddressSummary: formattedShippingAddress,
     })
 
     // Surface a manual-quote flag where Charlotte works (best-effort within

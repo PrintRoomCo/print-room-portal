@@ -16,6 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import type { QuoteData, QuoteDataItem } from '@/lib/job-tracker'
+import { normalizeShippingAddress } from '@/lib/checkout/shipping-address'
 
 export interface CreateJobTrackerShellArgs {
   quoteId: string
@@ -25,6 +26,7 @@ export interface CreateJobTrackerShellArgs {
   customerEmail: string | null
   customerName: string | null
   requiredBy: string | null
+  shippingAddress?: Record<string, unknown> | null
 }
 
 interface QuoteRow {
@@ -187,6 +189,7 @@ export async function createJobTrackerShellForOrder(
   const subtotal = Number(quote?.subtotal ?? 0)
   const decorationCost = Number(quote?.decoration_cost ?? 0)
   const totalAmount = Number(quote?.total_amount ?? 0)
+  const shippingAddress = normalizeShippingAddress(args.shippingAddress)
 
   const quoteData: QuoteData = {
     items,
@@ -196,6 +199,7 @@ export async function createJobTrackerShellForOrder(
       artworkTotal: decorationCost,
     },
     customerName: args.customerName ?? undefined,
+    shippingAddress: shippingAddress ?? undefined,
     subtotal,
     currencyCode: 'NZD',
   }

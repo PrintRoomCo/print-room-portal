@@ -25,7 +25,7 @@ interface ShipToRowProps {
   /** Currency formatter from the parent (CheckoutClient already holds one). */
   format: (amount: number) => string
   disabled?: boolean
-  /** Buyers can't ship to a custom address — hide the option entirely. Defaults to true (org_admin behaviour). */
+  /** Whether the one-time address option is available. */
   allowCustom?: boolean
   catalogueFrontImageUrl?: string | null
   /**
@@ -88,7 +88,7 @@ export function ShipToRow({
                   {s.city ? ` — ${s.city}` : ''}
                 </option>
               ))}
-              {allowCustom && <option value={CUSTOM_SHIP_TO}>Custom address…</option>}
+              {allowCustom && <option value={CUSTOM_SHIP_TO}>Pick a one-time address</option>}
             </select>
           </label>
         )}

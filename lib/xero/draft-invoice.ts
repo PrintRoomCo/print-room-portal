@@ -22,6 +22,7 @@ export interface BuildPayloadArgs {
   taxType: string
   lineAmountTypes: string
   brandingThemeId: string | null
+  deliveryAddressSummary?: string | null
   lines: XeroQuoteLineInput[]
 }
 
@@ -42,8 +43,11 @@ export interface XeroQuotePayload {
   ExpiryDate?: string
   CurrencyCode: string
   BrandingThemeID?: string
+  Summary?: string
   LineItems: XeroLineItem[]
 }
+
+const XERO_QUOTE_SUMMARY_MAX = 3000
 
 /** Add whole days to a 'YYYY-MM-DD' date in UTC (deterministic, tz-safe). */
 export function addDaysUTC(iso: string, days: number): string {
@@ -79,6 +83,12 @@ export function buildDraftQuotePayload(args: BuildPayloadArgs): XeroQuotePayload
   }
   if (expiryDate) payload.ExpiryDate = expiryDate
   if (args.brandingThemeId) payload.BrandingThemeID = args.brandingThemeId
+  if (args.deliveryAddressSummary?.trim()) {
+    payload.Summary = `Delivery address:\n${args.deliveryAddressSummary.trim()}`.slice(
+      0,
+      XERO_QUOTE_SUMMARY_MAX,
+    )
+  }
   return payload
 }
 
@@ -202,6 +212,7 @@ export interface CreateDraftInvoiceArgs {
   drawsStock: boolean
   existingInvoiceId: string | null
   today: string // 'YYYY-MM-DD'
+  deliveryAddressSummary?: string | null
 }
 
 export interface CreateDraftInvoiceResult {
@@ -292,6 +303,7 @@ export async function createDraftInvoiceForOrder(
     taxType: cfg.taxType,
     lineAmountTypes: cfg.lineAmountTypes,
     brandingThemeId: cfg.brandingThemeId,
+    deliveryAddressSummary: args.deliveryAddressSummary,
     lines,
   })
 

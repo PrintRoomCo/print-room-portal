@@ -47,6 +47,15 @@ function getProductionBoardId(): string {
 // by coincidence; kept as a distinct constant so the two never get conflated.
 const PREPRODUCTION_GROUP_ID = 'topics'
 
+function appendDeliveryAddressSection(lines: string[], deliveryAddress: string | null) {
+  const address = deliveryAddress?.trim()
+  if (!address) return
+
+  lines.push('--- Delivery Address ---')
+  lines.push(address)
+  lines.push('')
+}
+
 export interface PushOrderDealOptions {
   /** organizations.is_test — route the deal item to the demo group. */
   demo?: boolean
@@ -199,9 +208,7 @@ function buildFullFormResponse(data: ReorderData): string {
   )
   lines.push('')
 
-  lines.push('--- Delivery Address ---')
-  lines.push(data.deliveryAddress)
-  lines.push('')
+  appendDeliveryAddressSection(lines, data.deliveryAddress)
 
   lines.push('--- Customer Notes ---')
   lines.push(data.notes?.trim() ? data.notes.trim() : 'none')
@@ -402,6 +409,7 @@ export interface OrderDealData {
   customerCompany: string | null
   orderRef: string
   inHandDate: string | null
+  deliveryAddress: string | null
   notes: string | null
   totalAmount: number
   lines: OrderLineForMonday[]
@@ -426,6 +434,9 @@ function buildOrderFullFormResponse(data: OrderDealData): string {
   lines.push(`Total: $${data.totalAmount.toFixed(2)}`)
   if (data.inHandDate) lines.push(`In-hand: ${data.inHandDate}`)
   lines.push('')
+
+  appendDeliveryAddressSection(lines, data.deliveryAddress)
+
   lines.push('--- Lines ---')
   for (const line of data.lines) {
     lines.push(

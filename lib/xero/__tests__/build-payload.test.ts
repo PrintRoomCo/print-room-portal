@@ -18,6 +18,7 @@ const baseArgs: BuildPayloadArgs = {
   taxType: 'OUTPUT2',
   lineAmountTypes: 'Exclusive',
   brandingThemeId: null,
+  deliveryAddressSummary: 'Sam Buyer\n12 Queen St\nAuckland 1010\nNZ',
   lines: [
     { description: 'Basic Tee — Black / M (Logo Front)', quantity: 10, unitAmount: 12.5 },
     { description: 'Cap — OS', quantity: 20, unitAmount: 8 },
@@ -44,6 +45,7 @@ describe('buildDraftInvoicePayload', () => {
     expect(p.Date).toBe('2026-07-02')
     expect(p.ExpiryDate).toBe('2026-07-22')
     expect(p.CurrencyCode).toBe('NZD')
+    expect(p.Summary).toBe('Delivery address:\nSam Buyer\n12 Queen St\nAuckland 1010\nNZ')
     expect(p.LineItems).toEqual([
       { Description: 'Basic Tee — Black / M (Logo Front)', Quantity: 10, UnitAmount: 12.5, AccountCode: '200', TaxType: 'OUTPUT2' },
       { Description: 'Cap — OS', Quantity: 20, UnitAmount: 8, AccountCode: '200', TaxType: 'OUTPUT2' },

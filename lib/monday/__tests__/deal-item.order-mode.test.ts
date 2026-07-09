@@ -21,6 +21,7 @@ const fixture: OrderDealData = {
   customerCompany: 'Acme Co',
   orderRef: 'ORD-2026-0042',
   inHandDate: '2026-06-15',
+  deliveryAddress: 'Sam Buyer\n12 Queen St\nAuckland 1010\nNZ',
   notes: '  Wrap in tissue please  ',
   totalAmount: 1234.5,
   lines: [
@@ -115,6 +116,8 @@ describe('pushOrderDeal — Production column mapping', () => {
 
     const jobSpecs = cv[PRODUCTION_COLUMNS.jobSpecs].text as string
     expect(jobSpecs).toContain('ORD-2026-0042')
+    expect(jobSpecs).toContain('--- Delivery Address ---')
+    expect(jobSpecs).toContain('12 Queen St')
     expect(jobSpecs).toContain('• Logo Front: Basic Tee — Black / M × 10')
     expect(jobSpecs).toContain('• Crew Back: Heavy Hood — Navy / L × 5')
     expect(jobSpecs).toContain('• No decoration: Cap — OS × 20')

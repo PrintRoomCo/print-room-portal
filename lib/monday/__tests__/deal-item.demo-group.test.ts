@@ -17,6 +17,7 @@ const fixture: OrderDealData = {
   customerCompany: 'Demo Org',
   orderRef: 'ORD-2026-0099',
   inHandDate: null,
+  deliveryAddress: null,
   notes: null,
   totalAmount: 100,
   lines: [

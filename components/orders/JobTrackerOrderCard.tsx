@@ -14,6 +14,7 @@ import {
   getTrackingNumber,
   isTrackerCompleted,
 } from '@/lib/job-tracker'
+import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 
 interface JobTrackerOrderCardProps {
   tracker: JobTracker
@@ -40,6 +41,7 @@ export function JobTrackerOrderCard({
   const items = quoteData?.items ?? []
   const subtotal = quoteData?.summary?.total ?? quoteData?.summary?.subtotal ?? quoteData?.subtotal ?? 0
   const currency = quoteData?.currencyCode || 'NZD'
+  const shippingAddressLines = formatShippingAddress(quoteData?.shippingAddress)?.split('\n') ?? []
 
   const trackerUrl = getPortalTrackerPath(tracker.tracker_token)
   const totalItems = items.reduce((sum, item) => sum + getItemTotalQty(item), 0)
@@ -197,6 +199,18 @@ export function JobTrackerOrderCard({
                     year: 'numeric',
                   })}
                 </span>
+              </div>
+            </div>
+          )}
+
+          {/* Delivery Address */}
+          {shippingAddressLines.length > 0 && (
+            <div className="mb-4 rounded-2xl bg-gray-50 p-4">
+              <h4 className="text-sm font-medium text-black mb-2">Delivery address</h4>
+              <div className="space-y-0.5 text-sm text-gray-600">
+                {shippingAddressLines.map((line, index) => (
+                  <p key={`${line}-${index}`}>{line}</p>
+                ))}
               </div>
             </div>
           )}
