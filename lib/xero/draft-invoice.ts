@@ -6,7 +6,7 @@ import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getXeroConfig, isXeroEnabled } from './config'
 import { evaluateXeroEligibility } from './eligibility'
 
-export interface XeroInvoiceLineInput {
+export interface XeroQuoteLineInput {
   description: string
   quantity: number
   unitAmount: number
@@ -22,7 +22,7 @@ export interface BuildPayloadArgs {
   taxType: string
   lineAmountTypes: string
   brandingThemeId: string | null
-  lines: XeroInvoiceLineInput[]
+  lines: XeroQuoteLineInput[]
 }
 
 interface XeroLineItem {
@@ -33,14 +33,13 @@ interface XeroLineItem {
   TaxType: string
 }
 
-export interface XeroInvoicePayload {
-  Type: 'ACCREC'
+export interface XeroQuotePayload {
   Status: 'DRAFT'
   Contact: { ContactID: string }
   LineAmountTypes: string
   Reference: string
   Date: string
-  DueDate?: string
+  ExpiryDate?: string
   CurrencyCode: string
   BrandingThemeID?: string
   LineItems: XeroLineItem[]
@@ -53,18 +52,17 @@ export function addDaysUTC(iso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** DueDate from payment terms. net20→+20d, net30→+30d, else none. */
-export function dueDateFor(paymentTerms: string | null, today: string): string | undefined {
+/** ExpiryDate from payment terms. net20→+20d, net30→+30d, else none. */
+export function expiryDateFor(paymentTerms: string | null, today: string): string | undefined {
   if (paymentTerms === 'net20') return addDaysUTC(today, 20)
   if (paymentTerms === 'net30') return addDaysUTC(today, 30)
   return undefined
 }
 
-/** Build the Xero ACCREC DRAFT invoice object (one entry of a POST /Invoices batch). */
-export function buildDraftInvoicePayload(args: BuildPayloadArgs): XeroInvoicePayload {
-  const dueDate = dueDateFor(args.paymentTerms, args.today)
-  const payload: XeroInvoicePayload = {
-    Type: 'ACCREC',
+/** Build the Xero DRAFT quote object (one entry of a POST /Quotes batch). */
+export function buildDraftQuotePayload(args: BuildPayloadArgs): XeroQuotePayload {
+  const expiryDate = expiryDateFor(args.paymentTerms, args.today)
+  const payload: XeroQuotePayload = {
     Status: 'DRAFT',
     Contact: { ContactID: args.contactId },
     LineAmountTypes: args.lineAmountTypes,
@@ -79,12 +77,17 @@ export function buildDraftInvoicePayload(args: BuildPayloadArgs): XeroInvoicePay
       TaxType: args.taxType,
     })),
   }
-  if (dueDate) payload.DueDate = dueDate
+  if (expiryDate) payload.ExpiryDate = expiryDate
   if (args.brandingThemeId) payload.BrandingThemeID = args.brandingThemeId
   return payload
 }
 
-// --- quote_items → invoice line ------------------------------------------------
+// Back-compat exports for existing tests/callers while the DB/audit naming still
+// reflects the original draft-invoice integration.
+export const dueDateFor = expiryDateFor
+export const buildDraftInvoicePayload = buildDraftQuotePayload
+
+// --- quote_items → quote line --------------------------------------------------
 
 type SwatchEmbed = { label: string | null } | { label: string | null }[] | null
 
@@ -103,11 +106,11 @@ function firstOrSelf<T>(v: T | T[] | null | undefined): T | null {
 }
 
 /**
- * Compose one Xero invoice line from a persisted quote_item. unit_price already
+ * Compose one Xero quote line from a persisted quote_item. unit_price already
  * includes any folded decoration cost (submit.ts folds it before the RPC), so we
  * bill it as-is. Description mirrors the Monday subitem label style.
  */
-export function buildLineFromQuoteItem(row: QuoteItemForXero): XeroInvoiceLineInput {
+export function buildLineFromQuoteItem(row: QuoteItemForXero): XeroQuoteLineInput {
   const swatch = firstOrSelf(row.product_variants?.product_color_swatches)
   const variantBits = [swatch?.label, row.size_label].filter(Boolean).join(' / ')
   const design = row.decorations?.[0]?.name
@@ -182,8 +185,8 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
 
 // --- orchestrator --------------------------------------------------------------
 
-interface XeroInvoicesResponse {
-  Invoices?: Array<{ InvoiceID: string; InvoiceNumber?: string }>
+interface XeroQuotesResponse {
+  Quotes?: Array<{ QuoteID: string; QuoteNumber?: string }>
 }
 
 export interface CreateDraftInvoiceArgs {
@@ -209,7 +212,7 @@ export interface CreateDraftInvoiceResult {
 }
 
 /**
- * Create one order's Xero DRAFT invoice, or flag it for manual review.
+ * Create one order's Xero DRAFT quote, or flag it for manual review.
  * Best-effort contract: on a Xero/DB error it THROWS — the caller (submit.ts
  * step 5c) wraps this in try/catch and audits ORDER_XERO_DRAFT_FAILED. It never
  * rolls back the order.
@@ -279,7 +282,7 @@ export async function createDraftInvoiceForOrder(
     .eq('quote_id', args.quoteId)
   const lines = ((itemRows ?? []) as unknown as QuoteItemForXero[]).map(buildLineFromQuoteItem)
 
-  const payload = buildDraftInvoicePayload({
+  const payload = buildDraftQuotePayload({
     contactId,
     orderRef: args.orderRef,
     today: args.today,
@@ -294,19 +297,19 @@ export async function createDraftInvoiceForOrder(
 
   // Idempotency-Key (order id) closes the write→persist crash gap: a retry with
   // the same key returns the already-created draft instead of a duplicate.
-  const res = await xeroFetch<XeroInvoicesResponse>('/Invoices', {
+  const res = await xeroFetch<XeroQuotesResponse>('/Quotes', {
     method: 'POST',
     idempotencyKey: args.orderId,
-    body: JSON.stringify({ Invoices: [payload] }),
+    body: JSON.stringify({ Quotes: [payload] }),
   })
-  const inv = res.Invoices?.[0]
-  if (!inv?.InvoiceID) throw new Error('Xero invoice create returned no InvoiceID')
+  const quote = res.Quotes?.[0]
+  if (!quote?.QuoteID) throw new Error('Xero quote create returned no QuoteID')
 
   await admin
     .from('orders')
     .update({
-      xero_invoice_id: inv.InvoiceID,
-      xero_invoice_number: inv.InvoiceNumber ?? null,
+      xero_invoice_id: quote.QuoteID,
+      xero_invoice_number: quote.QuoteNumber ?? null,
       xero_invoice_status: 'drafted',
     })
     .eq('id', args.orderId)
@@ -318,10 +321,10 @@ export async function createDraftInvoiceForOrder(
       action: AUDIT_ACTIONS.ORDER_XERO_DRAFTED,
       targetType: 'order',
       targetId: args.orderId,
-      metadata: { order_ref: args.orderRef, xero_invoice_id: inv.InvoiceID, xero_invoice_number: inv.InvoiceNumber ?? null },
+      metadata: { order_ref: args.orderRef, xero_quote_id: quote.QuoteID, xero_quote_number: quote.QuoteNumber ?? null },
     },
     admin,
   )
 
-  return { status: 'drafted', reason: 'ok', invoiceId: inv.InvoiceID, invoiceNumber: inv.InvoiceNumber }
+  return { status: 'drafted', reason: 'ok', invoiceId: quote.QuoteID, invoiceNumber: quote.QuoteNumber }
 }

@@ -60,18 +60,18 @@ describe('xeroFetch', () => {
       // 1st call: token
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 1800 }), text: async () => '', headers: new Map() })
       // 2nd call: the API request
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ Invoices: [{ InvoiceID: 'inv-1' }] }), text: async () => '', headers: new Map() })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ Quotes: [{ QuoteID: 'quote-1' }] }), text: async () => '', headers: new Map() })
     vi.stubGlobal('fetch', f)
 
-    const res = await xeroFetch<{ Invoices: Array<{ InvoiceID: string }> }>('/Invoices', {
+    const res = await xeroFetch<{ Quotes: Array<{ QuoteID: string }> }>('/Quotes', {
       method: 'POST',
       idempotencyKey: 'order-1',
-      body: JSON.stringify({ Invoices: [] }),
+      body: JSON.stringify({ Quotes: [] }),
     })
-    expect(res.Invoices[0].InvoiceID).toBe('inv-1')
+    expect(res.Quotes[0].QuoteID).toBe('quote-1')
 
     const [url, init] = f.mock.calls[1]
-    expect(url).toBe('https://api.xero.com/api.xro/2.0/Invoices')
+    expect(url).toBe('https://api.xero.com/api.xro/2.0/Quotes')
     expect(init.headers.Authorization).toBe('Bearer tok')
     expect(init.headers.Accept).toBe('application/json')
     expect(init.headers['Idempotency-Key']).toBe('order-1')
@@ -83,6 +83,6 @@ describe('xeroFetch', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 1800 }), text: async () => '', headers: new Map() })
       .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({}), text: async () => 'ValidationException', headers: new Map() })
     vi.stubGlobal('fetch', f)
-    await expect(xeroFetch('/Invoices', { method: 'POST' })).rejects.toThrow(/Xero API 400 on \/Invoices: ValidationException/)
+    await expect(xeroFetch('/Quotes', { method: 'POST' })).rejects.toThrow(/Xero API 400 on \/Quotes: ValidationException/)
   })
 })

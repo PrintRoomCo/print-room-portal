@@ -1443,7 +1443,7 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5c. Best-effort Xero DRAFT invoice for fully-billable orders. Mirrors the
+  // 5c. Best-effort Xero DRAFT quote for fully-billable orders. Mirrors the
   //     Monday/email side-effects: never throws, audits on failure. Ineligible
   //     orders (test org, prepay org, or ANY stock-draw line) are flagged
   //     xero_invoice_status='manual_review' for Charlotte instead of drafted.
@@ -1473,15 +1473,15 @@ export async function submitCustomerOrder(
       today: new Date().toISOString().slice(0, 10),
     })
 
-    // Surface a manual-invoice flag where Charlotte works (best-effort within
+    // Surface a manual-quote flag where Charlotte works (best-effort within
     // this already-best-effort block). The orchestrator already set the DB
     // status + audit; this is just the human-visible nudge on the Monday card.
     if (xeroResult.status === 'manual_review' && mondayItemId) {
       try {
         await postItemUpdate(
           mondayItemId,
-          `⚠️ Manual invoice required — this order was not auto-drafted in Xero ` +
-            `(reason: ${xeroResult.reason}). Please raise the invoice manually.`,
+          `Manual Xero quote required — this order was not auto-drafted in Xero ` +
+            `(reason: ${xeroResult.reason}). Please raise the quote manually.`,
         )
       } catch (noteErr) {
         console.error('[Checkout] Xero manual-review Monday note failed (swallowed)', {
@@ -1492,7 +1492,7 @@ export async function submitCustomerOrder(
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    console.error('[Checkout] Xero draft invoice failed (swallowed)', { orderId: order_id, err: message })
+    console.error('[Checkout] Xero draft quote failed (swallowed)', { orderId: order_id, err: message })
     try {
       await recordAuditEvent(
         {

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildDraftInvoicePayload,
   buildLineFromQuoteItem,
-  dueDateFor,
+  expiryDateFor,
   type BuildPayloadArgs,
   type QuoteItemForXero,
 } from '../draft-invoice'
@@ -24,26 +24,25 @@ const baseArgs: BuildPayloadArgs = {
   ],
 }
 
-describe('dueDateFor', () => {
-  it('adds 20 days for net20', () => expect(dueDateFor('net20', '2026-07-02')).toBe('2026-07-22'))
-  it('adds 30 days for net30 (crossing a month)', () => expect(dueDateFor('net30', '2026-07-02')).toBe('2026-08-01'))
+describe('expiryDateFor', () => {
+  it('adds 20 days for net20', () => expect(expiryDateFor('net20', '2026-07-02')).toBe('2026-07-22'))
+  it('adds 30 days for net30 (crossing a month)', () => expect(expiryDateFor('net30', '2026-07-02')).toBe('2026-08-01'))
   it('returns undefined for prepay/null/unknown', () => {
-    expect(dueDateFor('prepay', '2026-07-02')).toBeUndefined()
-    expect(dueDateFor(null, '2026-07-02')).toBeUndefined()
-    expect(dueDateFor('weird', '2026-07-02')).toBeUndefined()
+    expect(expiryDateFor('prepay', '2026-07-02')).toBeUndefined()
+    expect(expiryDateFor(null, '2026-07-02')).toBeUndefined()
+    expect(expiryDateFor('weird', '2026-07-02')).toBeUndefined()
   })
 })
 
 describe('buildDraftInvoicePayload', () => {
-  it('builds an ACCREC DRAFT with GST-exclusive lines', () => {
+  it('builds a DRAFT quote with GST-exclusive lines', () => {
     const p = buildDraftInvoicePayload(baseArgs)
-    expect(p.Type).toBe('ACCREC')
     expect(p.Status).toBe('DRAFT')
     expect(p.Contact).toEqual({ ContactID: 'contact-1' })
     expect(p.LineAmountTypes).toBe('Exclusive')
     expect(p.Reference).toBe('ORD-2026-0042')
     expect(p.Date).toBe('2026-07-02')
-    expect(p.DueDate).toBe('2026-07-22')
+    expect(p.ExpiryDate).toBe('2026-07-22')
     expect(p.CurrencyCode).toBe('NZD')
     expect(p.LineItems).toEqual([
       { Description: 'Basic Tee — Black / M (Logo Front)', Quantity: 10, UnitAmount: 12.5, AccountCode: '200', TaxType: 'OUTPUT2' },
@@ -51,9 +50,9 @@ describe('buildDraftInvoicePayload', () => {
     ])
   })
 
-  it('omits DueDate when payment terms give none, and omits branding when unset', () => {
+  it('omits ExpiryDate when payment terms give none, and omits branding when unset', () => {
     const p = buildDraftInvoicePayload({ ...baseArgs, paymentTerms: null })
-    expect('DueDate' in p).toBe(false)
+    expect('ExpiryDate' in p).toBe(false)
     expect('BrandingThemeID' in p).toBe(false)
   })
 
