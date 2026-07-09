@@ -133,6 +133,7 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
           ) : (
             <PortalEmptyState
               title="Nothing here yet"
+              body="Start creating orders by browsing our catalogue."
               actionHref="/catalogue"
               actionLabel="Browse catalogue"
             />

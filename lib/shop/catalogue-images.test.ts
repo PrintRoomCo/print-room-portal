@@ -80,6 +80,35 @@ describe('resolveGalleryImagesForColour', () => {
     expect(resolved.map((image) => image.url)).toEqual(['/designer-front-blue.png'])
   })
 
+  it('prefers a colour-matched designer snapshot over a colour-matched staff_pick', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'aaa-pick-front-blue',
+          url: '/pick-front-blue.png',
+          view: 'front',
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_pick',
+        },
+        {
+          id: 'zzz-designer-front-blue',
+          url: '/designer-front-blue.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'designer_snapshot',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.url)).toEqual(['/designer-front-blue.png'])
+  })
+
   it('prefers a colour-matched staff upload over an all-colour designer snapshot', () => {
     const resolved = resolveGalleryImagesForColour(
       [
