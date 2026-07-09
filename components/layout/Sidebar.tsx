@@ -170,21 +170,6 @@ export function Sidebar({ children, customer }: SidebarProps) {
                         />
                       )}
                       <g transform={`translate(8 ${rowY + 24}) scale(${ICON_SCALE})`}>
-                        {row.id === 'tracking' && (
-                          <>
-                            {/* Screen printing carousel — top-down with
-                                slight perspective oval on the hub. */}
-                            <ellipse className="cls-line" cx={12} cy={12} rx={3} ry={2} />
-                            <line className="cls-line" x1={12} y1={10} x2={12} y2={6} />
-                            <line className="cls-line" x1={14} y1={12} x2={18} y2={12} />
-                            <line className="cls-line" x1={12} y1={14} x2={12} y2={18} />
-                            <line className="cls-line" x1={10} y1={12} x2={6} y2={12} />
-                            <rect className="cls-line" x={8.5} y={2}   width={7} height={4} rx={1} />
-                            <rect className="cls-line" x={18}  y={8.5} width={4} height={7} rx={1} />
-                            <rect className="cls-line" x={8.5} y={18}  width={7} height={4} rx={1} />
-                            <rect className="cls-line" x={2}   y={8.5} width={4} height={7} rx={1} />
-                          </>
-                        )}
                         {row.id === 'catalogue' && (
                           <>
                             {/* Tall paper bag with top fold — t.e. shop. */}
@@ -205,6 +190,24 @@ export function Sidebar({ children, customer }: SidebarProps) {
                             />
                           </>
                         )}
+
+                         {row.id === 'tracking' && (
+                          <>
+                            {/* Screen printing carousel — top-down with
+                                slight perspective oval on the hub. */}
+                            <ellipse className="cls-line" cx={12} cy={12} rx={3} ry={2} />
+                            <line className="cls-line" x1={12} y1={10} x2={12} y2={6} />
+                            <line className="cls-line" x1={14} y1={12} x2={18} y2={12} />
+                            <line className="cls-line" x1={12} y1={14} x2={12} y2={18} />
+                            <line className="cls-line" x1={10} y1={12} x2={6} y2={12} />
+                            <rect className="cls-line" x={8.5} y={2}   width={7} height={4} rx={1} />
+                            <rect className="cls-line" x={18}  y={8.5} width={4} height={7} rx={1} />
+                            <rect className="cls-line" x={8.5} y={18}  width={7} height={4} rx={1} />
+                            <rect className="cls-line" x={2}   y={8.5} width={4} height={7} rx={1} />
+                          </>
+                        )}
+
+
                         {row.id === 'orders' && (
                           <>
                             {/* 12-petal flower/sun with inner hub — t.e. orders. */}
