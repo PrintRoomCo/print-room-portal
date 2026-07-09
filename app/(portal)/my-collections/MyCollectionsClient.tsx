@@ -93,9 +93,6 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
           <h1 className="font-dm-sans text-[clamp(40px,5vw,72px)] font-medium leading-[1.05] tracking-[-0.02em] text-gray-900">
             Orders
           </h1>
-          <p className="mt-4 max-w-prose text-base text-gray-600">
-            Review your orders before they enter production.
-          </p>
         </header>
 
         {quotes.length > 0 && (
@@ -136,7 +133,6 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
           ) : (
             <PortalEmptyState
               title="Nothing here yet"
-              body="When you submit an order, it will appear here for review and approval."
               actionHref="/catalogue"
               actionLabel="Browse catalogue"
             />
