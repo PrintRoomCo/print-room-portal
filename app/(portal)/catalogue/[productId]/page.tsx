@@ -474,9 +474,9 @@ const loadProductDetailPageData = cache(async (
       decorations,
       effectiveMoq,
       preOrderClosed,
-      // Display-only: relabel the Volume-pricing widget's first band to start at
-      // this qty (cart/checkout brackets are untouched, so price & MOQ unchanged).
-      volumeDisplayFloorQty: catItem.volume_display_floor_qty ?? null,
+      // Display-only: hide these bands from the Volume-pricing widget
+      // (cart/checkout brackets are untouched, so price & MOQ unchanged).
+      volumeDisplayHiddenBands: catItem.volume_display_hidden_bands ?? [],
     },
   }
 })
