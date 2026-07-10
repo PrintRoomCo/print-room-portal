@@ -12,6 +12,7 @@ export interface CatalogueAwareGalleryImage {
 }
 
 export interface CatalogueItemImageRow {
+  id?: string
   catalogue_item_id: string
   view: string | null
   source: string | null
@@ -39,8 +40,8 @@ function sortByPosition<T extends { position?: number | null }>(arr: T[]): T[] {
  *
  * Order: all-colours `front` -> lead colour's `front` -> first all-colours by
  * position (any view) -> masterImageUrl -> null. designer_snapshot rows are
- * always excluded from the derive (a snapshot only becomes the card via an
- * explicit pick, handled by the caller before this runs).
+ * excluded from this shared plain-garment fallback; the customer catalogue
+ * chooses its PDP-equivalent mock-up before calling this derive.
  */
 export function deriveCardImageUrl(args: {
   images: CardFallbackImage[]
@@ -83,6 +84,49 @@ export function pickCatalogueItemThumbnail(
   })
 }
 
+/**
+ * Resolves the rendered mock-up the PDP would choose for a colour. Catalogue
+ * cards use this before their separate staff-selected card image so a product
+ * with published artwork is never represented by its undecorated garment.
+ */
+export function pickCataloguePdpMockupThumbnail(
+  rows: CatalogueItemImageRow[],
+  selectedColorSwatchId: string | null,
+): string | null {
+  const mockupImages: CatalogueAwareGalleryImage[] = []
+
+  for (const [index, row] of rows.entries()) {
+    if (!row.image_url || row.source !== 'designer_snapshot') continue
+    mockupImages.push({
+      id: `catalogue:${row.id ?? `${row.catalogue_item_id}:${index}`}`,
+      url: row.image_url,
+      view: normalizeCatalogueImageView(row.view, row.image_url),
+      position: row.position,
+      color_swatch_id: row.color_swatch_id,
+      scope: 'catalogue',
+      source: 'designer_snapshot',
+    })
+  }
+
+  return pickPreferredGalleryImageUrl(mockupImages, selectedColorSwatchId, null)
+}
+
+/**
+ * Customer-card precedence mirrors the PDP whenever a rendered artwork mock-up
+ * exists. Explicit staff picks retain their existing behaviour for products
+ * without a mock-up, followed by the shared plain-garment fallback derive.
+ */
+export function pickCatalogueCardThumbnail(args: {
+  fallbackUrl: string | null
+  rows: CatalogueItemImageRow[]
+  leadColorSwatchId: string | null
+  explicitCardImageUrl?: string | null
+}): string | null {
+  return pickCataloguePdpMockupThumbnail(args.rows, args.leadColorSwatchId) ??
+    args.explicitCardImageUrl ??
+    pickCatalogueItemThumbnail(args.fallbackUrl, args.rows, args.leadColorSwatchId)
+}
+
 export function pickCatalogueColourThumbnail(args: {
   fallbackUrl: string | null
   rows: CatalogueItemImageRow[]
@@ -95,6 +139,10 @@ export function pickCatalogueColourThumbnail(args: {
     selectedColorSwatchId,
     swatchImageUrl = null,
   } = args
+
+  const mockupUrl = pickCataloguePdpMockupThumbnail(rows, selectedColorSwatchId)
+  if (mockupUrl) return mockupUrl
+
   const frontRows = sortByPosition(
     rows
       .filter((row) => row.image_url)

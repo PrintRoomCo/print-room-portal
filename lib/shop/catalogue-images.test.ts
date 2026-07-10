@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   pickCatalogueColourThumbnail,
+  pickCatalogueCardThumbnail,
   pickCatalogueItemThumbnail,
   pickPreferredGalleryImageUrl,
   resolveGalleryImagesForColour,
@@ -469,10 +470,55 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
   })
 })
 
+describe('pickCatalogueCardThumbnail', () => {
+  it('REGRESSION: uses the rendered lead-colour mock-up that the PDP shows', () => {
+    // The staff pick is the blank garment, while the designer snapshot is the
+    // same garment with artwork composited onto it. The collapsed catalogue
+    // tile must match the PDP's lead-colour image rather than fall back to the
+    // undecorated product photo.
+    expect(
+      pickCatalogueCardThumbnail({
+        fallbackUrl: '/blank-garment.png',
+        leadColorSwatchId: 'lead-blue',
+        explicitCardImageUrl: '/blank-lead-garment.png',
+        rows: [
+          {
+            catalogue_item_id: 'item-1',
+            view: 'front',
+            source: 'staff_pick',
+            position: 0,
+            image_url: '/blank-lead-garment.png',
+            color_swatch_id: 'lead-blue',
+          },
+          {
+            catalogue_item_id: 'item-1',
+            view: 'front',
+            source: 'designer_snapshot',
+            position: 0,
+            image_url: '/lead-blue-with-artwork.png',
+            color_swatch_id: 'lead-blue',
+          },
+        ],
+      }),
+    ).toBe('/lead-blue-with-artwork.png')
+  })
+
+  it('keeps an explicit staff card image when no rendered mock-up exists', () => {
+    expect(
+      pickCatalogueCardThumbnail({
+        fallbackUrl: '/master.png',
+        leadColorSwatchId: 'lead-blue',
+        explicitCardImageUrl: '/staff-pick.png',
+        rows: [],
+      }),
+    ).toBe('/staff-pick.png')
+  })
+})
+
 describe('pickCatalogueItemThumbnail', () => {
   it('excludes designer_snapshot from the fallback derive — falls back to master url', () => {
-    // Snapshots are excluded from the card fallback; an explicit card_image_id pick
-    // (handled by the caller) is the only way a snapshot becomes the card thumbnail.
+    // Snapshots are excluded from the shared plain-garment fallback. The customer
+    // card resolver chooses the PDP-equivalent mock-up before reaching this path.
     expect(
       pickCatalogueItemThumbnail('/blank.png', [
         {
@@ -543,6 +589,34 @@ const catalogueItemRow = (
 })
 
 describe('pickCatalogueColourThumbnail', () => {
+  it('uses the rendered mock-up ahead of the undecorated selected-colour image', () => {
+    expect(
+      pickCatalogueColourThumbnail({
+        fallbackUrl: '/product.png',
+        selectedColorSwatchId: 'navy',
+        swatchImageUrl: '/navy-garment.png',
+        rows: [
+          {
+            catalogue_item_id: 'item-1',
+            view: 'front',
+            source: 'staff_pick',
+            position: 0,
+            image_url: '/navy-blank.png',
+            color_swatch_id: 'navy',
+          },
+          {
+            catalogue_item_id: 'item-1',
+            view: 'front',
+            source: 'designer_snapshot',
+            position: 0,
+            image_url: '/navy-with-artwork.png',
+            color_swatch_id: 'navy',
+          },
+        ],
+      }),
+    ).toBe('/navy-with-artwork.png')
+  })
+
   it('prefers the selected-colour front over all-colours front and detail rows', () => {
     expect(
       pickCatalogueColourThumbnail({

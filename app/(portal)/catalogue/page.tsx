@@ -13,8 +13,8 @@ import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { effectiveFulfilment, matchesMode, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
+  pickCatalogueCardThumbnail,
   pickCatalogueColourThumbnail,
-  pickCatalogueItemThumbnail,
   type CatalogueItemImageRow,
 } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
@@ -260,9 +260,10 @@ export default async function CataloguePage({
     scopedItemIds.length > 0
       ? admin
           .from('b2b_catalogue_item_images')
-          .select('catalogue_item_id, view, source, position, image_url, color_swatch_id')
+          .select('id, catalogue_item_id, view, source, position, image_url, color_swatch_id')
           .in('catalogue_item_id', scopedItemIds)
           .eq('is_published', true)
+          .order('position', { ascending: true })
       : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
     scopedItemIds.length > 0
       ? admin
@@ -505,7 +506,12 @@ export default async function CataloguePage({
       id: p.id,
       name: stripTrailingSku(p.name, p.sku),
       sku: p.sku,
-      image_url: pickedUrl ?? pickCatalogueItemThumbnail(p.image_url, imagesByProduct.get(p.id) ?? [], leadColorSwatchId),
+      image_url: pickCatalogueCardThumbnail({
+        fallbackUrl: p.image_url,
+        rows: imagesByProduct.get(p.id) ?? [],
+        leadColorSwatchId,
+        explicitCardImageUrl: pickedUrl,
+      }),
       type: p.garment_family,
       price_low: priceLow,
       price_high: priceHigh,
