@@ -471,16 +471,14 @@ describe('resolveGalleryImagesForColour blank-image filter', () => {
 })
 
 describe('pickCatalogueCardThumbnail', () => {
-  it('REGRESSION: uses the rendered lead-colour mock-up that the PDP shows', () => {
-    // The staff pick is the blank garment, while the designer snapshot is the
-    // same garment with artwork composited onto it. The collapsed catalogue
-    // tile must match the PDP's lead-colour image rather than fall back to the
-    // undecorated product photo.
+  it('REGRESSION: honours the staff-starred variant image over an automatic PDP mock-up', () => {
+    // The star control writes card_image_id. It is an explicit staff choice,
+    // so the catalogue card must use it even when an automatic mock-up exists.
     expect(
       pickCatalogueCardThumbnail({
         fallbackUrl: '/blank-garment.png',
         leadColorSwatchId: 'lead-blue',
-        explicitCardImageUrl: '/blank-lead-garment.png',
+        explicitCardImageUrl: '/staff-starred-variant.png',
         rows: [
           {
             catalogue_item_id: 'item-1',
@@ -500,7 +498,7 @@ describe('pickCatalogueCardThumbnail', () => {
           },
         ],
       }),
-    ).toBe('/lead-blue-with-artwork.png')
+    ).toBe('/staff-starred-variant.png')
   })
 
   it('keeps an explicit staff card image when no rendered mock-up exists', () => {
@@ -512,6 +510,25 @@ describe('pickCatalogueCardThumbnail', () => {
         rows: [],
       }),
     ).toBe('/staff-pick.png')
+  })
+
+  it('uses the PDP mock-up when staff has not starred an image', () => {
+    expect(
+      pickCatalogueCardThumbnail({
+        fallbackUrl: '/blank-garment.png',
+        leadColorSwatchId: 'lead-blue',
+        rows: [
+          {
+            catalogue_item_id: 'item-1',
+            view: 'front',
+            source: 'designer_snapshot',
+            position: 0,
+            image_url: '/lead-blue-with-artwork.png',
+            color_swatch_id: 'lead-blue',
+          },
+        ],
+      }),
+    ).toBe('/lead-blue-with-artwork.png')
   })
 })
 

@@ -85,9 +85,9 @@ export function pickCatalogueItemThumbnail(
 }
 
 /**
- * Resolves the rendered mock-up the PDP would choose for a colour. Catalogue
- * cards use this before their separate staff-selected card image so a product
- * with published artwork is never represented by its undecorated garment.
+ * Resolves the rendered mock-up the PDP would choose for a colour. Customer
+ * cards use it as their automatic fallback when staff has not starred a
+ * specific catalogue image.
  */
 export function pickCataloguePdpMockupThumbnail(
   rows: CatalogueItemImageRow[],
@@ -112,9 +112,9 @@ export function pickCataloguePdpMockupThumbnail(
 }
 
 /**
- * Customer-card precedence mirrors the PDP whenever a rendered artwork mock-up
- * exists. Explicit staff picks retain their existing behaviour for products
- * without a mock-up, followed by the shared plain-garment fallback derive.
+ * A staff-starred card image is an explicit catalogue choice and therefore wins
+ * over the automatic PDP mock-up. Without a star, customer cards mirror the
+ * PDP's rendered artwork before using the shared plain-garment fallback.
  */
 export function pickCatalogueCardThumbnail(args: {
   fallbackUrl: string | null
@@ -122,8 +122,8 @@ export function pickCatalogueCardThumbnail(args: {
   leadColorSwatchId: string | null
   explicitCardImageUrl?: string | null
 }): string | null {
-  return pickCataloguePdpMockupThumbnail(args.rows, args.leadColorSwatchId) ??
-    args.explicitCardImageUrl ??
+  return args.explicitCardImageUrl ??
+    pickCataloguePdpMockupThumbnail(args.rows, args.leadColorSwatchId) ??
     pickCatalogueItemThumbnail(args.fallbackUrl, args.rows, args.leadColorSwatchId)
 }
 
