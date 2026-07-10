@@ -15,7 +15,7 @@ import {
   resolveDecorationsForPricing,
 } from '@/lib/shop/decoration-filter'
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
-import { applyVolumeDisplayFloor } from '@/lib/shop/volume-display-floor'
+import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
 import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
@@ -134,12 +134,12 @@ interface Props {
    */
   initialColorSwatchId?: string | null
   /**
-   * Staff-set qty the customer Volume-pricing widget is advertised to start at
-   * (e.g. 100 → first band shows "100–249"). DISPLAY ONLY — the cart/checkout
-   * `brackets` snapshot is the full ladder, so price paid and MOQ are unchanged.
-   * Null = show the full ladder.
+   * Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
+   * widget. DISPLAY ONLY — the cart/checkout `brackets` snapshot is the full
+   * ladder, so price paid and MOQ are unchanged.
+   * Empty = show the full ladder.
    */
-  volumeDisplayFloorQty?: number | null
+  volumeDisplayHiddenBands?: number[]
 }
 
 export function ProductDetailClient({
@@ -156,7 +156,7 @@ export function ProductDetailClient({
   effectiveMoq,
   preOrderClosed = false,
   initialColorSwatchId = null,
-  volumeDisplayFloorQty = null,
+  volumeDisplayHiddenBands = [],
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -760,20 +760,20 @@ export function ProductDetailClient({
   )
 
   // Customer Volume-pricing widget rows: combine each garment band with its
-  // decoration figure, then apply the staff-set display floor. Relabel only —
+  // decoration figure, then drop the staff-hidden bands. Display only —
   // the cart's `brackets` snapshot stays the full ladder, so the price paid at
   // any qty (and the MOQ) are unchanged; this just changes what's advertised.
   const displayVolumeBrackets = useMemo(
     () =>
-      applyVolumeDisplayFloor(
+      hideVolumeDisplayBands(
         brackets.map((b, i) => ({
           min_quantity: b.min_quantity,
           max_quantity: b.max_quantity,
           unit_price: Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0),
         })),
-        volumeDisplayFloorQty,
+        volumeDisplayHiddenBands,
       ),
-    [brackets, decorationPerUnitAtBracket, volumeDisplayFloorQty],
+    [brackets, decorationPerUnitAtBracket, volumeDisplayHiddenBands],
   )
 
   function handleAddToCart() {
