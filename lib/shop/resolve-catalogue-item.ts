@@ -16,7 +16,7 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, volume_display_hidden_bands, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string
