@@ -75,11 +75,9 @@ export interface CartLine {
    * added from, threaded through checkout into submit_b2b_order so the order
    * records WHICH skin sold and resolves MOQ/fulfilment on the exact item.
    * Optional + nullable: absent on legacy persisted lines (treated as "no
-   * catalogue identity", same as before). `catalogueVariantLabel` is the skin's
-   * label (e.g. "Design A"), DISTINCT from `variantLabel` (size/colour).
+   * catalogue identity", same as before).
    */
   catalogueItemId?: string | null
-  catalogueVariantLabel?: string | null
   /**
    * Manual-final pricing (2026-06-10). When the catalogue item's price_mode is
    * 'manual_final' the decoration is ONE combined figure per qty band for the

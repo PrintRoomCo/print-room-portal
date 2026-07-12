@@ -28,7 +28,6 @@ const baseProduct = {
   brand_name: null,
   category_name: null,
   catalogueItemId: 'i1',
-  catalogueVariantLabel: null,
 }
 
 const variants = [

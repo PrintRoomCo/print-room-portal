@@ -13,7 +13,6 @@ export interface QuoteItemRebuildRow {
   decorations: unknown
   ship_to_store_id: string | null
   catalogue_item_id: string | null
-  catalogue_variant_label: string | null
   qty_from_stock: number
   qty_to_make: number
   /** joined: product_variants.product_color_swatches.label */
@@ -43,7 +42,6 @@ export interface RebuildLine {
   decorations: CartLineDecoration[]
   fulfilmentType: CartLineFulfilmentType
   catalogueItemId: string | null
-  catalogueVariantLabel: string | null
 }
 
 export interface BuildRebuildResult {
@@ -64,8 +62,7 @@ export function deriveFulfilmentType(row: { qty_to_make: number }): CartLineFulf
 
 function variantLabelFrom(row: QuoteItemRebuildRow): string {
   const parts = [row.colour_label, row.size_label].filter(Boolean)
-  if (parts.length > 0) return parts.join(' / ')
-  return row.catalogue_variant_label ?? '—'
+  return parts.length > 0 ? parts.join(' / ') : '—'
 }
 
 function decorationsFrom(raw: unknown): CartLineDecoration[] {
@@ -94,7 +91,6 @@ export function buildRebuildLines(rows: QuoteItemRebuildRow[]): BuildRebuildResu
         decorations: decorationsFrom(r.decorations),
         fulfilmentType: deriveFulfilmentType(r),
         catalogueItemId: r.catalogue_item_id,
-        catalogueVariantLabel: r.catalogue_variant_label,
       }
     })
   return { lines, degradedCount }

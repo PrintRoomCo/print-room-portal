@@ -8,7 +8,6 @@ export type PdpCatalogueItem = {
   description: string | null
   sku_override: string | null
   moq_override: number | null
-  variant_label: string | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
   price_mode: 'computed' | 'manual_final' | null
   /** Staff-set qty the customer Volume-pricing widget is advertised to start at
@@ -17,7 +16,7 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, variant_label, fulfilment_type_override, price_mode, volume_display_floor_qty, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_floor_qty, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string

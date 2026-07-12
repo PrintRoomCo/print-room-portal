@@ -28,7 +28,6 @@ const baseProduct = {
   brand_name: null,
   category_name: null,
   catalogueItemId: 'i1',
-  catalogueVariantLabel: null,
 }
 
 // Red has an in-stock S (4) and an out-of-stock M (0). The inline multi-size

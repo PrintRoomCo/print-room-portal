@@ -96,8 +96,6 @@ export function normalizePersisted(raw: unknown): CartState {
       // else the order line loses which skin sold on reload.
       catalogueItemId:
         typeof l.catalogueItemId === 'string' ? l.catalogueItemId : null,
-      catalogueVariantLabel:
-        typeof l.catalogueVariantLabel === 'string' ? l.catalogueVariantLabel : null,
     })
   }
   return { lines: normalized }

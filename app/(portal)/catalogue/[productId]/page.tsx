@@ -402,7 +402,6 @@ const loadProductDetailPageData = cache(async (
     description: string | null
     sku_override: string | null
     moq_override: number | null
-    variant_label: string | null
     fulfilment_type_override: FulfilmentType | null
   } | null
   const catalogueFallbackImageUrl = pickPreferredGalleryImageUrl(
@@ -454,7 +453,6 @@ const loadProductDetailPageData = cache(async (
         // the cart line through checkout into submit_b2b_order. `catItem.id` was
         // already resolved server-side; we just stop dropping it.
         catalogueItemId: catItem.id ?? null,
-        catalogueVariantLabel: catItemForked?.variant_label ?? null,
         // Manual-final pricing (2026-06-10). Drives the client to read the
         // item's combined decoration figure instead of summing per-placement.
         priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',

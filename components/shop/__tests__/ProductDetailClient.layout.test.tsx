@@ -72,7 +72,6 @@ describe('ProductDetailClient PDP layout', () => {
           brand_name: 'AS Colour',
           category_name: 'T-Shirt',
           catalogueItemId: 'i1',
-          catalogueVariantLabel: null,
         }}
         variants={[
           {
