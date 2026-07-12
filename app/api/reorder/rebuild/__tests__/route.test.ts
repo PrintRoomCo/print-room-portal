@@ -74,7 +74,6 @@ describe('POST /api/reorder/rebuild', () => {
               decorations: [],
               ship_to_store_id: null,
               catalogue_item_id: null,
-              catalogue_variant_label: null,
               qty_from_stock: 0,
               qty_to_make: 30,
               product_variants: { product_color_swatches: { label: 'Bone' }, sizes: { label: 'M' } },

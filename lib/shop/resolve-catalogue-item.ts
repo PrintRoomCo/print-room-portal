@@ -8,7 +8,6 @@ export type PdpCatalogueItem = {
   description: string | null
   sku_override: string | null
   moq_override: number | null
-  variant_label: string | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
   price_mode: 'computed' | 'manual_final' | null
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing

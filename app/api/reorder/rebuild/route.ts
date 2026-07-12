@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     .from('quote_items')
     .select(
       `product_id, variant_id, product_name, quantity, decorations,
-       ship_to_store_id, catalogue_item_id, catalogue_variant_label,
+       ship_to_store_id, catalogue_item_id,
        qty_from_stock, qty_to_make,
        product_variants ( color_swatch_id, product_color_swatches(label), sizes(label) )`,
     )
@@ -120,7 +120,6 @@ export async function POST(request: Request) {
       decorations: r.decorations,
       ship_to_store_id: (r.ship_to_store_id as string | null) ?? null,
       catalogue_item_id: catalogueItemId,
-      catalogue_variant_label: (r.catalogue_variant_label as string | null) ?? null,
       qty_from_stock: Number(r.qty_from_stock ?? 0),
       qty_to_make: Number(r.qty_to_make ?? 0),
       colour_label: (swatch as { label?: string } | null)?.label ?? null,

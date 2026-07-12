@@ -65,7 +65,6 @@ interface ProductData {
   // Phase 2 — catalogue-item identity (named to avoid colliding with the
   // size/colour `variantLabel` on CartLine). Null for legacy/non-catalogue.
   catalogueItemId: string | null
-  catalogueVariantLabel: string | null
   // Manual-final pricing (2026-06-10). 'manual_final' => decoration is ONE
   // combined figure per band for the whole item (read from the engine), not a
   // per-placement sum, and the garment is already tier-exact. Optional: absent =>
@@ -906,7 +905,6 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
-            catalogueVariantLabel: product.catalogueVariantLabel,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
@@ -977,7 +975,6 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
-          catalogueVariantLabel: product.catalogueVariantLabel,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
           manualDecorationBrackets: manualDecorationBracketsSnapshot,
         })
@@ -1014,7 +1011,6 @@ export function ProductDetailClient({
         decorations: cartDecorationsForSwatch(colorSwatchId),
         brackets: cartLineBrackets,
         catalogueItemId: product.catalogueItemId,
-        catalogueVariantLabel: product.catalogueVariantLabel,
         manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
         manualDecorationBrackets: manualDecorationBracketsSnapshot,
       }
@@ -1052,7 +1048,6 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
-      catalogueVariantLabel: product.catalogueVariantLabel,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })

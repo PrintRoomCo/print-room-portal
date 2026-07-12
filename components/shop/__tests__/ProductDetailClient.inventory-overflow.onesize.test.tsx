@@ -29,7 +29,6 @@ const product = {
   brand_name: null,
   category_name: null,
   catalogueItemId: 'i1',
-  catalogueVariantLabel: null,
 }
 
 // Single one-size variant with 4 in stock.

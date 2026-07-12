@@ -14,7 +14,7 @@ const product = {
   moq: 1, lead_time_days: 14, sizing_type: 'multi_size',
   decoration_methods: null, decoration_price: null, sku: null, safety_standard: null,
   specs: null, supports_labels: null, garment_family: null, default_sizes: null,
-  brand_name: null, category_name: null, catalogueItemId: 'i-pen', catalogueVariantLabel: null,
+  brand_name: null, category_name: null, catalogueItemId: 'i-pen',
   fulfilment_type: 'made_to_order' as const,
 }
 // One sizeless colourway variant — the exact shape that was un-orderable.

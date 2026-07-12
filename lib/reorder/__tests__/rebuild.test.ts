@@ -14,7 +14,6 @@ function row(over: Partial<QuoteItemRebuildRow> = {}): QuoteItemRebuildRow {
     decorations: 'decorations' in over ? over.decorations : [],
     ship_to_store_id: over.ship_to_store_id ?? null,
     catalogue_item_id: over.catalogue_item_id ?? null,
-    catalogue_variant_label: over.catalogue_variant_label ?? null,
     qty_from_stock: over.qty_from_stock ?? 0,
     qty_to_make: over.qty_to_make ?? 0,
     colour_label: over.colour_label ?? null,
@@ -38,13 +37,6 @@ describe('buildRebuildLines', () => {
     expect(lines[0].variantLabel).toBe('Bone / M')
   })
 
-  it('falls back to catalogue_variant_label when the variant join is empty', () => {
-    const { lines } = buildRebuildLines([
-      row({ colour_label: null, size_label: null, catalogue_variant_label: 'Design A' }),
-    ])
-    expect(lines[0].variantLabel).toBe('Design A')
-  })
-
   it('falls back to "—" when nothing resolves a label', () => {
     const { lines } = buildRebuildLines([row({ colour_label: null, size_label: null })])
     expect(lines[0].variantLabel).toBe('—')
@@ -57,7 +49,6 @@ describe('buildRebuildLines', () => {
         quantity: 24,
         ship_to_store_id: 'store-1',
         catalogue_item_id: 'ci-1',
-        catalogue_variant_label: 'Design A',
         image_url: 'https://img/x.png',
       }),
     ])
@@ -66,7 +57,6 @@ describe('buildRebuildLines', () => {
       qty: 24,
       shipToStoreId: 'store-1',
       catalogueItemId: 'ci-1',
-      catalogueVariantLabel: 'Design A',
       imageUrl: 'https://img/x.png',
       unitPrice: 0,
     })

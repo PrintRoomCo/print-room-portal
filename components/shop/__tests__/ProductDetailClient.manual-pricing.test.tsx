@@ -53,7 +53,6 @@ const product = {
   brand_name: null,
   category_name: null,
   catalogueItemId: 'ci-manual',
-  catalogueVariantLabel: null,
   priceMode: 'manual_final' as const,
   manualDecorationSeed: { 1: 7.5 },
 }
