@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
 import { CatalogueGrid } from '../CatalogueGrid'
 import type { CatalogueProductForGrid } from '@/lib/shop/explode-variants'
-import { SHOW_ALL_VARIANTS_KEY } from '@/lib/shop/show-all-variants'
 
 // ProductCard -> Money calls useCurrency(), which throws without a provider.
-// Stub it so the grid test stays focused on explode/toggle behaviour.
+// Stub it so the grid test stays focused on explode behaviour.
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({
     format: (n: number) => `$${n.toFixed(2)}`,
@@ -15,7 +14,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 }))
 
 // next/image rejects relative test-fixture src values ("black.png") via its
-// loader. The grid test cares about tiles/links/toggle, not image rendering —
+// loader. The grid test cares about tiles/links, not image rendering —
 // render a plain <img> so fixtures don't need absolute URLs.
 vi.mock('next/image', () => ({
   __esModule: true,
@@ -36,28 +35,11 @@ const products: CatalogueProductForGrid[] = [
 ]
 
 describe('CatalogueGrid', () => {
-  beforeEach(() => window.localStorage.clear())
-
-  it('defaults to exploded (one tile per colour)', () => {
+  it('renders one tile per colour', () => {
     render(<CatalogueGrid products={products} />)
     expect(screen.getByText('Crew Socks — Black')).toBeInTheDocument()
     expect(screen.getByText('Crew Socks — Pink')).toBeInTheDocument()
     const blackLink = screen.getByText('Crew Socks — Black').closest('a')
     expect(blackLink).toHaveAttribute('href', '/catalogue/p1?color=sw-black')
-  })
-
-  it('collapses when the toggle is switched off, and persists the choice', () => {
-    render(<CatalogueGrid products={products} />)
-    fireEvent.click(screen.getByRole('switch', { name: /show all variants/i }))
-    expect(screen.queryByText('Crew Socks — Black')).not.toBeInTheDocument()
-    expect(screen.getByText('Crew Socks')).toBeInTheDocument()
-    expect(window.localStorage.getItem(SHOW_ALL_VARIANTS_KEY)).toBe('0')
-  })
-
-  it('honours a stored OFF preference on mount', () => {
-    window.localStorage.setItem(SHOW_ALL_VARIANTS_KEY, '0')
-    render(<CatalogueGrid products={products} />)
-    expect(screen.getByText('Crew Socks')).toBeInTheDocument()
-    expect(screen.queryByText('Crew Socks — Black')).not.toBeInTheDocument()
   })
 })
