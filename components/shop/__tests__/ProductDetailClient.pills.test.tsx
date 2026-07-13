@@ -76,8 +76,8 @@ describe('PDP ordering-mode pills', () => {
   it('mixed + org_admin → both relabelled pills, no legacy wording', () => {
     renderPDP({ fulfilment_type: 'mixed', role: 'org_admin' })
     const group = screen.getByRole('group', { name: /order mode/i })
-    expect(group).toHaveTextContent('From inventory')
-    expect(group).toHaveTextContent('Reorder')
+    expect(group).toHaveTextContent('Stock on hand')
+    expect(group).toHaveTextContent('Purchase order')
     expect(group).not.toHaveTextContent('From Stock')
     expect(group).not.toHaveTextContent('Made to Order')
   })

@@ -137,8 +137,8 @@ describe('PDP ordering permissions (dead-zone + member cap)', () => {
       orderingPermission: 'both',
     })
     const group = screen.getByRole('group', { name: /order mode/i })
-    expect(group).toHaveTextContent('From inventory')
-    expect(group).toHaveTextContent('Reorder')
+    expect(group).toHaveTextContent('Stock on hand')
+    expect(group).toHaveTextContent('Purchase order')
     expect(
       screen.queryByText(
         /unavailable to order right now\. contact the print room/i,
@@ -155,8 +155,8 @@ describe('PDP ordering permissions (dead-zone + member cap)', () => {
       orderingPermission: 'stock_only',
     })
     const group = screen.getByRole('group', { name: /order mode/i })
-    expect(group).toHaveTextContent('From inventory')
-    expect(group).toHaveTextContent('Reorder')
+    expect(group).toHaveTextContent('Stock on hand')
+    expect(group).toHaveTextContent('Purchase order')
     expect(
       screen.queryByText(
         /unavailable to order right now\. contact the print room/i,

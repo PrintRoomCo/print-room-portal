@@ -12,8 +12,8 @@ export type Pill = 'from_inventory' | 'reorder'
 export type OrderingMode = 'all' | 'from_inventory' | 'reorder'
 
 export const PILL_LABELS: Record<Pill, string> = {
-  from_inventory: 'From inventory',
-  reorder: 'Reorder',
+  from_inventory: 'Stock on hand',
+  reorder: 'Purchase order',
 }
 
 /** Effective mode = catalogue override ?? master base ?? made_to_order. */

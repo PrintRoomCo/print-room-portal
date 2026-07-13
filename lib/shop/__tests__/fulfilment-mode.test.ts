@@ -52,7 +52,7 @@ describe('matchesMode (catalogue filter)', () => {
 
 describe('PILL_LABELS', () => {
   it('uses the spec wording', () => {
-    expect(PILL_LABELS.from_inventory).toBe('From inventory')
-    expect(PILL_LABELS.reorder).toBe('Reorder')
+    expect(PILL_LABELS.from_inventory).toBe('Stock on hand')
+    expect(PILL_LABELS.reorder).toBe('Purchase order')
   })
 })
