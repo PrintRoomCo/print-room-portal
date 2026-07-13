@@ -85,4 +85,14 @@ Sequencing: **B3 first** (security), then **B1** (the one big DB-time win), then
 
 ## Review checkpoint
 
-**Pausing here.** On sign-off, implementation order: characterization tests → A1 → measure → A2 → measure → A3 → measure → regression test → PR with before/after harness numbers. Track B SQL files can be drafted in parallel with review feedback.
+~~Pausing here.~~ **Approved 2026-07-14; Track A implemented same day.**
+
+## Outcome (measured after A1–A3, same harness)
+
+| Fixture | Round-trips before → after | Wall-clock before → after |
+|---|---|---|
+| 1 × 3 | 13 → 13 | 446 ms → 391 ms |
+| 40 × 3 | **93 → 17** | **3,806 ms → 621 ms (6.1×)** |
+| 80 × 3 | (~173 extrapolated) → **17** | (~7.4 s extrapolated) → **554 ms** |
+
+Decoration-loop share at N=40: 3,264 ms → 120 ms (link-selects 40 → 1; manual price RPCs 40 → 3 concurrent). Round-trip count is now independent of order size — pinned by `submit.roundtrip-regression.test.ts` (link-select = 1, price RPCs = distinct (item|link, pooled-qty) pairs, tier lookups ≤ 1). All 16 drift characterization tests unchanged and green pre/post. Full suite: 492 passed; the 2 failures (`CartTable`, `ProductDetailClient.manual-pricing` UI copy tests) fail identically on the unmodified tree — pre-existing, not touched by this branch.

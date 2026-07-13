@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
-import { effectiveDecorationPrice } from '@/lib/checkout/decoration-effective-price'
+import { effectiveDecorationPrice, loadTierMultiplier } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { resolveOrderEmailRecipient } from './order-email-recipient'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
@@ -664,17 +664,146 @@ export async function submitCustomerOrder(
     }
   }
 
-  async function applyManualDecorationForLine(
+  type LinkRow = {
+    id: string
+    catalogue_item_id: string
+    unit_price_override: number | string | null
+    snapshot_url: string | null
+    b2b_catalogue_items: { id: string; source_product_id: string }
+    org_decorations: {
+      id: string
+      organization_id: string
+      name: string
+      decoration_method: string
+      unit_price: number | string
+      is_active: boolean
+      width_mm: number | null
+      height_mm: number | null
+      colour_count: number | null
+      organization_artworks: { public_url: string } | { public_url: string }[] | null
+      decoration_locations:
+        | { location: string; placement_key: string | null }
+        | { location: string; placement_key: string | null }[]
+        | null
+    }
+  }
+
+  // One batched link fetch for the whole order (was one select per line — the
+  // checkout round-trip fan-out, see PERF-FINDINGS.md). Chunked to keep the
+  // PostgREST `in` filter bounded. A dec.linkId missing from the map is
+  // 'detached', exactly as it was with the per-line select.
+  const allLinkIds = Array.from(
+    new Set(input.lines.flatMap((l) => (l.decorations ?? []).map((d) => d.linkId))),
+  )
+  const linkRowById = new Map<string, LinkRow>()
+  for (let i = 0; i < allLinkIds.length; i += 100) {
+    const { data: linkRows, error: linkErr } = await admin
+      .from('b2b_catalogue_item_decorations')
+      .select(`
+        id,
+        catalogue_item_id,
+        unit_price_override,
+        snapshot_url,
+        b2b_catalogue_items!inner(id, source_product_id),
+        org_decorations!inner(
+          id,
+          organization_id,
+          name,
+          decoration_method,
+          unit_price,
+          is_active,
+          width_mm,
+          height_mm,
+          colour_count,
+          organization_artworks!org_decorations_artwork_id_fkey(public_url),
+          decoration_locations!org_decorations_decoration_location_id_fkey(location, placement_key)
+        )
+      `)
+      .in('id', allLinkIds.slice(i, i + 100))
+      .eq('is_published', true)
+    if (linkErr) {
+      throw new Error(`decoration lookup failed: ${linkErr.message}`)
+    }
+    for (const r of (linkRows as unknown as LinkRow[]) ?? []) linkRowById.set(r.id, r)
+  }
+
+  // Decoration tier qty for a line — pooled across same product+signature
+  // lines, mirroring the cart (the same aggregate the loop used per line).
+  const decorationQtyForLine = (line: CheckoutLineInput): number =>
+    totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
+    line.qty
+
+  const isManualCheckoutLine = (line: CheckoutLineInput): boolean =>
+    !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
+
+  // Pre-resolve every decoration price this order needs, concurrently and
+  // deduplicated: manual lines need ONE combined figure per distinct
+  // (catalogue item, pooled qty); computed decorations need one engine price
+  // per distinct (link, pooled qty). Only structurally-valid rows are priced —
+  // rejected placements (detached/cross-org/inactive/wrong-item) never were.
+  const manualPairs = new Map<string, { itemId: string; qty: number }>()
+  const computedPairs = new Map<string, { row: LinkRow; qty: number }>()
+  for (const line of input.lines) {
+    const qty = decorationQtyForLine(line)
+    if (isManualCheckoutLine(line) && line.catalogueItemId) {
+      manualPairs.set(`${line.catalogueItemId}::${qty}`, { itemId: line.catalogueItemId, qty })
+      continue
+    }
+    for (const dec of line.decorations ?? []) {
+      const row = linkRowById.get(dec.linkId)
+      if (!row) continue
+      const od = row.org_decorations
+      if (od.organization_id !== input.context.organizationId) continue
+      if (!od.is_active) continue
+      if (row.b2b_catalogue_items.source_product_id !== line.product_id) continue
+      computedPairs.set(`${row.id}::${qty}`, { row, qty })
+    }
+  }
+
+  // The tier multiplier depends only on the org — resolve it ONCE (it was
+  // re-queried per decoration inside effectiveDecorationPrice), and only when
+  // a computed decoration actually needs pricing.
+  const tierMultiplier =
+    computedPairs.size > 0
+      ? await loadTierMultiplier(admin, input.context.organizationId)
+      : 1
+
+  const manualPriceByPair = new Map<string, number>()
+  const computedPriceByPair = new Map<string, number>()
+  await Promise.all([
+    ...Array.from(manualPairs.entries()).map(async ([key, pair]) => {
+      const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
+        p_catalogue_item_id: pair.itemId,
+        p_qty: pair.qty,
+      })
+      const value = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
+      manualPriceByPair.set(key, value)
+    }),
+    ...Array.from(computedPairs.entries()).map(async ([key, pair]) => {
+      const od = pair.row.org_decorations
+      const effective = await effectiveDecorationPrice(
+        admin,
+        {
+          orgDecorationId: od.id,
+          organizationId: input.context.organizationId,
+          unitPriceOverride: pair.row.unit_price_override,
+          baseUnitPrice: od.unit_price,
+        },
+        pair.qty,
+        tierMultiplier,
+      )
+      computedPriceByPair.set(key, effective)
+    }),
+  ])
+
+  function applyManualDecorationForLine(
     line: CheckoutLineInput,
     decorationQty: number,
     driftLinkId: string,
-  ): Promise<void> {
+  ): void {
     if (!line.catalogueItemId) return
-    const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
-      p_catalogue_item_id: line.catalogueItemId,
-      p_qty: decorationQty,
-    })
-    const manualCombined = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
+    const manualCombined =
+      manualPriceByPair.get(`${line.catalogueItemId}::${decorationQty}`) ?? 0
     const serverR = Number(manualCombined.toFixed(2))
     const claimedR =
       line.claimed_manual_decoration == null
@@ -703,76 +832,18 @@ export async function submitCustomerOrder(
     const isManualLine = !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
     if (decs.length === 0) {
       if (isManualLine) {
-        const decorationQty =
-          totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
-          line.qty
-        await applyManualDecorationForLine(line, decorationQty, '')
+        applyManualDecorationForLine(line, decorationQtyForLine(line), '')
       }
       validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), [])
       continue
     }
-    const linkIds = decs.map((d) => d.linkId)
-    const { data: rows, error: linkErr } = await admin
-      .from('b2b_catalogue_item_decorations')
-      .select(`
-        id,
-        catalogue_item_id,
-        unit_price_override,
-        snapshot_url,
-        b2b_catalogue_items!inner(id, source_product_id),
-        org_decorations!inner(
-          id,
-          organization_id,
-          name,
-          decoration_method,
-          unit_price,
-          is_active,
-          width_mm,
-          height_mm,
-          colour_count,
-          organization_artworks!org_decorations_artwork_id_fkey(public_url),
-          decoration_locations!org_decorations_decoration_location_id_fkey(location, placement_key)
-        )
-      `)
-      .in('id', linkIds)
-      .eq('is_published', true)
-    if (linkErr) {
-      throw new Error(`decoration lookup failed: ${linkErr.message}`)
-    }
-
-    type LinkRow = {
-      id: string
-      catalogue_item_id: string
-      unit_price_override: number | string | null
-      snapshot_url: string | null
-      b2b_catalogue_items: { id: string; source_product_id: string }
-      org_decorations: {
-        id: string
-        organization_id: string
-        name: string
-        decoration_method: string
-        unit_price: number | string
-        is_active: boolean
-        width_mm: number | null
-        height_mm: number | null
-        colour_count: number | null
-        organization_artworks: { public_url: string } | { public_url: string }[] | null
-        decoration_locations:
-          | { location: string; placement_key: string | null }
-          | { location: string; placement_key: string | null }[]
-          | null
-      }
-    }
-
-    const byId = new Map((rows as unknown as LinkRow[] ?? []).map((r) => [r.id, r]))
+    const byId = linkRowById
     const validated: CheckoutLineDecorationInput[] = []
 
     // Decoration tier qty for this line (aggregated across same product+signature
     // lines, mirroring the cart). Used for both the per-placement engine price
     // and the manual-final combined figure.
-    const decorationQty =
-      totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
-      line.qty
+    const decorationQty = decorationQtyForLine(line)
 
     // Manual-final: when the line's catalogue item is manual, resolve the item's
     // ONE combined decoration figure from the engine (exact, no multiplier).
@@ -851,16 +922,7 @@ export async function submitCustomerOrder(
         continue
       }
 
-      const effective = await effectiveDecorationPrice(
-        admin,
-        {
-          orgDecorationId: od.id,
-          organizationId: input.context.organizationId,
-          unitPriceOverride: row.unit_price_override,
-          baseUnitPrice: od.unit_price,
-        },
-        decorationQty,
-      )
+      const effective = computedPriceByPair.get(`${row.id}::${decorationQty}`) ?? 0
       if (effective !== dec.unitPrice) {
         drift.push({
           cartLineId: line.cart_line_id ?? null,
@@ -893,7 +955,7 @@ export async function submitCustomerOrder(
     // mirrors the garment "legacy cart" path (UnitPriceDrift only guards carts
     // that carried a snapshot).
     if (isManualLine) {
-      await applyManualDecorationForLine(
+      applyManualDecorationForLine(
         line,
         decorationQty,
         validated[0]?.linkId ?? decs[0]?.linkId ?? '',
