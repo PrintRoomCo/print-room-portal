@@ -106,7 +106,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] motion-safe:animate-portal-enter md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans text-[clamp(40px,5vw,72px)] font-medium leading-[1.05] tracking-[-0.02em] text-gray-900">
-            Tracking
+            Track my Project
           </h1>
           <p className="mt-4 max-w-prose text-base text-gray-600">
             Track active production work and revisit completed orders.

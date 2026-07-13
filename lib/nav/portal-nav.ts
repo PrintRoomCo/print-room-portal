@@ -40,7 +40,7 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiredTenantTypes: null,
   },
   {
-    name: 'Tracking',
+    name: 'Track my Project',
     href: '/tracking',
     iconKey: 'tracking',
     requiresCompany: false,

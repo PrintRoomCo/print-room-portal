@@ -3,7 +3,7 @@ import { OrderTrackerClient } from './OrderTrackerClient'
 import { getPortalOrderTrackerData } from '@/lib/portal-data'
 
 export const metadata: Metadata = {
-  title: 'Order tracker',
+  title: 'Track my Project',
 }
 
 export default async function OrderTrackerPage() {
