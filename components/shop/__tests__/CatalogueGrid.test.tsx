@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { CatalogueGrid } from '../CatalogueGrid'
-import type { CatalogueProductForGrid } from '@/lib/shop/explode-variants'
+import type { CatalogueProductForGrid } from '@/lib/shop/catalogue-tile'
 
 // ProductCard -> Money calls useCurrency(), which throws without a provider.
 // Stub it so the grid test stays focused on explode behaviour.
@@ -35,11 +35,17 @@ const products: CatalogueProductForGrid[] = [
 ]
 
 describe('CatalogueGrid', () => {
-  it('renders one tile per colour', () => {
+  it('renders one card per product, linking to the PDP (no colour explosion)', () => {
     render(<CatalogueGrid products={products} />)
-    expect(screen.getByText('Crew Socks — Black')).toBeInTheDocument()
-    expect(screen.getByText('Crew Socks — Pink')).toBeInTheDocument()
-    const blackLink = screen.getByText('Crew Socks — Black').closest('a')
-    expect(blackLink).toHaveAttribute('href', '/catalogue/p1?color=sw-black')
+    const card = screen.getByText('Crew Socks')
+    expect(card).toBeInTheDocument()
+    expect(screen.queryByText('Crew Socks — Black')).not.toBeInTheDocument()
+    expect(card.closest('a')).toHaveAttribute('href', '/catalogue/p1')
+  })
+
+  it('shows the product colours as swatches on the single card', () => {
+    render(<CatalogueGrid products={products} />)
+    // ProductCard renders the swatch group with a colour-count aria-label.
+    expect(screen.getByLabelText('2 colours available')).toBeInTheDocument()
   })
 })
