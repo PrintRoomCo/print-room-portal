@@ -8,9 +8,10 @@
 --
 -- Date: 2026-07-14
 --
--- STAGED — RUNNABLE BUT NOT APPLIED. Apply only on explicit sign-off,
--- via the same tracked-migration path used for B1/B3/B4/B6/B7, OR by
--- hand in the SQL editor. Project ref: bthsxgmcnbvwwgvdveek.
+-- APPLIED 2026-07-14 as tracked migration
+-- b5a_preorder_stores_policy_merge after the pg_policies drift check
+-- below matched the captured BEFORE set exactly.
+-- Project ref: bthsxgmcnbvwwgvdveek.
 --
 -- WHAT THIS DOES
 --   Merges the 5 permissive policies on preorder_stores (1 cmd=ALL
@@ -87,13 +88,16 @@ CREATE POLICY "preorder_stores_update_merged" ON public.preorder_stores
 
 COMMIT;
 
--- Post-apply check: get_advisors(performance) should show 0
+-- Post-apply verified: get_advisors(performance) shows 0
 -- multiple_permissive_policies findings for preorder_stores (was 20).
 
 
--- ===== ROLLBACK =====
+-- ===== ROLLBACK TEMPLATE (INTENTIONALLY NON-EXECUTING) =====
 -- Restores the 5 original policies verbatim, as captured from pg_policies
 -- on 2026-07-14 (bare auth.*() calls, i.e. the pre-initplan form).
+-- Apply the SQL inside this block only as a separate tracked rollback
+-- migration. Keeping it commented makes the complete file forward-safe.
+/*
 BEGIN;
 
 DROP POLICY "preorder_stores_delete_merged" ON public.preorder_stores;
@@ -123,3 +127,4 @@ CREATE POLICY "preorder_stores_owner_update" ON public.preorder_stores
     WITH CHECK (auth.uid() = owner_id);
 
 COMMIT;
+*/
