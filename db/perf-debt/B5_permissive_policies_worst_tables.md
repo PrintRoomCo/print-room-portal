@@ -1,39 +1,43 @@
 # B5: Multiple Permissive Policies — worst offenders (staff_quotes, preorder_stores)
 
-**Purpose:** Analysis + DRAFT merge proposal for the two tables with the most
-`multiple_permissive_policies` advisor findings (20 each). This document is
-**NOT ready-to-run SQL**. It exists to scope the work and give reviewers a
-concrete starting point.
+**Purpose:** Analysis and historical proposal for the two tables that had the
+most `multiple_permissive_policies` advisor findings (20 each). The reviewed
+safe subset was promoted to the separate B5a/B5b files and applied; SQL blocks
+in this document remain explanatory history, not an apply surface.
 
 **Date:** 2026-07-14
 
-**STAGED FOR REVIEW — DO NOT APPLY without explicit sign-off.** This project
-has NO Supabase branching; any SQL extracted from this doc must first be
-promoted to a tracked migration with a separate tracked rollback, and may be
-applied only after someone signs off on the case-by-case semantics called out
-below. Project ref: `bthsxgmcnbvwwgvdveek`.
+**APPLIED SAFE SUBSET — 2026-07-14.** B5a and B5b step 1 were applied only
+after explicit production approval and exact pre-apply drift checks. Do not
+extract or apply SQL directly from this analysis document. Project ref:
+`bthsxgmcnbvwwgvdveek`.
 
-> **PROMOTION STATUS (2026-07-14).** After a verb-by-verb equivalence review,
-> two of the merges in this doc were promoted to runnable-but-staged SQL
-> files (still NOT applied — apply on explicit sign-off):
-> - **`preorder_stores`** → `B5a_preorder_stores.sql` (clean full merge, clears all 20 findings).
+> **APPLICATION STATUS (2026-07-14).** After a verb-by-verb equivalence review,
+> two merges were promoted and applied as tracked migrations:
+> - **`preorder_stores`** → `B5a_preorder_stores.sql` /
+>   `b5a_preorder_stores_policy_merge` (clean full merge, verified 20→0).
 > - **`staff_quotes` step 1 only** → `B5b_staff_quotes_step1.sql` (merges the two
->   `cmd=ALL/public` policies; **expected to clear ~18 of 20**, not the "10 of 20"
->   stated below — see the correction in the step-1 section). Step 2 remains
->   blocked on a product-owner call and is intentionally NOT in B5b.
+>   `cmd=ALL/public` policies) / `b5b_staff_quotes_step1_policy_merge`
+>   (verified 20→2, clearing 18 rather than the original draft's 10). Step 2
+>   remains blocked on a product-owner call, was not drafted further, and was
+>   not applied.
 >
 > Both target tables have 0 live rows (`pg_stat_user_tables`, 2026-07-14), so
 > blast radius is near-nil. Both promoted files also fold in the
-> `(select auth.*())` initplan fix. Everything else in this doc is still
+> `(select auth.*())` initplan fix. Everything else in this doc remains
 > analysis-only.
 
-**Evidence:** `multiple_permissive_policies` lint, 144 total findings across
-the project. `staff_quotes` and `preorder_stores` each contribute 20 findings
-— the two largest single-table contributors. Full breakdown of all affected
-tables is at the bottom of this doc.
+**Evidence:** Before B5, the `multiple_permissive_policies` lint had 144 total
+findings: `staff_quotes` and `preorder_stores` contributed 20 each. After B5a,
+the total was 124 and `preorder_stores` was 0. After B5b step 1, the total was
+106 and `staff_quotes` was exactly 2. The residuals are authenticated INSERT
+(`{staff_quotes_admin_or_own_access,staff_quotes_insert_own}`) and authenticated
+SELECT (`{staff_quotes_admin_or_own_access,staff_quotes_select_own,
+staff_quotes_select_staff}`).
 
-**Pre-apply verification query** (run before extracting/running any DRAFT SQL
-below, to confirm the policy set hasn't changed since 2026-07-14):
+**Historical pre-apply verification query.** The exact table-specific forms in
+B5a/B5b were run immediately before application and matched the captured
+BEFORE definitions. Retained here as audit context:
 
 ```sql
 SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
@@ -81,7 +85,7 @@ evaluates true. Concretely, for one query:
 
 ---
 
-## staff_quotes — current policies (dumped from pg_policies, 2026-07-14)
+## staff_quotes — pre-apply policies (dumped from pg_policies, 2026-07-14)
 
 | policyname | roles | cmd | qual | with_check |
 |---|---|---|---|---|
@@ -114,9 +118,9 @@ that baseline for their specific action:
 
 Total: 5+4+1+4+1+5 = **20**, matching the advisor count exactly.
 
-### DRAFT proposal for staff_quotes
+### Historical proposal for staff_quotes
 
-**DRAFT — semantics must be reviewed case-by-case.**
+**Historical draft — retained for audit context.**
 
 **Step 1 (~18 of 20 findings — see correction):** merge
 the two `cmd = ALL, roles = {public}` policies into one. This is the clean
@@ -210,7 +214,7 @@ need explicit sign-off:
 
 ---
 
-## preorder_stores — current policies (dumped from pg_policies, 2026-07-14)
+## preorder_stores — pre-apply policies (dumped from pg_policies, 2026-07-14)
 
 | policyname | roles | cmd | qual | with_check |
 |---|---|---|---|---|
@@ -237,9 +241,9 @@ roles for each of the 4 non-ALL commands:
 
 Total: 5+5+5+5 = **20**, matching the advisor count exactly.
 
-### DRAFT proposal for preorder_stores
+### Historical proposal for preorder_stores
 
-**DRAFT — semantics must be reviewed case-by-case.**
+**Historical draft — retained for audit context.**
 
 Unlike `staff_quotes`, this one has a clean full resolution: because
 `preorder_stores_service_role` is the *only* thing overlapping with each of
@@ -294,17 +298,16 @@ COMMIT;
 
 ---
 
-## Remaining tables affected by `multiple_permissive_policies`
+## Post-B5 tables affected by `multiple_permissive_policies`
 
-Full breakdown from the advisor JSON (`multiple_permissive_policies` lint,
-144 total findings project-wide). Only `staff_quotes` and `preorder_stores`
-are analyzed above; everything else below is listed for prioritization only
-— no draft SQL in this doc.
+Post-apply advisor breakdown (`multiple_permissive_policies` lint, 106 total
+findings project-wide). `preorder_stores` no longer appears; `staff_quotes`
+retains only the two deliberately accepted step-1 residuals. Everything else
+below is listed for prioritization only — no draft SQL in this doc.
 
 | Table | Findings |
 |---|---|
-| staff_quotes | 20 |
-| preorder_stores | 20 |
+| staff_quotes | 2 |
 | chat_messages | 10 |
 | chat_conversations | 10 |
 | supplier_price_rules | 5 |
@@ -336,5 +339,5 @@ are analyzed above; everything else below is listed for prioritization only
 | ai_generation_history | 1 |
 | account_requests | 1 |
 
-Sum check: 20+20+10+10+(13×5)+(4×2)+(11×1) = 40+20+65+8+11 = **144**, matches
-the advisor's total `multiple_permissive_policies` finding count exactly.
+Sum check: 2+10+10+(13×5)+(4×2)+(11×1) = 2+20+65+8+11 = **106**, matching
+the post-B5 advisor's total `multiple_permissive_policies` finding count.

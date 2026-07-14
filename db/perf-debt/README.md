@@ -8,31 +8,31 @@ PERF-STRATEGY.md Track B — both on branch `perf/checkout-fanout` (PR #66).
 `b4_rls_initplan_hot_tables`, `b7_drop_unused_and_duplicate_indexes` (197
 dropped, 1 skipped: `idx_bom_items_tech_pack_id` had been scanned since
 staging), `b6_fk_covering_indexes` (79 created; CONCURRENTLY stripped —
-transactional apply, safe at current table sizes). **NOT applied:** B5
-(analysis doc by design) and B2 (permission-gated at apply time + open
-product question on 1-minute cron latency). Post-apply: rls_disabled_in_public
-98→0, auth_rls_initplan 87→78, duplicate_index 15→2 (the two constraint-backed
-pairs), publication = chat tables only, checkout harness green (17 round-trips).
+transactional apply, safe at current table sizes),
+`b5a_preorder_stores_policy_merge`, and
+`b5b_staff_quotes_step1_policy_merge`. **NOT applied:** B2
+(permission-gated at apply time + open product question on 1-minute cron
+latency) or staff_quotes step 2. Post-apply: rls_disabled_in_public
+98→0, auth_rls_initplan 87→72, duplicate_index 15→2 (the two constraint-backed
+pairs), multiple_permissive_policies 144→106, publication = chat tables only,
+checkout harness green (17 round-trips).
 Known lint-tension left as-is at current scale: B7's drops re-exposed 48
 unindexed FKs and B6's new FK indexes now count as "unused" (79) — the two
 advisor lints structurally conflict on a low-traffic DB; revisit when row
 counts grow. Rollback sections below remain valid for every applied item.
 
-**FOLLOW-UP 2026-07-14 (B5 promotion + B2 investigation) — nothing new applied:**
+**FOLLOW-UP 2026-07-14 (B5 applied + B2 investigation):**
 
-- **B5 partially promoted (STAGED, not applied).** After a verb-by-verb
-  equivalence review, two merges became runnable-but-staged files:
-  `B5a_preorder_stores.sql` (clean full merge, clears all 20 findings) and
-  `B5b_staff_quotes_step1.sql` (merges the two `cmd=ALL/public` policies;
-  **expected to clear ~18 of 20**, not the draft's "10" — the draft
-  undercounted; the non-authenticated INSERT/SELECT groups collapse too).
-  staff_quotes **step 2** stays blocked on a product-owner call and is NOT in
-  B5b. Both target tables have 0 live rows; both fold in the `(select auth.*())`
-  initplan fix. Pre-apply `pg_policies` drift checks passed on 2026-07-14, but
-  the tracked `apply_migration` call was rejected in read-only mode before any
-  DDL ran. Both live policy sets and the advisor baseline remain unchanged
-  (`preorder_stores` 20, `staff_quotes` 20). Do not bypass with `execute_sql`;
-  apply when the tracked-migration connection is write-enabled.
+- **B5 safe subset APPLIED.** The exact table-specific `pg_policies` drift
+  checks in both promoted files matched their captured rollback definitions.
+  B5a then ran as tracked migration `b5a_preorder_stores_policy_merge` and the
+  performance advisor verified `preorder_stores` 20→0. B5b step 1 ran as
+  `b5b_staff_quotes_step1_policy_merge` and verified `staff_quotes` 20→2
+  (the expected authenticated INSERT and SELECT residuals). Total
+  `multiple_permissive_policies` findings moved 144→124→106. Both target
+  tables had 0 live rows at review time; both applied merges include the
+  `(select auth.*())` initplan fix. staff_quotes **step 2** remains blocked on
+  a product-owner call, was not drafted further, and was not applied.
 - **B3 archive-move is safe (swept 2026-07-14).** ZERO runtime
   (`.ts/.tsx/.js`) references to any of the 101 archived tables across all
   repos; the only code references are historical one-off `.sql` scripts that
@@ -76,16 +76,16 @@ counts grow. Rollback sections below remain valid for every applied item.
 | 2 | `B1_realtime_publication_trim.sql` | Drop 4 subscriber-less tables from the realtime publication | WAL decode was **79.4 % of all DB time**; chat (the only consumed feed) is untouched | Re-run the subscriber grep if any repo deployed after 2026-07-14 |
 | 3 | `B4_rls_initplan_hot_tables.sql` | `(select auth.*())` initplan rewrite for policies on the 9 checkout-hot tables | Per-row → per-query policy evaluation on RLS reads | Mechanical, but review each rewritten expression against the rollback copy |
 | 4 | `B7_unused_duplicate_indexes.sql` | Drop 15 duplicate + ~201 advisor-flagged unused indexes | Less WAL per write, smaller cache (~5.5 MB) | **Re-verify `idx_scan = 0` at apply time** (stats window starts 2026-03-23 and may miss seasonal jobs); constraint-backed indexes are excluded/flagged |
-| 5 | `B5_permissive_policies_worst_tables.md` + `B5a_preorder_stores.sql` + `B5b_staff_quotes_step1.sql` | Analysis, plus two PROMOTED runnable-but-staged merges: preorder_stores (full, clears 20) and staff_quotes step 1 (clears ~18 of 20) | Cuts per-query policy evaluation | B5a/B5b reviewed & runnable (apply on sign-off, 0-row tables); staff_quotes **step 2** still draft/blocked on a product call |
+| 5 | `B5_permissive_policies_worst_tables.md` + `B5a_preorder_stores.sql` + `B5b_staff_quotes_step1.sql` | Analysis, plus two APPLIED tracked merges: preorder_stores (full, cleared 20) and staff_quotes step 1 (cleared 18 of 20) | Cuts per-query policy evaluation | B5a/B5b applied and advisor-verified; staff_quotes **step 2** remains blocked on a product call and was not drafted further |
 | 6 | `B6_fk_covering_indexes.sql` | Covering indexes for the 79 unindexed FKs | Faster FK checks/joins — mostly *latent* (largest affected table is `product_variants` at 35 k rows; `orders` has 10) | `CREATE INDEX CONCURRENTLY` cannot run in a transaction — apply one by one |
 | — | `B2_cron_retune.sql` | Every-minute crons → `*/5` (**split**: jobid 4 uniforms-sync vs jobid 1 b2b-worker) | Modest (~3 % of DB time is all of pg_net) | jobid 4 safe pending "≤5-min board freshness OK?"; jobid 1 is an approval queue (backstop cron) — leave at `*/1` unless direct-invoke path confirmed. apply_migration denied; not worked around |
 
 ## Ground rules
 
 - Apply **one file per session**, run its pre-apply verification first, and
-  keep its rollback section at hand. B5a/B5b are forward-safe as complete
-  files: their verbatim rollback templates are intentionally commented and
-  must be applied only as separate tracked rollback migrations.
+  keep its rollback section at hand. B5a/B5b were applied as separate tracked
+  migrations; their verbatim rollback templates remain intentionally commented
+  and must be applied only as separate tracked rollback migrations.
 - After B3/B1, watch the staff portal chat + catalogue flows and
   `pg_stat_statements` for a day before proceeding down the list.
 - Found during the audit, parked for a separate security pass: 22

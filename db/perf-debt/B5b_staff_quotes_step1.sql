@@ -11,8 +11,9 @@
 --
 -- Date: 2026-07-14
 --
--- STAGED — RUNNABLE BUT NOT APPLIED. Apply only on explicit sign-off,
--- via the tracked-migration path used for B1/B3/B4/B6/B7.
+-- APPLIED 2026-07-14 as tracked migration
+-- b5b_staff_quotes_step1_policy_merge after the pg_policies drift check
+-- below matched the captured BEFORE set exactly.
 -- Project ref: bthsxgmcnbvwwgvdveek.
 --
 -- WHAT THIS DOES
@@ -23,7 +24,7 @@
 --   (select auth.uid()) for the auth_rls_initplan win (behavior-
 --   preserving; flagged as a bundled extra).
 --
--- EXPECTED ADVISOR DELTA — ~18 of 20 findings cleared (CONFIRM POST-APPLY)
+-- VERIFIED ADVISOR DELTA — 18 of 20 findings cleared
 --   The two merged policies were the SOLE overlapping pair on every
 --   command for the 4 non-authenticated roles, and the only pair at all
 --   on DELETE/UPDATE. Merging 2 -> 1 clears every group whose overlap
@@ -103,6 +104,8 @@ COMMIT;
 --   staff_quotes_insert_own    (INSERT, authenticated)
 --   staff_quotes_select_own    (SELECT, authenticated)
 --   staff_quotes_select_staff  (SELECT, authenticated)
+-- Post-apply verified: get_advisors(performance) shows exactly 2 residual
+-- findings, for authenticated INSERT and authenticated SELECT.
 
 
 -- ===== ROLLBACK TEMPLATE (INTENTIONALLY NON-EXECUTING) =====

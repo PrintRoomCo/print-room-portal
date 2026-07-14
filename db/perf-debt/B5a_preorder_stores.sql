@@ -8,8 +8,9 @@
 --
 -- Date: 2026-07-14
 --
--- STAGED — RUNNABLE BUT NOT APPLIED. Apply only on explicit sign-off,
--- via the same tracked-migration path used for B1/B3/B4/B6/B7.
+-- APPLIED 2026-07-14 as tracked migration
+-- b5a_preorder_stores_policy_merge after the pg_policies drift check
+-- below matched the captured BEFORE set exactly.
 -- Project ref: bthsxgmcnbvwwgvdveek.
 --
 -- WHAT THIS DOES
@@ -87,7 +88,7 @@ CREATE POLICY "preorder_stores_update_merged" ON public.preorder_stores
 
 COMMIT;
 
--- Post-apply check: get_advisors(performance) should show 0
+-- Post-apply verified: get_advisors(performance) shows 0
 -- multiple_permissive_policies findings for preorder_stores (was 20).
 
 
