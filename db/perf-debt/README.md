@@ -83,7 +83,9 @@ counts grow. Rollback sections below remain valid for every applied item.
 ## Ground rules
 
 - Apply **one file per session**, run its pre-apply verification first, and
-  keep its rollback section at hand.
+  keep its rollback section at hand. B5a/B5b are forward-safe as complete
+  files: their verbatim rollback templates are intentionally commented and
+  must be applied only as separate tracked rollback migrations.
 - After B3/B1, watch the staff portal chat + catalogue flows and
   `pg_stat_statements` for a day before proceeding down the list.
 - Found during the audit, parked for a separate security pass: 22

@@ -8,10 +8,10 @@ concrete starting point.
 **Date:** 2026-07-14
 
 **STAGED FOR REVIEW — DO NOT APPLY without explicit sign-off.** This project
-has NO Supabase branching; any SQL extracted from this doc must be applied
-manually via the SQL editor/psql after review, and only after someone signs
-off on the case-by-case semantics called out below. Project ref:
-`bthsxgmcnbvwwgvdveek`.
+has NO Supabase branching; any SQL extracted from this doc must first be
+promoted to a tracked migration with a separate tracked rollback, and may be
+applied only after someone signs off on the case-by-case semantics called out
+below. Project ref: `bthsxgmcnbvwwgvdveek`.
 
 > **PROMOTION STATUS (2026-07-14).** After a verb-by-verb equivalence review,
 > two of the merges in this doc were promoted to runnable-but-staged SQL

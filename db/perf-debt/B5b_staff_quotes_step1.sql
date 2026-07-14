@@ -12,7 +12,7 @@
 -- Date: 2026-07-14
 --
 -- STAGED — RUNNABLE BUT NOT APPLIED. Apply only on explicit sign-off,
--- via the tracked-migration path used for B1/B3/B4/B6/B7, or by hand.
+-- via the tracked-migration path used for B1/B3/B4/B6/B7.
 -- Project ref: bthsxgmcnbvwwgvdveek.
 --
 -- WHAT THIS DOES
@@ -105,9 +105,12 @@ COMMIT;
 --   staff_quotes_select_staff  (SELECT, authenticated)
 
 
--- ===== ROLLBACK =====
+-- ===== ROLLBACK TEMPLATE (INTENTIONALLY NON-EXECUTING) =====
 -- Restores the two original policies verbatim, as captured from
 -- pg_policies on 2026-07-14 (bare auth.uid(), pre-initplan form).
+-- Apply the SQL inside this block only as a separate tracked rollback
+-- migration. Keeping it commented makes the complete file forward-safe.
+/*
 BEGIN;
 
 DROP POLICY "staff_quotes_admin_or_own_access" ON public.staff_quotes;
@@ -141,3 +144,4 @@ CREATE POLICY "staff_quotes_own_access" ON public.staff_quotes
     ));
 
 COMMIT;
+*/
