@@ -1210,10 +1210,6 @@ export function ProductDetailClient({
             </div>
           ) : (
           <>
-          {canChooseOrderIntent && (
-            <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
-          )}
-
           {displayVolumeBrackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
@@ -1231,6 +1227,10 @@ export function ProductDetailClient({
                 ))}
               </ul>
             </section>
+          )}
+
+          {canChooseOrderIntent && (
+            <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
 
           {multiSize && visibleSizeRows.length > 0 && (

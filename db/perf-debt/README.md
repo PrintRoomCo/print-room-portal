@@ -18,6 +18,44 @@ unindexed FKs and B6's new FK indexes now count as "unused" (79) — the two
 advisor lints structurally conflict on a low-traffic DB; revisit when row
 counts grow. Rollback sections below remain valid for every applied item.
 
+**FOLLOW-UP 2026-07-14 (B5 promotion + B2 investigation) — nothing new applied:**
+
+- **B5 partially promoted (STAGED, not applied).** After a verb-by-verb
+  equivalence review, two merges became runnable-but-staged files:
+  `B5a_preorder_stores.sql` (clean full merge, clears all 20 findings) and
+  `B5b_staff_quotes_step1.sql` (merges the two `cmd=ALL/public` policies;
+  **expected to clear ~18 of 20**, not the draft's "10" — the draft
+  undercounted; the non-authenticated INSERT/SELECT groups collapse too).
+  staff_quotes **step 2** stays blocked on a product-owner call and is NOT in
+  B5b. Both target tables have 0 live rows; both fold in the `(select auth.*())`
+  initplan fix. Apply on sign-off via the same tracked-migration path as
+  B1/B3/B4/B6/B7.
+- **B3 archive-move is safe (swept 2026-07-14).** ZERO runtime
+  (`.ts/.tsx/.js`) references to any of the 101 archived tables across all
+  repos; the only code references are historical one-off `.sql` scripts that
+  *created* the backups (they don't read them at runtime). The
+  `*_skucollapse_bak_20260624` / `colourway_collapse_map_bak_20260624` tables
+  named in staff scripts 024/025 exist in neither `public` nor `archive`
+  (dropped before B3) — B3 missed nothing. No operational break from the move.
+- **B2 is two jobs with different risk — do NOT treat them as one.**
+  - **jobid 4** `uniforms-monday-sync-cron` = `SELECT invoke_uniforms_monday_sync()`;
+    pushes uniforms data to a Monday board. Safe to slow to `*/5` pending ONE
+    product answer: **is ≤5-min board freshness acceptable?** If yes, apply
+    `select cron.alter_job(4, schedule => '*/5 * * * *');` (rollback `'* * * * *'`).
+  - **jobid 1** `b2b-worker-cron` posts to the `b2b-worker` edge function
+    (`print-room-studio/supabase/functions/b2b-worker`). That worker is a
+    **design/quote APPROVAL queue** (`approve-design` → creates Shopify
+    products; `approve-quote`/`reject-quote`; design-collection approve/reject).
+    It is invoked TWO ways: this cron **and** direct invocation right after a
+    webhook enqueues a job — so the cron is a **backstop/retry sweep**, not the
+    happy-path latency driver, but it is still order-adjacent. Recommendation:
+    slow jobid 4 first; **leave jobid 1 at `*/1`** unless the webhook
+    direct-invoke path is confirmed reliable end-to-end.
+  - Mechanics unchanged: `apply_migration` for the cron change was denied by the
+    permission classifier and was NOT worked around.
+  - **Parked security note:** jobid 1's cron command embeds a `service_role`
+    JWT in plaintext in `cron.job.command`. Separate hardening item, not perf.
+
 ## Files, in recommended apply order
 
 | Order | File | What | Win | Blocker / caution |
@@ -26,9 +64,9 @@ counts grow. Rollback sections below remain valid for every applied item.
 | 2 | `B1_realtime_publication_trim.sql` | Drop 4 subscriber-less tables from the realtime publication | WAL decode was **79.4 % of all DB time**; chat (the only consumed feed) is untouched | Re-run the subscriber grep if any repo deployed after 2026-07-14 |
 | 3 | `B4_rls_initplan_hot_tables.sql` | `(select auth.*())` initplan rewrite for policies on the 9 checkout-hot tables | Per-row → per-query policy evaluation on RLS reads | Mechanical, but review each rewritten expression against the rollback copy |
 | 4 | `B7_unused_duplicate_indexes.sql` | Drop 15 duplicate + ~201 advisor-flagged unused indexes | Less WAL per write, smaller cache (~5.5 MB) | **Re-verify `idx_scan = 0` at apply time** (stats window starts 2026-03-23 and may miss seasonal jobs); constraint-backed indexes are excluded/flagged |
-| 5 | `B5_permissive_policies_worst_tables.md` | Analysis + DRAFT merges for the worst multiple-permissive-policy tables (`staff_quotes`, `preorder_stores`, 20 findings each) | Cuts per-query policy evaluation | **Draft only** — policy semantics must be reviewed case-by-case before any SQL is written into a runnable file |
+| 5 | `B5_permissive_policies_worst_tables.md` + `B5a_preorder_stores.sql` + `B5b_staff_quotes_step1.sql` | Analysis, plus two PROMOTED runnable-but-staged merges: preorder_stores (full, clears 20) and staff_quotes step 1 (clears ~18 of 20) | Cuts per-query policy evaluation | B5a/B5b reviewed & runnable (apply on sign-off, 0-row tables); staff_quotes **step 2** still draft/blocked on a product call |
 | 6 | `B6_fk_covering_indexes.sql` | Covering indexes for the 79 unindexed FKs | Faster FK checks/joins — mostly *latent* (largest affected table is `product_variants` at 35 k rows; `orders` has 10) | `CREATE INDEX CONCURRENTLY` cannot run in a transaction — apply one by one |
-| — | `B2_cron_retune.sql` | Every-minute crons → `*/5` | Modest (~3 % of DB time is all of pg_net) | Blocked on a product answer: is 1-minute sync latency required? |
+| — | `B2_cron_retune.sql` | Every-minute crons → `*/5` (**split**: jobid 4 uniforms-sync vs jobid 1 b2b-worker) | Modest (~3 % of DB time is all of pg_net) | jobid 4 safe pending "≤5-min board freshness OK?"; jobid 1 is an approval queue (backstop cron) — leave at `*/1` unless direct-invoke path confirmed. apply_migration denied; not worked around |
 
 ## Ground rules
 
