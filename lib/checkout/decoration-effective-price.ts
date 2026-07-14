@@ -21,7 +21,7 @@ export interface DecorationPriceInput {
   baseUnitPrice: number | string
 }
 
-async function loadTierMultiplier(admin: SupabaseClient, organizationId: string): Promise<number> {
+export async function loadTierMultiplier(admin: SupabaseClient, organizationId: string): Promise<number> {
   const { data } = await admin
     .from('b2b_accounts')
     .select('tier_discount_override, customer_pricing_tiers!inner(multiplier)')
@@ -42,6 +42,12 @@ export async function effectiveDecorationPrice(
   admin: SupabaseClient,
   input: DecorationPriceInput,
   qty: number,
+  /**
+   * Pre-resolved org tier multiplier. The multiplier depends only on the
+   * organization, so callers pricing many decorations (checkout) resolve it
+   * once and pass it in; when absent it is loaded per call (legacy behaviour).
+   */
+  tierMultiplier?: number,
 ): Promise<number> {
   const { data, error } = await admin.rpc('effective_decoration_unit_price', {
     p_org_decoration_id: input.orgDecorationId,
@@ -58,6 +64,6 @@ export async function effectiveDecorationPrice(
     base = Number(input.baseUnitPrice)
   }
 
-  const tierMult = await loadTierMultiplier(admin, input.organizationId)
+  const tierMult = tierMultiplier ?? (await loadTierMultiplier(admin, input.organizationId))
   return Number((base * tierMult).toFixed(2))
 }
