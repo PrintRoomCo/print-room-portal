@@ -13,6 +13,20 @@ manually via the SQL editor/psql after review, and only after someone signs
 off on the case-by-case semantics called out below. Project ref:
 `bthsxgmcnbvwwgvdveek`.
 
+> **PROMOTION STATUS (2026-07-14).** After a verb-by-verb equivalence review,
+> two of the merges in this doc were promoted to runnable-but-staged SQL
+> files (still NOT applied — apply on explicit sign-off):
+> - **`preorder_stores`** → `B5a_preorder_stores.sql` (clean full merge, clears all 20 findings).
+> - **`staff_quotes` step 1 only** → `B5b_staff_quotes_step1.sql` (merges the two
+>   `cmd=ALL/public` policies; **expected to clear ~18 of 20**, not the "10 of 20"
+>   stated below — see the correction in the step-1 section). Step 2 remains
+>   blocked on a product-owner call and is intentionally NOT in B5b.
+>
+> Both target tables have 0 live rows (`pg_stat_user_tables`, 2026-07-14), so
+> blast radius is near-nil. Both promoted files also fold in the
+> `(select auth.*())` initplan fix. Everything else in this doc is still
+> analysis-only.
+
 **Evidence:** `multiple_permissive_policies` lint, 144 total findings across
 the project. `staff_quotes` and `preorder_stores` each contribute 20 findings
 — the two largest single-table contributors. Full breakdown of all affected
@@ -104,12 +118,22 @@ Total: 5+4+1+4+1+5 = **20**, matching the advisor count exactly.
 
 **DRAFT — semantics must be reviewed case-by-case.**
 
-**Step 1 (resolves groups A and F completely, 10 of 20 findings):** merge
+**Step 1 (~18 of 20 findings — see correction):** merge
 the two `cmd = ALL, roles = {public}` policies into one. This is the clean
 part of the merge — both already apply to the same roles and the same
 commands, so OR-ing their `USING`/`WITH CHECK` is semantically a
 straightforward union of "who can see/write this row" with no behavior
 change for DELETE/UPDATE (which only these two policies touch):
+
+> **Correction (2026-07-14):** this step was originally billed as "10 of 20
+> (groups A and F)". That undercounts. `{admin_access, own_access}` is the
+> *sole* overlap not just on DELETE (A) and UPDATE (F) but also on INSERT and
+> SELECT for the four **non-authenticated** roles (groups B and D) — those
+> have no per-verb policy, so they also collapse 2→1. Step 1 therefore clears
+> A+B+D+F = **18** findings, leaving only C (authenticated INSERT, `{merged,
+> insert_own}`) and E (authenticated SELECT, `{merged, select_own,
+> select_staff}`) = 2 residual for step 2. Confirm with a
+> `get_advisors(performance)` diff after applying `B5b_staff_quotes_step1.sql`.
 
 ```sql
 -- DRAFT — semantics must be reviewed case-by-case.
