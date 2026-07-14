@@ -1,13 +1,22 @@
-# Track B — shared-DB perf/security debt (staged SQL, review-only)
+# Track B — shared-DB perf/security debt (staged SQL)
 
 Staged 2026-07-14 from the verified findings in PERF-FINDINGS.md §4 and the plan in
 PERF-STRATEGY.md Track B — both on branch `perf/checkout-fanout` (PR #66).
 
-**Nothing in this directory has been applied.** The Supabase project
-(`bthsxgmcnbvwwgvdveek`) has no branching enabled, so these are hand-apply
-scripts for the SQL editor / psql, each with an explicit `ROLLBACK` section
-and pre-apply verification queries in its header. This directory is
-deliberately *outside* `supabase/migrations` so nothing can auto-apply it.
+**APPLIED 2026-07-14 (on Jon's instruction), as tracked migrations:**
+`b3_archive_backup_tables_out_of_public`, `b1_realtime_publication_trim`,
+`b4_rls_initplan_hot_tables`, `b7_drop_unused_and_duplicate_indexes` (197
+dropped, 1 skipped: `idx_bom_items_tech_pack_id` had been scanned since
+staging), `b6_fk_covering_indexes` (79 created; CONCURRENTLY stripped —
+transactional apply, safe at current table sizes). **NOT applied:** B5
+(analysis doc by design) and B2 (permission-gated at apply time + open
+product question on 1-minute cron latency). Post-apply: rls_disabled_in_public
+98→0, auth_rls_initplan 87→78, duplicate_index 15→2 (the two constraint-backed
+pairs), publication = chat tables only, checkout harness green (17 round-trips).
+Known lint-tension left as-is at current scale: B7's drops re-exposed 48
+unindexed FKs and B6's new FK indexes now count as "unused" (79) — the two
+advisor lints structurally conflict on a low-traffic DB; revisit when row
+counts grow. Rollback sections below remain valid for every applied item.
 
 ## Files, in recommended apply order
 
