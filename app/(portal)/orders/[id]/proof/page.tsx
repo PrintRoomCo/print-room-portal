@@ -30,25 +30,6 @@ interface VersionRow {
   id: string
   snapshot_data: unknown
 }
-
-/**
- * Customer "View proof" page.
- *
- * Slice F of the proof-creator product-first rollout (spec §G, plan F2).
- * Gates an authenticated buyer to a read-only render of the proof on their order.
- *
- * Gates (all enforced in this RSC; RLS on design_proofs also enforces org-scope
- * at the DB level via the `design_proofs_org_member_read` policy):
- *   1. requireB2BCustomer()             - auth gate
- *   2. order.quotes.organization_id     - org gate
- *   3. proof.order_id non-null          - order-linked gate
- *   4. order.order_proof_approval_gate  - deliberate customer visibility gate
- *      + proof_quality_status visible     (per stabilisation spec §G.5;
- *      predicate lives in lib/proofs/visibility.ts, shared with /proofs)
- *
- * Slice G adds the "Edit proof" entry point. This page intentionally renders
- * read-only.
- */
 export default async function OrderProofPage({
   params,
   searchParams,
@@ -60,14 +41,10 @@ export default async function OrderProofPage({
   const search = (await searchParams) ?? {}
   const amendmentSubmitted = search.amendment === 'submitted'
 
-  // Gate 1 — auth. Anonymous / no-org users are redirected per handleAuthFailure.
   const auth = await requireB2BCustomer()
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
-  // Resolve the order + its org (the org gate). We do not leak that the order
-  // exists if the caller's org doesn't match — the ProofNotReady panel is the
-  // single 403 surface.
   const { data: orderData } = await admin
     .from('orders')
     .select('id, status, order_proof_approval_gate, quote_id, quotes!inner(organization_id)')
@@ -77,8 +54,7 @@ export default async function OrderProofPage({
 
   if (!order || !order.quotes) return <ProofNotReady />
 
-  // Gate 2 — org membership. The caller's organizationId must match the
-  // order's quote's organization_id.
+
   if (order.quotes.organization_id !== context.organizationId) {
     console.warn('[proof-viewer] org_mismatch', {
       orderId,
