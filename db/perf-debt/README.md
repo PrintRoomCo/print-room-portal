@@ -28,8 +28,11 @@ counts grow. Rollback sections below remain valid for every applied item.
   undercounted; the non-authenticated INSERT/SELECT groups collapse too).
   staff_quotes **step 2** stays blocked on a product-owner call and is NOT in
   B5b. Both target tables have 0 live rows; both fold in the `(select auth.*())`
-  initplan fix. Apply on sign-off via the same tracked-migration path as
-  B1/B3/B4/B6/B7.
+  initplan fix. Pre-apply `pg_policies` drift checks passed on 2026-07-14, but
+  the tracked `apply_migration` call was rejected in read-only mode before any
+  DDL ran. Both live policy sets and the advisor baseline remain unchanged
+  (`preorder_stores` 20, `staff_quotes` 20). Do not bypass with `execute_sql`;
+  apply when the tracked-migration connection is write-enabled.
 - **B3 archive-move is safe (swept 2026-07-14).** ZERO runtime
   (`.ts/.tsx/.js`) references to any of the 101 archived tables across all
   repos; the only code references are historical one-off `.sql` scripts that
@@ -46,11 +49,20 @@ counts grow. Rollback sections below remain valid for every applied item.
     (`print-room-studio/supabase/functions/b2b-worker`). That worker is a
     **design/quote APPROVAL queue** (`approve-design` → creates Shopify
     products; `approve-quote`/`reject-quote`; design-collection approve/reject).
-    It is invoked TWO ways: this cron **and** direct invocation right after a
-    webhook enqueues a job — so the cron is a **backstop/retry sweep**, not the
-    happy-path latency driver, but it is still order-adjacent. Recommendation:
-    slow jobid 4 first; **leave jobid 1 at `*/1`** unless the webhook
-    direct-invoke path is confirmed reliable end-to-end.
+    The last committed direct-invoke producer lived in the former Shopify B2B
+    portal: enqueue, then an unawaited fire-and-forget POST to the worker. That
+    app was deleted from the studio monorepo on 2026-04-10, and no current
+    producer/invoker exists in the three active repos, so the currently
+    registered webhook path is not source-verifiable here. Live evidence on
+    2026-07-14: 9 B2B jobs total, newest 2026-01-13, 0 pending/processing, 1
+    historical failure; jobid 1 completed 1,440/1,440 cron runs in 24 hours and
+    recent worker HTTP requests were 200. The deployed worker processes at most
+    5 jobs per invocation, retries immediately without backoff, and has no
+    stale-`processing` recovery. Recommendation: **leave jobid 1 at `*/1`**
+    until the live Monday webhook registration/owner is located and a test
+    approval proves enqueue + direct invocation end-to-end. If that flow is
+    retired, disable this empty cron; if it remains active and ≤5-minute retry
+    latency is acceptable, `*/5` is then defensible.
   - Mechanics unchanged: `apply_migration` for the cron change was denied by the
     permission classifier and was NOT worked around.
   - **Parked security note:** jobid 1's cron command embeds a `service_role`
