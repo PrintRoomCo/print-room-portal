@@ -27,7 +27,8 @@ export interface OrderBreakdown {
   decorationTotal: number  // sum(qty × decorationPerUnit)
   discountAmount: number   // always 0 in catalogue mode
   netSubtotal: number      // grossSubtotal - discountAmount
+  pickingFee: number       // separate NZ picking-fee line; 0 when no fee applies
   gstRate: number          // 0.15 for NZ
-  gst: number              // round2(netSubtotal × gstRate)
-  total: number            // netSubtotal + gst
+  gst: number              // round2((netSubtotal + pickingFee) × gstRate)
+  total: number            // netSubtotal + pickingFee + gst
 }
