@@ -349,6 +349,12 @@ export function ProductDetailClient({
     (currentSelectionHasInventory && brackets.length === 0) ||
     (canChooseOrderIntent && orderIntent === 'inventory')
 
+  // Item 6: the stock "Available" column and the header AvailabilityBadge are
+  // meaningful only when drawing from existing stock (Stock-on-hand mode). In
+  // Purchase-order mode (!isInventoryMode) the order is a production run, so
+  // per-size availability is irrelevant — hide both.
+  const showAvailability = isInventoryMode
+
   // Org_admin drawing From inventory may overflow a size's available stock:
   // the in-stock units are drawn down and the shortfall becomes a production
   // run. Restricted staff and stocked-only products are NOT in scope; they
@@ -1166,12 +1172,14 @@ export function ProductDetailClient({
                 <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(32px,4vw,56px)] text-gray-900">
                   {product.name}
                 </h1>
-                <AvailabilityBadge
-                  availableQty={multiSize ? colourTotalAvailable : availableQty}
-                  availableToOrder={
-                    multiSize ? hasBackorderableOrderPath : selectedVariantBackorderable
-                  }
-                />
+                {showAvailability && (
+                  <AvailabilityBadge
+                    availableQty={multiSize ? colourTotalAvailable : availableQty}
+                    availableToOrder={
+                      multiSize ? hasBackorderableOrderPath : selectedVariantBackorderable
+                    }
+                  />
+                )}
                 {product.sizing_type && product.sizing_type !== 'multi_size' && (
                   <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-gray-600">
                     {product.sizing_type.replace(/_/g, ' ')}
@@ -1239,7 +1247,9 @@ export function ProductDetailClient({
                 <thead className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500">
                   <tr>
                     <th className="px-5 pt-5 pb-2 font-medium">Size</th>
-                    <th className="px-5 pt-5 pb-2 font-medium">Available</th>
+                    {showAvailability && (
+                      <th className="px-5 pt-5 pb-2 font-medium">Available</th>
+                    )}
                     <th className="px-5 pt-5 pb-2 text-right font-medium">Qty</th>
                   </tr>
                 </thead>
@@ -1266,24 +1276,26 @@ export function ProductDetailClient({
                     return (
                       <tr key={cellKey(row.variantId, row.sizeId)} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
-                        <td className="px-5 py-3 text-xs text-gray-600">
-                          {showAvailableToOrderChip ? (
-                            <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
-                              Available to order
-                            </span>
-                          ) : `${stocked}`}
-                          {/* "to be made" is a reorder/MTO concept — qty beyond
-                              stock that goes to production. In From-inventory mode
-                              the shortfall guard already caps orders at available
-                              stock, so we show only the available count there.
-                              Suppressed when the pill already says "Available to
-                              order" (matches backorderable-row behaviour). */}
-                          {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showAvailableToOrderChip && (
-                            <span className="ml-1 text-amber-700">
-                              ({backorder} to be made)
-                            </span>
-                          )}
-                        </td>
+                        {showAvailability && (
+                          <td className="px-5 py-3 text-xs text-gray-600">
+                            {showAvailableToOrderChip ? (
+                              <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                                Available to order
+                              </span>
+                            ) : `${stocked}`}
+                            {/* "to be made" is a reorder/MTO concept — qty beyond
+                                stock that goes to production. In From-inventory mode
+                                the shortfall guard already caps orders at available
+                                stock, so we show only the available count there.
+                                Suppressed when the pill already says "Available to
+                                order" (matches backorderable-row behaviour). */}
+                            {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showAvailableToOrderChip && (
+                              <span className="ml-1 text-amber-700">
+                                ({backorder} to be made)
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-5 py-3 text-right">
                           <input
                             type="number"
@@ -1314,7 +1326,7 @@ export function ProductDetailClient({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-200">
-                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={2}>
+                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={showAvailability ? 2 : 1}>
                       Total this colour
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
@@ -1323,7 +1335,7 @@ export function ProductDetailClient({
                   </tr>
                   {otherColoursTotalQty > 0 && (
                     <tr className="border-t border-gray-100">
-                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={2}>
+                      <td className="px-5 py-3 text-xs text-gray-500" colSpan={showAvailability ? 2 : 1}>
                         Order total (across all variants)
                       </td>
                       <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
