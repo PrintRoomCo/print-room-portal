@@ -15,7 +15,7 @@ export default async function CheckoutReviewPage() {
 
   const { data: rawStores } = await admin
     .from('stores')
-    .select('id, name, city')
+    .select('id, name, city, country')
     .eq('organization_id', context.organizationId)
     .order('name')
 

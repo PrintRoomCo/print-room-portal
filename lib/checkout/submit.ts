@@ -18,7 +18,7 @@ import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { orderBillingNote } from '@/lib/monday/billing-note'
 import { orderNeedsInvoicing } from './order-billing'
-import { pickingFeeForGoods } from '@/lib/pricing/picking-fee'
+import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
@@ -1150,15 +1150,12 @@ export async function submitCustomerOrder(
   }))
   const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
   const isStockOnHandOrder = orderType === 'stock_on_hand'
-  const shipCountryRaw = (shippingAddress as { country?: unknown }).country
-  const shipCountry = (typeof shipCountryRaw === 'string' ? shipCountryRaw : '')
-    .trim()
-    .toLowerCase()
-  const isAusShipping =
-    shipCountry === 'au' || shipCountry === 'aus' || shipCountry.startsWith('austral')
   const goodsSubtotal = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
-  const pickFee =
-    isStockOnHandOrder && !isAusShipping ? pickingFeeForGoods(goodsSubtotal) : 0
+  const pickFee = orderPickingFee({
+    isStockOnHand: isStockOnHandOrder,
+    shipCountry: (shippingAddress as { country?: unknown }).country as string | null | undefined,
+    goodsSubtotal,
+  })
 
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.

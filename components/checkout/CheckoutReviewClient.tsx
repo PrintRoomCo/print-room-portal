@@ -10,6 +10,8 @@ import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { classifyOrderType } from '@/lib/orders/order-type'
 import {
   allInLineTotal,
   allInUnitPrice,
@@ -70,18 +72,43 @@ export function CheckoutReviewClient({
     return map
   }, [stores])
 
-  const breakdown = useMemo(
-    () =>
-      computeOrderBreakdown({
-        lines: cart.lines.map((line) => ({
-          qty: line.qty,
-          unitEffective: line.unitPrice,
-          decorationPerUnit: decorationPerUnit(line),
-        })),
-        gstRate: 0.15,
-      }),
-    [cart.lines],
-  )
+  // Ship-to country mirrors the server's single-shipping-address resolution
+  // (submit.ts): the custom address when every line ships custom, else the FIRST
+  // line's store. Drives the NZ picking-fee region gate so the customer's figure
+  // matches the Xero draft + Monday billing note.
+  const shipCountry = useMemo<string | null>(() => {
+    if (!reviewState) return null
+    if (allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)) {
+      return reviewState.customAddress.country ?? null
+    }
+    const firstStoreId = cart.lines[0]
+      ? reviewState.perLineShipTo[cart.lines[0].lineId]
+      : null
+    return firstStoreId ? storeById.get(firstStoreId)?.country ?? null : null
+  }, [reviewState, cart.lines, storeById])
+
+  const breakdown = useMemo(() => {
+    // NZ picking fee (shared helper — same logic as the server) shown to the
+    // customer. goodsSubtotal is ex-GST goods incl. folded decoration, matching
+    // computeOrderBreakdown's grossSubtotal and the server's repriced total.
+    const goodsSubtotal = cart.lines.reduce((t, l) => t + allInUnitPrice(l) * l.qty, 0)
+    const pickingFee = orderPickingFee({
+      isStockOnHand:
+        classifyOrderType(cart.lines.map((l) => ({ fulfilment_type: l.fulfilmentType ?? null }))) ===
+        'stock_on_hand',
+      shipCountry,
+      goodsSubtotal,
+    })
+    return computeOrderBreakdown({
+      lines: cart.lines.map((line) => ({
+        qty: line.qty,
+        unitEffective: line.unitPrice,
+        decorationPerUnit: decorationPerUnit(line),
+      })),
+      gstRate: 0.15,
+      pickingFee,
+    })
+  }, [cart.lines, shipCountry])
   const depositPct = defaultDepositPercent ?? 0
   const depositAmount = (breakdown.netSubtotal * depositPct) / 100
 
