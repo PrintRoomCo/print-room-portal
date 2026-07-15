@@ -1689,7 +1689,7 @@ export async function submitCustomerOrder(
       const emailRecipient = resolveOrderEmailRecipient({
         isTestOrg: isTestOrgForEmail,
         customerEmail: input.context.email,
-        testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+        testEmail: 'jamie@theprint-room.co.nz',
       })
 
       const result = await sendOrderConfirmation({
@@ -1741,12 +1741,21 @@ export async function submitCustomerOrder(
     const notifyTotal =
       emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
 
-    const { data: notifyOrgFlag } = await admin
+    const { data: notifyOrgFlag, error: notifyOrgError } = await admin
       .from('organizations')
       .select('is_test')
       .eq('id', input.context.organizationId)
       .maybeSingle()
-    const notifyIsTestOrg = Boolean((notifyOrgFlag as { is_test?: boolean } | null)?.is_test)
+    if (notifyOrgError) {
+      console.error(
+        '[Checkout] dispatch recipient lookup failed; routing to test inbox',
+        notifyOrgError.message,
+      )
+    }
+    // Fail closed: an unknown org classification must never notify Charlotte.
+    const notifyIsTestOrg = notifyOrgError
+      ? true
+      : Boolean((notifyOrgFlag as { is_test?: boolean } | null)?.is_test)
 
     await postOrderPlacedSlack({
       orderRef: order_ref,
@@ -1763,7 +1772,7 @@ export async function submitCustomerOrder(
 
     const dispatchRecipient = resolveDispatchNotificationRecipient({
       isTestOrg: notifyIsTestOrg,
-      testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+      testEmail: 'jamie@theprint-room.co.nz',
     })
     await sendOrderPlacedDispatch({
       to: dispatchRecipient,

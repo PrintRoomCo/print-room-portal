@@ -61,4 +61,23 @@ describe('postOrderPlacedSlack', () => {
     expect(init.method).toBe('POST')
     expect(init.body).toContain('TPRC-000042')
   })
+
+  it('logs and contains webhook failures without throwing', async () => {
+    process.env.SLACK_PORTAL_WEBHOOK_URL = 'https://hooks.slack.test/abc'
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => 'unavailable',
+    }))
+
+    await expect(postOrderPlacedSlack(sample)).resolves.toEqual({
+      ok: false,
+      error: 'Slack webhook HTTP 503: unavailable',
+    })
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[Checkout] order-placed Slack notification failed (swallowed)',
+      'Slack webhook HTTP 503: unavailable',
+    )
+  })
 })

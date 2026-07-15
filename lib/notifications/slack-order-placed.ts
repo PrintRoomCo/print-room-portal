@@ -94,10 +94,14 @@ export async function postOrderPlacedSlack(
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      return { ok: false, error: `Slack webhook HTTP ${res.status}: ${body}` }
+      const error = `Slack webhook HTTP ${res.status}: ${body}`
+      console.error('[Checkout] order-placed Slack notification failed (swallowed)', error)
+      return { ok: false, error }
     }
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    const error = e instanceof Error ? e.message : String(e)
+    console.error('[Checkout] order-placed Slack notification failed (swallowed)', error)
+    return { ok: false, error }
   }
 }
