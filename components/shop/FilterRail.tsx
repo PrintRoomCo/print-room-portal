@@ -11,9 +11,16 @@ interface Props {
   facets: ShopFacets
   /** Route to post back to. `/catalogue` for catalogue listing, `/shop` for inventory. */
   basePath: '/catalogue' | '/shop'
+  /**
+   * Whether to show the "Ordering mode" filter. Hidden for stock_only members
+   * (memberCanReorder === false) — the same condition that hides the PDP
+   * order-mode pill: they can only ever draw from stock, so a "Purchase order"
+   * filter option would be inert. Defaults to shown.
+   */
+  showModeFilter?: boolean
 }
 
-export function FilterRail({ filters, facets, basePath }: Props) {
+export function FilterRail({ filters, facets, basePath, showModeFilter = true }: Props) {
   const hasActive = activeFilterCount(filters) > 0
 
   const clearHref = basePath
@@ -67,18 +74,20 @@ export function FilterRail({ filters, facets, basePath }: Props) {
           />
         </Section>
 
-        <Section label="Ordering mode">
-          <FilterAutoSubmitSelect
-            name="mode"
-            defaultValue={filters.mode === 'all' ? '' : filters.mode}
-            ariaLabel="Filter by ordering mode"
-            options={[
-              { value: '', label: 'All' },
-              { value: 'from_inventory', label: PILL_LABELS.from_inventory },
-              { value: 'reorder', label: PILL_LABELS.reorder },
-            ]}
-          />
-        </Section>
+        {showModeFilter && (
+          <Section label="Ordering mode">
+            <FilterAutoSubmitSelect
+              name="mode"
+              defaultValue={filters.mode === 'all' ? '' : filters.mode}
+              ariaLabel="Filter by ordering mode"
+              options={[
+                { value: '', label: 'All' },
+                { value: 'from_inventory', label: PILL_LABELS.from_inventory },
+                { value: 'reorder', label: PILL_LABELS.reorder },
+              ]}
+            />
+          </Section>
+        )}
 
         <Section label="Sort">
           <FilterAutoSubmitSelect
