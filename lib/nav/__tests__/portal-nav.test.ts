@@ -40,3 +40,12 @@ describe('getNavigationItems — Inventory gating', () => {
     expect(hrefs(access({ canUseLeavers: true }))).toContain('/leavers-quotes')
   })
 })
+
+describe('getNavigationItems — Track my Project gating (Item 5)', () => {
+  it('shows Track my Project to an org_admin', () => {
+    expect(hrefs(access({ isOrgAdmin: true }))).toContain('/tracking')
+  })
+  it('hides Track my Project from a non-admin (staff)', () => {
+    expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/tracking')
+  })
+})
