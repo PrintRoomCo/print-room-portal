@@ -18,6 +18,9 @@ import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
+import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
+import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
+import { resolveDispatchNotificationRecipient } from '@/lib/checkout/dispatch-notification-recipient'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -1706,6 +1709,69 @@ export async function submitCustomerOrder(
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     console.error('[Checkout] Order-confirmation email failed:', message)
+  }
+
+  // 7. Order-placed dispatch notification (Item 13). Fires for EVERY order the
+  //    moment it commits: a Block Kit Slack message (no-op until the webhook env
+  //    exists) plus an email to the dispatch desk (charlotte@ in prod, or the
+  //    test inbox for demo orgs). Best-effort — a notification failure must
+  //    never break the order. Reuses the step-6 email summary + a portal deep
+  //    link to the order's confirmation page (the only order_id-keyed route).
+  try {
+    const notifyOrderUrl = `${
+      process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
+    }/checkout/confirmation/${order_id}`
+
+    const notifyLines =
+      emailLines.length > 0
+        ? emailLines
+        : repriced.map((l) => ({
+            productName: l.product_name,
+            variantLabel: '—',
+            quantity: l.qty,
+            unitPrice: l.unit_price,
+          }))
+    const notifyTotal =
+      emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+    const { data: notifyOrgFlag } = await admin
+      .from('organizations')
+      .select('is_test')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    const notifyIsTestOrg = Boolean((notifyOrgFlag as { is_test?: boolean } | null)?.is_test)
+
+    await postOrderPlacedSlack({
+      orderRef: order_ref,
+      customerName: emailCustomerName,
+      orderType,
+      totalAmount: notifyTotal,
+      orderUrl: notifyOrderUrl,
+      lines: notifyLines.map((l) => ({
+        productName: l.productName,
+        variantLabel: l.variantLabel,
+        quantity: l.quantity,
+      })),
+    })
+
+    const dispatchRecipient = resolveDispatchNotificationRecipient({
+      isTestOrg: notifyIsTestOrg,
+      testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+    })
+    await sendOrderPlacedDispatch({
+      to: dispatchRecipient,
+      orderRef: order_ref,
+      customerName: emailCustomerName,
+      orderType,
+      totalAmount: notifyTotal,
+      orderUrl: notifyOrderUrl,
+      lines: notifyLines,
+    })
+  } catch (e) {
+    console.error('[Checkout] order-placed dispatch notification failed (swallowed)', {
+      orderId: order_id,
+      err: e instanceof Error ? e.message : String(e),
+    })
   }
 
   return { order_id, order_ref }
