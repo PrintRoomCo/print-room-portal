@@ -16,6 +16,7 @@ import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
+import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 
 export interface CheckoutLineDecorationInput {
@@ -1374,6 +1375,22 @@ export async function submitCustomerOrder(
         .from('quote_items')
         .update({ monday_subitem_id: subitemId })
         .eq('id', quoteItemId)
+    }
+
+    // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
+    // Monday card so the floor pulls from stock instead of producing. Purchase
+    // orders get no note. Own try/catch so a note failure never marks the whole
+    // Monday push as failed (mirrors the Xero manual-review note in step 5c).
+    const stockNote = stockOnHandMondayNote(orderType)
+    if (stockNote) {
+      try {
+        await postItemUpdate(itemId, stockNote)
+      } catch (noteErr) {
+        console.error('[Checkout] stock-on-hand Monday note failed (swallowed)', {
+          orderId: order_id,
+          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+        })
+      }
     }
 
     // Stamp the same Monday item id onto the job_trackers shell created in
