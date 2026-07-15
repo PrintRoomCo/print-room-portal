@@ -1,3 +1,5 @@
+import type { FulfilmentType } from '@/lib/shop/fulfilment-mode'
+
 export interface CartLineDecoration {
   /** b2b_catalogue_item_decorations.id — re-validated on submit. */
   linkId: string
@@ -63,6 +65,16 @@ export interface CartLine {
    * vs 'inventory'). Absent on legacy persisted lines; treat as 'stocked'.
    */
   fulfilmentType?: CartLineFulfilmentType
+  /**
+   * Spec B / F1 — the product's EFFECTIVE fulfilment nature (catalogue override
+   * ?? product base), snapshotted at add-time. Distinct from `fulfilmentType`
+   * (the CHOSEN mode): a 'stocked' line from a 'mixed' product can be flipped to
+   * a purchase order in the cart, but a line from a pure 'made_to_order' product
+   * cannot. The cart's per-line order-type selector shows only when
+   * nature === 'mixed' (pillsFor returns both pills). Absent on legacy/reorder
+   * lines → treated as 'made_to_order' (no selector).
+   */
+  nature?: FulfilmentType
   /**
    * Volume-tier brackets snapshotted at add-time. Used by CartProvider to
    * re-derive unitPrice when qty changes (so a 100→24 edit drops back to the

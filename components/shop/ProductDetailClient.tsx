@@ -911,6 +911,7 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
+            nature: product.fulfilment_type,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
@@ -981,6 +982,7 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
+          nature: product.fulfilment_type,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
           manualDecorationBrackets: manualDecorationBracketsSnapshot,
         })
@@ -1017,6 +1019,7 @@ export function ProductDetailClient({
         decorations: cartDecorationsForSwatch(colorSwatchId),
         brackets: cartLineBrackets,
         catalogueItemId: product.catalogueItemId,
+        nature: product.fulfilment_type,
         manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
         manualDecorationBrackets: manualDecorationBracketsSnapshot,
       }
@@ -1054,6 +1057,7 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
+      nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
