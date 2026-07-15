@@ -16,7 +16,10 @@ import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
-import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
+import { orderBillingNote } from '@/lib/monday/billing-note'
+import { orderNeedsInvoicing } from './order-billing'
+import { pickingFeeForGoods } from '@/lib/pricing/picking-fee'
+import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
@@ -411,7 +414,7 @@ export async function submitCustomerOrder(
       .in('id', productIds),
     admin
       .from('b2b_catalogue_items')
-      .select('id, source_product_id, moq_override, fulfilment_type_override')
+      .select('id, source_product_id, moq_override, fulfilment_type_override, billing_mode')
       .in('source_product_id', productIds)
       .in('id', Array.from(grantedItemIds)),
   ])
@@ -425,6 +428,7 @@ export async function submitCustomerOrder(
     source_product_id: string
     moq_override: number | null
     fulfilment_type_override: string | null
+    billing_mode: 'invoice_on_dispatch' | 'prepaid' | null
   }>
   const productMoqById = new Map(productRows.map((r) => [r.id, r.moq]))
   const overrideByProductId = new Map(
@@ -1128,6 +1132,34 @@ export async function submitCustomerOrder(
     }
   }
 
+  // Spec B — per-order billing signal + NZ picking fee. `billing_mode` per
+  // catalogue item: invoice_on_dispatch = not-paid (draft quote, invoice before
+  // dispatch), prepaid = goods already paid. `needsInvoicing` drives the Monday
+  // billing note; `pickFee` feeds BOTH that note and the Xero draft (single
+  // source of truth). Fee applies to stock-on-hand orders only
+  // (order_type === 'stock_on_hand') and is NZD-only — AUS ship-to orders are
+  // excluded here (region seam) pending the AUD/10%-GST AUS epic.
+  const billingModeByCatItemId = new Map<string, BillingMode>(
+    catItemRows.map((r) => [r.id, (r.billing_mode ?? 'invoice_on_dispatch') as BillingMode]),
+  )
+  const orderBillingLines = input.lines.map((l) => ({
+    stocked: l.fulfilment_type === 'stocked',
+    billingMode: l.catalogueItemId
+      ? billingModeByCatItemId.get(l.catalogueItemId) ?? 'invoice_on_dispatch'
+      : ('invoice_on_dispatch' as BillingMode),
+  }))
+  const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
+  const isStockOnHandOrder = orderType === 'stock_on_hand'
+  const shipCountryRaw = (shippingAddress as { country?: unknown }).country
+  const shipCountry = (typeof shipCountryRaw === 'string' ? shipCountryRaw : '')
+    .trim()
+    .toLowerCase()
+  const isAusShipping =
+    shipCountry === 'au' || shipCountry === 'aus' || shipCountry.startsWith('austral')
+  const goodsSubtotal = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+  const pickFee =
+    isStockOnHandOrder && !isAusShipping ? pickingFeeForGoods(goodsSubtotal) : 0
+
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.
   // total_amount already includes decoration via the folded unit_price above.
@@ -1422,12 +1454,17 @@ export async function submitCustomerOrder(
     // Monday card so the floor pulls from stock instead of producing. Purchase
     // orders get no note. Own try/catch so a note failure never marks the whole
     // Monday push as failed (mirrors the Xero manual-review note in step 5c).
-    const stockNote = stockOnHandMondayNote(orderType)
-    if (stockNote) {
+    // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
+    // billing note stating whether goods need invoicing (not-paid) or are
+    // prepaid, plus the pick fee. Purchase orders still get no note.
+    const billingNote = isStockOnHandOrder
+      ? orderBillingNote({ needsInvoicing, pickFee })
+      : null
+    if (billingNote) {
       try {
-        await postItemUpdate(itemId, stockNote)
+        await postItemUpdate(itemId, billingNote)
       } catch (noteErr) {
-        console.error('[Checkout] stock-on-hand Monday note failed (swallowed)', {
+        console.error('[Checkout] billing note failed (swallowed)', {
           orderId: order_id,
           err: noteErr instanceof Error ? noteErr.message : String(noteErr),
         })
