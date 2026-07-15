@@ -13,6 +13,7 @@ import {
   type CheckoutLineInput,
 } from '@/lib/checkout/submit'
 import { cacheTags } from '@/lib/cache/tags'
+import { partitionCheckoutLines, type CheckoutOrderType } from '@/lib/checkout/partition'
 
 interface CheckoutRequestBody {
   idempotency_key?: string
@@ -95,20 +96,39 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await submitCustomerOrder(auth.admin, {
-      context: auth.context,
-      idempotency_key: body.idempotency_key,
-      required_by: body.required_by ?? null,
-      notes: body.notes ?? null,
-      internal_notes: null,
-      lines: body.lines,
-      custom_shipping_address: body.custom_shipping_address ?? null,
-      intent,
-    })
-    // New order → both portal-data caches (account quotes, order-tracker) stale.
+    // F1 (spec B): split a mixed cart into TWO backend orders — the
+    // made_to_order lines become a purchase_order (Monday/tracker path); the
+    // stocked lines become order_type='stock_on_hand' (Spec A push-with-note +
+    // notification). A homogeneous cart still makes a single call. Each partition
+    // gets a distinct idempotency suffix so a retry after a partial failure
+    // dedupes the already-committed order.
+    const partitions = partitionCheckoutLines(body.lines)
+    const orders: Array<{ order_id: string; order_ref: string; order_type: CheckoutOrderType }> = []
+    for (const part of partitions) {
+      const suffix = part.orderType === 'stock_on_hand' ? 'stock' : 'po'
+      const result = await submitCustomerOrder(auth.admin, {
+        context: auth.context,
+        idempotency_key: `${body.idempotency_key}:${suffix}`,
+        required_by: body.required_by ?? null,
+        notes: body.notes ?? null,
+        internal_notes: null,
+        lines: part.lines,
+        custom_shipping_address: body.custom_shipping_address ?? null,
+        intent,
+        // order_type intentionally NOT passed: submit self-classifies each
+        // homogeneous partition via classifyOrderType(input.lines) (the RPC has
+        // no p_order_type param). The partition orderType — which equals that
+        // derived value — drives only the idempotency suffix + the response.
+      })
+      orders.push({ ...result, order_type: part.orderType })
+    }
+    // New order(s) → both portal-data caches (account quotes, order-tracker) stale.
     revalidateTag(cacheTags.accountData, { expire: 0 })
     revalidateTag(cacheTags.orderTracker, { expire: 0 })
-    return NextResponse.json(result)
+    // Primary (redirect target) is the purchase_order when present — it carries
+    // the production tracker; otherwise the sole stock_on_hand order.
+    const primary = orders[0]
+    return NextResponse.json({ order_id: primary.order_id, order_ref: primary.order_ref, orders })
   } catch (e) {
     if (e instanceof DecorationDriftError) {
       return NextResponse.json(
