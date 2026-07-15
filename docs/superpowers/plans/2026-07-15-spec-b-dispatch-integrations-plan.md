@@ -25,6 +25,32 @@ Every task's requirements implicitly include this section.
 
 ---
 
+## ⟳ Reconciliation note — 2026-07-15 (Spec A has shipped)
+
+This plan was drafted alongside the Spec B spec, **before Spec A was implemented**, so several tasks below hedge with "confirm Spec A has landed" or assume mechanics Spec A ultimately shipped differently. Spec A is now **built and merged** in `P` (its own plan is 128/137 done — only human data-entry + 2 sign-offs remain). **Where a task below and this note disagree, follow this note.**
+
+**Spec A module map (real shipped symbols — consume these by name):**
+
+| Foundation | Shipped as | Anchor (`P` = print-room-portal) |
+|---|---|---|
+| Order-type classification | `classifyOrderType(input.lines)` → `'stock_on_hand' \| 'purchase_order'` (all-stocked ⇒ stock_on_hand, else purchase_order) | `P lib/orders/order-type.ts` |
+| Order-type persistence | a **post-RPC** `.update({ order_type }).eq('id', order_id)` — the `submit_b2b_order` RPC does **NOT** take a `p_order_type` param | `P lib/checkout/submit.ts` local `orderType`, stamped ~1100-1105 |
+| Monday push-with-note | `STOCK_ON_HAND_MONDAY_NOTE` + `stockOnHandMondayNote(orderType)` → `postItemUpdate(itemId, note)` (the flat note the spec called "item 11") | `P lib/monday/order-type-note.ts`; callsite submit.ts ~1421-1435 |
+| Order-placed notification | `postOrderPlacedSlack(...)` (reads `SLACK_PORTAL_WEBHOOK_URL`, no-ops if unset) + `resolveDispatchNotificationRecipient(...)` / `sendOrderPlacedDispatch(...)` (default `charlotte@theprint-room.co.nz`, test → `jamie@`) | `P lib/notifications/slack-order-placed.ts`, `P lib/checkout/dispatch-notification-recipient.ts`; callsite submit.ts ~1797-1822 |
+| Xero eligibility | already reduced to **exactly 3 gates**: `xeroEnabled`, `existingInvoiceId`, `isTestOrg`. **No `draws_stock` gate and no `prepay_org`/`payment_terms` gate exist** — stock-on-hand orders already draft. | `P lib/xero/eligibility.ts` |
+| Xero line items | `XeroQuoteLineInput { description, quantity, unitAmount }`; internal `XeroLineItem` adds **global** `AccountCode`/`TaxType` (not per-line, **no discount field**) → prepaid handling must zero `unitAmount`, not set a discount | `P lib/xero/draft-invoice.ts` |
+| GST / totals | server persists `subtotal = total_amount` and **never populates `quotes.tax`**; GST (0.15) is computed **client-side only** in `computeOrderBreakdown` and not saved. A picking-fee line must be threaded into the client breakdown **and** the RPC line_items **and** the Xero lines **and** the Monday summary — there is no server GST total to amend | `P lib/pricing/pricingMath.ts` |
+
+**Corrections that override the tasks below:**
+
+1. **F1 route task — do NOT thread `order_type`.** Each partition is homogeneous, so `submit`'s own `classifyOrderType(input.lines)` already stamps the right `order_type` and the Monday note / notification / Xero all key off that derived local. **Skip that task's Step 4 (add `CheckoutInput.order_type`) and Step 5 (add `p_order_type` to the RPC — the RPC has no such param; adding it breaks the call).** The partition metadata is used only for the `:po`/`:stock` idempotency suffix and the `orders[]` response.
+2. **Xero task — eligibility is already at target.** Spec A already removed the `draws_stock` gate and there is no `prepay_org` gate. **Skip that task's Steps 1-4 (the eligibility rewrite/tests) — treat them as verify-only.** Start at Step 5 (the `draft-invoice.ts` prepaid-zero + pick-fee lines). Step 9's cleanup of the vestigial `drawsStock` arg on `CreateDraftInvoiceArgs` (submit still passes it) is still valid; the "prepay_org" decision gate in Open Threads is **moot**.
+3. **Monday-note task — the flat note EXISTS.** Replace the body of the shipped `stockOnHandMondayNote(orderType)` call (submit.ts ~1421-1435) with `orderBillingNote(...)`; do not add a second `postItemUpdate`.
+4. **Starshipit — `order_type` is available.** It's the `orderType` local in submit.ts (~1100), computed before the side-effect blocks. Pass it into `pushOrderToStarshipit` instead of the "null in the interim" placeholder.
+5. **Line numbers have drifted** ~+60 lines in submit.ts since drafting. Trust the code landmarks in the map above over the plan's inline line numbers (e.g. the Xero "step 5c" block is ~1584-1655, not ~1521-1544).
+
+---
+
 ## Tasks (in Spec B sequencing order)
 
 <!-- ===== Spec B step 1 · Thursday-critical staff-default invite · cluster: thursday-critical-staff-default-invite ===== -->
@@ -1168,10 +1194,10 @@ Grounding notes that shape every task below:
 - Modify `/Users/jamierogangeorge/Documents/print-room-portal/lib/checkout/submit.ts` (catalogue-item fetch `catItemMoqRows`, lines 399-424; the Monday push block, ~lines 1291-1352; the Xero step 5c, lines 1521-1544)
 
 **Interfaces:**
-- Consumes: `BillingMode`; the Spec A **push-with-note Monday flow** (whatever posts the per-order note after `pushOrderDeal`); `input.lines[].fulfilment_type`, `input.lines[].catalogueItemId`; existing `catItemRows` (already selected from `b2b_catalogue_items` in submit).
+- Consumes: `BillingMode`; the Spec A **push-with-note Monday flow** — specifically `stockOnHandMondayNote(orderType)` posted via `postItemUpdate` at submit.ts ~1421-1435 (`lib/monday/order-type-note.ts`); `input.lines[].fulfilment_type`, `input.lines[].catalogueItemId`; existing `catItemRows` (already selected from `b2b_catalogue_items` in submit).
 - Produces: `orderNeedsInvoicing(lines: Array<{ stocked: boolean; billingMode: BillingMode }>): boolean`; `orderBillingNote(input: { needsInvoicing: boolean; pickFee: number }): string`.
 
-> **Supersedes Spec A item 11 (flat Monday note).** Spec A introduces a single flat note; Spec B makes it conditional again. Since the flat note does not exist in `submit.ts` today (only the Xero manual-review note at line 1551), wire `orderBillingNote` into Spec A's note callsite when it lands; if Spec A hasn't shipped, post it as an additional `postItemUpdate` in the Monday push block.
+> **⟳ Supersedes Spec A item 11 (flat Monday note) — Spec A has shipped it.** The flat note **exists**: `stockOnHandMondayNote(orderType)` → `postItemUpdate(itemId, note)` at submit.ts ~1421-1435 (module `lib/monday/order-type-note.ts`). Spec B makes it conditional again by **replacing that call's note body** with `orderBillingNote(...)` — do NOT add a second `postItemUpdate`.
 
 - [ ] **Step 1: Write the failing aggregation test.** Create `order-billing.test.ts`:
   ```ts
@@ -1272,7 +1298,7 @@ Grounding notes that shape every task below:
     })
   }
   ```
-  `pickFee` is the order picking fee computed in the Xero task (Decision gate: fee scope). Import `orderBillingNote` from `@/lib/monday/billing-note`. **If Spec A's push-with-note flow already posts a flat note, replace that note's body with `orderBillingNote(...)` instead of adding a second update.**
+  `pickFee` is the order picking fee computed in the Xero task (Decision gate: fee scope). Import `orderBillingNote` from `@/lib/monday/billing-note`. **⟳ Spec A's push-with-note flow DOES post a flat note (`stockOnHandMondayNote` at submit.ts ~1421-1435) — replace that call's body with `orderBillingNote(...)`; do not add a second update.** (The "~line 1354" anchor above has drifted to ~1421-1435.)
 - [ ] **Step 11: Run the submit test suite — expect PASS (no regressions):**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/submit.monday-push-failure.test.ts lib/checkout/order-billing.test.ts lib/monday/__tests__/billing-note.test.ts`
   Add a case to `submit.monday-push-failure.test.ts` (or a new `submit.billing-note.test.ts`) asserting `postItemUpdate` receives the "Prepaid …" body when all stocked lines are prepaid, and the "Not paid …" body otherwise.
@@ -1293,7 +1319,7 @@ Grounding notes that shape every task below:
 - Consumes: `orderNeedsInvoicing` / `needsInvoicing` + per-line billing signal (prior task); `pickingFeeForGoods`; the order goods subtotal (`repriced` total already computed in submit as `totalAmount`, line 1327).
 - Produces: `buildPickFeeLine(feeNzd: number): XeroQuoteLineInput`; `prepaidZeroLine(line: XeroQuoteLineInput): XeroQuoteLineInput`; `XeroIneligibleReason` no longer includes `'draws_stock'`; `CreateDraftInvoiceArgs` gains `pickingFee: number` and `prepaidStockedLineKeys: Set<string>` (Decision gate on the matching mechanism).
 
-> **Supersedes Spec A item 15 (Xero applies to every order).** Spec B refines it: EVERY stock-on-hand order now drafts (the old `draws_stock -> manual_review` block is removed); prepaid goods get a $0 line (100% discount) + a separate pick-fee line, not-paid goods get a normal draft quote.
+> **⟳ RECONCILED (Spec A shipped).** Spec A **already** made every non-test order draft — `eligibility.ts` has exactly 3 gates (`xeroEnabled`, `existingInvoiceId`, `isTestOrg`); there is **no** `draws_stock` or `prepay_org` gate left to remove. **Steps 1-4 below are verify-only — skip the eligibility rewrite and start at Step 5.** Spec B's real delta lives in `draft-invoice.ts`: prepaid goods get a **$0 `unitAmount`** line (the `XeroLineItem` type has no discount field) + a separate pick-fee line; not-paid goods get a normal draft quote.
 
 - [ ] **Step 1: Rewrite the eligibility test for the new rule.** In `eligibility.test.ts`:
   - Remove `drawsStock` from the `base` fixture (line 10) and from every spread.
@@ -1382,7 +1408,7 @@ Grounding notes that shape every task below:
   )
   ```
   Pass `pickingFee: pickFee` and `prepaidStockedLineKeys` into `createDraftInvoiceForOrder(...)` and delete the `drawsStock` arg (lines 1522, 1540). `pickFee` is also the value handed to `orderBillingNote(...)` in the Monday task (single source of truth).
-- [ ] **Step 11: Update the orchestrator's manual-review branch.** Since `draws_stock` is gone, only `prepay_org` (Decision gate) still routes to manual_review. Confirm `createDraftInvoiceForOrder`'s `elig.reason === 'prepay_org'` branch (line 245) still compiles after removing `'draws_stock'`.
+- [ ] **Step 11: ⟳ RECONCILED — no manual-review branch to update.** Shipped `eligibility.ts` has no `draws_stock` or `prepay_org` reason, so there is no such branch to touch. Just confirm `createDraftInvoiceForOrder` still compiles after dropping the vestigial `drawsStock` arg (Step 9).
 - [ ] **Step 12: Run the Xero suite + submit Xero test — expect PASS:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/xero/ lib/checkout/__tests__/submit.roundtrip-regression.test.ts && npx tsc --noEmit`
   Fix any submit test that fed `drawsStock`/asserted `draws_stock` manual_review — update those to assert a drafted stock-on-hand order.
@@ -1502,8 +1528,8 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     hasDeliveryAddress: boolean
     /**
      * orders.order_type (Spec A). When provided, only 'delivery' pushes; other
-     * types skip. Optional until Spec A threads it into submit — interim callers
-     * pass null and rely on `intent`.
+     * types skip. ⟳ Spec A exposes order_type as the `orderType` local at
+     * submit.ts ~1100 — pass it; `intent` stays the primary ship-to-customer signal.
      */
     orderType?: string | null
   }
@@ -1837,7 +1863,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     isTestOrg: boolean
     customerEmail: string | null
     shippingAddress: Record<string, unknown> | null
-    /** orders.order_type (Spec A) once threaded into submit; null in the interim. */
+    /** orders.order_type — Spec A exposes it as the `orderType` local (~submit.ts:1100). */
     orderType?: string | null
   }
 
@@ -1938,7 +1964,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
         isTestOrg: ssIsTestOrg,
         customerEmail: input.context.email ?? null,
         shippingAddress,
-        // orderType: threaded once Spec A exposes orders.order_type at submit.
+        orderType, // Spec A exposes order_type as the `orderType` local (~submit.ts:1100)
       })
       if (ssResult.status === 'skipped') {
         await recordAuditEvent(
@@ -2482,18 +2508,18 @@ Steps:
 ### Task: Rewire the checkout route to create two orders for a mixed cart
 
 **Files:**
-- Modify `/Users/jamierogangeorge/Documents/print-room-portal/lib/checkout/submit.ts` (CheckoutInput interface lines 77-87; the `submit_b2b_order` RPC call args near line 1051) — thread `order_type` through.
+- ~~Modify `lib/checkout/submit.ts` to thread `order_type`~~ — **NOT NEEDED** (reconciled 2026-07-15): `submit` already derives `order_type` from its lines via `classifyOrderType`, and `submit_b2b_order` takes no `p_order_type`. F1 leaves submit.ts untouched.
 - Modify `/Users/jamierogangeorge/Documents/print-room-portal/app/api/checkout/route.ts` (imports lines 1-15; the single `submitCustomerOrder` call + return, lines 97-111).
 - Create `/Users/jamierogangeorge/Documents/print-room-portal/app/api/checkout/__tests__/route.split.test.ts`
 
 **Interfaces:**
 - Consumes: `partitionCheckoutLines(lines: CheckoutLineInput[]): CheckoutPartition[]` and `type CheckoutOrderType` (from the partition task); `submitCustomerOrder(admin, input: CheckoutInput): Promise<{ order_id: string; order_ref: string }>` (submit.ts line 291); the existing `intent` gating already computed in route.ts lines 82-95.
-- Consumes (Spec A, by name — see Decision gate): the `orders.order_type` column, the Monday **push-with-note** flow, and the **order-placed notification** abstraction (Slack + email), all keyed on `order_type='stock_on_hand'`.
-- Produces: `POST /api/checkout` response `{ order_id, order_ref, orders: Array<{ order_id, order_ref, order_type: CheckoutOrderType }> }`; `CheckoutInput.order_type?: 'purchase_order' | 'stock_on_hand'`.
+- Consumes (Spec A — **shipped**, see Reconciliation note): the `orders.order_type` classifier (`classifyOrderType`), the Monday **push-with-note** flow, and the **order-placed notification** abstraction — all fire automatically **inside** `submitCustomerOrder`, once per call, keyed on the `order_type` it derives from that call's lines. F1 gets the split routing for free by calling submit once per homogeneous partition.
+- Produces: `POST /api/checkout` response `{ order_id, order_ref, orders: Array<{ order_id, order_ref, order_type: CheckoutOrderType }> }` (the per-order `order_type` comes from the **partition**, not from submit). **No** `CheckoutInput.order_type` field is added.
 
 Steps:
 
-- [ ] **Step 1: Decision gate — confirm Spec A foundations.** Verify `orders.order_type` exists and `submit_b2b_order` accepts `p_order_type`, and that Spec A's push-with-note Monday branch + order-placed notification key on it. If NOT yet merged, STOP and coordinate with Spec A — do NOT fabricate the Monday/notification routing here. (`grep -rn "p_order_type\|order_type" supabase/migrations lib/monday lib/checkout` in the portal repo.) This task threads the order_type VALUE only.
+- [ ] **Step 1: ⟳ RECONCILED (Spec A shipped 2026-07-15).** `orders.order_type` is derived **inside** submit by `classifyOrderType(input.lines)` and stamped by a post-RPC `.update()` — the `submit_b2b_order` RPC has **no** `p_order_type` param. Each homogeneous partition therefore self-classifies (all-stocked → `stock_on_hand`; all-made_to_order → `purchase_order`) and self-routes (Monday note + notification + Xero all read that derived local). **F1 threads NO order_type and does not modify submit.ts. Skip Steps 4 and 5 below.** This task only (a) splits the cart and (b) sets the `:po`/`:stock` idempotency suffix + `orders[]` response.
 
 - [ ] **Step 2: Add the failing route test.** Create `app/api/checkout/__tests__/route.split.test.ts` (mirrors the existing `route.permission-denied.test.ts` mock scaffold):
   ```ts
@@ -2550,11 +2576,11 @@ Steps:
       expect(submitCustomerOrder).toHaveBeenCalledTimes(2)
       const calls = vi.mocked(submitCustomerOrder).mock.calls
       expect(calls[0][1].idempotency_key).toBe('idem-1:po')
-      expect(calls[0][1].order_type).toBe('purchase_order')
       expect(calls[0][1].lines.map((l) => l.product_id)).toEqual(['mto'])
       expect(calls[1][1].idempotency_key).toBe('idem-1:stock')
-      expect(calls[1][1].order_type).toBe('stock_on_hand')
       expect(calls[1][1].lines.map((l) => l.product_id)).toEqual(['stk'])
+      // order_type is NOT passed to submit (it self-classifies each homogeneous
+      // partition); assert it on the response `orders[]` below instead.
 
       const json = await res.json()
       expect(json.order_id).toBe('po-1')
@@ -2570,40 +2596,16 @@ Steps:
       }))
       expect(res.status).toBe(200)
       expect(submitCustomerOrder).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(submitCustomerOrder).mock.calls[0][1].order_type).toBe('stock_on_hand')
       expect(vi.mocked(submitCustomerOrder).mock.calls[0][1].idempotency_key).toBe('idem-2:stock')
     })
   })
   ```
 
-- [ ] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` called once (not twice), and `calls[0][1].order_type` is `undefined` (plus a TS error `order_type does not exist on CheckoutInput` if run through typecheck).
+- [ ] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` is called once (not twice), the `:po`/`:stock` idempotency suffixes are absent, and `res.json().orders` is undefined.
 
-- [ ] **Step 4: Add `order_type` to CheckoutInput.** In `lib/checkout/submit.ts`, extend the interface (current lines 77-87 end with `intent?: 'customer' | 'inventory'`). Add after `intent`:
-  ```ts
-    /**
-     * Spec B / F1 — which backend order_type this submit creates. The checkout
-     * route partitions a mixed cart and calls submit once per partition:
-     * 'purchase_order' (made_to_order lines → Monday/tracker) and 'stock_on_hand'
-     * (stocked lines → Spec A push-with-note + notification). Defaults to
-     * 'purchase_order' (today's single-order behaviour).
-     */
-    order_type?: 'purchase_order' | 'stock_on_hand'
-  ```
+- [ ] **Step 4: ⟳ SKIP (reconciled).** Do **not** add `order_type` to `CheckoutInput`. Submit self-classifies each homogeneous partition via `classifyOrderType(input.lines)`, so an added field would be dead code.
 
-- [ ] **Step 5: Thread it into the RPC.** In `lib/checkout/submit.ts`, the `submit_b2b_order` call currently ends (around line 1051):
-  ```ts
-      p_intent: input.intent ?? 'customer',
-      p_member_permission: input.context.orderingPermission ?? 'both',
-    })
-  ```
-  Add the order_type param:
-  ```ts
-      p_intent: input.intent ?? 'customer',
-      p_order_type: input.order_type ?? 'purchase_order',
-      p_member_permission: input.context.orderingPermission ?? 'both',
-    })
-  ```
-  (If Step 1 found `submit_b2b_order` does NOT yet accept `p_order_type`, that RPC signature is a Spec A deliverable — do not add it here; block per the Decision gate.)
+- [ ] **Step 5: ⟳ SKIP (reconciled).** Do **not** add `p_order_type` to the `submit_b2b_order` RPC call — the shipped RPC has no such parameter (Spec A stamps `order_type` via a post-RPC `.update()`), so adding it would break the call. Submit already sets the correct `order_type` for each homogeneous partition.
 
 - [ ] **Step 6: Partition the route.** In `app/api/checkout/route.ts`, add the import (after line 15's `import { cacheTags }`):
   ```ts
@@ -2650,7 +2652,7 @@ Steps:
           lines: part.lines,
           custom_shipping_address: body.custom_shipping_address ?? null,
           intent,
-          order_type: part.orderType,
+          // order_type omitted — submit self-classifies this homogeneous partition
         })
         orders.push({ ...result, order_type: part.orderType })
       }
@@ -3958,9 +3960,9 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee scope): does the picking fee apply to ALL orders, stock-on-hand-only, or prepaid-only? Plan defaults to stock-on-hand orders (any line with qty_from_stock>0 / fulfilment_type='stocked'), matching spec (c) 'push EVERY stock-on-hand order to Xero ... add the picking fee on a separate line'. Confirm before wiring which orders get the fee.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee region): the band table ($0-99=$35 ... $400+=$15) is NZ-only. Behaviour for non-NZ orders (different currency/GST) is undecided. pickingFeeForGoods is written NZD-only; a region param is a follow-up.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee band input): which figure drives the band lookup — goods ex-GST (grossSubtotal, plan's assumption) vs goods incl-GST vs order total. Plan uses grossSubtotal (goods, ex-GST).
-- **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Xero eligibility reversal): Spec B supersedes Spec A item 15. Plan REMOVES the blanket draws_stock->manual_review gate so stock-on-hand orders now draft. Undecided: does org-level payment_terms='prepay' (prepay_org gate) ALSO get dropped now that per-product billing_mode is authoritative, or does it still force manual_review? Plan keeps prepay_org for now and flags it.
+- **[prepaid-tag-customer-display-xero-pickfee]** ✅ RESOLVED (Spec A shipped): the `draws_stock->manual_review` gate is **already gone** — `eligibility.ts` has only 3 gates (`xeroEnabled`/`existingInvoiceId`/`isTestOrg`) and stock-on-hand orders already draft. There is **no `prepay_org`/`payment_terms` gate** in shipped code, so the "do we also drop it" question is moot — nothing to drop.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Xero prepaid-line matching): how a persisted quote_items row is matched to its prepaid/stocked billing at draft time — in-memory line-billing map passed from submit.ts keyed by makeLineKey (plan's primary, no extra migration) vs a new quote_items.billing_mode snapshot column (needs a portal migration + apply coordination on the shared prod DB). Confirm before implementing the Xero wiring step.
-- **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Monday note supersession): Spec B item (d) supersedes Spec A item 11's flat note. The exact insertion point depends on where Spec A's push-with-note flow posts its note — plan wires orderBillingNote into that flow by name; confirm Spec A's note callsite when it lands.
+- **[prepaid-tag-customer-display-xero-pickfee]** ✅ RESOLVED (Spec A shipped): the flat note is `stockOnHandMondayNote(orderType)` posted via `postItemUpdate` at submit.ts ~1421-1435 (`lib/monday/order-type-note.ts`). Replace that call's body with `orderBillingNote(...)`.
 - **[prepaid-tag-customer-display-xero-pickfee]** Thursday staff-default invite is API-level only (role choice + default_store_id on POST /api/b2b-accounts/[id]/invite). The staff-portal invite UI still needs a role selector + store picker to send default_store_id — that UI is out of this narrow slice's scope (full self-serve F2 stays deferred).
 - **[prepaid-tag-customer-display-xero-pickfee]** OUT OF SCOPE / EXTERNAL BLOCKER: Starshipit account ownership (fresh portal-owned vs consolidate the live 'Print Room Dispatch' account) is a blocking external decision noted in the brief but not touched by this cluster's code.
 - **[item-12-starshipit-dispatch]** DECISION GATE (blocking, external): Starshipit account ownership — fresh portal-owned account vs consolidate the live 'Print Room Dispatch' account (629 unmatched rows keyed to old Shopify #PR numbers). Must be decided before STARSHIPIT_ENABLED is flipped on.
@@ -3968,15 +3970,16 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **[item-12-starshipit-dispatch]** DECISION GATE: supersede vs supplement the Monday-fed pipe — governs whether the portal webhook additionally flips job_trackers.status to 'dispatched' and sends sendTrackerStatusEmail, or ONLY writes tracking_info (additive/supplement). Plan ships the supplement (tracking_info write) as the safe default and leaves the status-flip + email as a gated follow-up step.
 - **[item-12-starshipit-dispatch]** Starshipit POST /api/orders create-order request/response shape is NOT verifiable in-repo (studio only exercises /api/orders/shipped and /api/track). The destination.{name,street,suburb,state,post_code,country,phone,email} field names and the `data.order.order_id` response path in createStarshipitOrder MUST be confirmed against Starshipit's live API docs before enabling; the function is dark-by-default so an imperfect payload never touches production.
 - **[item-12-starshipit-dispatch]** Confirm the shared Supabase project does not already contain starshipit_webhook_logs (from the studio integration) before applying the portal migration — it is CREATE IF NOT EXISTS so it is safe either way, but list_tables should be checked.
-- **[item-12-starshipit-dispatch]** order_type threading: Spec A adds orders.order_type but does not (yet) thread it into CheckoutInput/B2BCustomerContext at submit time; interim eligibility uses input.intent ('inventory' skips). Pass the real order_type into pushOrderToStarshipit once Spec A exposes it.
+- **[item-12-starshipit-dispatch]** ✅ RESOLVED (Spec A shipped): `order_type` is available as the `orderType` local in submit.ts (~1100), computed before the side-effect blocks. Pass it straight into `pushOrderToStarshipit`; `intent` stays the primary ship-to-customer signal.
 - **[item-12-starshipit-dispatch]** Picking-fee / billing_mode decisions are out of scope for this cluster (Item 12) — no changes here.
-- **[F1]** DECISION GATE — Spec A dependency: F1's route calls submitCustomerOrder with `order_type: 'stock_on_hand'` and relies on Spec A to (a) add the `orders.order_type` column, (b) branch the Monday push into the lighter push-with-note flow for stock_on_hand, and (c) fire the order-placed notification (Slack + email) abstraction. These do NOT exist in the portal repo yet. F1 threads the order_type VALUE only; it must NOT fabricate the push-with-note/notification branching. Confirm Spec A has landed before merging F1's route task, or coordinate the field addition to avoid a duplicate.
+- **[F1]** ✅ RESOLVED (Spec A shipped): (a) `orders.order_type`, (b) the Monday push-with-note branch, and (c) the order-placed notification all exist and fire **inside** `submitCustomerOrder`. F1 therefore passes **no** `order_type` and does **not** touch submit.ts — it calls submit once per homogeneous partition and each self-classifies + self-routes. (See Reconciliation note, correction 1.)
 - **[F1]** DECISION — legacy/absent fulfilment_type routing: partitionCheckoutLines routes a line with an ABSENT `fulfilment_type` (legacy persisted carts, reorder rebuilds) into the `purchase_order` partition, matching submit_b2b_order's MOQ-conservative treatment (absent counts toward production). Note the CartLine JSDoc says absent → 'treat as stocked' for UI oversell purposes — the two defaults intentionally differ. Confirm purchase_order is the desired order_type default for absent lines.
 - **[F1]** DECISION GATE (deferred UX) — two-order confirmation surface: the route returns BOTH orders (`orders[]`) but redirects the customer to the PRIMARY (purchase_order when present) confirmation page only. A confirmation view that shows both split orders is out of scope for this slice; decide whether it is needed before GA.
 - **[F1]** LABEL WORDING: the selector reuses PILL_LABELS ('Stock on hand' / 'Purchase order') for DRY consistency with the PDP/catalogue. The spec text said 'Stock order' — trivial product-copy decision; flag if 'Stock order' wording is required instead.
 - **[F1]** interaction intent='inventory' × order_type='stock_on_hand': an admin choosing add-to-my-inventory (intent='inventory') AND a stock-draw line is a contradictory combination. v1 passes intent through to both partitions unchanged and does not special-case this; confirm whether inventory-intent carts should suppress the stock partition.
 - **[F1]** PARTIAL-COMMIT: with a mixed cart the two submitCustomerOrder calls run sequentially (purchase_order first). If the first commits and the second throws (drift/MOQ/stock), one order exists and the client shows an error. Retry is safe because each partition uses a distinct idempotency key suffix (`:po` / `:stock`) that submit_b2b_order dedupes. Accepted for v1; noted for reviewer awareness.
 - **[F1]** This cluster does NOT include the Thursday-critical staff-default invite slice (that narrow invite slice lives elsewhere in Spec B) nor the billing-tag / picking-fee / Starshipit decisions — those are separate Spec B items and out of F1 scope.
+- **[F1]** ⟳ NEW (surfaced in reconciliation) — DECISION: because Spec A fires the order-placed notification **and** a Xero draft for *every* non-test order, a mixed cart that splits into two orders now triggers **two** notifications and **two** draft quotes (one per split order). This is consistent with Spec A's "notify/draft every order" choices, but confirm it's acceptable for split orders — or scope the dispatch notification (and/or a combined draft) to avoid the double-send.
 - **[F2]** DECISION GATE — ordering_permission default for studio tenants. Studios keep no stock, so a staff member invited with the plan's default `ordering_permission: 'stock_only'` could order nothing. The staff EditRoleDialog handles this via `orderingPermissionOptions(tenantType)` (studio → reorder_only only). F2 needs a product decision: (a) mirror that tenant-scoping in the portal invite UI/API, (b) default studio invites to 'reorder_only', or (c) leave the control fully open and let staff correct it later. Plan currently exposes all three and defaults 'stock_only' — flagged, not resolved.
 - **[F2]** DECISION — immediate vs deferred send. The plan sends the branded sign-in OTP immediately on invite (mirrors the staff single-invite route). If self-serve should instead adopt the staff 'Send invites (N)' batching model (provision now, email later via invited_at), that is a separate build. Confirm immediate-send is acceptable for org-admin self-serve.
 - **[F2]** SCOPE — F2 covers invite/ADD of new staff only. Editing an existing member's role or promoting staff↔org_admin from the customer portal is intentionally out of scope (stays staff-side in the staff portal). The hard guard forbids minting org_admins; confirm no portal-side role-editing is wanted in this slice.
@@ -3988,4 +3991,4 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **Starshipit vs Monday tracking** — decide whether Starshipit tracking supersedes or supplements the Spec A Monday-fed pipe.
 - **Picking-fee region** — NZ band table only; decide behaviour for other regions (per-region tables vs NZ-only for now).
 - **Picking-fee scope** — applies to all orders, stock-on-hand only, or prepaid only?
-- **Prepaid supersessions** — this block reverses Spec A item 15 (Xero fires for every order) and Spec A item 11 (flat Monday note); confirm both Spec A pieces are shipped before layering prepaid on top.
+- **Prepaid supersessions** — ✅ both Spec A pieces are shipped: item 15 (Xero fires for every non-test order — eligibility at 3 gates) and item 11 (flat Monday note — `stockOnHandMondayNote`). Prepaid layers on top by replacing the flat note body + zeroing prepaid Xero lines.
