@@ -24,6 +24,12 @@ interface CheckoutClientProps {
   paymentTerms: string | null
   defaultDepositPercent: number | null
   /**
+   * organizations.is_test — demo/test org gate. Suppresses the deposit /
+   * payment-terms banner so a demo walkthrough never shows real terms, matching
+   * the checkout review screen's suppression.
+   */
+  isTest: boolean
+  /**
    * Per-buyer default ship-to. When set AND the store is in `stores`, every
    * line is locked to it (staff intent: this buyer always ships to this store).
    * When null, the parent falls back to `stores[0]` so the dropdown is still
@@ -46,6 +52,7 @@ export function CheckoutClient({
   customerCode,
   paymentTerms,
   defaultDepositPercent,
+  isTest,
   defaultStoreId: buyerDefaultStoreId,
   isBuyer,
   tenantType,
@@ -226,7 +233,7 @@ export function CheckoutClient({
         </div>
       )}
 
-      {depositPct > 0 && (
+      {!isTest && depositPct > 0 && (
         <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
           A deposit of {depositPct}% ({format(depositAmount)}) will be
           invoiced up-front. Balance on {paymentTerms ?? 'net20'}.

@@ -76,6 +76,7 @@ describe('CheckoutClient review step', () => {
         customerCode="CUST-1"
         paymentTerms="net20"
         defaultDepositPercent={null}
+        isTest={false}
         defaultStoreId={null}
         isBuyer={false}
         tenantType="studio"
@@ -108,6 +109,7 @@ describe('CheckoutClient review step', () => {
         customerCode="CUST-1"
         paymentTerms="net20"
         defaultDepositPercent={null}
+        isTest={false}
         defaultStoreId={null}
         isBuyer={false}
         tenantType="franchise"
@@ -138,6 +140,7 @@ describe('CheckoutClient review step', () => {
         customerCode="CUST-1"
         paymentTerms="net20"
         defaultDepositPercent={null}
+        isTest={false}
         defaultStoreId={null}
         isBuyer={false}
         tenantType="franchise"
@@ -167,6 +170,7 @@ describe('CheckoutClient review step', () => {
         customerCode="CUST-1"
         paymentTerms="net20"
         defaultDepositPercent={null}
+        isTest={false}
         defaultStoreId="store-1"
         isBuyer={true}
         tenantType="studio"
@@ -198,5 +202,25 @@ describe('CheckoutClient review step', () => {
         country: 'NZ',
       },
     })
+  })
+
+  it('hides the deposit / payment-terms banner for a demo (is_test) org', () => {
+    const bannerProps = {
+      stores: [{ id: 'store-1', name: 'Main store', city: 'Auckland' }],
+      customerCode: 'CUST-1',
+      paymentTerms: 'net30',
+      defaultDepositPercent: 20,
+      defaultStoreId: null,
+      isBuyer: false,
+      tenantType: 'studio' as const,
+    }
+
+    const { rerender } = render(<CheckoutClient {...bannerProps} isTest={false} />)
+    // Real org: the deposit / payment-terms banner is shown.
+    expect(screen.getByText(/A deposit of/i)).toBeInTheDocument()
+
+    // Demo (is_test) org: the same banner is suppressed, mirroring the review screen.
+    rerender(<CheckoutClient {...bannerProps} isTest={true} />)
+    expect(screen.queryByText(/A deposit of/i)).not.toBeInTheDocument()
   })
 })
