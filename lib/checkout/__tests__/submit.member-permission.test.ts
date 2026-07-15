@@ -106,7 +106,7 @@ function ctx(overrides: Partial<B2BCustomerContext> = {}): B2BCustomerContext {
   return {
     userId: 'u1', membershipId: 'm1', role: 'org_admin', email: 'a@b.co',
     fullName: 'A', organizationId: ORG_ID, organizationName: 'Org',
-    customerCode: 'PRT', b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
+    customerCode: 'PRT', isTest: false, b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
     contractNotes: null, pricingMode: null, defaultDepositPercent: null, storeIds: [],
     defaultStoreId: null, tenantType: null, allowsMultiStoreOrdering: false,
     moqExempt: true, orderingPermission: 'both', ...overrides,

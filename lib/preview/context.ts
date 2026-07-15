@@ -20,7 +20,7 @@ export async function buildPreviewContext(
 
   // Mirror requireB2BCustomer's selects exactly (note: org select omits moq_exempt).
   const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
-    admin.from('organizations').select('id, name, customer_code').eq('id', membership.organization_id).single(),
+    admin.from('organizations').select('id, name, customer_code, is_test').eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
       .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type, pricing_mode')
       .eq('organization_id', membership.organization_id).maybeSingle(),
@@ -41,6 +41,7 @@ export async function buildPreviewContext(
     organizationId: org.id,
     organizationName: org.name,
     customerCode: org.customer_code,
+    isTest: Boolean((org as { is_test?: boolean | null }).is_test),
     b2bAccountId: b2b?.id ?? null,
     tierLevel: b2b?.tier_level ?? null,
     paymentTerms: b2b?.payment_terms ?? null,

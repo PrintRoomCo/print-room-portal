@@ -157,6 +157,7 @@ function buildInput(
       organizationId: ORG_ID,
       organizationName: 'Acme Co',
       customerCode: 'ACME',
+      isTest: false,
       b2bAccountId: null,
       tierLevel: null,
       paymentTerms: 'net20',

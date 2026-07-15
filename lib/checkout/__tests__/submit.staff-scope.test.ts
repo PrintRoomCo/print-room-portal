@@ -14,7 +14,7 @@ function ctx(overrides: Partial<B2BCustomerContext> = {}): B2BCustomerContext {
   return {
     userId: 'u1', membershipId: 'm1', role: 'staff', email: 'a@b.co',
     fullName: 'A', organizationId: 'org1', organizationName: 'Org',
-    customerCode: 'PRT', b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
+    customerCode: 'PRT', isTest: false, b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
     contractNotes: null, pricingMode: null, defaultDepositPercent: null, storeIds: ['s1'],
     defaultStoreId: 's1', tenantType: 'franchise', allowsMultiStoreOrdering: false,
     moqExempt: false, orderingPermission: 'both', ...overrides,

@@ -273,6 +273,7 @@ export function makeContext(orgId: string) {
     organizationId: orgId,
     organizationName: 'Acme Co',
     customerCode: 'ACME',
+    isTest: false,
     b2bAccountId: null,
     tierLevel: null,
     paymentTerms: 'net20',
