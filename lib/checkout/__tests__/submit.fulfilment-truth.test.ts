@@ -438,16 +438,28 @@ describe('submitCustomerOrder — order_type stamping (Foundation F-1)', () => {
     })
   })
 
-  it('fails visibly when the order_type stamp cannot be persisted', async () => {
-    const { admin } = makeSupabaseStub({
+  it('audits and still completes the order when the order_type stamp cannot be persisted', async () => {
+    const { admin, writes } = makeSupabaseStub({
       selects: baseSelects({ productNature: 'mixed' }),
       rpc: happyRpc,
       writeErrors: { orders: { message: 'order_type write failed' } },
     })
 
-    await expect(submitCustomerOrder(admin, buildInput())).rejects.toThrow(
-      'Failed to stamp order_type: order_type write failed',
+    // The order row is already committed by the RPC, so a failed stamp must not
+    // 500 the customer or orphan the order — it records an audit breadcrumb and
+    // continues (the order stays 'purchase_order' until re-stamped).
+    const result = await submitCustomerOrder(admin, buildInput())
+    expect(result.order_id).toBe(ORDER_ID)
+
+    const stampFailureAudit = writes.find(
+      (w) =>
+        w.table === 'audit_events' &&
+        !Array.isArray(w.payload) &&
+        typeof w.payload === 'object' &&
+        w.payload !== null &&
+        (w.payload as Record<string, unknown>).action === 'order.order_type_stamp_failed',
     )
+    expect(stampFailureAudit).toBeTruthy()
   })
 
   it("classifies a mixed cart as 'purchase_order' (interim single-order rule)", async () => {

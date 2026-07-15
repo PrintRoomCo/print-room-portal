@@ -20,7 +20,10 @@ import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
-import { resolveDispatchNotificationRecipient } from '@/lib/checkout/dispatch-notification-recipient'
+import {
+  resolveDispatchNotificationRecipient,
+  isTestOrgFailClosed,
+} from '@/lib/checkout/dispatch-notification-recipient'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -1086,15 +1089,43 @@ export async function submitCustomerOrder(
   // a genuine stock draw, else 'purchase_order'. The all-stocked twin of the
   // drawsStock (some-stocked) predicate at step 5c. The column defaults to
   // 'purchase_order' at the DB, so this update only ever narrows to
-  // 'stock_on_hand' for fully-stocked orders. Plain awaited write (same
-  // contract as the decoration_cost update below), not a swallowed side-effect.
+  // 'stock_on_hand' for fully-stocked orders.
+  //
+  // The order row is ALREADY committed by the RPC above (with the DB default),
+  // so a failure here must NOT turn a placed order into a customer-facing 500 or
+  // an orphan that skips the downstream Monday/notification steps. Instead we
+  // fail-audit like every other post-commit side-effect in this function: record
+  // ORDER_TYPE_STAMP_FAILED (so a mis-typed order is discoverable + re-stampable)
+  // and continue. Worst case the order stays 'purchase_order' until re-stamped.
   const orderType = classifyOrderType(input.lines)
   const { error: orderTypeError } = await admin
     .from('orders')
     .update({ order_type: orderType })
     .eq('id', order_id)
   if (orderTypeError) {
-    throw new Error(`Failed to stamp order_type: ${orderTypeError.message}`)
+    console.error('[Checkout] order_type stamp failed (audited, order committed)', {
+      orderId: order_id,
+      intendedType: orderType,
+      err: orderTypeError.message,
+    })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_TYPE_STAMP_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, intended_order_type: orderType, error: orderTypeError.message },
+        },
+        admin,
+      )
+    } catch (auditErr) {
+      console.error('[Checkout] order_type stamp-failure audit threw (swallowed)', {
+        orderId: order_id,
+        err: auditErr instanceof Error ? auditErr.message : String(auditErr),
+      })
+    }
   }
 
   // Record decoration revenue separately on the quote so finance can split
@@ -1558,12 +1589,17 @@ export async function submitCustomerOrder(
   //     passed through for Spec B, but no longer gates the draft.
   try {
     const drawsStock = input.lines.some((l) => l.fulfilment_type === 'stocked')
-    const { data: xeroOrgRow } = await admin
+    const xeroOrgResult = await admin
       .from('organizations')
       .select('is_test')
       .eq('id', input.context.organizationId)
       .maybeSingle()
-    const xeroIsTestOrg = Boolean((xeroOrgRow as { is_test?: boolean } | null)?.is_test)
+    // Fail closed on error OR a missing row: treat as a test org so we never push
+    // a live Xero draft for an org we could not classify (mirrors the email +
+    // dispatch recipient lookups).
+    const xeroIsTestOrg = isTestOrgFailClosed(
+      xeroOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
+    )
 
     const xeroResult = await createDraftInvoiceForOrder(admin, {
       orderId: order_id,
@@ -1680,12 +1716,12 @@ export async function submitCustomerOrder(
         emailTotalAmount ??
         repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
 
-      const { data: emailOrgFlag, error: emailOrgErr } = await admin
+      const emailOrgResult = await admin
         .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
-      // Fail closed: if we can't confirm is_test, route to the test inbox rather than risk emailing a real customer.
-      const isTestOrgForEmail = emailOrgErr
-        ? true
-        : Boolean((emailOrgFlag as { is_test?: boolean } | null)?.is_test)
+      // Fail closed on error OR a missing row: route to the test inbox rather than risk emailing a real customer.
+      const isTestOrgForEmail = isTestOrgFailClosed(
+        emailOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
+      )
       const emailRecipient = resolveOrderEmailRecipient({
         isTestOrg: isTestOrgForEmail,
         customerEmail: input.context.email,
@@ -1741,21 +1777,22 @@ export async function submitCustomerOrder(
     const notifyTotal =
       emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
 
-    const { data: notifyOrgFlag, error: notifyOrgError } = await admin
+    const notifyOrgResult = await admin
       .from('organizations')
       .select('is_test')
       .eq('id', input.context.organizationId)
       .maybeSingle()
-    if (notifyOrgError) {
+    // Fail closed: an unknown org classification (lookup error OR missing row)
+    // must never notify Charlotte — route to the test inbox instead.
+    const notifyIsTestOrg = isTestOrgFailClosed(
+      notifyOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
+    )
+    if (notifyOrgResult.error || !notifyOrgResult.data) {
       console.error(
-        '[Checkout] dispatch recipient lookup failed; routing to test inbox',
-        notifyOrgError.message,
+        '[Checkout] dispatch recipient lookup unresolved; routing to test inbox',
+        notifyOrgResult.error?.message ?? 'org row not found',
       )
     }
-    // Fail closed: an unknown org classification must never notify Charlotte.
-    const notifyIsTestOrg = notifyOrgError
-      ? true
-      : Boolean((notifyOrgFlag as { is_test?: boolean } | null)?.is_test)
 
     await postOrderPlacedSlack({
       orderRef: order_ref,

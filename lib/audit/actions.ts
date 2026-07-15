@@ -3,6 +3,7 @@
 // cross-repo audit queries can group by `action`. Spec 2026-05-13 §G.4 + §M.R7.
 export const AUDIT_ACTIONS = {
   ORDER_SUBMIT: 'order.submit',
+  ORDER_TYPE_STAMP_FAILED: 'order.order_type_stamp_failed',
   ORDER_MONDAY_PUSH_FAILED: 'order.monday_push_failed',
   ORDER_PRE_APPROVED_INVENTORY: 'order.pre_approved_inventory',
   ORDER_PRE_APPROVED_INVENTORY_FAILED: 'order.pre_approved_inventory_failed',
