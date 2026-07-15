@@ -45,7 +45,8 @@ const args: CreateDraftInvoiceArgs = {
   ordererEmail: 'buyer@acme.test',
   paymentTerms: 'net20',
   isTestOrg: false,
-  drawsStock: false,
+  pickingFee: 0,
+  prepaidStockedLineKeys: new Set<string>(),
   existingInvoiceId: null,
   today: '2026-07-02',
 }
@@ -84,10 +85,52 @@ describe('createDraftInvoiceForOrder — eligible', () => {
     // xeroFetch is POST /Quotes.
     mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'quote-xero-2', QuoteNumber: 'QU-0002' }] })
     const { admin, updates } = fakeAdmin({ cachedContactId: 'c-1', quoteItems: [] })
-    const res = await createDraftInvoiceForOrder(admin, { ...args, drawsStock: true })
+    const res = await createDraftInvoiceForOrder(admin, args)
     expect(res).toEqual({ status: 'drafted', reason: 'ok', invoiceId: 'quote-xero-2', invoiceNumber: 'QU-0002' })
     expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_id: 'quote-xero-2', xero_invoice_number: 'QU-0002', xero_invoice_status: 'drafted' } })
     expect(updates).not.toContainEqual({ table: 'orders', payload: { xero_invoice_status: 'manual_review' } })
+  })
+
+  it('zeroes a prepaid stocked line and appends a pick-fee line to the payload', async () => {
+    mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'quote-xero-3', QuoteNumber: 'QU-0003' }] })
+    const { admin } = fakeAdmin({
+      cachedContactId: 'c-1',
+      quoteItems: [
+        // prepaid stocked line — key matches, should be zeroed + relabelled
+        {
+          product_name: 'Tee', quantity: 24, unit_price: 12.5, size_label: 'M',
+          decorations: null, product_variants: { product_color_swatches: { label: 'Black' } },
+          product_id: 'p-1', variant_id: 'v-1', size_id: 3, qty_from_stock: 24,
+        },
+        // not-paid stocked line — billed as-is
+        {
+          product_name: 'Cap', quantity: 10, unit_price: 20, size_label: null,
+          decorations: null, product_variants: null,
+          product_id: 'p-2', variant_id: null, size_id: null, qty_from_stock: 10,
+        },
+      ],
+    })
+
+    const res = await createDraftInvoiceForOrder(admin, {
+      ...args,
+      pickingFee: 30,
+      prepaidStockedLineKeys: new Set(['p-1::v-1::3']),
+    })
+
+    expect(res.status).toBe('drafted')
+    const quoteCall = mockFetch.mock.calls.find((c) => c[0] === '/Quotes')
+    const body = JSON.parse((quoteCall?.[1] as { body: string }).body) as {
+      Quotes: Array<{ LineItems: Array<{ Description: string; Quantity: number; UnitAmount: number }> }>
+    }
+    const items = body.Quotes[0].LineItems
+    // prepaid line zeroed ($0) + relabelled
+    expect(items).toContainEqual(
+      expect.objectContaining({ Description: expect.stringContaining('(prepaid — no charge)'), Quantity: 24, UnitAmount: 0 }),
+    )
+    // not-paid line billed as-is
+    expect(items).toContainEqual(expect.objectContaining({ Quantity: 10, UnitAmount: 20 }))
+    // pick fee rides on its own line
+    expect(items).toContainEqual(expect.objectContaining({ Description: 'Picking fee', Quantity: 1, UnitAmount: 30 }))
   })
 })
 

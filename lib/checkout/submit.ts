@@ -1622,10 +1622,16 @@ export async function submitCustomerOrder(
   //     never throws, audits on failure. Spec A: EVERY non-test order drafts —
   //     purchase orders and stock-on-hand alike. Only a test org is skipped
   //     (xero_invoice_status='skipped'); disabled/already-drafted are inert.
-  //     drawsStock is still computed from the cart lines' fulfilment_type and
-  //     passed through for Spec B, but no longer gates the draft.
+  //     Spec B: prepaid stocked goods are zeroed on the draft and the pick fee
+  //     (computed above, region-gated to NZ) rides on its own line.
   try {
-    const drawsStock = input.lines.some((l) => l.fulfilment_type === 'stocked')
+    const prepaidStockedLineKeys = new Set(
+      input.lines.flatMap((l, i) =>
+        l.fulfilment_type === 'stocked' && orderBillingLines[i]?.billingMode === 'prepaid'
+          ? [makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)]
+          : [],
+      ),
+    )
     const xeroOrgResult = await admin
       .from('organizations')
       .select('is_test')
@@ -1648,7 +1654,8 @@ export async function submitCustomerOrder(
       ordererEmail: input.context.email ?? null,
       paymentTerms: input.context.paymentTerms ?? null,
       isTestOrg: xeroIsTestOrg,
-      drawsStock,
+      pickingFee: pickFee,
+      prepaidStockedLineKeys,
       existingInvoiceId: null, // fresh order — no prior draft
       today: new Date().toISOString().slice(0, 10),
       deliveryAddressSummary: formattedShippingAddress,
