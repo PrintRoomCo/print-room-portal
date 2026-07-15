@@ -9,6 +9,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { getPortalOwnerKey } from '@/lib/portal-owner'
 import type { PortalOrderTrackerData, PreOrderTrackerItem } from '@/lib/portal-data'
 import { ORDER_STATUS_LABELS } from '@/lib/orders/status-labels'
+import { withinDateRange } from '@/lib/orders/past-orders-filter'
 import { CancelPreOrderButton } from './CancelPreOrderButton'
 
 type StatusFilter = 'active' | 'completed'
@@ -27,6 +28,8 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
   const [dataLoading, setDataLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
     if (companyLoading) return
@@ -84,6 +87,12 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
         ? trackers.filter((t) => !isTrackerCompleted(t.status))
         : trackers.filter((t) => isTrackerCompleted(t.status))
 
+    if (dateFrom || dateTo) {
+      result = result.filter((t) =>
+        withinDateRange(t.created_at, dateFrom || null, dateTo || null),
+      )
+    }
+
     if (search.trim()) {
       const query = search.toLowerCase().trim()
       result = result.filter(
@@ -97,7 +106,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
     }
 
     return result
-  }, [trackers, search, statusFilter])
+  }, [trackers, search, statusFilter, dateFrom, dateTo])
 
   if (!access && !companyLoading) return null
 
@@ -161,6 +170,21 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
                 Completed
               </FilterChip>
             </div>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-full bg-white px-4 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-full bg-white px-4 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
+              aria-label="To date"
+            />
+            {/* TODO(store-filter): blocked on store-attribution decision */}
           </div>
         )}
 

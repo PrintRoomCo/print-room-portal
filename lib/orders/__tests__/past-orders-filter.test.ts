@@ -47,3 +47,12 @@ describe('filterPastOrders', () => {
     expect(filterPastOrders(orders, { status: 'all', from: '2026-05-15', to: null }).map((o) => o.orderId)).toEqual(['b'])
   })
 })
+
+describe('tracker date filter reuse', () => {
+  it('keeps a tracker created inside the range', () => {
+    expect(withinDateRange('2026-06-01T08:00:00Z', '2026-06-01', '2026-06-30')).toBe(true)
+  })
+  it('drops a tracker created before the range', () => {
+    expect(withinDateRange('2026-05-31T23:00:00Z', '2026-06-01', null)).toBe(false)
+  })
+})

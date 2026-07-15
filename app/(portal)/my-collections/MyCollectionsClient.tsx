@@ -7,6 +7,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { getPortalOwnerKey } from '@/lib/portal-owner'
 import type { PortalPastOrdersData, PortalPastOrder } from '@/lib/portal-data'
 import { orderStatusLabel, type OrderStatus } from '@/lib/orders/status-labels'
+import { filterPastOrders } from '@/lib/orders/past-orders-filter'
 
 type Order = PortalPastOrder
 
@@ -27,6 +28,9 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
   const { access, loading: companyLoading } = useCompany()
   const currentOwnerKey = getPortalOwnerKey(access)
   const [orders, setOrders] = useState<Order[]>(initialData.orders)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
   const [dataOwnerKey, setDataOwnerKey] = useState(initialData.ownerKey)
   const [dataLoading, setDataLoading] = useState(false)
 
@@ -72,6 +76,13 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
     }
   }, [companyLoading, currentOwnerKey, dataOwnerKey])
 
+  const statusOptions = Array.from(new Set(orders.map((o) => o.status)))
+  const filteredOrders = filterPastOrders(orders, {
+    status: statusFilter,
+    from: dateFrom || null,
+    to: dateTo || null,
+  })
+
   if (!access && !companyLoading) return null
 
   return (
@@ -83,6 +94,38 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
           </h1>
         </header>
 
+        {orders.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-full bg-gray-100 px-4 py-1.5 text-xs font-medium text-gray-700"
+            >
+              <option value="all">All statuses</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {orderStatusLabel(s as OrderStatus)}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-700"
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-700"
+              aria-label="To date"
+            />
+            {/* TODO(store-filter): blocked on store-attribution decision */}
+          </div>
+        )}
+
         <div
           className={
             dataLoading
@@ -90,12 +133,17 @@ export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
               : 'transition-opacity duration-150'
           }
         >
-          {orders.length > 0 ? (
+          {filteredOrders.length > 0 ? (
             <div className="space-y-4">
-              {orders.map((order) => (
+              {filteredOrders.map((order) => (
                 <OrderCard key={order.orderId} order={order} />
               ))}
             </div>
+          ) : orders.length > 0 ? (
+            <PortalEmptyState
+              title="No matches"
+              body="Try widening the status or date filters."
+            />
           ) : (
             <PortalEmptyState
               title="Nothing here yet"
