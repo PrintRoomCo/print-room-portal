@@ -16,6 +16,11 @@ vi.mock('@/lib/email/order-confirmation', () => ({
   sendOrderConfirmation: vi.fn().mockResolvedValue({ success: true }),
 }))
 
+const { sendOrderPlacedDispatch } = vi.hoisted(() => ({
+  sendOrderPlacedDispatch: vi.fn().mockResolvedValue({ success: true }),
+}))
+vi.mock('@/lib/email/order-placed-dispatch', () => ({ sendOrderPlacedDispatch }))
+
 // Proof autofill is async + unrelated. Stub to a no-op so we don't drag in the
 // proof assembly graph.
 vi.mock('@/lib/proofs/autofill-for-order', () => ({
@@ -80,7 +85,7 @@ function makeSupabaseStub(opts: {
     }
 
     const builder = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => {
         pendingWrite = { op: 'insert', payload }
         return builder
@@ -101,9 +106,9 @@ function makeSupabaseStub(opts: {
         filters.push({ column, value })
         return builder
       },
-      gt: (_column: string, _value: unknown) => builder,
-      order: (_col: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      gt: () => builder,
+      order: () => builder,
+      limit: () => builder,
       single: async () => settle(),
       maybeSingle: async () => {
         const r = settle()
@@ -128,7 +133,7 @@ function makeSupabaseStub(opts: {
 
   const admin = {
     from: vi.fn((table: string) => builderFor(table)),
-    rpc: vi.fn(async (name: string, _args?: unknown) => {
+    rpc: vi.fn(async (name: string) => {
       const r = opts.rpcResponses[name]
       if (!r) return { data: null, error: null }
       return r
@@ -168,6 +173,7 @@ function buildInput(): CheckoutInput {
       organizationId: ORG_ID,
       organizationName: 'Acme Co',
       customerCode: 'ACME',
+      isTest: false,
       b2bAccountId: null,
       tierLevel: null,
       paymentTerms: 'net20',
@@ -204,7 +210,7 @@ function buildInput(): CheckoutInput {
  * given `is_test` flag. Mirrors the sibling Monday-push-failure test's stub
  * exactly, plus the organizations matcher this test needs.
  */
-function buildStub(isTest: boolean) {
+function buildStub(isTest: boolean, organizationError: { message: string } | null = null) {
   return makeSupabaseStub({
     membershipRole: 'org_admin',
     rpcResponses: {
@@ -257,7 +263,13 @@ function buildStub(isTest: boolean) {
         error: null,
       } },
       // organizations is_test flag lookup (the demo-routing read under test).
-      { table: 'organizations', response: { data: { is_test: isTest }, error: null } },
+      {
+        table: 'organizations',
+        response: {
+          data: organizationError ? null : { is_test: isTest },
+          error: organizationError,
+        },
+      },
     ],
   })
 }
@@ -279,5 +291,22 @@ describe('submitCustomerOrder — demo Monday group routing', () => {
     await submitCustomerOrder(admin, buildInput())
     expect(pushOrderDeal).toHaveBeenCalledOnce()
     expect(vi.mocked(pushOrderDeal).mock.calls[0][1]).toEqual({ demo: false })
+  })
+
+  it('fails closed to Jamie for dispatch email when the demo-org lookup fails', async () => {
+    const savedDemoTestEmail = process.env.DEMO_TEST_EMAIL
+    process.env.DEMO_TEST_EMAIL = 'someone-else@example.com'
+    try {
+      const { admin } = buildStub(false, { message: 'organization lookup failed' })
+      await submitCustomerOrder(admin, buildInput())
+
+      expect(sendOrderPlacedDispatch).toHaveBeenCalledOnce()
+      expect(sendOrderPlacedDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'jamie@theprint-room.co.nz' }),
+      )
+    } finally {
+      if (savedDemoTestEmail === undefined) delete process.env.DEMO_TEST_EMAIL
+      else process.env.DEMO_TEST_EMAIL = savedDemoTestEmail
+    }
   })
 })

@@ -120,20 +120,19 @@ describe('PDP multi-size table — From-inventory available qty (Item 3, inverte
     expect(screen.getByText('4')).toBeInTheDocument()
   })
 
-  it('reorder mode (made_to_order, no stock): all sizes + Available column unchanged', () => {
+  it('reorder mode (made_to_order, no stock): all sizes shown, Available column hidden (Item 6)', () => {
     // made_to_order + org_admin + tiers, but NO inventory on the selection →
-    // canChooseOrderIntent false → reorder mode (all sizes + Available column).
-    // (A made_to_order product that DOES carry stock now defaults to inventory
-    //  mode with a toggle — restored pre-2026-06-03 behavior; see pills test.)
+    // canChooseOrderIntent false → purchase-order mode. Item 6 hides the whole
+    // Available column in purchase-order mode; every size row still renders.
     renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin', availability: noStock })
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
     expect(
-      screen.getByRole('columnheader', { name: 'Available' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('columnheader', { name: 'Available' }),
+    ).not.toBeInTheDocument()
   })
 
-  it('legacy per-size variants display every order-without-stock size as available to order', () => {
+  it('backorderable made-to-order sizes still render, Available column hidden (Item 6)', () => {
     renderPDP({
       fulfilment_type: 'made_to_order',
       role: 'org_admin',
@@ -141,23 +140,21 @@ describe('PDP multi-size table — From-inventory available qty (Item 3, inverte
     })
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
-    expect(screen.getAllByText(/Available to order/i)).toHaveLength(3)
+    // Item 6: purchase-order mode hides the whole Available column AND the header
+    // badge, so the per-size "Available to order" chips no longer render.
+    expect(screen.queryByText(/Available to order/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Out of stock')).not.toBeInTheDocument()
   })
 })
 
 describe('PDP multi-size table — made-to-order rows with no inventory record (2026-06-29)', () => {
-  it('shows "Available to order" per untracked size instead of a — placeholder', () => {
-    // made_to_order + org_admin + NO availability rows → every size is untracked
-    // (available === null), the canonical MTO/in-house product case. The product
-    // is still fully orderable via production (deadZone false, !isInventoryMode),
-    // so each size row should read "Available to order" rather than "—".
+  it('renders every untracked size row with the Available column hidden (Item 6)', () => {
+    // made_to_order + org_admin + NO availability rows → purchase-order mode.
+    // Item 6 hides the whole Available column here, so the per-size
+    // "Available to order" chips no longer render; the size rows still do.
     renderPDP({ fulfilment_type: 'made_to_order', role: 'org_admin', availability: {} as never })
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size M')).toBeInTheDocument()
-    // One mint pill per untracked size row. The header AvailabilityBadge renders
-    // nothing here (colourTotalAvailable is undefined), so the only matches are
-    // the two in-table cells — and the "—" placeholder is gone.
-    expect(screen.getAllByText(/Available to order/i)).toHaveLength(2)
+    expect(screen.queryByText(/Available to order/i)).not.toBeInTheDocument()
   })
 })

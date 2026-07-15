@@ -45,11 +45,11 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     iconKey: 'tracking',
     requiresCompany: false,
     requiresLeavers: false,
-    requiresOrgAdmin: false,
+    requiresOrgAdmin: true,
     requiredTenantTypes: null,
   },
   {
-    name: 'Orders',
+    name: 'Past orders',
     href: '/my-collections',
     iconKey: 'orders',
     requiresCompany: false,

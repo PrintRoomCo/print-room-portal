@@ -190,7 +190,13 @@ function SignIn() {
                 />
               </div>
             </div>
-            <div className="mt-3 text-right">
+            <div className="mt-3 flex items-center justify-between gap-4">
+              <a
+                href="mailto:jamie@theprint-room.co.nz"
+                className="text-sm font-semibold text-black underline-offset-4 hover:underline"
+              >
+                Trouble logging in?
+              </a>
               <a
                 href="/reset-password"
                 className="text-sm font-semibold text-black underline-offset-4 hover:underline"

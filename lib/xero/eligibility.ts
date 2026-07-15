@@ -1,11 +1,6 @@
 // lib/xero/eligibility.ts
 
-export type XeroIneligibleReason =
-  | 'disabled'
-  | 'already_drafted'
-  | 'test_org'
-  | 'prepay_org'
-  | 'draws_stock'
+export type XeroIneligibleReason = 'disabled' | 'already_drafted' | 'test_org'
 export type XeroEligibilityReason = 'ok' | XeroIneligibleReason
 
 export interface XeroEligibilityInput {
@@ -15,10 +10,6 @@ export interface XeroEligibilityInput {
   existingInvoiceId: string | null
   /** organizations.is_test. */
   isTestOrg: boolean
-  /** 'prepay' | 'net20' | 'net30' | null. */
-  paymentTerms: string | null
-  /** True if ANY order line draws from existing stock. */
-  drawsStock: boolean
 }
 
 export interface XeroEligibility {
@@ -27,16 +18,16 @@ export interface XeroEligibility {
 }
 
 /**
- * Draft a Xero invoice iff ALL hold: feature on, not already drafted, not a test
- * org, not a prepay org, and no line draws stock. Order of checks defines
- * precedence (see test). draws_stock/prepay_org → the caller flags manual_review;
- * disabled/already_drafted/test_org → skipped.
+ * Draft a Xero DRAFT quote iff ALL hold: feature on, not already drafted, and
+ * not a test org. Spec A: EVERY non-test order is invoiced — purchase orders
+ * and stock-on-hand orders alike. There is no order-type, payment-terms, or
+ * stock-draw branch (prepay is deferred to Spec B). Order of checks defines
+ * precedence (see test): disabled/already_drafted → fully inert; test_org →
+ * the caller records xero_invoice_status='skipped'.
  */
 export function evaluateXeroEligibility(input: XeroEligibilityInput): XeroEligibility {
   if (!input.xeroEnabled) return { eligible: false, reason: 'disabled' }
   if (input.existingInvoiceId) return { eligible: false, reason: 'already_drafted' }
   if (input.isTestOrg) return { eligible: false, reason: 'test_org' }
-  if (input.paymentTerms === 'prepay') return { eligible: false, reason: 'prepay_org' }
-  if (input.drawsStock) return { eligible: false, reason: 'draws_stock' }
   return { eligible: true, reason: 'ok' }
 }

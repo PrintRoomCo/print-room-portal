@@ -49,15 +49,15 @@ function makeSupabaseStub(opts: {
     }
 
     const builder: Record<string, unknown> = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => { pendingWrite = { op: 'insert', payload }; return builder },
       update: (payload: AnyRow) => { pendingWrite = { op: 'update', payload }; return builder },
       eq: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
       in: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
       is: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
-      gt: (_col: string, _val: unknown) => builder,
-      order: (_col: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      gt: () => builder,
+      order: () => builder,
+      limit: () => builder,
       single: async () => settle(),
       maybeSingle: async () => {
         const r = settle()
@@ -106,7 +106,7 @@ function ctx(overrides: Partial<B2BCustomerContext> = {}): B2BCustomerContext {
   return {
     userId: 'u1', membershipId: 'm1', role: 'org_admin', email: 'a@b.co',
     fullName: 'A', organizationId: ORG_ID, organizationName: 'Org',
-    customerCode: 'PRT', b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
+    customerCode: 'PRT', isTest: false, b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
     contractNotes: null, pricingMode: null, defaultDepositPercent: null, storeIds: [],
     defaultStoreId: null, tenantType: null, allowsMultiStoreOrdering: false,
     moqExempt: true, orderingPermission: 'both', ...overrides,

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-// @ts-ignore — next.config.mjs is an untyped ESM config module; we only read redirects()
+// @ts-expect-error — next.config.mjs is an untyped ESM config module; we only read redirects()
 import nextConfig from '../../next.config.mjs'
 
 type Redirect = { source: string; destination: string; permanent: boolean }
 
 async function getRedirects(): Promise<Redirect[]> {
-  // @ts-ignore — redirects() is defined on the Next config object
+  // @ts-expect-error — redirects() is defined on the Next config object
   return (await nextConfig.redirects()) as Redirect[]
 }
 

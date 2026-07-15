@@ -65,10 +65,10 @@ function makeSupabaseStub(opts: {
 
   function builderFor(table: string) {
     const builder = {
-      select: (_cols?: string) => builder,
-      eq: (_column: string, _value: unknown) => builder,
-      in: (_column: string, _value: unknown) => builder,
-      gt: (_column: string, _value: unknown) => builder,
+      select: () => builder,
+      eq: () => builder,
+      in: () => builder,
+      gt: () => builder,
       single: async () => responseFor(table),
       maybeSingle: async () => {
         const r = responseFor(table)
@@ -132,6 +132,7 @@ function buildInput(lines: CheckoutLineInput[]): CheckoutInput {
       organizationId: ORG_ID,
       organizationName: 'Acme Co',
       customerCode: 'ACME',
+      isTest: false,
       b2bAccountId: null,
       tierLevel: null,
       paymentTerms: 'net20',

@@ -179,8 +179,14 @@ export function CartTable({
             </div>
 
             {/* Inline status messages */}
-            {(isOversell || isMoqShort) && (
+            {(isMadeToOrder || isOversell || isMoqShort) && (
               <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
+                {isMadeToOrder && (
+                  <p className="text-amber-700">
+                    <span className="font-medium">Made to order</span> — this will be
+                    produced before dispatch.
+                  </p>
+                )}
                 {isOversell && (
                   <p className="flex items-center gap-2 text-rose-700">
                     Only {avail} available.

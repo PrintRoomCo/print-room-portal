@@ -18,6 +18,8 @@ export interface B2BCustomerContext {
   organizationId: string
   organizationName: string
   customerCode: string | null
+  /** organizations.is_test — demo/test org gate. Suppresses the deposit/payment-terms UI on review; mirrors the server-side is_test reads in lib/checkout/submit.ts. */
+  isTest: boolean
   b2bAccountId: string | null
   tierLevel: number | null
   paymentTerms: string | null
@@ -101,7 +103,7 @@ export async function requireB2BCustomer(
 
   const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
     admin.from('organizations')
-      .select('id, name, customer_code')
+      .select('id, name, customer_code, is_test')
       .eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
       .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type, pricing_mode')
@@ -137,6 +139,7 @@ export async function requireB2BCustomer(
       organizationId: org.id,
       organizationName: org.name,
       customerCode: org.customer_code,
+      isTest: Boolean((org as { is_test?: boolean | null }).is_test),
       b2bAccountId: b2b?.id ?? null,
       tierLevel: b2b?.tier_level ?? null,
       paymentTerms: b2b?.payment_terms ?? null,

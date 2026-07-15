@@ -162,6 +162,7 @@ function buildInput(items: FixtureItem[], lineCount: number): CheckoutInput {
     organizationId: DEMO_ORG_ID,
     organizationName: 'Print Room Demo',
     customerCode: 'DEMO',
+    isTest: false,
     b2bAccountId: null,
     tierLevel: null,
     paymentTerms: 'net30',

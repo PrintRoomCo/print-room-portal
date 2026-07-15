@@ -12,10 +12,15 @@ import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
+import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
+import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
+import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
+import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
+import { resolveDispatchNotificationRecipient } from '@/lib/checkout/dispatch-notification-recipient'
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -424,9 +429,10 @@ export async function submitCustomerOrder(
   )
 
   // Server-side fulfilment truth (2026-07-06). 'stocked' is a stock-DRAW claim
-  // that exempts a line from MOQ (below) and trips the Xero draws_stock gate
-  // (step 5c) — so it may only stand when the product's effective nature
-  // actually allows a draw. submit_b2b_order resolves fulfilment the same way
+  // that exempts a line from MOQ (below) — so it may only stand when the
+  // product's effective nature actually allows a draw. (Spec A no longer gates
+  // Xero on stock-draw; the coercion still matters for MOQ + Spec B.)
+  // submit_b2b_order resolves fulfilment the same way
   // (catalogue override ?? product base) and never draws on-hand stock for
   // made_to_order/pre_order natures, so a 'stocked' claim there is always
   // wrong — the old PDP fallback bug, stale persisted carts, or a hostile
@@ -1075,6 +1081,22 @@ export async function submitCustomerOrder(
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
 
+  // Foundation F-1 — classify and stamp order_type from the (already
+  // nature-coerced, see step 1) cart lines: 'stock_on_hand' iff every line is
+  // a genuine stock draw, else 'purchase_order'. The all-stocked twin of the
+  // drawsStock (some-stocked) predicate at step 5c. The column defaults to
+  // 'purchase_order' at the DB, so this update only ever narrows to
+  // 'stock_on_hand' for fully-stocked orders. Plain awaited write (same
+  // contract as the decoration_cost update below), not a swallowed side-effect.
+  const orderType = classifyOrderType(input.lines)
+  const { error: orderTypeError } = await admin
+    .from('orders')
+    .update({ order_type: orderType })
+    .eq('id', order_id)
+  if (orderTypeError) {
+    throw new Error(`Failed to stamp order_type: ${orderTypeError.message}`)
+  }
+
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.
   // total_amount already includes decoration via the folded unit_price above.
@@ -1365,6 +1387,22 @@ export async function submitCustomerOrder(
         .eq('id', quoteItemId)
     }
 
+    // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
+    // Monday card so the floor pulls from stock instead of producing. Purchase
+    // orders get no note. Own try/catch so a note failure never marks the whole
+    // Monday push as failed (mirrors the Xero manual-review note in step 5c).
+    const stockNote = stockOnHandMondayNote(orderType)
+    if (stockNote) {
+      try {
+        await postItemUpdate(itemId, stockNote)
+      } catch (noteErr) {
+        console.error('[Checkout] stock-on-hand Monday note failed (swallowed)', {
+          orderId: order_id,
+          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+        })
+      }
+    }
+
     // Stamp the same Monday item id onto the job_trackers shell created in
     // step 4c. Webhook-driven status updates from Monday already key off
     // monday_item_id (job_tracker_webhook_logs) so this enables inbound
@@ -1512,12 +1550,12 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5c. Best-effort Xero DRAFT quote for fully-billable orders. Mirrors the
-  //     Monday/email side-effects: never throws, audits on failure. Ineligible
-  //     orders (test org, prepay org, or ANY stock-draw line) are flagged
-  //     xero_invoice_status='manual_review' for Charlotte instead of drafted.
-  //     Stock-draw is read from the cart lines' fulfilment_type — the submit RPC
-  //     payload does not persist per-line stock qty (see the p_lines map above).
+  // 5c. Best-effort Xero DRAFT quote. Mirrors the Monday/email side-effects:
+  //     never throws, audits on failure. Spec A: EVERY non-test order drafts —
+  //     purchase orders and stock-on-hand alike. Only a test org is skipped
+  //     (xero_invoice_status='skipped'); disabled/already-drafted are inert.
+  //     drawsStock is still computed from the cart lines' fulfilment_type and
+  //     passed through for Spec B, but no longer gates the draft.
   try {
     const drawsStock = input.lines.some((l) => l.fulfilment_type === 'stocked')
     const { data: xeroOrgRow } = await admin
@@ -1651,7 +1689,7 @@ export async function submitCustomerOrder(
       const emailRecipient = resolveOrderEmailRecipient({
         isTestOrg: isTestOrgForEmail,
         customerEmail: input.context.email,
-        testEmail: process.env.DEMO_TEST_EMAIL || 'jamie@theprint-room.co.nz',
+        testEmail: 'jamie@theprint-room.co.nz',
       })
 
       const result = await sendOrderConfirmation({
@@ -1678,6 +1716,78 @@ export async function submitCustomerOrder(
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     console.error('[Checkout] Order-confirmation email failed:', message)
+  }
+
+  // 7. Order-placed dispatch notification (Item 13). Fires for EVERY order the
+  //    moment it commits: a Block Kit Slack message (no-op until the webhook env
+  //    exists) plus an email to the dispatch desk (charlotte@ in prod, or the
+  //    test inbox for demo orgs). Best-effort — a notification failure must
+  //    never break the order. Reuses the step-6 email summary + a portal deep
+  //    link to the order's confirmation page (the only order_id-keyed route).
+  try {
+    const notifyOrderUrl = `${
+      process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
+    }/checkout/confirmation/${order_id}`
+
+    const notifyLines =
+      emailLines.length > 0
+        ? emailLines
+        : repriced.map((l) => ({
+            productName: l.product_name,
+            variantLabel: '—',
+            quantity: l.qty,
+            unitPrice: l.unit_price,
+          }))
+    const notifyTotal =
+      emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+    const { data: notifyOrgFlag, error: notifyOrgError } = await admin
+      .from('organizations')
+      .select('is_test')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    if (notifyOrgError) {
+      console.error(
+        '[Checkout] dispatch recipient lookup failed; routing to test inbox',
+        notifyOrgError.message,
+      )
+    }
+    // Fail closed: an unknown org classification must never notify Charlotte.
+    const notifyIsTestOrg = notifyOrgError
+      ? true
+      : Boolean((notifyOrgFlag as { is_test?: boolean } | null)?.is_test)
+
+    await postOrderPlacedSlack({
+      orderRef: order_ref,
+      customerName: emailCustomerName,
+      orderType,
+      totalAmount: notifyTotal,
+      orderUrl: notifyOrderUrl,
+      lines: notifyLines.map((l) => ({
+        productName: l.productName,
+        variantLabel: l.variantLabel,
+        quantity: l.quantity,
+      })),
+    })
+
+    const dispatchRecipient = resolveDispatchNotificationRecipient({
+      isTestOrg: notifyIsTestOrg,
+      testEmail: 'jamie@theprint-room.co.nz',
+    })
+    await sendOrderPlacedDispatch({
+      to: dispatchRecipient,
+      orderRef: order_ref,
+      customerName: emailCustomerName,
+      orderType,
+      totalAmount: notifyTotal,
+      orderUrl: notifyOrderUrl,
+      lines: notifyLines,
+    })
+  } catch (e) {
+    console.error('[Checkout] order-placed dispatch notification failed (swallowed)', {
+      orderId: order_id,
+      err: e instanceof Error ? e.message : String(e),
+    })
   }
 
   return { order_id, order_ref }

@@ -22,7 +22,6 @@ interface EditableReorderItemsProps {
 
 function seedFromSource(
   items: QuoteDataItem[],
-  designNamesByInstanceId?: Record<string, string>,
 ): ReorderEditedItem[] {
   return items.map((item, index) => {
     const productName = getItemDisplayName(item)
@@ -50,7 +49,7 @@ export function EditableReorderItems({
   disabled,
 }: EditableReorderItemsProps) {
   const [edited, setEdited] = useState<ReorderEditedItem[]>(() =>
-    seedFromSource(items, designNamesByInstanceId),
+    seedFromSource(items),
   )
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getNavigationItems, type NavAccess } from '../portal-nav'
+import { getNavigationItems, PORTAL_NAV_ITEMS, type NavAccess } from '../portal-nav'
 
 function access(over: Partial<NavAccess> = {}): NavAccess {
   return {
@@ -38,5 +38,21 @@ describe('getNavigationItems — Inventory gating', () => {
     expect(hrefs(access({ isCompanyUser: false }))).not.toContain('/catalogue')
     expect(hrefs(access({ canUseLeavers: false }))).not.toContain('/leavers-quotes')
     expect(hrefs(access({ canUseLeavers: true }))).toContain('/leavers-quotes')
+  })
+})
+
+describe('getNavigationItems — Track my Project gating (Item 5)', () => {
+  it('shows Track my Project to an org_admin', () => {
+    expect(hrefs(access({ isOrgAdmin: true }))).toContain('/tracking')
+  })
+  it('hides Track my Project from a non-admin (staff)', () => {
+    expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/tracking')
+  })
+})
+
+describe('Orders → Past orders rename (Item 10)', () => {
+  it('labels the /my-collections item "Past orders"', () => {
+    const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/my-collections')
+    expect(item?.name).toBe('Past orders')
   })
 })

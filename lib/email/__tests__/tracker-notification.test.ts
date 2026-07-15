@@ -7,7 +7,7 @@ interface EmailArgs {
   text: string
 }
 
-const sendEmail = vi.fn((_args: EmailArgs) => Promise.resolve({ success: true }))
+const sendEmail = vi.fn(() => Promise.resolve({ success: true }))
 vi.mock('../client', () => ({
   sendEmail: (args: EmailArgs) => sendEmail(args),
 }))

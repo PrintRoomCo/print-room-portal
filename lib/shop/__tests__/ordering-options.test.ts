@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { effectivePermission, orderingOptions } from '../fulfilment-mode'
+import { effectivePermission, orderingOptions, memberCanReorder } from '../fulfilment-mode'
 
 describe('effectivePermission', () => {
   it('org_admin is always both, ignoring the stored value', () => {
@@ -30,5 +30,15 @@ describe('orderingOptions (product nature ∩ member permission)', () => {
       canReorder: expected.reorder,
       deadZone: expected.dead,
     })
+  })
+})
+
+describe('memberCanReorder (member-side factor of orderingOptions.canReorder)', () => {
+  it('stock_only members have no reorder path', () => {
+    expect(memberCanReorder('stock_only')).toBe(false)
+  })
+  it('reorder_only and both members can reorder', () => {
+    expect(memberCanReorder('reorder_only')).toBe(true)
+    expect(memberCanReorder('both')).toBe(true)
   })
 })

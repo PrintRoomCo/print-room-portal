@@ -111,7 +111,9 @@ describe('PDP ordering permissions (dead-zone + member cap)', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
-    expect(screen.getAllByText(/Available to order/i).length).toBeGreaterThanOrEqual(1)
+    // Orderability is proven by the Qty input above; Item 6 hides the
+    // Available column in purchase-order mode, so the chip no longer renders.
+    expect(screen.queryByText(/Available to order/i)).not.toBeInTheDocument()
   })
 
   // stocked product × reorder_only member: product offers only draw, member may

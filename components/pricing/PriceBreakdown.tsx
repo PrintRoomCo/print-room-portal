@@ -23,10 +23,22 @@ interface PriceBreakdownProps {
  */
 export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownProps) {
   const showShipping = variant === 'cart-totals' || variant === 'checkout-review'
+  // PDP shows a single synthetic line (aggregate qty at one unit price), so the
+  // per-unit figure is unambiguous. Cart/checkout can mix unit prices across
+  // lines, where a single "per unit" number would mislead — so gate it.
+  const showPerUnit = variant === 'pdp' && breakdown.lines.length === 1
   const fmt = format ?? formatPrice
 
   return (
     <div className="space-y-1.5 text-sm">
+      {showPerUnit && (
+        <Row
+          label="Per unit"
+          value={breakdown.lines[0].unitEffective}
+          muted
+          format={fmt}
+        />
+      )}
       <Row label="Subtotal" value={breakdown.grossSubtotal} format={fmt} />
       {/*
         Keep breakdown.decorationTotal populated for debugging and checkout
