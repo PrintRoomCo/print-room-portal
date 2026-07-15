@@ -391,6 +391,7 @@ async function overlayTrackingInfo(
 
 const fetchPastOrdersForUser = unstable_cache(
   async (userId: string, email: string | null): Promise<PortalPastOrdersData> => {
+    void email
     const adminClient = getSupabaseServer()
     const { data: membership } = await adminClient
       .from('user_organizations')

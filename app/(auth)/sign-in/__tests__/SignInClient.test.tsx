@@ -17,10 +17,15 @@ vi.mock('next/image', () => ({
     width?: number
     height?: number
     priority?: boolean
-  }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} {...props} />
-  ),
+  }) => {
+    void _width
+    void _height
+    void _priority
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img alt={alt} {...props} />
+    )
+  },
 }))
 
 vi.mock('next/navigation', () => ({
@@ -30,6 +35,8 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@hcaptcha/react-hcaptcha', () => ({
   default: forwardRef(function MockHCaptcha(_props, _ref) {
+    void _props
+    void _ref
     return <div data-testid="hcaptcha" />
   }),
 }))
