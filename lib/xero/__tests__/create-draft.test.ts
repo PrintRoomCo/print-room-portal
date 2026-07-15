@@ -78,18 +78,20 @@ describe('createDraftInvoiceForOrder — eligible', () => {
     expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_id: 'quote-xero-1', xero_invoice_number: 'QU-0001', xero_invoice_status: 'drafted' } })
     expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'order.xero_drafted' }), admin)
   })
+
+  it('drafts a stock-draw order now — the draws_stock gate is gone (Spec A)', async () => {
+    // Spec A invoices stock-on-hand orders too. cachedContactId set → the only
+    // xeroFetch is POST /Quotes.
+    mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'quote-xero-2', QuoteNumber: 'QU-0002' }] })
+    const { admin, updates } = fakeAdmin({ cachedContactId: 'c-1', quoteItems: [] })
+    const res = await createDraftInvoiceForOrder(admin, { ...args, drawsStock: true })
+    expect(res).toEqual({ status: 'drafted', reason: 'ok', invoiceId: 'quote-xero-2', invoiceNumber: 'QU-0002' })
+    expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_id: 'quote-xero-2', xero_invoice_number: 'QU-0002', xero_invoice_status: 'drafted' } })
+    expect(updates).not.toContainEqual({ table: 'orders', payload: { xero_invoice_status: 'manual_review' } })
+  })
 })
 
 describe('createDraftInvoiceForOrder — ineligible', () => {
-  it('flags manual_review on a stock-draw order (no Xero call)', async () => {
-    const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })
-    const res = await createDraftInvoiceForOrder(admin, { ...args, drawsStock: true })
-    expect(res).toEqual({ status: 'manual_review', reason: 'draws_stock' })
-    expect(mockFetch).not.toHaveBeenCalled()
-    expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_status: 'manual_review' } })
-    expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'order.xero_manual_review' }), admin)
-  })
-
   it('skips (no write, no audit) when the flag is off', async () => {
     process.env.XERO_ENABLED = 'false'
     const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })

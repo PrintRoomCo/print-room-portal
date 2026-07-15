@@ -209,6 +209,8 @@ export interface CreateDraftInvoiceArgs {
   ordererEmail: string | null
   paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
   isTestOrg: boolean
+  /** Computed stock-draw truth. Ignored by Spec A eligibility (every order
+   *  drafts); retained for Spec B and still surfaced to callers/tests. */
   drawsStock: boolean
   existingInvoiceId: string | null
   today: string // 'YYYY-MM-DD'
@@ -232,31 +234,16 @@ export async function createDraftInvoiceForOrder(
   admin: SupabaseClient,
   args: CreateDraftInvoiceArgs,
 ): Promise<CreateDraftInvoiceResult> {
+  // Spec A: every non-test order is invoiced — purchase orders and stock-on-hand
+  // alike. No payment-terms or stock-draw gate remains. (args.drawsStock is still
+  // computed upstream and passed through for Spec B, but is no longer consulted.)
   const elig = evaluateXeroEligibility({
     xeroEnabled: isXeroEnabled(),
     existingInvoiceId: args.existingInvoiceId,
     isTestOrg: args.isTestOrg,
-    paymentTerms: args.paymentTerms,
-    drawsStock: args.drawsStock,
   })
 
   if (!elig.eligible) {
-    // prepay + stock-draw are billable-but-uncostable in v1 → Charlotte's queue.
-    if (elig.reason === 'prepay_org' || elig.reason === 'draws_stock') {
-      await admin.from('orders').update({ xero_invoice_status: 'manual_review' }).eq('id', args.orderId)
-      await recordAuditEvent(
-        {
-          orgId: args.organizationId,
-          actorUserId: args.actorUserId,
-          action: AUDIT_ACTIONS.ORDER_XERO_MANUAL_REVIEW,
-          targetType: 'order',
-          targetId: args.orderId,
-          metadata: { order_ref: args.orderRef, reason: elig.reason },
-        },
-        admin,
-      )
-      return { status: 'manual_review', reason: elig.reason }
-    }
     // test_org → record a 'skipped' status (keeps the ledger clean, no nag).
     if (elig.reason === 'test_org') {
       await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
