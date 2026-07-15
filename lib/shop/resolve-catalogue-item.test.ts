@@ -74,7 +74,13 @@ describe('resolveCatalogueItemForPdp', () => {
   it('exact preview match force-shows the in-edit item without needing a grant', async () => {
     const admin = makeStub({
       b2b_catalogue_items: [
-        { id: TEE_ITEM, source_product_id: TEE_PRODUCT, name: 'Tee (draft)', price_mode: 'computed' },
+        {
+          id: TEE_ITEM,
+          source_product_id: TEE_PRODUCT,
+          name: 'Tee (draft)',
+          price_mode: 'computed',
+          billing_mode: 'prepaid',
+        },
       ],
     })
     const result = await resolveCatalogueItemForPdp(
@@ -90,6 +96,7 @@ describe('resolveCatalogueItemForPdp', () => {
       { getGrantedItemIds: async () => [] },
     )
     expect(result?.id).toBe(TEE_ITEM)
+    expect(result?.billing_mode).toBe('prepaid')
   })
 
   it('non-preview uses the granted lookup', async () => {

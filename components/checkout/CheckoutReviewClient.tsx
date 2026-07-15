@@ -7,6 +7,7 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
+import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import {
@@ -402,6 +403,11 @@ export function CheckoutReviewClient({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
+                      {showsPrepaidTag(line.fulfilmentType ?? 'stocked', line.billingMode ?? null) && (
+                        <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          Pre-paid
+                        </span>
+                      )}
                       <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
                         {line.variantLabel}
                       </p>
