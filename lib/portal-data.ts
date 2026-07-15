@@ -9,7 +9,7 @@ import {
   getJobsForUser,
   getJobTrackerForUserByToken,
 } from '@/lib/job-tracker-queries'
-import type { JobTracker } from '@/lib/job-tracker'
+import { getTrackingNumber, type JobTracker, type TrackingInfo } from '@/lib/job-tracker'
 import type { B2BCustomerAccess } from '@/types/company'
 import { cacheTags, cacheRevalidate } from '@/lib/cache/tags'
 import { readPreviewSession } from '@/lib/preview/cookie'
@@ -47,6 +47,55 @@ export interface PortalAccountData {
   stores: PortalAccountStore[]
   recentQuotes: PortalAccountQuote[]
   ownerKey: string | null
+}
+
+export interface PastOrderTracking {
+  carrier: string | null
+  trackingNumber: string | null
+  url: string | null
+}
+
+export interface PortalPastOrder {
+  orderId: string
+  quoteId: string | null
+  orderRef: string | null
+  quoteNumber: string | null
+  reference: string | null
+  status: string
+  customerName: string | null
+  customerEmail: string | null
+  customerCompany: string | null
+  subtotal: number
+  totalAmount: number
+  currency: string
+  createdAt: string
+  tracking: PastOrderTracking | null
+}
+
+export interface PortalPastOrdersData {
+  orders: PortalPastOrder[]
+  stores: PortalAccountStore[]
+  ownerKey: string | null
+}
+
+interface PastOrderRow {
+  id: string
+  status: string | null
+  created_at: string | null
+  quote_id: string | null
+  quotes: {
+    organization_id: string | null
+    created_by: string | null
+    order_ref: string | null
+    quote_number: string | null
+    reference: string | null
+    customer_name: string | null
+    customer_email: string | null
+    customer_company: string | null
+    subtotal: number | null
+    total_amount: number | null
+    currency: string | null
+  } | null
 }
 
 interface PortalAccountOrderStatusRow {
@@ -284,6 +333,126 @@ export const getPortalAccountData = cache(async (): Promise<PortalAccountData> =
     return { stores: [], recentQuotes: [], ownerKey: null }
   }
   return fetchAccountDataForUser(user.id, user.email ?? null)
+})
+
+function mapPastOrderRow(row: PastOrderRow): PortalPastOrder {
+  return {
+    orderId: row.id,
+    quoteId: row.quote_id,
+    orderRef: row.quotes?.order_ref ?? null,
+    quoteNumber: row.quotes?.quote_number ?? null,
+    reference: row.quotes?.reference ?? null,
+    status: row.status ?? 'awaiting-approval',
+    customerName: row.quotes?.customer_name ?? null,
+    customerEmail: row.quotes?.customer_email ?? null,
+    customerCompany: row.quotes?.customer_company ?? null,
+    subtotal: Number(row.quotes?.subtotal ?? 0),
+    totalAmount: Number(row.quotes?.total_amount ?? 0),
+    currency: row.quotes?.currency ?? 'NZD',
+    createdAt: row.created_at ?? new Date().toISOString(),
+    tracking: null,
+  }
+}
+
+async function overlayTrackingInfo(
+  adminClient: SupabaseClient,
+  orders: PortalPastOrder[],
+): Promise<PortalPastOrder[]> {
+  const quoteIds = orders.map((o) => o.quoteId).filter(Boolean) as string[]
+  if (quoteIds.length === 0) return orders
+
+  const { data: trackerRows } = await adminClient
+    .from('job_trackers')
+    .select('quote_id, tracking_info')
+    .in('quote_id', quoteIds)
+
+  const byQuoteId = new Map<string, TrackingInfo | null>()
+  for (const row of (trackerRows ?? []) as Array<{
+    quote_id: string | null
+    tracking_info: TrackingInfo | null
+  }>) {
+    if (!row.quote_id || byQuoteId.has(row.quote_id)) continue
+    byQuoteId.set(row.quote_id, row.tracking_info)
+  }
+
+  return orders.map((order) => {
+    const info = order.quoteId ? byQuoteId.get(order.quoteId) : null
+    if (!info) return order
+    return {
+      ...order,
+      tracking: {
+        carrier: info.carrier ?? null,
+        trackingNumber: getTrackingNumber(info) ?? null,
+        url: info.url ?? null,
+      },
+    }
+  })
+}
+
+const fetchPastOrdersForUser = unstable_cache(
+  async (userId: string, email: string | null): Promise<PortalPastOrdersData> => {
+    const adminClient = getSupabaseServer()
+    const { data: membership } = await adminClient
+      .from('user_organizations')
+      .select('organization_id, role')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    let orders: PortalPastOrder[] = []
+    let stores: PortalAccountStore[] = []
+
+    if (membership?.organization_id) {
+      const { data: storesData } = await adminClient
+        .from('stores')
+        .select('id, name, address, location, city, state, country, postal_code, phone')
+        .eq('organization_id', membership.organization_id)
+        .order('created_at', { ascending: true })
+      stores = (storesData || []) as PortalAccountStore[]
+
+      // Past orders = placed stock_on_hand orders. Display fields come from the
+      // joined quote (orders carries no org/customer columns). order_type is
+      // added by the Order-type foundation task.
+      const { data: orderRows } = await adminClient
+        .from('orders')
+        .select(
+          `id, status, created_at, quote_id,
+           quotes!inner (
+             organization_id, created_by, order_ref, quote_number, reference,
+             customer_name, customer_email, customer_company,
+             subtotal, total_amount, currency
+           )`,
+        )
+        .eq('order_type', 'stock_on_hand')
+        .eq('quotes.organization_id', membership.organization_id)
+        .order('created_at', { ascending: false })
+
+      orders = await overlayTrackingInfo(
+        adminClient,
+        ((orderRows ?? []) as unknown as PastOrderRow[]).map(mapPastOrderRow),
+      )
+    }
+
+    return {
+      orders,
+      stores,
+      ownerKey: membership?.organization_id
+        ? `org:${membership.organization_id}`
+        : `user:${userId}`,
+    }
+  },
+  ['portal-past-orders-data'],
+  {
+    tags: [cacheTags.accountData],
+    revalidate: cacheRevalidate.accountData,
+  },
+)
+
+export const getPortalPastOrdersData = cache(async (): Promise<PortalPastOrdersData> => {
+  const user = await getPortalUser()
+  if (!user) {
+    return { orders: [], stores: [], ownerKey: null }
+  }
+  return fetchPastOrdersForUser(user.id, user.email ?? null)
 })
 
 async function overlayLatestOrderStatuses(
