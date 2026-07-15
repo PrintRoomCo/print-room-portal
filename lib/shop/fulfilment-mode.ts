@@ -64,6 +64,18 @@ export function effectivePermission(
   return stored ?? 'stock_only'
 }
 
+/**
+ * Does this member's permission ever grant a reorder (production-run) path?
+ * True for 'reorder_only' and 'both'; false for 'stock_only'. This is the
+ * member-side factor of orderingOptions().canReorder — the SAME condition that
+ * hides the PDP order-mode pill for a stock_only member. The catalogue
+ * FilterRail ordering-mode filter reuses it so a stock_only member never sees a
+ * "Purchase order" filter option they could never act on.
+ */
+export function memberCanReorder(permission: MemberPermission): boolean {
+  return permission === 'reorder_only' || permission === 'both'
+}
+
 export interface OrderingOptions {
   /** May this viewer draw this product from existing stock? */
   canDrawStock: boolean
@@ -87,7 +99,7 @@ export function orderingOptions(
   const productDraw = nature === 'stocked' || nature === 'mixed'
   const productReorder = nature === 'made_to_order' || nature === 'mixed'
   const memberDraw = permission === 'stock_only' || permission === 'both'
-  const memberReorder = permission === 'reorder_only' || permission === 'both'
+  const memberReorder = memberCanReorder(permission)
   const canDrawStock = productDraw && memberDraw
   const canReorder = productReorder && memberReorder
   return { canDrawStock, canReorder, deadZone: !canDrawStock && !canReorder }
