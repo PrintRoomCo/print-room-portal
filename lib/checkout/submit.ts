@@ -429,9 +429,10 @@ export async function submitCustomerOrder(
   )
 
   // Server-side fulfilment truth (2026-07-06). 'stocked' is a stock-DRAW claim
-  // that exempts a line from MOQ (below) and trips the Xero draws_stock gate
-  // (step 5c) — so it may only stand when the product's effective nature
-  // actually allows a draw. submit_b2b_order resolves fulfilment the same way
+  // that exempts a line from MOQ (below) — so it may only stand when the
+  // product's effective nature actually allows a draw. (Spec A no longer gates
+  // Xero on stock-draw; the coercion still matters for MOQ + Spec B.)
+  // submit_b2b_order resolves fulfilment the same way
   // (catalogue override ?? product base) and never draws on-hand stock for
   // made_to_order/pre_order natures, so a 'stocked' claim there is always
   // wrong — the old PDP fallback bug, stale persisted carts, or a hostile
@@ -1543,12 +1544,12 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5c. Best-effort Xero DRAFT quote for fully-billable orders. Mirrors the
-  //     Monday/email side-effects: never throws, audits on failure. Ineligible
-  //     orders (test org, prepay org, or ANY stock-draw line) are flagged
-  //     xero_invoice_status='manual_review' for Charlotte instead of drafted.
-  //     Stock-draw is read from the cart lines' fulfilment_type — the submit RPC
-  //     payload does not persist per-line stock qty (see the p_lines map above).
+  // 5c. Best-effort Xero DRAFT quote. Mirrors the Monday/email side-effects:
+  //     never throws, audits on failure. Spec A: EVERY non-test order drafts —
+  //     purchase orders and stock-on-hand alike. Only a test org is skipped
+  //     (xero_invoice_status='skipped'); disabled/already-drafted are inert.
+  //     drawsStock is still computed from the cart lines' fulfilment_type and
+  //     passed through for Spec B, but no longer gates the draft.
   try {
     const drawsStock = input.lines.some((l) => l.fulfilment_type === 'stocked')
     const { data: xeroOrgRow } = await admin

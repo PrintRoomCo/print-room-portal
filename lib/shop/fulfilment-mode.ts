@@ -125,7 +125,7 @@ export interface LineFulfilmentContext {
 
 /**
  * Which fulfilment a cart line should claim. 'stocked' is a stock-DRAW claim:
- * it exempts the line from MOQ and trips the Xero draws_stock gate at submit,
+ * it exempts the line from MOQ at submit (Spec A no longer gates Xero on it),
  * so it may only be claimed when a draw is actually possible — the viewer can
  * draw this product (nature stocked/mixed × member permission) AND either the
  * org_admin toggle chose From-inventory or the cell is tracked with enough
