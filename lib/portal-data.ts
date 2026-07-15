@@ -412,7 +412,9 @@ const fetchPastOrdersForUser = unstable_cache(
       // Past orders = placed stock_on_hand orders. Display fields come from the
       // joined quote (orders carries no org/customer columns). order_type is
       // added by the Order-type foundation task.
-      const { data: orderRows } = await adminClient
+      const canSeeAllOrgOrders = membership.role === 'org_admin'
+
+      let orderQuery = adminClient
         .from('orders')
         .select(
           `id, status, created_at, quote_id,
@@ -424,7 +426,14 @@ const fetchPastOrdersForUser = unstable_cache(
         )
         .eq('order_type', 'stock_on_hand')
         .eq('quotes.organization_id', membership.organization_id)
-        .order('created_at', { ascending: false })
+
+      // staff (non-admin) see only their own placed stock orders; org_admin sees the
+      // whole org. This is the same rule buildAccess().canSeeAllOrgOrders encodes.
+      if (!canSeeAllOrgOrders) {
+        orderQuery = orderQuery.eq('quotes.created_by', userId)
+      }
+
+      const { data: orderRows } = await orderQuery.order('created_at', { ascending: false })
 
       orders = await overlayTrackingInfo(
         adminClient,
