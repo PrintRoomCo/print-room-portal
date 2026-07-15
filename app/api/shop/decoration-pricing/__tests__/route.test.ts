@@ -15,10 +15,10 @@ function makeAdminStub() {
 
   function builderFor() {
     const builder = {
-      select: (_cols?: string) => builder,
-      eq: (_column: string, _value: unknown) => builder,
-      order: (_column: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      select: () => builder,
+      eq: () => builder,
+      order: () => builder,
+      limit: () => builder,
       maybeSingle: async () => ({ data: null, error: null }),
     }
     return builder

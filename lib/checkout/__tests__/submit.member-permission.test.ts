@@ -49,15 +49,15 @@ function makeSupabaseStub(opts: {
     }
 
     const builder: Record<string, unknown> = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => { pendingWrite = { op: 'insert', payload }; return builder },
       update: (payload: AnyRow) => { pendingWrite = { op: 'update', payload }; return builder },
       eq: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
       in: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
       is: (_col: string, _val: unknown) => { filters.push({ column: _col, value: _val }); return builder },
-      gt: (_col: string, _val: unknown) => builder,
-      order: (_col: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      gt: () => builder,
+      order: () => builder,
+      limit: () => builder,
       single: async () => settle(),
       maybeSingle: async () => {
         const r = settle()

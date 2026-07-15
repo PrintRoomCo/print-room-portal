@@ -120,7 +120,13 @@ export function makeFanoutStub(config: StubConfig) {
         }
       }
       // strip the stub-internal flag so consumers see the PostgREST shape
-      return { data: rows.map(({ __is_published: _p, ...rest }) => rest), error: null }
+      return {
+        data: rows.map(({ __is_published, ...rest }) => {
+          void __is_published
+          return rest
+        }),
+        error: null,
+      }
     }
     if (table === 'b2b_accounts') {
       if (!config.tier) return { data: [], error: null }
@@ -184,12 +190,12 @@ export function makeFanoutStub(config: StubConfig) {
     }
 
     const builder = {
-      select: (_cols?: string) => builder,
-      insert: (_payload: AnyRow | AnyRow[]) => {
+      select: () => builder,
+      insert: () => {
         pendingWrite = true
         return builder
       },
-      update: (_payload: AnyRow) => {
+      update: () => {
         pendingWrite = true
         return builder
       },

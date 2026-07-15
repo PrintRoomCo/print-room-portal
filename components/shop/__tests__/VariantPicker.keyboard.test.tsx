@@ -38,7 +38,6 @@ describe('VariantPicker keyboard navigation', () => {
       />,
     )
 
-    const red = screen.getByRole('radio', { name: /select colour red/i })
     const blue = screen.getByRole('radio', { name: /select colour blue/i })
     const group = screen.getByRole('group', { name: /select colour/i })
 

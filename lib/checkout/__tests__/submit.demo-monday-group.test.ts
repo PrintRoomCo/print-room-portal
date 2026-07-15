@@ -85,7 +85,7 @@ function makeSupabaseStub(opts: {
     }
 
     const builder = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => {
         pendingWrite = { op: 'insert', payload }
         return builder
@@ -106,9 +106,9 @@ function makeSupabaseStub(opts: {
         filters.push({ column, value })
         return builder
       },
-      gt: (_column: string, _value: unknown) => builder,
-      order: (_col: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      gt: () => builder,
+      order: () => builder,
+      limit: () => builder,
       single: async () => settle(),
       maybeSingle: async () => {
         const r = settle()
@@ -133,7 +133,7 @@ function makeSupabaseStub(opts: {
 
   const admin = {
     from: vi.fn((table: string) => builderFor(table)),
-    rpc: vi.fn(async (name: string, _args?: unknown) => {
+    rpc: vi.fn(async (name: string) => {
       const r = opts.rpcResponses[name]
       if (!r) return { data: null, error: null }
       return r

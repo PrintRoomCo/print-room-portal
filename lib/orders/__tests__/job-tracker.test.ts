@@ -58,7 +58,7 @@ function makeStub(opts: {
     }
 
     const builder = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => {
         pendingWrite = { op: 'insert', payload }
         return builder

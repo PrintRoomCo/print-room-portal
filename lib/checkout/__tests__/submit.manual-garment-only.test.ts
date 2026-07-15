@@ -114,7 +114,7 @@ function makeSupabaseStub(opts: {
     }
 
     const builder = {
-      select: (_cols?: string) => builder,
+      select: () => builder,
       insert: (payload: AnyRow | AnyRow[]) => {
         pendingWrite = { op: 'insert', payload }
         return builder
@@ -131,10 +131,10 @@ function makeSupabaseStub(opts: {
         filters.push({ column, value })
         return builder
       },
-      is: (_column: string, _value: unknown) => builder,
-      gt: (_column: string, _value: unknown) => builder,
-      order: (_column: string, _opts?: unknown) => builder,
-      limit: (_n: number) => builder,
+      is: () => builder,
+      gt: () => builder,
+      order: () => builder,
+      limit: () => builder,
       single: async () => settle(),
       maybeSingle: async () => {
         const r = settle()
