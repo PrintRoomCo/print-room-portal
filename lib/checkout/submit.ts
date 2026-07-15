@@ -12,6 +12,7 @@ import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
+import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { postItemUpdate } from '@/lib/monday/updates'
@@ -1074,6 +1075,16 @@ export async function submitCustomerOrder(
   const row = rowRaw as SubmitB2BOrderRow | null
   if (!row) throw new Error('submit_b2b_order returned no row')
   const { quote_id, order_id, order_ref } = row
+
+  // Foundation F-1 — classify and stamp order_type from the (already
+  // nature-coerced, see step 1) cart lines: 'stock_on_hand' iff every line is
+  // a genuine stock draw, else 'purchase_order'. The all-stocked twin of the
+  // drawsStock (some-stocked) predicate at step 5c. The column defaults to
+  // 'purchase_order' at the DB, so this update only ever narrows to
+  // 'stock_on_hand' for fully-stocked orders. Plain awaited write (same
+  // contract as the decoration_cost update below), not a swallowed side-effect.
+  const orderType = classifyOrderType(input.lines)
+  await admin.from('orders').update({ order_type: orderType }).eq('id', order_id)
 
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.

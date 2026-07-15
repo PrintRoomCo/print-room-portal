@@ -395,3 +395,67 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     )
   })
 })
+
+describe('submitCustomerOrder — order_type stamping (Foundation F-1)', () => {
+  const ordersOrderTypeWrite = (
+    writes: Array<{ table: string; op: string; payload: unknown }>,
+  ) =>
+    writes.find(
+      (w) =>
+        w.table === 'orders' &&
+        w.op === 'update' &&
+        !Array.isArray(w.payload) &&
+        typeof w.payload === 'object' &&
+        w.payload !== null &&
+        'order_type' in (w.payload as Record<string, unknown>),
+    )
+
+  it("stamps order_type='stock_on_hand' when every line is a genuine stock draw", async () => {
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }), // keeps the 'stocked' claim
+      rpc: happyRpc,
+    })
+
+    const result = await submitCustomerOrder(admin, buildInput()) // qty 10, stocked, MOQ-exempt
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(ordersOrderTypeWrite(writes)?.payload).toMatchObject({
+      order_type: 'stock_on_hand',
+    })
+  })
+
+  it("stamps order_type='purchase_order' for a made_to_order line", async () => {
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'made_to_order' }),
+      rpc: happyRpc,
+    })
+
+    const result = await submitCustomerOrder(admin, buildInput({ qty: 24 }))
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(ordersOrderTypeWrite(writes)?.payload).toMatchObject({
+      order_type: 'purchase_order',
+    })
+  })
+
+  it("classifies a mixed cart as 'purchase_order' (interim single-order rule)", async () => {
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }),
+      rpc: happyRpc,
+    })
+
+    // One stocked line (MOQ-exempt) + one made_to_order line on the same
+    // (mixed) product whose 24 qty meets MOQ 24 for the production run.
+    const input = buildInput({ qty: 5 })
+    input.lines.push({
+      ...input.lines[0],
+      qty: 24,
+      cart_line_id: 'line-2',
+      fulfilment_type: 'made_to_order',
+    })
+
+    const result = await submitCustomerOrder(admin, input)
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(ordersOrderTypeWrite(writes)?.payload).toMatchObject({
+      order_type: 'purchase_order',
+    })
+  })
+})
