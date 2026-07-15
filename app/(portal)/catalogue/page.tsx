@@ -11,7 +11,7 @@ import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
-import { effectiveFulfilment, matchesMode, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
+import { effectiveFulfilment, matchesMode, memberCanReorder, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
   pickCatalogueCardThumbnail,
   pickCatalogueColourThumbnail,
@@ -550,7 +550,12 @@ export default async function CataloguePage({
             global PortalTopBar's second row (populated via SetTopBarContext). */}
         <div className="mt-4 md:hidden">
           <FilterSheetTrigger activeCount={activeCount}>
-            <FilterRail filters={filters} facets={facets} basePath="/catalogue" />
+            <FilterRail
+              filters={filters}
+              facets={facets}
+              basePath="/catalogue"
+              showModeFilter={memberCanReorder(context.orderingPermission)}
+            />
           </FilterSheetTrigger>
         </div>
 
