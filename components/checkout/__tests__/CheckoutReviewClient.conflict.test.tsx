@@ -55,13 +55,14 @@ function okJson(payload: unknown) {
   } as unknown as Response
 }
 
-function renderReview() {
+function renderReview(overrides?: { isTest?: boolean; paymentTerms?: string | null }) {
   return render(
     <CheckoutReviewClient
       stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
       customerCode="CUST-1"
-      paymentTerms="net20"
+      paymentTerms={overrides?.paymentTerms ?? 'net20'}
       defaultDepositPercent={null}
+      isTest={overrides?.isTest ?? false}
     />,
   )
 }
@@ -217,5 +218,27 @@ describe('CheckoutReviewClient line display', () => {
       '/api/checkout/review-images',
       expect.objectContaining({ method: 'POST' }),
     ))
+  })
+})
+
+describe('CheckoutReviewClient payment terms visibility', () => {
+  it('shows the payment terms block for a real (non-test) org', async () => {
+    vi.mocked(fetch).mockResolvedValue(okJson({ imagesByLineId: {} }))
+
+    renderReview({ isTest: false, paymentTerms: 'net30' })
+
+    expect(await screen.findByText(/payment terms:/i)).toBeInTheDocument()
+    expect(screen.getByText('net30')).toBeInTheDocument()
+  })
+
+  it('hides the payment terms block for a test/demo org', async () => {
+    vi.mocked(fetch).mockResolvedValue(okJson({ imagesByLineId: {} }))
+
+    renderReview({ isTest: true, paymentTerms: 'net30' })
+
+    // Wait for the review to hydrate (product line only renders in the full view).
+    await screen.findAllByText('Test tee')
+    expect(screen.queryByText(/payment terms:/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('net30')).not.toBeInTheDocument()
   })
 })

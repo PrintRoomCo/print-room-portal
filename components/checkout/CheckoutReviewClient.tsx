@@ -31,6 +31,8 @@ interface CheckoutReviewClientProps {
   customerCode: string | null
   paymentTerms: string | null
   defaultDepositPercent: number | null
+  /** organizations.is_test — when true, hide the deposit/payment-terms block (demo org). */
+  isTest: boolean
 }
 
 interface CheckoutResponse {
@@ -43,6 +45,7 @@ export function CheckoutReviewClient({
   customerCode,
   paymentTerms,
   defaultDepositPercent,
+  isTest,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -439,7 +442,7 @@ export function CheckoutReviewClient({
           </div>
         </details>
 
-        {(depositPct > 0 || paymentTerms) && (
+        {!isTest && (depositPct > 0 || paymentTerms) && (
           <div className="mt-4 space-y-1 text-xs text-gray-500">
             {paymentTerms && (
               <p>
