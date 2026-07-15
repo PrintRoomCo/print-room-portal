@@ -15,6 +15,7 @@ import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
+import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
@@ -1643,6 +1644,66 @@ export async function submitCustomerOrder(
           orgId: input.context.organizationId,
           actorUserId: input.context.userId,
           action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_FAILED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, quote_id, error: message },
+        },
+        admin,
+      )
+    } catch {
+      // truly best-effort
+    }
+  }
+
+  // 5d. Best-effort Starshipit push-at-placement. Registers an UNSHIPPED order
+  //     carrying delivery details so staff can generate the label + tracking in
+  //     Starshipit; the portal webhook writes the tracking link back onto the
+  //     job_trackers row. Dark by default (STARSHIPIT_ENABLED). Mirrors the
+  //     Monday/Xero side-effects: never throws out of submit, audits on failure.
+  try {
+    const { data: ssOrgRow } = await admin
+      .from('organizations')
+      .select('is_test')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    const ssIsTestOrg = Boolean((ssOrgRow as { is_test?: boolean } | null)?.is_test)
+
+    const ssResult = await pushOrderToStarshipit(admin, {
+      orderId: order_id,
+      orderRef: order_ref,
+      organizationId: input.context.organizationId,
+      actorUserId: input.context.userId,
+      intent: input.intent ?? 'customer',
+      isTestOrg: ssIsTestOrg,
+      customerEmail: input.context.email ?? null,
+      shippingAddress,
+      // orderType intentionally NOT passed: Spec A orders.order_type is a
+      // stock/production axis ('stock_on_hand'|'purchase_order'), NOT a
+      // delivery/pickup discriminator — passing it would skip every order via
+      // the eligibility's non_delivery_type gate. `intent` is the real signal.
+    })
+    if (ssResult.status === 'skipped') {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_STARSHIPIT_SKIPPED,
+          targetType: 'order',
+          targetId: order_id,
+          metadata: { order_ref, reason: ssResult.reason },
+        },
+        admin,
+      )
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[Checkout] Starshipit push failed (swallowed)', { orderId: order_id, err: message })
+    try {
+      await recordAuditEvent(
+        {
+          orgId: input.context.organizationId,
+          actorUserId: input.context.userId,
+          action: AUDIT_ACTIONS.ORDER_STARSHIPIT_PUSH_FAILED,
           targetType: 'order',
           targetId: order_id,
           metadata: { order_ref, quote_id, error: message },

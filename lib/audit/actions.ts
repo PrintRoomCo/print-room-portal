@@ -13,6 +13,9 @@ export const AUDIT_ACTIONS = {
   ORDER_XERO_DRAFTED: 'order.xero_drafted',
   ORDER_XERO_MANUAL_REVIEW: 'order.xero_manual_review',
   ORDER_XERO_DRAFT_FAILED: 'order.xero_draft_failed',
+  ORDER_STARSHIPIT_PUSHED: 'order.starshipit_pushed',
+  ORDER_STARSHIPIT_SKIPPED: 'order.starshipit_skipped',
+  ORDER_STARSHIPIT_PUSH_FAILED: 'order.starshipit_push_failed',
 
   PROOF_AUTOFILL_SUCCEEDED: 'proof.autofill_succeeded',
   PROOF_AUTOFILL_SKIPPED: 'proof.autofill_skipped',
