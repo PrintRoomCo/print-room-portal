@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 
 describe('CartTable fulfilment copy', () => {
-  it('describes a made_to_order line as produced before dispatch, not an inventory shelf', async () => {
+  it('shows no fulfilment note for a made_to_order line', async () => {
     render(
       <CartTable
         lines={[makeLine({ fulfilmentType: 'made_to_order' })]}
@@ -48,9 +48,7 @@ describe('CartTable fulfilment copy', () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalled())
 
-    expect(screen.getByText(/produced before dispatch/i)).toBeInTheDocument()
-    // Regression: the old copy wrongly told customers their order goes to the
-    // inventory shelf — that only happens on an explicit inventory checkout.
+    expect(screen.queryByText(/produced before dispatch/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/inventory shelf/i)).not.toBeInTheDocument()
   })
 

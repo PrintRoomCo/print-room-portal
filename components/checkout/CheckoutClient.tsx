@@ -245,8 +245,8 @@ export function CheckoutClient({
           <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
             <p className="font-medium text-gray-900">Print Room warehouse</p>
             <p className="mt-1 text-xs text-gray-500">
-              Stock lands on your inventory shelf at Print Room. Your account manager will
-              mark it received when it arrives.
+              Stock lands in your 3PL inventory. Your account manager will notify you when
+              it&apos;s been made.
             </p>
           </div>
         )}

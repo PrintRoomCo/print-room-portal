@@ -1220,8 +1220,8 @@ export function ProductDetailClient({
           <>
           {displayVolumeBrackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                Volume pricing
+              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                Volume Pricing
               </p>
               <ul className="mt-4 grid grid-cols-2 gap-y-2 text-sm text-gray-700 md:grid-cols-3">
                 {displayVolumeBrackets.map((b, i) => (
@@ -1326,8 +1326,8 @@ export function ProductDetailClient({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-200">
-                    <td className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-500" colSpan={showAvailability ? 2 : 1}>
-                      Total this colour
+                    <td className="px-5 py-3 text-[11px] font-medium tracking-[0.08em] text-gray-500" colSpan={showAvailability ? 2 : 1}>
+                      Total This Colour
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
                       {currentColourTotalQty}
@@ -1573,7 +1573,7 @@ function ProductDetailsCondensed({ product }: { product: ProductData }) {
     <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-2.5 text-xs">
       {rows.map((r) => (
         <div key={r.label} className="flex flex-col gap-0.5">
-          <dt className="text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500">{r.label}</dt>
+          <dt className="text-[10px] font-medium tracking-[0.12em] text-gray-500">{r.label}</dt>
           <dd className="truncate text-sm text-gray-900">{r.value}</dd>
         </div>
       ))}
