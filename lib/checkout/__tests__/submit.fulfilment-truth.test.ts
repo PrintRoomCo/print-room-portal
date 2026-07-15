@@ -64,6 +64,7 @@ function makeSupabaseStub(opts: {
     data: unknown
     error: { message: string } | null
   }
+  writeErrors?: Partial<Record<string, { message: string }>>
 }) {
   const writes: RecordedWrite[] = []
   const rpcCalls: RpcCallRecord[] = []
@@ -78,7 +79,7 @@ function makeSupabaseStub(opts: {
     const settle = (): SelectResponse => {
       if (pendingWrite) {
         writes.push({ table, op: pendingWrite.op, payload: pendingWrite.payload, filters: [...filters] })
-        return { data: null, error: null }
+        return { data: null, error: opts.writeErrors?.[table] ?? null }
       }
       return matchSelect()
     }
@@ -435,6 +436,18 @@ describe('submitCustomerOrder — order_type stamping (Foundation F-1)', () => {
     expect(ordersOrderTypeWrite(writes)?.payload).toMatchObject({
       order_type: 'purchase_order',
     })
+  })
+
+  it('fails visibly when the order_type stamp cannot be persisted', async () => {
+    const { admin } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }),
+      rpc: happyRpc,
+      writeErrors: { orders: { message: 'order_type write failed' } },
+    })
+
+    await expect(submitCustomerOrder(admin, buildInput())).rejects.toThrow(
+      'Failed to stamp order_type: order_type write failed',
+    )
   })
 
   it("classifies a mixed cart as 'purchase_order' (interim single-order rule)", async () => {

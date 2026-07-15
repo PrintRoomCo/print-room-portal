@@ -1089,7 +1089,13 @@ export async function submitCustomerOrder(
   // 'stock_on_hand' for fully-stocked orders. Plain awaited write (same
   // contract as the decoration_cost update below), not a swallowed side-effect.
   const orderType = classifyOrderType(input.lines)
-  await admin.from('orders').update({ order_type: orderType }).eq('id', order_id)
+  const { error: orderTypeError } = await admin
+    .from('orders')
+    .update({ order_type: orderType })
+    .eq('id', order_id)
+  if (orderTypeError) {
+    throw new Error(`Failed to stamp order_type: ${orderTypeError.message}`)
+  }
 
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.
