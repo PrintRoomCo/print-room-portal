@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getNavigationItems, type NavAccess } from '../portal-nav'
+import { getNavigationItems, PORTAL_NAV_ITEMS, type NavAccess } from '../portal-nav'
 
 function access(over: Partial<NavAccess> = {}): NavAccess {
   return {
@@ -47,5 +47,12 @@ describe('getNavigationItems — Track my Project gating (Item 5)', () => {
   })
   it('hides Track my Project from a non-admin (staff)', () => {
     expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/tracking')
+  })
+})
+
+describe('Orders → Past orders rename (Item 10)', () => {
+  it('labels the /my-collections item "Past orders"', () => {
+    const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/my-collections')
+    expect(item?.name).toBe('Past orders')
   })
 })
