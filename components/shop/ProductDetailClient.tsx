@@ -1310,7 +1310,18 @@ export function ProductDetailClient({
                     const showAvailableToOrderChip = showBackorderableChip || !trackedRow
                     return (
                       <tr key={cellKey(row.variantId, row.sizeId)} className="border-t border-gray-100">
-                        <td className="px-5 py-3 font-medium text-gray-900">{row.sizeLabel}</td>
+                        <td className="px-5 py-3 font-medium text-gray-900">
+                          {row.sizeLabel}
+                          {/* Purchase-order side: the Available column (which
+                              carries the "to be made" chip in inventory mode) is
+                              hidden, but every unit here is a production run — so
+                              surface the same yellow reassurance inline. */}
+                          {!isInventoryMode && value > 0 && (
+                            <span className="ml-2 text-xs font-normal text-amber-700">
+                              ({value} to be made)
+                            </span>
+                          )}
+                        </td>
                         {showAvailability && (
                           <td className="px-5 py-3 text-xs text-gray-600">
                             {showAvailableToOrderChip ? (
