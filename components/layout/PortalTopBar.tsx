@@ -218,7 +218,7 @@ function FilterRow({
         {hasActive && (
           <Link
             href={action}
-            className="ml-auto text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-900"
+            className="ml-auto text-[11px] font-medium tracking-[0.12em] text-gray-500 hover:text-gray-900"
           >
             Clear all
           </Link>

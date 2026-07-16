@@ -122,7 +122,7 @@ export default async function WelcomePage() {
       </section>
 
       <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Account manager</p>
+        <p className="text-xs font-medium tracking-wide text-gray-400">Account manager</p>
         <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{accountManager.name}</h2>

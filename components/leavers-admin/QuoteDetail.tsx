@@ -21,19 +21,19 @@ export function QuoteDetail({ quote }: Props) {
         <h3 className="font-semibold mb-4">Overview</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Customer</span>
+            <span className="text-muted-foreground block text-xs tracking-wide mb-1">Customer</span>
             <span className="font-medium">{quote.customer_name}</span>
             <div className="text-muted-foreground">{quote.customer_email}</div>
             {quote.customer_phone && <div className="text-muted-foreground">{quote.customer_phone}</div>}
           </div>
           <div>
-            <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">School</span>
+            <span className="text-muted-foreground block text-xs tracking-wide mb-1">School</span>
             <span className="font-medium">{details?.school_name || quote.customer_company || '--'}</span>
             {details?.teacher_name && <div className="text-muted-foreground">Teacher: {details.teacher_name}</div>}
             {details?.teacher_email && <div className="text-muted-foreground">{details.teacher_email}</div>}
           </div>
           <div>
-            <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Details</span>
+            <span className="text-muted-foreground block text-xs tracking-wide mb-1">Details</span>
             <div className="flex items-center gap-2 mb-1">
               <StatusBadge status={quote.status} />
             </div>

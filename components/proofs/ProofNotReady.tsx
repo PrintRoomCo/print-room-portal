@@ -13,7 +13,7 @@ export function ProofNotReady() {
   return (
     <div className="max-w-2xl p-4 md:p-8">
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Proof</p>
+        <p className="text-xs font-medium tracking-wide text-gray-400">Proof</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Proof not available yet</h1>
         <p className="mt-3 text-sm leading-6 text-gray-600">
           Your proof will be ready once our team reviews your order. We&apos;ll email you when

@@ -6,7 +6,7 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { cartLineDisplayImageUrl, isGenericCustomDecorationName } from '@/lib/cart/types'
 
 const LABEL_CAP =
-  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+  'text-[11px] font-medium tracking-[0.12em] text-gray-500'
 
 const SUPPORT_MAILTO = 'mailto:hello@theprint-room.co.nz'
 

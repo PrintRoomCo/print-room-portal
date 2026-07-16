@@ -118,7 +118,7 @@ export default async function OrderProofPage({
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Proof</p>
+          <p className="text-xs font-medium tracking-wide text-gray-400">Proof</p>
           <h1 className="mt-1 text-2xl font-semibold text-gray-900">{proof.name || 'Proof'}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
             Read-only view of the proof prepared by our team for this order.

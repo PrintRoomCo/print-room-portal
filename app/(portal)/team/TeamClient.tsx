@@ -150,7 +150,7 @@ export function TeamClient({
         ) : (
           <div className="mt-4 space-y-4">
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Email *</span>
+              <span className="text-xs tracking-wide text-gray-500">Email *</span>
               <input
                 type="email"
                 value={email}
@@ -161,7 +161,7 @@ export function TeamClient({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="text-xs uppercase tracking-wide text-gray-500">First name *</span>
+                <span className="text-xs tracking-wide text-gray-500">First name *</span>
                 <input
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
@@ -169,7 +169,7 @@ export function TeamClient({
                 />
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wide text-gray-500">Last name</span>
+                <span className="text-xs tracking-wide text-gray-500">Last name</span>
                 <input
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
@@ -178,7 +178,7 @@ export function TeamClient({
               </label>
             </div>
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-gray-500">
+              <span className="text-xs tracking-wide text-gray-500">
                 Default ship-to store *
               </span>
               <select
@@ -195,7 +195,7 @@ export function TeamClient({
               </select>
             </label>
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-gray-500">
+              <span className="text-xs tracking-wide text-gray-500">
                 Ordering permission
               </span>
               <select

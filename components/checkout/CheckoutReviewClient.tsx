@@ -465,7 +465,7 @@ export function CheckoutReviewClient({
                           Pre-paid
                         </span>
                       )}
-                      <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
+                      <p className="mt-1 text-xs tracking-wide text-gray-500">
                         {line.variantLabel}
                       </p>
                       <p className="text-xs text-gray-500">qty {line.qty}</p>

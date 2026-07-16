@@ -120,21 +120,21 @@ export function GarmentLineItem({
           {/* Product cascade */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Product Type</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1 tracking-wide">Product Type</label>
               <select className="select-glass" value={line.productType} onChange={e => handleProductTypeChange(e.target.value)}>
                 <option value="">Select type...</option>
                 {productTypes.map((t: string) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Brand</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1 tracking-wide">Brand</label>
               <select className="select-glass" value={line.brand} onChange={e => handleBrandChange(e.target.value)} disabled={!line.productType}>
                 <option value="">Select brand...</option>
                 {brands.map((b: string) => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Product</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1 tracking-wide">Product</label>
               <select className="select-glass" value={line.productId} onChange={e => handleProductChange(e.target.value)} disabled={!line.brand}>
                 <option value="">Select product...</option>
                 {productsForBrand.map((p: any) => <option key={p.id} value={p.id}>{p.productName}</option>)}
@@ -145,11 +145,11 @@ export function GarmentLineItem({
           {/* Colour + Quantity */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Garment Colour</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1 tracking-wide">Garment Colour</label>
               <input className="input-glass" value={line.garmentColour} onChange={e => update({ garmentColour: e.target.value })} placeholder="e.g. Navy, Black" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Quantity (min 24)</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1 tracking-wide">Quantity (min 24)</label>
               <div className="quantity-control">
                 <button className="quantity-btn" onClick={() => update({ quantity: Math.max(24, line.quantity - 1) })}>-</button>
                 <input
@@ -167,7 +167,7 @@ export function GarmentLineItem({
           {/* Decorations */}
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Decorations</span>
+              <span className="text-xs font-medium text-muted-foreground tracking-wide">Decorations</span>
               {line.decorations.length < 4 && (
                 <button className="btn-ghost text-xs" onClick={addDecoration}>+ Add decoration</button>
               )}
@@ -192,7 +192,7 @@ export function GarmentLineItem({
           {linePricing?.priceable && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <div className="flex justify-between items-baseline mb-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase">Unit price (incl. GST)</span>
+                <span className="text-xs font-medium text-muted-foreground">Unit price (incl. GST)</span>
                 <span className="text-xl font-bold text-[rgb(var(--color-brand-blue))]">
                   {formatPrice(linePricing.unitPriceInclGst)}
                 </span>

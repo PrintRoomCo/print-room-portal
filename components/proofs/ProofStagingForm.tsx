@@ -174,7 +174,7 @@ export function ProofStagingForm({
       <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 md:p-6">
         <h2 className="text-base font-semibold text-gray-900">Job notes</h2>
         <label className="block">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium tracking-wide text-gray-500">
             Additional job notes
           </span>
           <textarea
@@ -209,7 +209,7 @@ export function ProofStagingForm({
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <label className="block">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <span className="text-xs font-medium tracking-wide text-gray-500">
                 Design name
               </span>
               <input
@@ -226,7 +226,7 @@ export function ProofStagingForm({
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <span className="text-xs font-medium tracking-wide text-gray-500">
                 Subtitle
               </span>
               <input
@@ -243,7 +243,7 @@ export function ProofStagingForm({
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <span className="text-xs font-medium tracking-wide text-gray-500">
                 Colour name
               </span>
               <input
@@ -263,7 +263,7 @@ export function ProofStagingForm({
 
           {design.printAreas.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-xs font-medium tracking-wide text-gray-500">
                 Print areas
               </p>
               <div className="space-y-3">
@@ -273,7 +273,7 @@ export function ProofStagingForm({
                     className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-4"
                   >
                     <label className="block md:col-span-2">
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <span className="text-xs font-medium tracking-wide text-gray-500">
                         Label
                       </span>
                       <input
@@ -292,7 +292,7 @@ export function ProofStagingForm({
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <span className="text-xs font-medium tracking-wide text-gray-500">
                         Width (mm)
                       </span>
                       <input
@@ -312,7 +312,7 @@ export function ProofStagingForm({
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <span className="text-xs font-medium tracking-wide text-gray-500">
                         Height (mm)
                       </span>
                       <input

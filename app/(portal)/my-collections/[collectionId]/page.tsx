@@ -407,7 +407,7 @@ export default function CollectionDetail() {
                 </p>
               )}
               <div className="mt-3 p-3 bg-red-50/50 rounded-lg border border-red-200/30">
-                <p className="font-medium text-red-800 text-xs uppercase tracking-wide">What to do next</p>
+                <p className="font-medium text-red-800 text-xs tracking-wide">What to do next</p>
                 <ul className="mt-1 space-y-1 text-red-700">
                   <li>&bull; Review the feedback above</li>
                   <li>&bull; Click &quot;Revise &amp; Resubmit&quot; to edit your designs</li>
@@ -628,7 +628,7 @@ export default function CollectionDetail() {
 }
 
 const LABEL_CAP =
-  'text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500'
+  'text-[11px] font-medium tracking-[0.12em] text-gray-500'
 
 const SUPPORT_MAILTO = 'mailto:hello@theprint-room.co.nz'
 

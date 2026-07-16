@@ -1140,7 +1140,7 @@ export function ProductDetailClient({
                   </span>
                 )}
                 {product.sizing_type && product.sizing_type !== 'multi_size' && (
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-gray-600">
+                  <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] tracking-[0.12em] text-gray-600">
                     {product.sizing_type.replace(/_/g, ' ')}
                   </span>
                 )}
@@ -1221,7 +1221,7 @@ export function ProductDetailClient({
           {multiSize && visibleSizeRows.length > 0 && (
             <section className="overflow-hidden rounded-[24px] bg-white">
               <table className="w-full text-sm">
-                <thead className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500">
+                <thead className="text-left text-[11px] tracking-[0.08em] text-gray-500">
                   <tr>
                     <th className="px-5 pt-5 pb-2 font-medium">Size</th>
                     {showAvailability && (
@@ -1397,7 +1397,7 @@ export function ProductDetailClient({
                 <div>
                   <label
                     htmlFor="qty"
-                    className="block text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500"
+                    className="block text-[11px] font-medium tracking-[0.12em] text-gray-500"
                   >
                     Quantity
                   </label>
@@ -1452,7 +1452,7 @@ export function ProductDetailClient({
                     </p>
                     <a
                       href="mailto:hello@theprint-room.co.nz"
-                      className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 underline transition-colors hover:text-gray-900"
+                      className="text-[11px] font-medium tracking-[0.12em] text-gray-500 underline transition-colors hover:text-gray-900"
                     >
                       Contact sales
                     </a>

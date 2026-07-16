@@ -122,7 +122,7 @@ export function FilterRail({ filters, facets, basePath, showModeFilter = true }:
       {hasActive && (
         <Link
           href={clearHref}
-          className="mt-4 inline-block text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-900"
+          className="mt-4 inline-block text-[11px] font-medium tracking-[0.12em] text-gray-500 hover:text-gray-900"
         >
           Clear all
         </Link>
@@ -134,7 +134,7 @@ export function FilterRail({ filters, facets, basePath, showModeFilter = true }:
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">{label}</p>
+      <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">{label}</p>
       {children}
     </div>
   )

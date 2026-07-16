@@ -116,7 +116,7 @@ export default async function OrderProofEditPage({
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <div className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        <p className="text-xs font-medium tracking-wide text-gray-400">
           Edit proof — request changes
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">{proof.name || 'Proof'}</h1>

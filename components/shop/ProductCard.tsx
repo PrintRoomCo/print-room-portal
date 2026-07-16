@@ -61,10 +61,10 @@ export function ProductCard({ product }: ProductCardProps) {
         <dl className="grid min-w-0 grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-0.5 text-[10px] leading-tight">
           <dt className="font-medium tracking-wider text-gray-400">Product</dt>
           <dt className="font-medium tracking-wider text-gray-400">Price</dt>
-          <dd className="truncate font-medium uppercase tracking-wider text-gray-900">
+          <dd className="truncate font-medium tracking-wider text-gray-900">
             {product.name}
           </dd>
-          <dd className="whitespace-nowrap font-medium uppercase tracking-wider text-gray-900">
+          <dd className="whitespace-nowrap font-medium tracking-wider text-gray-900">
             {product.price_status === 'missing' ? (
               'On request'
             ) : product.price_high > product.price_low ? (
@@ -91,7 +91,7 @@ export function ProductCard({ product }: ProductCardProps) {
               />
             ))}
             {extraSwatches > 0 && (
-              <span className="ml-0.5 text-[9px] font-medium uppercase tracking-wider text-gray-400">
+              <span className="ml-0.5 text-[9px] font-medium tracking-wider text-gray-400">
                 +{extraSwatches}
               </span>
             )}
