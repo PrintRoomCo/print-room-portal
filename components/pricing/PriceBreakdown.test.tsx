@@ -8,6 +8,7 @@ const ob = {
   decorationTotal: 15.0,
   discountAmount: 0,
   netSubtotal: 215.0,
+  pickingFee: 0,
   gstRate: 0.15,
   gst: 32.25,
   total: 247.25,
@@ -29,6 +30,7 @@ const obPdp = {
   decorationTotal: 15.0,
   discountAmount: 0,
   netSubtotal: 230.0,
+  pickingFee: 0,
   gstRate: 0.15,
   gst: 34.5,
   total: 264.5,
@@ -85,5 +87,21 @@ describe('PriceBreakdown', () => {
     render(<PriceBreakdown breakdown={obPdp} variant="pdp" format={format} />)
     // 21.50 * 0.9 = 19.35
     expect(screen.getByText(/A\$19\.35/)).toBeDefined()
+  })
+
+  it('renders a Picking fee row when pickingFee > 0', () => {
+    render(
+      <PriceBreakdown
+        breakdown={{ ...ob, pickingFee: 30 }}
+        variant="cart-totals"
+      />,
+    )
+    expect(screen.getByText(/Picking fee/i)).toBeDefined()
+    expect(screen.getByText(/\$30\.00/)).toBeDefined()
+  })
+
+  it('renders no Picking fee row when pickingFee is 0', () => {
+    render(<PriceBreakdown breakdown={ob} variant="cart-totals" />)
+    expect(screen.queryByText(/Picking fee/i)).toBeNull()
   })
 })

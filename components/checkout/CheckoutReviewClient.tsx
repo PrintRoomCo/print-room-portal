@@ -7,8 +7,11 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
+import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { classifyOrderType } from '@/lib/orders/order-type'
 import {
   allInLineTotal,
   allInUnitPrice,
@@ -33,6 +36,14 @@ interface CheckoutReviewClientProps {
   defaultDepositPercent: number | null
   /** organizations.is_test — when true, hide the deposit/payment-terms block (demo org). */
   isTest: boolean
+  /**
+   * Fresh catalogueItemId → billing_mode resolved at SSR. The cart's own
+   * billingMode is an add-to-cart snapshot that can go stale if staff flip an
+   * item's billing_mode while it sits in a persisted cart — the server bills
+   * from the fresh value, so the badge must too. Snapshot is the fallback for
+   * lines with no map entry (legacy carts).
+   */
+  billingModeByItemId?: Record<string, 'invoice_on_dispatch' | 'prepaid'>
 }
 
 interface CheckoutResponse {
@@ -46,6 +57,7 @@ export function CheckoutReviewClient({
   paymentTerms,
   defaultDepositPercent,
   isTest,
+  billingModeByItemId,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -69,18 +81,43 @@ export function CheckoutReviewClient({
     return map
   }, [stores])
 
-  const breakdown = useMemo(
-    () =>
-      computeOrderBreakdown({
-        lines: cart.lines.map((line) => ({
-          qty: line.qty,
-          unitEffective: line.unitPrice,
-          decorationPerUnit: decorationPerUnit(line),
-        })),
-        gstRate: 0.15,
-      }),
-    [cart.lines],
-  )
+  // Ship-to country mirrors the server's single-shipping-address resolution
+  // (submit.ts): the custom address when every line ships custom, else the FIRST
+  // line's store. Drives the NZ picking-fee region gate so the customer's figure
+  // matches the Xero draft + Monday billing note.
+  const shipCountry = useMemo<string | null>(() => {
+    if (!reviewState) return null
+    if (allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)) {
+      return reviewState.customAddress.country ?? null
+    }
+    const firstStoreId = cart.lines[0]
+      ? reviewState.perLineShipTo[cart.lines[0].lineId]
+      : null
+    return firstStoreId ? storeById.get(firstStoreId)?.country ?? null : null
+  }, [reviewState, cart.lines, storeById])
+
+  const breakdown = useMemo(() => {
+    // NZ picking fee (shared helper — same logic as the server) shown to the
+    // customer. goodsSubtotal is ex-GST goods incl. folded decoration, matching
+    // computeOrderBreakdown's grossSubtotal and the server's repriced total.
+    const goodsSubtotal = cart.lines.reduce((t, l) => t + allInUnitPrice(l) * l.qty, 0)
+    const pickingFee = orderPickingFee({
+      isStockOnHand:
+        classifyOrderType(cart.lines.map((l) => ({ fulfilment_type: l.fulfilmentType ?? null }))) ===
+        'stock_on_hand',
+      shipCountry,
+      goodsSubtotal,
+    })
+    return computeOrderBreakdown({
+      lines: cart.lines.map((line) => ({
+        qty: line.qty,
+        unitEffective: line.unitPrice,
+        decorationPerUnit: decorationPerUnit(line),
+      })),
+      gstRate: 0.15,
+      pickingFee,
+    })
+  }, [cart.lines, shipCountry])
   const depositPct = defaultDepositPercent ?? 0
   const depositAmount = (breakdown.netSubtotal * depositPct) / 100
 
@@ -402,6 +439,18 @@ export function CheckoutReviewClient({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
+                      {showsPrepaidTag(
+                        line.fulfilmentType ?? 'stocked',
+                        (line.catalogueItemId
+                          ? billingModeByItemId?.[line.catalogueItemId]
+                          : undefined) ??
+                          line.billingMode ??
+                          null,
+                      ) && (
+                        <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          Pre-paid
+                        </span>
+                      )}
                       <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
                         {line.variantLabel}
                       </p>

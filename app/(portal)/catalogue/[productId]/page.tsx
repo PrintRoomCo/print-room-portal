@@ -456,6 +456,8 @@ const loadProductDetailPageData = cache(async (
         // Manual-final pricing (2026-06-10). Drives the client to read the
         // item's combined decoration figure instead of summing per-placement.
         priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',
+        // Per customer×product billing tag — drives the customer "Pre-paid" indicator.
+        billingMode: (catItem.billing_mode as 'invoice_on_dispatch' | 'prepaid' | null) ?? 'invoice_on_dispatch',
         // Manual-final: combined decoration per canonical breakpoint, resolved
         // server-side so the PDP shows the right decoration immediately.
         manualDecorationSeed,

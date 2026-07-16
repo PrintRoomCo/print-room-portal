@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
+import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
@@ -60,6 +61,8 @@ interface ProductData {
   garment_family: string | null
   default_sizes: string[] | null
   fulfilment_type: FulfilmentType
+  // Per customer×product billing tag — drives the customer "Pre-paid" indicator.
+  billingMode?: 'invoice_on_dispatch' | 'prepaid'
   brand_name: string | null
   category_name: string | null
   // Phase 2 — catalogue-item identity (named to avoid colliding with the
@@ -911,6 +914,7 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
+            billingMode: product.billingMode,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
@@ -981,6 +985,7 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
+          billingMode: product.billingMode,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
           manualDecorationBrackets: manualDecorationBracketsSnapshot,
         })
@@ -1017,6 +1022,7 @@ export function ProductDetailClient({
         decorations: cartDecorationsForSwatch(colorSwatchId),
         brackets: cartLineBrackets,
         catalogueItemId: product.catalogueItemId,
+        billingMode: product.billingMode,
         manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
         manualDecorationBrackets: manualDecorationBracketsSnapshot,
       }
@@ -1054,6 +1060,7 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
+      billingMode: product.billingMode,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
@@ -1179,6 +1186,11 @@ export function ProductDetailClient({
                       multiSize ? hasBackorderableOrderPath : selectedVariantBackorderable
                     }
                   />
+                )}
+                {showsPrepaidTag(product.fulfilment_type, product.billingMode ?? null) && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    Pre-paid
+                  </span>
                 )}
                 {product.sizing_type && product.sizing_type !== 'multi_size' && (
                   <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-gray-600">

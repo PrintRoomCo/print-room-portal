@@ -88,3 +88,20 @@ describe('computeOrderBreakdown', () => {
     expect(ob.total).toBeCloseTo(1943.50, 2)
   })
 })
+
+describe('computeOrderBreakdown pickingFee', () => {
+  const lines = [{ qty: 2, unitEffective: 50, decorationPerUnit: 0 }] // goods = 100
+  it('defaults pickingFee to 0 (no behaviour change)', () => {
+    const b = computeOrderBreakdown({ lines, gstRate: 0.15 })
+    expect(b.pickingFee).toBe(0)
+    expect(b.gst).toBe(15) // 100 * 0.15
+    expect(b.total).toBe(115)
+  })
+  it('adds the fee to GST + total but not to netSubtotal', () => {
+    const b = computeOrderBreakdown({ lines, gstRate: 0.15, pickingFee: 30 })
+    expect(b.pickingFee).toBe(30)
+    expect(b.netSubtotal).toBe(100) // goods only (deposit base)
+    expect(b.gst).toBe(19.5) // (100 + 30) * 0.15
+    expect(b.total).toBe(149.5) // 100 + 30 + 19.5
+  })
+})

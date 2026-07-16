@@ -25,6 +25,32 @@ Every task's requirements implicitly include this section.
 
 ---
 
+## ⟳ Reconciliation note — 2026-07-15 (Spec A has shipped)
+
+This plan was drafted alongside the Spec B spec, **before Spec A was implemented**, so several tasks below hedge with "confirm Spec A has landed" or assume mechanics Spec A ultimately shipped differently. Spec A is now **built and merged** in `P` (its own plan is 128/137 done — only human data-entry + 2 sign-offs remain). **Where a task below and this note disagree, follow this note.**
+
+**Spec A module map (real shipped symbols — consume these by name):**
+
+| Foundation | Shipped as | Anchor (`P` = print-room-portal) |
+|---|---|---|
+| Order-type classification | `classifyOrderType(input.lines)` → `'stock_on_hand' \| 'purchase_order'` (all-stocked ⇒ stock_on_hand, else purchase_order) | `P lib/orders/order-type.ts` |
+| Order-type persistence | a **post-RPC** `.update({ order_type }).eq('id', order_id)` — the `submit_b2b_order` RPC does **NOT** take a `p_order_type` param | `P lib/checkout/submit.ts` local `orderType`, stamped ~1100-1105 |
+| Monday push-with-note | `STOCK_ON_HAND_MONDAY_NOTE` + `stockOnHandMondayNote(orderType)` → `postItemUpdate(itemId, note)` (the flat note the spec called "item 11") | `P lib/monday/order-type-note.ts`; callsite submit.ts ~1421-1435 |
+| Order-placed notification | `postOrderPlacedSlack(...)` (reads `SLACK_PORTAL_WEBHOOK_URL`, no-ops if unset) + `resolveDispatchNotificationRecipient(...)` / `sendOrderPlacedDispatch(...)` (default `charlotte@theprint-room.co.nz`, test → `jamie@`) | `P lib/notifications/slack-order-placed.ts`, `P lib/checkout/dispatch-notification-recipient.ts`; callsite submit.ts ~1797-1822 |
+| Xero eligibility | already reduced to **exactly 3 gates**: `xeroEnabled`, `existingInvoiceId`, `isTestOrg`. **No `draws_stock` gate and no `prepay_org`/`payment_terms` gate exist** — stock-on-hand orders already draft. | `P lib/xero/eligibility.ts` |
+| Xero line items | `XeroQuoteLineInput { description, quantity, unitAmount }`; internal `XeroLineItem` adds **global** `AccountCode`/`TaxType` (not per-line, **no discount field**) → prepaid handling must zero `unitAmount`, not set a discount | `P lib/xero/draft-invoice.ts` |
+| GST / totals | server persists `subtotal = total_amount` and **never populates `quotes.tax`**; GST (0.15) is computed **client-side only** in `computeOrderBreakdown` and not saved. A picking-fee line must be threaded into the client breakdown **and** the RPC line_items **and** the Xero lines **and** the Monday summary — there is no server GST total to amend | `P lib/pricing/pricingMath.ts` |
+
+**Corrections that override the tasks below:**
+
+1. **F1 route task — do NOT thread `order_type`.** Each partition is homogeneous, so `submit`'s own `classifyOrderType(input.lines)` already stamps the right `order_type` and the Monday note / notification / Xero all key off that derived local. **Skip that task's Step 4 (add `CheckoutInput.order_type`) and Step 5 (add `p_order_type` to the RPC — the RPC has no such param; adding it breaks the call).** The partition metadata is used only for the `:po`/`:stock` idempotency suffix and the `orders[]` response.
+2. **Xero task — eligibility is already at target.** Spec A already removed the `draws_stock` gate and there is no `prepay_org` gate. **Skip that task's Steps 1-4 (the eligibility rewrite/tests) — treat them as verify-only.** Start at Step 5 (the `draft-invoice.ts` prepaid-zero + pick-fee lines). Step 9's cleanup of the vestigial `drawsStock` arg on `CreateDraftInvoiceArgs` (submit still passes it) is still valid; the "prepay_org" decision gate in Open Threads is **moot**.
+3. **Monday-note task — the flat note EXISTS.** Replace the body of the shipped `stockOnHandMondayNote(orderType)` call (submit.ts ~1421-1435) with `orderBillingNote(...)`; do not add a second `postItemUpdate`.
+4. **Starshipit — `order_type` is available.** It's the `orderType` local in submit.ts (~1100), computed before the side-effect blocks. Pass it into `pushOrderToStarshipit` instead of the "null in the interim" placeholder.
+5. **Line numbers have drifted** ~+60 lines in submit.ts since drafting. Trust the code landmarks in the map above over the plan's inline line numbers (e.g. the Xero "step 5c" block is ~1584-1655, not ~1521-1544).
+
+---
+
 ## Tasks (in Spec B sequencing order)
 
 <!-- ===== Spec B step 1 · Thursday-critical staff-default invite · cluster: thursday-critical-staff-default-invite ===== -->
@@ -49,7 +75,7 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
 - Consumes (existing repo primitives, no earlier task): `requireB2BAccountsStaffAccess(req?: Request): Promise<{ admin, context: { userId: string } } | { error: NextResponse }>`; `recordAuditEvent(...)`; `AUDIT_ACTIONS.MEMBER_INVITE`; DB `CHECK chk_buyer_has_default_store` (role='staff' ⇒ default_store_id not null).
 - Produces: the widened `POST /api/b2b-accounts/[id]/invite` contract (see interfacesProduced) — request body gains `role?: 'org_admin' | 'staff'` and `default_store_id?: string | null`; staff without a valid org-owned store is rejected with `400 { error, code: 'buyer_requires_default_store' }`.
 
-- [ ] **Step 1: Extend the test double and write the failing behaviour tests (RED).**
+- [x] **Step 1: Extend the test double and write the failing behaviour tests (RED).**
   In `src/app/api/b2b-accounts/[id]/invite/route.test.ts`, add two options to `makeAdmin`'s `opts` object (currently lines 30-39):
   ```ts
       profileUserId?: string | null
@@ -154,13 +180,13 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
   })
   ```
 
-- [ ] **Step 2: Run the new tests — confirm RED.**
+- [x] **Step 2: Run the new tests — confirm RED.**
   ```bash
   cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run invite/route.test.ts
   ```
   Expected FAIL. The `staff WITH a store` case fails first with `AssertionError: expected 400 to be 201` (current route rejects every non-`org_admin` role at lines 48-53); the `staff WITHOUT a store` case fails on `expected undefined to be 'buyer_requires_default_store'`; the wrong-org case fails on the `/does not belong/` match; the `org_admin` case fails because the current insert omits `default_store_id`.
 
-- [ ] **Step 3: Widen `ALLOWED_ROLES` and the `InviteBody` type (minimal impl).**
+- [x] **Step 3: Widen `ALLOWED_ROLES` and the `InviteBody` type (minimal impl).**
   In `src/app/api/b2b-accounts/[id]/invite/route.ts`, replace lines 6-16:
   ```ts
   // Invites default to org_admin. The staff role requires default_store_id
@@ -194,7 +220,7 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
   }
   ```
 
-- [ ] **Step 4: Capture `default_store_id`, validate role, and guard staff-without-store.**
+- [x] **Step 4: Capture `default_store_id`, validate role, and guard staff-without-store.**
   In the same file, replace the parse/validation block (lines 37-53):
   ```ts
     const email = body.email?.trim().toLowerCase() ?? ''
@@ -246,7 +272,7 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
     }
   ```
 
-- [ ] **Step 5: Validate the store belongs to this org (mirror the role PATCH route).**
+- [x] **Step 5: Validate the store belongs to this org (mirror the role PATCH route).**
   In the same file, the org-existence check ends at line 63:
   ```ts
     if (!org) {
@@ -276,7 +302,7 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
     }
   ```
 
-- [ ] **Step 6: Persist `default_store_id` on the membership + audit it.**
+- [x] **Step 6: Persist `default_store_id` on the membership + audit it.**
   Replace the insert (lines 144-150):
   ```ts
     const { error: membershipError } = await auth.admin
@@ -307,13 +333,13 @@ Grounding summary (verified against the real repo, all paths in `S = /Users/jami
       metadata: { email, first_name: firstName, last_name: lastName, role, default_store_id: defaultStoreId },
   ```
 
-- [ ] **Step 7: Run the tests — confirm GREEN.**
+- [x] **Step 7: Run the tests — confirm GREEN.**
   ```bash
   cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run invite/route.test.ts
   ```
   Expected PASS (all pre-existing org_admin tests + the four new staff/store tests). If the bracketed path is preferred over the filter form, quote it: `npx vitest run 'src/app/api/b2b-accounts/[id]/invite/route.test.ts'`.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
   ```bash
   git commit -am "feat: staff-initiated invite accepts staff role + default_store_id"
   ```
@@ -333,7 +359,7 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
 - Consumes: the widened invite API (`POST /api/b2b-accounts/[id]/invite` body `{ email, first_name, last_name?, role, default_store_id }`); `type MemberRole = 'org_admin' | 'staff'` (exported from `./EditRoleDialog:10`); `Dropdown` (`@/components/ui/dropdown` — trigger renders `aria-haspopup="listbox"` and the selected/placeholder label inline under SSR; its listbox portals and is invisible to `renderToStaticMarkup`).
 - Produces: `defaultInviteRole(memberCount: number): MemberRole`; `InviteRoleFields(props)` (see interfacesProduced).
 
-- [ ] **Step 1: Write the failing test (RED) for the new module.**
+- [x] **Step 1: Write the failing test (RED) for the new module.**
   Create `src/components/b2b-accounts/__tests__/InviteMemberFields.test.tsx`:
   ```tsx
   import { describe, it, expect } from 'vitest'
@@ -405,13 +431,13 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
   })
   ```
 
-- [ ] **Step 2: Run it — confirm RED.**
+- [x] **Step 2: Run it — confirm RED.**
   ```bash
   cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run InviteMemberFields
   ```
   Expected FAIL: `Failed to resolve import "../InviteMemberFields"` (the module does not exist yet).
 
-- [ ] **Step 3: Create the module (GREEN).**
+- [x] **Step 3: Create the module (GREEN).**
   Create `src/components/b2b-accounts/InviteMemberFields.tsx`:
   ```tsx
   // src/components/b2b-accounts/InviteMemberFields.tsx
@@ -524,18 +550,18 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
   }
   ```
 
-- [ ] **Step 4: Run the module test — confirm GREEN.**
+- [x] **Step 4: Run the module test — confirm GREEN.**
   ```bash
   cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run InviteMemberFields
   ```
   Expected PASS (5 assertions across 2 describes).
 
-- [ ] **Step 5: Commit the tested unit.**
+- [x] **Step 5: Commit the tested unit.**
   ```bash
   git commit -am "feat: add InviteRoleFields + defaultInviteRole for the invite dialog"
   ```
 
-- [ ] **Step 6: Wire the new fields into MembersPanel — import + state.**
+- [x] **Step 6: Wire the new fields into MembersPanel — import + state.**
   In `src/components/b2b-accounts/MembersPanel.tsx`, add the import after line 16 (`import { BulkUploadDialog } from './BulkUploadDialog'`):
   ```tsx
   import { defaultInviteRole, InviteRoleFields } from './InviteMemberFields'
@@ -547,7 +573,7 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
   ```
   (`MemberRole` is already imported at line 13 via `import { EditRoleDialog, type MemberRole } from './EditRoleDialog'`.)
 
-- [ ] **Step 7: Reset the invite fields each time the dialog opens (default role per current member count).**
+- [x] **Step 7: Reset the invite fields each time the dialog opens (default role per current member count).**
   Add this handler right after `submitInvite` closes (after line 137, before the `const GRID` declaration at line 139):
   ```tsx
     function openInvite() {
@@ -571,7 +597,7 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
           </Button>
   ```
 
-- [ ] **Step 8: Send the selected role + store, and reset the store on success.**
+- [x] **Step 8: Send the selected role + store, and reset the store on success.**
   In `submitInvite`, replace the request body (lines 116-121):
   ```tsx
         body: JSON.stringify({
@@ -605,7 +631,7 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
         setDefaultStoreId(null)
   ```
 
-- [ ] **Step 9: Render the controls in the dialog + guard the submit button.**
+- [x] **Step 9: Render the controls in the dialog + guard the submit button.**
   In the invite `Modal`, the first/last-name grid closes at line 287 (`</div>` after the Last name `Field`). Insert the control block immediately after that closing `</div>` and before the `{message && (` block (line 288):
   ```tsx
               <InviteRoleFields
@@ -630,14 +656,14 @@ Depends on **the widened invite API** (previous task) — the dialog now POSTs `
                 }
   ```
 
-- [ ] **Step 10: Verify the wiring type-checks and the whole slice is green.**
+- [x] **Step 10: Verify the wiring type-checks and the whole slice is green.**
   ```bash
   cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run InviteMemberFields invite/route.test.ts && npx tsc --noEmit
   ```
   Expected: all vitest tests PASS and `tsc --noEmit` reports no errors (confirms `InviteRoleFields`/`stores`/`role` wiring in `MembersPanel` is type-correct — MembersPanel itself has no unit test, matching repo convention).
   Decision-free manual check (optional, recommended before Thursday): open a B2B org with ≥1 store, click **+ Invite member**, confirm the Role dropdown defaults to **Staff** on an account that already has a member (and **Org admin** on an empty account), that selecting **Staff** reveals the required store picker, and that **Send invite** stays disabled until a store is chosen.
 
-- [ ] **Step 11: Commit.**
+- [x] **Step 11: Commit.**
   ```bash
   git commit -am "feat: invite dialog gains role + default ship-to store (staff default)"
   ```
@@ -832,7 +858,7 @@ Grounding notes that shape every task below:
 
 > Migrations aren't unit-tested (schema). This mirrors the additive style of `20260518120000_inventory_catalogue_derived.sql` (`add column if not exists`, `comment on column`). SHARED PROD DB, NO STAGING — verify + apply per repo convention.
 
-- [ ] **Step 1: Write the migration.** Create the file:
+- [x] **Step 1: Write the migration.** Create the file:
   ```sql
   -- Per customer×product billing mode for catalogue items.
   --  'invoice_on_dispatch' (default = "not-paid"): goods draft-quoted in Xero,
@@ -850,10 +876,10 @@ Grounding notes that shape every task below:
     'or prepaid (goods already paid; Xero zeroes goods value, pick fee only). Distinct from '
     'variant_inventory.prepaid (valuation-only).';
   ```
-- [ ] **Step 2 (Decision gate — apply to shared prod DB):** Before applying, re-run a read-only check and record the count, per the `20260612150000` convention:
+- [x] **Step 2 (Decision gate — apply to shared prod DB):** Before applying, re-run a read-only check and record the count, per the `20260612150000` convention:
   `SELECT count(*) FROM public.b2b_catalogue_items WHERE billing_mode IS NOT NULL;` (expect: errors — column absent — confirming a clean add). Apply via the repo's migration runner (`supabase db push` or MCP `apply_migration`), then verify:
   `SELECT DISTINCT billing_mode FROM public.b2b_catalogue_items;` → expect only `invoice_on_dispatch`.
-- [ ] **Step 3: Commit.** `git commit -am "feat: add b2b_catalogue_items.billing_mode (not-paid default)"`
+- [x] **Step 3: Commit.** `git commit -am "feat: add b2b_catalogue_items.billing_mode (not-paid default)"`
 
 ---
 
@@ -869,7 +895,7 @@ Grounding notes that shape every task below:
 - Consumes: `b2b_catalogue_items.billing_mode` (prior task); existing `buildItemPatch(body): { patch; error? }`.
 - Produces: `type BillingMode = 'invoice_on_dispatch' | 'prepaid'` (add to `@/types/products` alongside `FulfilmentType`); PATCH now accepts+validates `billing_mode`; editor exposes a "Billing" dropdown next to "Fulfilment mode".
 
-- [ ] **Step 1: Write the failing PATCH test.** Append to `route.patch.test.ts`:
+- [x] **Step 1: Write the failing PATCH test.** Append to `route.patch.test.ts`:
   ```ts
   describe('buildItemPatch billing_mode', () => {
     it('accepts invoice_on_dispatch', () => {
@@ -888,10 +914,10 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run "src/app/api/catalogues/[id]/items/[itemId]/route.patch.test.ts"`
   Expected: `expected undefined to be 'invoice_on_dispatch'` (billing_mode not yet allow-listed).
-- [ ] **Step 3: Allow-list + validate billing_mode in the route.** In `route.ts`, add `'billing_mode'` to `PATCHABLE` (after `'price_mode'`, line 22) and add a constant next to `VALID_PRICE_MODES` (line 27):
+- [x] **Step 3: Allow-list + validate billing_mode in the route.** In `route.ts`, add `'billing_mode'` to `PATCHABLE` (after `'price_mode'`, line 22) and add a constant next to `VALID_PRICE_MODES` (line 27):
   ```ts
   const VALID_BILLING_MODES = new Set(['invoice_on_dispatch', 'prepaid'])
   ```
@@ -904,17 +930,17 @@ Grounding notes that shape every task below:
     patch[k] = body[k]
   }
   ```
-- [ ] **Step 4: Run — expect PASS** (same command as Step 2).
-- [ ] **Step 5: Extend the editor loader.** In `page.tsx`, add `billing_mode,` to the `b2b_catalogue_items` select (after `price_mode,` line 99) and to the `item` mapping (after `price_mode:` line 392):
+- [x] **Step 4: Run — expect PASS** (same command as Step 2).
+- [x] **Step 5: Extend the editor loader.** In `page.tsx`, add `billing_mode,` to the `b2b_catalogue_items` select (after `price_mode,` line 99) and to the `item` mapping (after `price_mode:` line 392):
   ```ts
   billing_mode: (item.billing_mode as 'invoice_on_dispatch' | 'prepaid') ?? 'invoice_on_dispatch',
   ```
-- [ ] **Step 6: Thread billing_mode through the editor component state.** In `CatalogueItemEditor.tsx`:
+- [x] **Step 6: Thread billing_mode through the editor component state.** In `CatalogueItemEditor.tsx`:
   - Add to `CatalogueItemEditorData.item` (after `price_mode` line 64): `billing_mode: 'invoice_on_dispatch' | 'prepaid'`.
   - Add to `FormState` (after `fulfilment_type_override`, line 106): `billing_mode: string`.
   - In `initial()` (line 121): `billing_mode: data.item.billing_mode ?? 'invoice_on_dispatch',`.
   - In `buildPatch()` (after the `fulfilment_type_override` entry, line 205-206): `billing_mode: form.billing_mode,`.
-- [ ] **Step 7: Add the Billing dropdown to the editor UI**, directly beneath the Fulfilment-mode `Field` (after line 563, inside the same "Catalogue-scoped details" Card):
+- [x] **Step 7: Add the Billing dropdown to the editor UI**, directly beneath the Fulfilment-mode `Field` (after line 563, inside the same "Catalogue-scoped details" Card):
   ```tsx
   <Field id="cie-billing-mode" label="Billing">
     <Dropdown
@@ -930,8 +956,8 @@ Grounding notes that shape every task below:
   </Field>
   ```
   (`Dropdown` and `Field` are already imported/defined in this file — lines 24, 750.)
-- [ ] **Step 8: Manual smoke** (no component test harness for this editor): `cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx tsc --noEmit` — expect no type errors from the new field wiring.
-- [ ] **Step 9: Commit.** `git commit -am "feat: staff billing-mode control on catalogue items"`
+- [x] **Step 8: Manual smoke** (no component test harness for this editor): `cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx tsc --noEmit` — expect no type errors from the new field wiring.
+- [x] **Step 9: Commit.** `git commit -am "feat: staff billing-mode control on catalogue items"`
 
 ---
 
@@ -948,7 +974,7 @@ Grounding notes that shape every task below:
 > **DECISION GATE (region):** bands are NZ-only ($0-99=$35, $100-199=$30, $200-299=$25, $300-399=$20, $400+=$15). Non-NZ behaviour is undecided — this function is NZD-only; a `region` param is a follow-up.
 > **DECISION GATE (band input):** the band is keyed on goods ex-GST subtotal (`grossSubtotal`). Confirm this vs incl-GST/order-total before the totals wiring task consumes it.
 
-- [ ] **Step 1: Write the failing test.** Create `picking-fee.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `picking-fee.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { pickingFeeForGoods } from './picking-fee'
@@ -969,10 +995,10 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/pricing/picking-fee.test.ts`
   Expected: `Failed to resolve import "./picking-fee"`.
-- [ ] **Step 3: Implement.** Create `picking-fee.ts`:
+- [x] **Step 3: Implement.** Create `picking-fee.ts`:
   ```ts
   /**
    * NZ picking-fee band table. Keyed on goods subtotal (ex-GST, NZD).
@@ -995,8 +1021,8 @@ Grounding notes that shape every task below:
     return PICKING_FEE_BANDS[PICKING_FEE_BANDS.length - 1].fee
   }
   ```
-- [ ] **Step 4: Run — expect PASS** (same command as Step 2).
-- [ ] **Step 5: Commit.** `git commit -am "feat: NZ picking-fee band table"`
+- [x] **Step 4: Run — expect PASS** (same command as Step 2).
+- [x] **Step 5: Commit.** `git commit -am "feat: NZ picking-fee band table"`
 
 ---
 
@@ -1015,7 +1041,7 @@ Grounding notes that shape every task below:
 
 > Keeping `pickingFee` optional (default 0) is deliberate — `ProductDetailClient`, `CheckoutClient`, `CartDrawer` and `CheckoutReviewClient` all call `computeOrderBreakdown` and must not change behaviour until the checkout wiring passes a fee.
 
-- [ ] **Step 1: Write the failing math test.** Append to `pricingMath.test.ts`:
+- [x] **Step 1: Write the failing math test.** Append to `pricingMath.test.ts`:
   ```ts
   import { computeOrderBreakdown } from './pricingMath'
   describe('computeOrderBreakdown pickingFee', () => {
@@ -1035,14 +1061,14 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/pricing/pricingMath.test.ts`
   Expected: `expected undefined to be 0` (`pickingFee` missing on the breakdown).
-- [ ] **Step 3: Add the field to the type.** In `types.ts` `OrderBreakdown`, after `netSubtotal` (line 29) add:
+- [x] **Step 3: Add the field to the type.** In `types.ts` `OrderBreakdown`, after `netSubtotal` (line 29) add:
   ```ts
   pickingFee: number       // separate NZ picking-fee line; 0 when no fee applies
   ```
-- [ ] **Step 4: Compute it.** In `pricingMath.ts`, extend `OrderInput` (lines 31-34):
+- [x] **Step 4: Compute it.** In `pricingMath.ts`, extend `OrderInput` (lines 31-34):
   ```ts
   interface OrderInput {
     lines: Array<Pick<LineInput, 'qty' | 'unitEffective' | 'decorationPerUnit'>>
@@ -1068,8 +1094,8 @@ Grounding notes that shape every task below:
     total,
   }
   ```
-- [ ] **Step 5: Run — expect PASS** (same command as Step 2). Confirm no other `pricingMath.test.ts` case regressed (`pickingFee` defaults to 0).
-- [ ] **Step 6: Render the pick-fee row.** In `PriceBreakdown.tsx`, directly after the `showShipping` block (line 41) add:
+- [x] **Step 5: Run — expect PASS** (same command as Step 2). Confirm no other `pricingMath.test.ts` case regressed (`pickingFee` defaults to 0).
+- [x] **Step 6: Render the pick-fee row.** In `PriceBreakdown.tsx`, directly after the `showShipping` block (line 41) add:
   ```tsx
   {breakdown.pickingFee > 0 && (
     <div className="flex items-baseline justify-between">
@@ -1078,10 +1104,10 @@ Grounding notes that shape every task below:
     </div>
   )}
   ```
-- [ ] **Step 7: Add a component test.** In `PriceBreakdown.test.tsx`, render with a breakdown carrying `pickingFee: 30` and assert the "Picking fee" label + formatted amount appear, and that a `pickingFee: 0` breakdown renders no such row. (Mirror the existing render assertions in that file.)
-- [ ] **Step 8: Run — expect PASS:**
+- [x] **Step 7: Add a component test.** In `PriceBreakdown.test.tsx`, render with a breakdown carrying `pickingFee: 30` and assert the "Picking fee" label + formatted amount appear, and that a `pickingFee: 0` breakdown renders no such row. (Mirror the existing render assertions in that file.)
+- [x] **Step 8: Run — expect PASS:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/pricing/PriceBreakdown.test.tsx`
-- [ ] **Step 9: Commit.** `git commit -am "feat: picking-fee line in order breakdown + PriceBreakdown"`
+- [x] **Step 9: Commit.** `git commit -am "feat: picking-fee line in order breakdown + PriceBreakdown"`
 
 > NOTE: This task only adds the *capability*. Which order value the fee is computed from and *where* `pickingFee` is passed into `computeOrderBreakdown` (checkout only? cart drawer too?) is decided in the checkout-summary wiring — see the Decision gate in the picking-fee band task (scope: all / stock-on-hand / prepaid).
 
@@ -1103,7 +1129,7 @@ Grounding notes that shape every task below:
 
 > Spec (b): the "Pre-paid" indicator shows only for **stock-on-hand products carrying the tag** — i.e. `billing_mode === 'prepaid'` AND the product can draw stock (`fulfilment_type` is `'stocked'` or `'mixed'`). A `'made_to_order'` prepaid item shows nothing.
 
-- [ ] **Step 1: Write the failing predicate test.** Create `prepaid-tag.test.ts`:
+- [x] **Step 1: Write the failing predicate test.** Create `prepaid-tag.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { showsPrepaidTag } from './prepaid-tag'
@@ -1116,10 +1142,10 @@ Grounding notes that shape every task below:
     it('false when billingMode null (legacy)', () => expect(showsPrepaidTag('stocked', null)).toBe(false))
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/shop/prepaid-tag.test.ts`
   Expected: `Failed to resolve import "./prepaid-tag"`.
-- [ ] **Step 3: Implement the shared type + predicate.** Create `lib/shop/billing-mode.ts`:
+- [x] **Step 3: Implement the shared type + predicate.** Create `lib/shop/billing-mode.ts`:
   ```ts
   export type BillingMode = 'invoice_on_dispatch' | 'prepaid'
   ```
@@ -1134,15 +1160,15 @@ Grounding notes that shape every task below:
     return fulfilment === 'stocked' || fulfilment === 'mixed'
   }
   ```
-- [ ] **Step 4: Run — expect PASS** (same command as Step 2).
-- [ ] **Step 5: Select + type the column in the resolver.** In `resolve-catalogue-item.ts`, add to `PdpCatalogueItem` (after `price_mode`, line 12): `billing_mode: 'invoice_on_dispatch' | 'prepaid' | null` and append `billing_mode` to `CAT_ITEM_SELECT` (line 19), e.g. `... price_mode, billing_mode, volume_display_hidden_bands, ...`.
-- [ ] **Step 6: Extend the resolver test.** In `resolve-catalogue-item.test.ts`, add `billing_mode: 'prepaid'` to a fixture row and assert the resolved item exposes it. Run — expect PASS:
+- [x] **Step 4: Run — expect PASS** (same command as Step 2).
+- [x] **Step 5: Select + type the column in the resolver.** In `resolve-catalogue-item.ts`, add to `PdpCatalogueItem` (after `price_mode`, line 12): `billing_mode: 'invoice_on_dispatch' | 'prepaid' | null` and append `billing_mode` to `CAT_ITEM_SELECT` (line 19), e.g. `... price_mode, billing_mode, volume_display_hidden_bands, ...`.
+- [x] **Step 6: Extend the resolver test.** In `resolve-catalogue-item.test.ts`, add `billing_mode: 'prepaid'` to a fixture row and assert the resolved item exposes it. Run — expect PASS:
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/shop/resolve-catalogue-item.test.ts`
-- [ ] **Step 7: Thread billing_mode into the PDP payload.** In `app/(portal)/catalogue/[productId]/page.tsx`, in the `product` object (after `priceMode:` line 458) add:
+- [x] **Step 7: Thread billing_mode into the PDP payload.** In `app/(portal)/catalogue/[productId]/page.tsx`, in the `product` object (after `priceMode:` line 458) add:
   ```ts
   billingMode: (catItem.billing_mode as 'invoice_on_dispatch' | 'prepaid' | null) ?? 'invoice_on_dispatch',
   ```
-- [ ] **Step 8: Render the badge on the PDP.** In `ProductDetailClient.tsx`, add to the `ProductData` interface (after `fulfilment_type`, line 62): `billingMode?: 'invoice_on_dispatch' | 'prepaid'`. Import the predicate at the top (`import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'`) and, next to the existing `AvailabilityBadge` render, add:
+- [x] **Step 8: Render the badge on the PDP.** In `ProductDetailClient.tsx`, add to the `ProductData` interface (after `fulfilment_type`, line 62): `billingMode?: 'invoice_on_dispatch' | 'prepaid'`. Import the predicate at the top (`import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'`) and, next to the existing `AvailabilityBadge` render, add:
   ```tsx
   {showsPrepaidTag(product.fulfilment_type, product.billingMode ?? null) && (
     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -1151,10 +1177,10 @@ Grounding notes that shape every task below:
   )}
   ```
   (Exact placement: alongside the `<AvailabilityBadge />` usage — grep `AvailabilityBadge` at line 5/its JSX site.)
-- [ ] **Step 9: Checkout-summary badge.** The cart line already carries `catalogueItemId` and `fulfilmentType` (`lib/cart/types.ts` lines 65, 80) but NOT `billing_mode`. **Decision gate:** to show the badge in `CheckoutReviewClient` per line, either (a) add `billingMode` to `CartLine` and stamp it when adding to cart from the PDP (preferred — PDP already has `product.billingMode`), or (b) look it up at review time. Plan for (a): add `billingMode?: BillingMode` to `CartLine`, set it in the PDP add-to-cart path, and in `CheckoutReviewClient.tsx` (the per-line `<article>` block, lines 400-415) render the same "Pre-paid" pill when `showsPrepaidTag(line.fulfilmentType ?? 'stocked', line.billingMode ?? null)`.
-- [ ] **Step 10: Run the PDP/checkout unit tests + typecheck.**
+- [x] **Step 9: Checkout-summary badge.** The cart line already carries `catalogueItemId` and `fulfilmentType` (`lib/cart/types.ts` lines 65, 80) but NOT `billing_mode`. **Decision gate:** to show the badge in `CheckoutReviewClient` per line, either (a) add `billingMode` to `CartLine` and stamp it when adding to cart from the PDP (preferred — PDP already has `product.billingMode`), or (b) look it up at review time. Plan for (a): add `billingMode?: BillingMode` to `CartLine`, set it in the PDP add-to-cart path, and in `CheckoutReviewClient.tsx` (the per-line `<article>` block, lines 400-415) render the same "Pre-paid" pill when `showsPrepaidTag(line.fulfilmentType ?? 'stocked', line.billingMode ?? null)`.
+- [x] **Step 10: Run the PDP/checkout unit tests + typecheck.**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/shop/prepaid-tag.test.ts lib/shop/resolve-catalogue-item.test.ts && npx tsc --noEmit`
-- [ ] **Step 11: Commit.** `git commit -am "feat: customer pre-paid indicator on PDP + checkout summary"`
+- [x] **Step 11: Commit.** `git commit -am "feat: customer pre-paid indicator on PDP + checkout summary"`
 
 ---
 
@@ -1168,12 +1194,12 @@ Grounding notes that shape every task below:
 - Modify `/Users/jamierogangeorge/Documents/print-room-portal/lib/checkout/submit.ts` (catalogue-item fetch `catItemMoqRows`, lines 399-424; the Monday push block, ~lines 1291-1352; the Xero step 5c, lines 1521-1544)
 
 **Interfaces:**
-- Consumes: `BillingMode`; the Spec A **push-with-note Monday flow** (whatever posts the per-order note after `pushOrderDeal`); `input.lines[].fulfilment_type`, `input.lines[].catalogueItemId`; existing `catItemRows` (already selected from `b2b_catalogue_items` in submit).
+- Consumes: `BillingMode`; the Spec A **push-with-note Monday flow** — specifically `stockOnHandMondayNote(orderType)` posted via `postItemUpdate` at submit.ts ~1421-1435 (`lib/monday/order-type-note.ts`); `input.lines[].fulfilment_type`, `input.lines[].catalogueItemId`; existing `catItemRows` (already selected from `b2b_catalogue_items` in submit).
 - Produces: `orderNeedsInvoicing(lines: Array<{ stocked: boolean; billingMode: BillingMode }>): boolean`; `orderBillingNote(input: { needsInvoicing: boolean; pickFee: number }): string`.
 
-> **Supersedes Spec A item 11 (flat Monday note).** Spec A introduces a single flat note; Spec B makes it conditional again. Since the flat note does not exist in `submit.ts` today (only the Xero manual-review note at line 1551), wire `orderBillingNote` into Spec A's note callsite when it lands; if Spec A hasn't shipped, post it as an additional `postItemUpdate` in the Monday push block.
+> **⟳ Supersedes Spec A item 11 (flat Monday note) — Spec A has shipped it.** The flat note **exists**: `stockOnHandMondayNote(orderType)` → `postItemUpdate(itemId, note)` at submit.ts ~1421-1435 (module `lib/monday/order-type-note.ts`). Spec B makes it conditional again by **replacing that call's note body** with `orderBillingNote(...)` — do NOT add a second `postItemUpdate`.
 
-- [ ] **Step 1: Write the failing aggregation test.** Create `order-billing.test.ts`:
+- [x] **Step 1: Write the failing aggregation test.** Create `order-billing.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { orderNeedsInvoicing } from './order-billing'
@@ -1193,10 +1219,10 @@ Grounding notes that shape every task below:
       ])).toBe(true))
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/order-billing.test.ts`
   Expected: `Failed to resolve import "./order-billing"`.
-- [ ] **Step 3: Implement.** Create `order-billing.ts`:
+- [x] **Step 3: Implement.** Create `order-billing.ts`:
   ```ts
   import type { BillingMode } from '@/lib/shop/billing-mode'
 
@@ -1207,8 +1233,8 @@ Grounding notes that shape every task below:
     return lines.some((l) => l.stocked && l.billingMode === 'invoice_on_dispatch')
   }
   ```
-- [ ] **Step 4: Run — expect PASS** (same command as Step 2).
-- [ ] **Step 5: Write the failing note test.** Create `lib/monday/__tests__/billing-note.test.ts`:
+- [x] **Step 4: Run — expect PASS** (same command as Step 2).
+- [x] **Step 5: Write the failing note test.** Create `lib/monday/__tests__/billing-note.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { orderBillingNote } from '../billing-note'
@@ -1224,10 +1250,10 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 6: Run — expect FAIL:**
+- [x] **Step 6: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/monday/__tests__/billing-note.test.ts`
   Expected: `Failed to resolve import "../billing-note"`.
-- [ ] **Step 7: Implement.** Create `lib/monday/billing-note.ts`:
+- [x] **Step 7: Implement.** Create `lib/monday/billing-note.ts`:
   ```ts
   /** Conditional Monday billing note (supersedes Spec A's flat note). */
   export function orderBillingNote(input: { needsInvoicing: boolean; pickFee: number }): string {
@@ -1237,8 +1263,8 @@ Grounding notes that shape every task below:
       : `Prepaid — no Xero invoice required (pick fee ${fee} only).`
   }
   ```
-- [ ] **Step 8: Run — expect PASS** (same command as Step 6).
-- [ ] **Step 9: Build the per-line billing signal in submit.ts.** The catalogue-item fetch already exists (lines 405-409). Add `billing_mode` to that select:
+- [x] **Step 8: Run — expect PASS** (same command as Step 6).
+- [x] **Step 9: Build the per-line billing signal in submit.ts.** The catalogue-item fetch already exists (lines 405-409). Add `billing_mode` to that select:
   ```ts
   admin
     .from('b2b_catalogue_items')
@@ -1261,7 +1287,7 @@ Grounding notes that shape every task below:
   const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
   ```
   (import `orderNeedsInvoicing` from `./order-billing`.) This block goes just after `catItemRows` is built (~line 421) so both the Monday and Xero steps can read `needsInvoicing`.
-- [ ] **Step 10: Post the conditional note in the Monday push block.** Inside the successful Monday push `try` (after `mondayItemId = itemId`, ~line 1354), add (best-effort, mirroring the existing Xero manual-review note at line 1551):
+- [x] **Step 10: Post the conditional note in the Monday push block.** Inside the successful Monday push `try` (after `mondayItemId = itemId`, ~line 1354), add (best-effort, mirroring the existing Xero manual-review note at line 1551):
   ```ts
   try {
     await postItemUpdate(itemId, orderBillingNote({ needsInvoicing, pickFee }))
@@ -1272,11 +1298,11 @@ Grounding notes that shape every task below:
     })
   }
   ```
-  `pickFee` is the order picking fee computed in the Xero task (Decision gate: fee scope). Import `orderBillingNote` from `@/lib/monday/billing-note`. **If Spec A's push-with-note flow already posts a flat note, replace that note's body with `orderBillingNote(...)` instead of adding a second update.**
+  `pickFee` is the order picking fee computed in the Xero task (Decision gate: fee scope). Import `orderBillingNote` from `@/lib/monday/billing-note`. **⟳ Spec A's push-with-note flow DOES post a flat note (`stockOnHandMondayNote` at submit.ts ~1421-1435) — replace that call's body with `orderBillingNote(...)`; do not add a second update.** (The "~line 1354" anchor above has drifted to ~1421-1435.)
 - [ ] **Step 11: Run the submit test suite — expect PASS (no regressions):**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/submit.monday-push-failure.test.ts lib/checkout/order-billing.test.ts lib/monday/__tests__/billing-note.test.ts`
   Add a case to `submit.monday-push-failure.test.ts` (or a new `submit.billing-note.test.ts`) asserting `postItemUpdate` receives the "Prepaid …" body when all stocked lines are prepaid, and the "Not paid …" body otherwise.
-- [ ] **Step 12: Commit.** `git commit -am "feat: order-level not-paid aggregation + conditional Monday billing note"`
+- [x] **Step 12: Commit.** `git commit -am "feat: order-level not-paid aggregation + conditional Monday billing note"`
 
 ---
 
@@ -1293,9 +1319,9 @@ Grounding notes that shape every task below:
 - Consumes: `orderNeedsInvoicing` / `needsInvoicing` + per-line billing signal (prior task); `pickingFeeForGoods`; the order goods subtotal (`repriced` total already computed in submit as `totalAmount`, line 1327).
 - Produces: `buildPickFeeLine(feeNzd: number): XeroQuoteLineInput`; `prepaidZeroLine(line: XeroQuoteLineInput): XeroQuoteLineInput`; `XeroIneligibleReason` no longer includes `'draws_stock'`; `CreateDraftInvoiceArgs` gains `pickingFee: number` and `prepaidStockedLineKeys: Set<string>` (Decision gate on the matching mechanism).
 
-> **Supersedes Spec A item 15 (Xero applies to every order).** Spec B refines it: EVERY stock-on-hand order now drafts (the old `draws_stock -> manual_review` block is removed); prepaid goods get a $0 line (100% discount) + a separate pick-fee line, not-paid goods get a normal draft quote.
+> **⟳ RECONCILED (Spec A shipped).** Spec A **already** made every non-test order draft — `eligibility.ts` has exactly 3 gates (`xeroEnabled`, `existingInvoiceId`, `isTestOrg`); there is **no** `draws_stock` or `prepay_org` gate left to remove. **Steps 1-4 below are verify-only — skip the eligibility rewrite and start at Step 5.** Spec B's real delta lives in `draft-invoice.ts`: prepaid goods get a **$0 `unitAmount`** line (the `XeroLineItem` type has no discount field) + a separate pick-fee line; not-paid goods get a normal draft quote.
 
-- [ ] **Step 1: Rewrite the eligibility test for the new rule.** In `eligibility.test.ts`:
+- [x] **Step 1: Rewrite the eligibility test for the new rule.** In `eligibility.test.ts`:
   - Remove `drawsStock` from the `base` fixture (line 10) and from every spread.
   - Delete the "flags any stock-draw order" case (lines 43-46).
   - Change the precedence case (lines 48-52) to drop `drawsStock` and end at `prepay_org` (Decision gate keeps prepay_org for now):
@@ -1312,12 +1338,12 @@ Grounding notes that shape every task below:
     expect(evaluateXeroEligibility(base)).toEqual({ eligible: true, reason: 'ok' })
   })
   ```
-- [ ] **Step 2: Run — expect FAIL:**
+- [x] **Step 2: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/xero/__tests__/eligibility.test.ts`
   Expected: type/compile error on the removed `drawsStock` field and the deleted `'draws_stock'` reason.
-- [ ] **Step 3: Drop draws_stock from eligibility.** In `eligibility.ts`: remove `'draws_stock'` from `XeroIneligibleReason` (line 3-8), remove `drawsStock` from `XeroEligibilityInput` (lines 20-21), and delete the `drawsStock` gate (line 40) from `evaluateXeroEligibility`. Update the doc comment (lines 29-34) to say stock-draw orders now draft with per-line prepaid handling.
-- [ ] **Step 4: Run — expect PASS** (same command as Step 2).
-- [ ] **Step 5: Write the failing pick-fee/prepaid line test.** Create `lib/xero/__tests__/pick-fee-and-prepaid.test.ts`:
+- [x] **Step 3: Drop draws_stock from eligibility.** In `eligibility.ts`: remove `'draws_stock'` from `XeroIneligibleReason` (line 3-8), remove `drawsStock` from `XeroEligibilityInput` (lines 20-21), and delete the `drawsStock` gate (line 40) from `evaluateXeroEligibility`. Update the doc comment (lines 29-34) to say stock-draw orders now draft with per-line prepaid handling.
+- [x] **Step 4: Run — expect PASS** (same command as Step 2).
+- [x] **Step 5: Write the failing pick-fee/prepaid line test.** Create `lib/xero/__tests__/pick-fee-and-prepaid.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { buildPickFeeLine, prepaidZeroLine } from '../draft-invoice'
@@ -1334,10 +1360,10 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 6: Run — expect FAIL:**
+- [x] **Step 6: Run — expect FAIL:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/xero/__tests__/pick-fee-and-prepaid.test.ts`
   Expected: `buildPickFeeLine is not a function`.
-- [ ] **Step 7: Implement the two pure helpers** in `draft-invoice.ts` (after `buildLineFromQuoteItem`, ~line 135):
+- [x] **Step 7: Implement the two pure helpers** in `draft-invoice.ts` (after `buildLineFromQuoteItem`, ~line 135):
   ```ts
   /** A separate Xero line for the NZ picking fee (billed once per order). */
   export function buildPickFeeLine(feeNzd: number): XeroQuoteLineInput {
@@ -1349,8 +1375,8 @@ Grounding notes that shape every task below:
     return { ...line, description: `${line.description} (prepaid — no charge)`, unitAmount: 0 }
   }
   ```
-- [ ] **Step 8: Run — expect PASS** (same command as Step 6).
-- [ ] **Step 9: Thread the fee + prepaid keys into the orchestrator.** In `CreateDraftInvoiceArgs` (lines 202-216): remove `drawsStock`, add `pickingFee: number` and `prepaidStockedLineKeys: Set<string>`. In `createDraftInvoiceForOrder`:
+- [x] **Step 8: Run — expect PASS** (same command as Step 6).
+- [x] **Step 9: Thread the fee + prepaid keys into the orchestrator.** In `CreateDraftInvoiceArgs` (lines 202-216): remove `drawsStock`, add `pickingFee: number` and `prepaidStockedLineKeys: Set<string>`. In `createDraftInvoiceForOrder`:
   - Update the `evaluateXeroEligibility(...)` call (lines 235-241) to drop `drawsStock`.
   - After the `lines` map (line 294), apply prepaid zeroing + append the pick-fee line:
   ```ts
@@ -1367,7 +1393,7 @@ Grounding notes that shape every task below:
   ```
   Extend the `quote_items` select (lines 288-293) to include `product_id, variant_id, size_id, qty_from_stock` so the key + stock signal are available. (`qty_from_stock` exists on `quote_items` — migration `20260518120000`.)
   > **DECISION GATE (matching mechanism):** `prepaidStockedLineKeys` is an in-memory set passed from submit, keyed `product_id::variant_id::size_id` (matches `makeLineKey` without the trailing separators). Alternative: persist a `quote_items.billing_mode` snapshot column (needs a portal migration + shared-DB apply coordination). Confirm before finalizing the key format.
-- [ ] **Step 10: Build the fee + prepaid set in submit.ts step 5c (lines 1521-1544).** Replace the `drawsStock` derivation with:
+- [x] **Step 10: Build the fee + prepaid set in submit.ts step 5c (lines 1521-1544).** Replace the `drawsStock` derivation with:
   ```ts
   const goodsSubtotal = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
   const pickFee = pickingFeeForGoods(goodsSubtotal)   // import from '@/lib/pricing/picking-fee'
@@ -1382,11 +1408,11 @@ Grounding notes that shape every task below:
   )
   ```
   Pass `pickingFee: pickFee` and `prepaidStockedLineKeys` into `createDraftInvoiceForOrder(...)` and delete the `drawsStock` arg (lines 1522, 1540). `pickFee` is also the value handed to `orderBillingNote(...)` in the Monday task (single source of truth).
-- [ ] **Step 11: Update the orchestrator's manual-review branch.** Since `draws_stock` is gone, only `prepay_org` (Decision gate) still routes to manual_review. Confirm `createDraftInvoiceForOrder`'s `elig.reason === 'prepay_org'` branch (line 245) still compiles after removing `'draws_stock'`.
-- [ ] **Step 12: Run the Xero suite + submit Xero test — expect PASS:**
+- [x] **Step 11: ⟳ RECONCILED — no manual-review branch to update.** Shipped `eligibility.ts` has no `draws_stock` or `prepay_org` reason, so there is no such branch to touch. Just confirm `createDraftInvoiceForOrder` still compiles after dropping the vestigial `drawsStock` arg (Step 9).
+- [x] **Step 12: Run the Xero suite + submit Xero test — expect PASS:**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/xero/ lib/checkout/__tests__/submit.roundtrip-regression.test.ts && npx tsc --noEmit`
   Fix any submit test that fed `drawsStock`/asserted `draws_stock` manual_review — update those to assert a drafted stock-on-hand order.
-- [ ] **Step 13: Commit.** `git commit -am "feat: Xero drafts stock-on-hand orders; prepaid goods zeroed + pick-fee line"`
+- [x] **Step 13: Commit.** `git commit -am "feat: Xero drafts stock-on-hand orders; prepaid goods zeroed + pick-fee line"`
 
 ---
 
@@ -1502,8 +1528,8 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     hasDeliveryAddress: boolean
     /**
      * orders.order_type (Spec A). When provided, only 'delivery' pushes; other
-     * types skip. Optional until Spec A threads it into submit — interim callers
-     * pass null and rely on `intent`.
+     * types skip. ⟳ Spec A exposes order_type as the `orderType` local at
+     * submit.ts ~1100 — pass it; `intent` stays the primary ship-to-customer signal.
      */
     orderType?: string | null
   }
@@ -1837,7 +1863,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     isTestOrg: boolean
     customerEmail: string | null
     shippingAddress: Record<string, unknown> | null
-    /** orders.order_type (Spec A) once threaded into submit; null in the interim. */
+    /** orders.order_type — Spec A exposes it as the `orderType` local (~submit.ts:1100). */
     orderType?: string | null
   }
 
@@ -1938,7 +1964,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
         isTestOrg: ssIsTestOrg,
         customerEmail: input.context.email ?? null,
         shippingAddress,
-        // orderType: threaded once Spec A exposes orders.order_type at submit.
+        orderType, // Spec A exposes order_type as the `orderType` local (~submit.ts:1100)
       })
       if (ssResult.status === 'skipped') {
         await recordAuditEvent(
@@ -2482,18 +2508,18 @@ Steps:
 ### Task: Rewire the checkout route to create two orders for a mixed cart
 
 **Files:**
-- Modify `/Users/jamierogangeorge/Documents/print-room-portal/lib/checkout/submit.ts` (CheckoutInput interface lines 77-87; the `submit_b2b_order` RPC call args near line 1051) — thread `order_type` through.
+- ~~Modify `lib/checkout/submit.ts` to thread `order_type`~~ — **NOT NEEDED** (reconciled 2026-07-15): `submit` already derives `order_type` from its lines via `classifyOrderType`, and `submit_b2b_order` takes no `p_order_type`. F1 leaves submit.ts untouched.
 - Modify `/Users/jamierogangeorge/Documents/print-room-portal/app/api/checkout/route.ts` (imports lines 1-15; the single `submitCustomerOrder` call + return, lines 97-111).
 - Create `/Users/jamierogangeorge/Documents/print-room-portal/app/api/checkout/__tests__/route.split.test.ts`
 
 **Interfaces:**
 - Consumes: `partitionCheckoutLines(lines: CheckoutLineInput[]): CheckoutPartition[]` and `type CheckoutOrderType` (from the partition task); `submitCustomerOrder(admin, input: CheckoutInput): Promise<{ order_id: string; order_ref: string }>` (submit.ts line 291); the existing `intent` gating already computed in route.ts lines 82-95.
-- Consumes (Spec A, by name — see Decision gate): the `orders.order_type` column, the Monday **push-with-note** flow, and the **order-placed notification** abstraction (Slack + email), all keyed on `order_type='stock_on_hand'`.
-- Produces: `POST /api/checkout` response `{ order_id, order_ref, orders: Array<{ order_id, order_ref, order_type: CheckoutOrderType }> }`; `CheckoutInput.order_type?: 'purchase_order' | 'stock_on_hand'`.
+- Consumes (Spec A — **shipped**, see Reconciliation note): the `orders.order_type` classifier (`classifyOrderType`), the Monday **push-with-note** flow, and the **order-placed notification** abstraction — all fire automatically **inside** `submitCustomerOrder`, once per call, keyed on the `order_type` it derives from that call's lines. F1 gets the split routing for free by calling submit once per homogeneous partition.
+- Produces: `POST /api/checkout` response `{ order_id, order_ref, orders: Array<{ order_id, order_ref, order_type: CheckoutOrderType }> }` (the per-order `order_type` comes from the **partition**, not from submit). **No** `CheckoutInput.order_type` field is added.
 
 Steps:
 
-- [ ] **Step 1: Decision gate — confirm Spec A foundations.** Verify `orders.order_type` exists and `submit_b2b_order` accepts `p_order_type`, and that Spec A's push-with-note Monday branch + order-placed notification key on it. If NOT yet merged, STOP and coordinate with Spec A — do NOT fabricate the Monday/notification routing here. (`grep -rn "p_order_type\|order_type" supabase/migrations lib/monday lib/checkout` in the portal repo.) This task threads the order_type VALUE only.
+- [ ] **Step 1: ⟳ RECONCILED (Spec A shipped 2026-07-15).** `orders.order_type` is derived **inside** submit by `classifyOrderType(input.lines)` and stamped by a post-RPC `.update()` — the `submit_b2b_order` RPC has **no** `p_order_type` param. Each homogeneous partition therefore self-classifies (all-stocked → `stock_on_hand`; all-made_to_order → `purchase_order`) and self-routes (Monday note + notification + Xero all read that derived local). **F1 threads NO order_type and does not modify submit.ts. Skip Steps 4 and 5 below.** This task only (a) splits the cart and (b) sets the `:po`/`:stock` idempotency suffix + `orders[]` response.
 
 - [ ] **Step 2: Add the failing route test.** Create `app/api/checkout/__tests__/route.split.test.ts` (mirrors the existing `route.permission-denied.test.ts` mock scaffold):
   ```ts
@@ -2550,11 +2576,11 @@ Steps:
       expect(submitCustomerOrder).toHaveBeenCalledTimes(2)
       const calls = vi.mocked(submitCustomerOrder).mock.calls
       expect(calls[0][1].idempotency_key).toBe('idem-1:po')
-      expect(calls[0][1].order_type).toBe('purchase_order')
       expect(calls[0][1].lines.map((l) => l.product_id)).toEqual(['mto'])
       expect(calls[1][1].idempotency_key).toBe('idem-1:stock')
-      expect(calls[1][1].order_type).toBe('stock_on_hand')
       expect(calls[1][1].lines.map((l) => l.product_id)).toEqual(['stk'])
+      // order_type is NOT passed to submit (it self-classifies each homogeneous
+      // partition); assert it on the response `orders[]` below instead.
 
       const json = await res.json()
       expect(json.order_id).toBe('po-1')
@@ -2570,40 +2596,16 @@ Steps:
       }))
       expect(res.status).toBe(200)
       expect(submitCustomerOrder).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(submitCustomerOrder).mock.calls[0][1].order_type).toBe('stock_on_hand')
       expect(vi.mocked(submitCustomerOrder).mock.calls[0][1].idempotency_key).toBe('idem-2:stock')
     })
   })
   ```
 
-- [ ] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` called once (not twice), and `calls[0][1].order_type` is `undefined` (plus a TS error `order_type does not exist on CheckoutInput` if run through typecheck).
+- [ ] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` is called once (not twice), the `:po`/`:stock` idempotency suffixes are absent, and `res.json().orders` is undefined.
 
-- [ ] **Step 4: Add `order_type` to CheckoutInput.** In `lib/checkout/submit.ts`, extend the interface (current lines 77-87 end with `intent?: 'customer' | 'inventory'`). Add after `intent`:
-  ```ts
-    /**
-     * Spec B / F1 — which backend order_type this submit creates. The checkout
-     * route partitions a mixed cart and calls submit once per partition:
-     * 'purchase_order' (made_to_order lines → Monday/tracker) and 'stock_on_hand'
-     * (stocked lines → Spec A push-with-note + notification). Defaults to
-     * 'purchase_order' (today's single-order behaviour).
-     */
-    order_type?: 'purchase_order' | 'stock_on_hand'
-  ```
+- [ ] **Step 4: ⟳ SKIP (reconciled).** Do **not** add `order_type` to `CheckoutInput`. Submit self-classifies each homogeneous partition via `classifyOrderType(input.lines)`, so an added field would be dead code.
 
-- [ ] **Step 5: Thread it into the RPC.** In `lib/checkout/submit.ts`, the `submit_b2b_order` call currently ends (around line 1051):
-  ```ts
-      p_intent: input.intent ?? 'customer',
-      p_member_permission: input.context.orderingPermission ?? 'both',
-    })
-  ```
-  Add the order_type param:
-  ```ts
-      p_intent: input.intent ?? 'customer',
-      p_order_type: input.order_type ?? 'purchase_order',
-      p_member_permission: input.context.orderingPermission ?? 'both',
-    })
-  ```
-  (If Step 1 found `submit_b2b_order` does NOT yet accept `p_order_type`, that RPC signature is a Spec A deliverable — do not add it here; block per the Decision gate.)
+- [ ] **Step 5: ⟳ SKIP (reconciled).** Do **not** add `p_order_type` to the `submit_b2b_order` RPC call — the shipped RPC has no such parameter (Spec A stamps `order_type` via a post-RPC `.update()`), so adding it would break the call. Submit already sets the correct `order_type` for each homogeneous partition.
 
 - [ ] **Step 6: Partition the route.** In `app/api/checkout/route.ts`, add the import (after line 15's `import { cacheTags }`):
   ```ts
@@ -2650,7 +2652,7 @@ Steps:
           lines: part.lines,
           custom_shipping_address: body.custom_shipping_address ?? null,
           intent,
-          order_type: part.orderType,
+          // order_type omitted — submit self-classifies this homogeneous partition
         })
         orders.push({ ...result, order_type: part.orderType })
       }
@@ -3958,9 +3960,9 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee scope): does the picking fee apply to ALL orders, stock-on-hand-only, or prepaid-only? Plan defaults to stock-on-hand orders (any line with qty_from_stock>0 / fulfilment_type='stocked'), matching spec (c) 'push EVERY stock-on-hand order to Xero ... add the picking fee on a separate line'. Confirm before wiring which orders get the fee.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee region): the band table ($0-99=$35 ... $400+=$15) is NZ-only. Behaviour for non-NZ orders (different currency/GST) is undecided. pickingFeeForGoods is written NZD-only; a region param is a follow-up.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (pick-fee band input): which figure drives the band lookup — goods ex-GST (grossSubtotal, plan's assumption) vs goods incl-GST vs order total. Plan uses grossSubtotal (goods, ex-GST).
-- **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Xero eligibility reversal): Spec B supersedes Spec A item 15. Plan REMOVES the blanket draws_stock->manual_review gate so stock-on-hand orders now draft. Undecided: does org-level payment_terms='prepay' (prepay_org gate) ALSO get dropped now that per-product billing_mode is authoritative, or does it still force manual_review? Plan keeps prepay_org for now and flags it.
+- **[prepaid-tag-customer-display-xero-pickfee]** ✅ RESOLVED (Spec A shipped): the `draws_stock->manual_review` gate is **already gone** — `eligibility.ts` has only 3 gates (`xeroEnabled`/`existingInvoiceId`/`isTestOrg`) and stock-on-hand orders already draft. There is **no `prepay_org`/`payment_terms` gate** in shipped code, so the "do we also drop it" question is moot — nothing to drop.
 - **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Xero prepaid-line matching): how a persisted quote_items row is matched to its prepaid/stocked billing at draft time — in-memory line-billing map passed from submit.ts keyed by makeLineKey (plan's primary, no extra migration) vs a new quote_items.billing_mode snapshot column (needs a portal migration + apply coordination on the shared prod DB). Confirm before implementing the Xero wiring step.
-- **[prepaid-tag-customer-display-xero-pickfee]** DECISION GATE (Monday note supersession): Spec B item (d) supersedes Spec A item 11's flat note. The exact insertion point depends on where Spec A's push-with-note flow posts its note — plan wires orderBillingNote into that flow by name; confirm Spec A's note callsite when it lands.
+- **[prepaid-tag-customer-display-xero-pickfee]** ✅ RESOLVED (Spec A shipped): the flat note is `stockOnHandMondayNote(orderType)` posted via `postItemUpdate` at submit.ts ~1421-1435 (`lib/monday/order-type-note.ts`). Replace that call's body with `orderBillingNote(...)`.
 - **[prepaid-tag-customer-display-xero-pickfee]** Thursday staff-default invite is API-level only (role choice + default_store_id on POST /api/b2b-accounts/[id]/invite). The staff-portal invite UI still needs a role selector + store picker to send default_store_id — that UI is out of this narrow slice's scope (full self-serve F2 stays deferred).
 - **[prepaid-tag-customer-display-xero-pickfee]** OUT OF SCOPE / EXTERNAL BLOCKER: Starshipit account ownership (fresh portal-owned vs consolidate the live 'Print Room Dispatch' account) is a blocking external decision noted in the brief but not touched by this cluster's code.
 - **[item-12-starshipit-dispatch]** DECISION GATE (blocking, external): Starshipit account ownership — fresh portal-owned account vs consolidate the live 'Print Room Dispatch' account (629 unmatched rows keyed to old Shopify #PR numbers). Must be decided before STARSHIPIT_ENABLED is flipped on.
@@ -3968,15 +3970,16 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **[item-12-starshipit-dispatch]** DECISION GATE: supersede vs supplement the Monday-fed pipe — governs whether the portal webhook additionally flips job_trackers.status to 'dispatched' and sends sendTrackerStatusEmail, or ONLY writes tracking_info (additive/supplement). Plan ships the supplement (tracking_info write) as the safe default and leaves the status-flip + email as a gated follow-up step.
 - **[item-12-starshipit-dispatch]** Starshipit POST /api/orders create-order request/response shape is NOT verifiable in-repo (studio only exercises /api/orders/shipped and /api/track). The destination.{name,street,suburb,state,post_code,country,phone,email} field names and the `data.order.order_id` response path in createStarshipitOrder MUST be confirmed against Starshipit's live API docs before enabling; the function is dark-by-default so an imperfect payload never touches production.
 - **[item-12-starshipit-dispatch]** Confirm the shared Supabase project does not already contain starshipit_webhook_logs (from the studio integration) before applying the portal migration — it is CREATE IF NOT EXISTS so it is safe either way, but list_tables should be checked.
-- **[item-12-starshipit-dispatch]** order_type threading: Spec A adds orders.order_type but does not (yet) thread it into CheckoutInput/B2BCustomerContext at submit time; interim eligibility uses input.intent ('inventory' skips). Pass the real order_type into pushOrderToStarshipit once Spec A exposes it.
+- **[item-12-starshipit-dispatch]** ✅ RESOLVED (Spec A shipped): `order_type` is available as the `orderType` local in submit.ts (~1100), computed before the side-effect blocks. Pass it straight into `pushOrderToStarshipit`; `intent` stays the primary ship-to-customer signal.
 - **[item-12-starshipit-dispatch]** Picking-fee / billing_mode decisions are out of scope for this cluster (Item 12) — no changes here.
-- **[F1]** DECISION GATE — Spec A dependency: F1's route calls submitCustomerOrder with `order_type: 'stock_on_hand'` and relies on Spec A to (a) add the `orders.order_type` column, (b) branch the Monday push into the lighter push-with-note flow for stock_on_hand, and (c) fire the order-placed notification (Slack + email) abstraction. These do NOT exist in the portal repo yet. F1 threads the order_type VALUE only; it must NOT fabricate the push-with-note/notification branching. Confirm Spec A has landed before merging F1's route task, or coordinate the field addition to avoid a duplicate.
+- **[F1]** ✅ RESOLVED (Spec A shipped): (a) `orders.order_type`, (b) the Monday push-with-note branch, and (c) the order-placed notification all exist and fire **inside** `submitCustomerOrder`. F1 therefore passes **no** `order_type` and does **not** touch submit.ts — it calls submit once per homogeneous partition and each self-classifies + self-routes. (See Reconciliation note, correction 1.)
 - **[F1]** DECISION — legacy/absent fulfilment_type routing: partitionCheckoutLines routes a line with an ABSENT `fulfilment_type` (legacy persisted carts, reorder rebuilds) into the `purchase_order` partition, matching submit_b2b_order's MOQ-conservative treatment (absent counts toward production). Note the CartLine JSDoc says absent → 'treat as stocked' for UI oversell purposes — the two defaults intentionally differ. Confirm purchase_order is the desired order_type default for absent lines.
 - **[F1]** DECISION GATE (deferred UX) — two-order confirmation surface: the route returns BOTH orders (`orders[]`) but redirects the customer to the PRIMARY (purchase_order when present) confirmation page only. A confirmation view that shows both split orders is out of scope for this slice; decide whether it is needed before GA.
 - **[F1]** LABEL WORDING: the selector reuses PILL_LABELS ('Stock on hand' / 'Purchase order') for DRY consistency with the PDP/catalogue. The spec text said 'Stock order' — trivial product-copy decision; flag if 'Stock order' wording is required instead.
 - **[F1]** interaction intent='inventory' × order_type='stock_on_hand': an admin choosing add-to-my-inventory (intent='inventory') AND a stock-draw line is a contradictory combination. v1 passes intent through to both partitions unchanged and does not special-case this; confirm whether inventory-intent carts should suppress the stock partition.
 - **[F1]** PARTIAL-COMMIT: with a mixed cart the two submitCustomerOrder calls run sequentially (purchase_order first). If the first commits and the second throws (drift/MOQ/stock), one order exists and the client shows an error. Retry is safe because each partition uses a distinct idempotency key suffix (`:po` / `:stock`) that submit_b2b_order dedupes. Accepted for v1; noted for reviewer awareness.
 - **[F1]** This cluster does NOT include the Thursday-critical staff-default invite slice (that narrow invite slice lives elsewhere in Spec B) nor the billing-tag / picking-fee / Starshipit decisions — those are separate Spec B items and out of F1 scope.
+- **[F1]** ⟳ NEW (surfaced in reconciliation) — DECISION: because Spec A fires the order-placed notification **and** a Xero draft for *every* non-test order, a mixed cart that splits into two orders now triggers **two** notifications and **two** draft quotes (one per split order). This is consistent with Spec A's "notify/draft every order" choices, but confirm it's acceptable for split orders — or scope the dispatch notification (and/or a combined draft) to avoid the double-send.
 - **[F2]** DECISION GATE — ordering_permission default for studio tenants. Studios keep no stock, so a staff member invited with the plan's default `ordering_permission: 'stock_only'` could order nothing. The staff EditRoleDialog handles this via `orderingPermissionOptions(tenantType)` (studio → reorder_only only). F2 needs a product decision: (a) mirror that tenant-scoping in the portal invite UI/API, (b) default studio invites to 'reorder_only', or (c) leave the control fully open and let staff correct it later. Plan currently exposes all three and defaults 'stock_only' — flagged, not resolved.
 - **[F2]** DECISION — immediate vs deferred send. The plan sends the branded sign-in OTP immediately on invite (mirrors the staff single-invite route). If self-serve should instead adopt the staff 'Send invites (N)' batching model (provision now, email later via invited_at), that is a separate build. Confirm immediate-send is acceptable for org-admin self-serve.
 - **[F2]** SCOPE — F2 covers invite/ADD of new staff only. Editing an existing member's role or promoting staff↔org_admin from the customer portal is intentionally out of scope (stays staff-side in the staff portal). The hard guard forbids minting org_admins; confirm no portal-side role-editing is wanted in this slice.
@@ -3988,4 +3991,4 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - **Starshipit vs Monday tracking** — decide whether Starshipit tracking supersedes or supplements the Spec A Monday-fed pipe.
 - **Picking-fee region** — NZ band table only; decide behaviour for other regions (per-region tables vs NZ-only for now).
 - **Picking-fee scope** — applies to all orders, stock-on-hand only, or prepaid only?
-- **Prepaid supersessions** — this block reverses Spec A item 15 (Xero fires for every order) and Spec A item 11 (flat Monday note); confirm both Spec A pieces are shipped before layering prepaid on top.
+- **Prepaid supersessions** — ✅ both Spec A pieces are shipped: item 15 (Xero fires for every non-test order — eligibility at 3 gates) and item 11 (flat Monday note — `stockOnHandMondayNote`). Prepaid layers on top by replacing the flat note body + zeroing prepaid Xero lines.

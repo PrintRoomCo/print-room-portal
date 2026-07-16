@@ -51,6 +51,9 @@ export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownPro
           <span className="font-medium text-gray-900">Included</span>
         </div>
       )}
+      {breakdown.pickingFee > 0 && (
+        <Row label="Picking fee" value={breakdown.pickingFee} format={fmt} />
+      )}
       <Row
         label={`GST (${Math.round(breakdown.gstRate * 100)}%)`}
         value={breakdown.gst}

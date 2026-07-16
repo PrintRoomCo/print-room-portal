@@ -31,6 +31,7 @@ export function computeLineBreakdown(input: LineInput): LineBreakdown {
 interface OrderInput {
   lines: Array<Pick<LineInput, 'qty' | 'unitEffective' | 'decorationPerUnit'>>
   gstRate: number
+  pickingFee?: number
 }
 
 export function computeOrderBreakdown(input: OrderInput): OrderBreakdown {
@@ -47,14 +48,16 @@ export function computeOrderBreakdown(input: OrderInput): OrderBreakdown {
     lines.reduce((s, l) => s + l.qty * l.decorationPerUnit, 0)
   )
   const netSubtotal = grossSubtotal
-  const gst = round2(netSubtotal * gstRate)
-  const total = round2(netSubtotal + gst)
+  const pickingFee = round2(Math.max(0, input.pickingFee ?? 0))
+  const gst = round2((netSubtotal + pickingFee) * gstRate)
+  const total = round2(netSubtotal + pickingFee + gst)
   return {
     lines,
     grossSubtotal,
     decorationTotal,
     discountAmount: 0,
     netSubtotal,
+    pickingFee,
     gstRate,
     gst,
     total,

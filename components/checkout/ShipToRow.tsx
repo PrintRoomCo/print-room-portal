@@ -12,6 +12,9 @@ export interface StoreOption {
   id: string
   name: string | null
   city: string | null
+  /** Free-text ship-to country. Optional — only the checkout review page loads
+   *  it (to region-gate the NZ picking-fee display). */
+  country?: string | null
 }
 
 export const CUSTOM_SHIP_TO = '__custom__'

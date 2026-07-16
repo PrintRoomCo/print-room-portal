@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ---------------------------------------------------------------------------
 // Mocks (hoisted) — same shape as submit.pre-approved-inventory.test.ts, plus
-// the Xero orchestrator so we can assert the drawsStock input it receives.
+// the Xero orchestrator so we can assert the picking fee it receives (0 for a
+// coerced purchase order, >0 for a genuine stock-on-hand draw).
 // ---------------------------------------------------------------------------
 
 vi.mock('@/lib/monday/deal-item', () => ({
@@ -308,7 +309,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(result.order_id).toBe(ORDER_ID)
   })
 
-  it("Xero gate sees drawsStock=false after coercion (made_to_order nature)", async () => {
+  it('coerced made_to_order line → purchase order → no picking fee', async () => {
     const { admin } = makeSupabaseStub({
       // qty meets MOQ so the order commits and reaches step 5c.
       selects: baseSelects({ productNature: 'made_to_order' }),
@@ -321,13 +322,11 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     )
     expect(result.order_id).toBe(ORDER_ID)
     expect(createDraftInvoiceForOrder).toHaveBeenCalledTimes(1)
-    expect(createDraftInvoiceForOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ drawsStock: false }),
-    )
+    // claim coerced away → purchase order → no picking fee (was drawsStock=false).
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(0)
   })
 
-  it('Xero gate still sees drawsStock=true for a genuine draw (mixed nature)', async () => {
+  it('genuine stock draw (mixed nature) → stock-on-hand order → picking fee applies', async () => {
     const { admin } = makeSupabaseStub({
       selects: baseSelects({ productNature: 'mixed' }),
       rpc: happyRpc,
@@ -335,10 +334,8 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
 
     const result = await submitCustomerOrder(admin, buildInput())
     expect(result.order_id).toBe(ORDER_ID)
-    expect(createDraftInvoiceForOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ drawsStock: true }),
-    )
+    // 'stocked' claim stands → all-stocked order → picking fee applies (was drawsStock=true).
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
   })
 
   it('catalogue-item fulfilment override beats the product base (override mixed on a made_to_order base)', async () => {
@@ -356,10 +353,51 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       buildInput({ catalogueItemId: CAT_ITEM_ID }),
     )
     expect(result.order_id).toBe(ORDER_ID)
-    expect(createDraftInvoiceForOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ drawsStock: true }),
+    // 'stocked' claim stands → all-stocked order → picking fee applies (was drawsStock=true).
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
+  })
+
+  it('picking-fee band uses the DECO-INCLUSIVE goods subtotal (matches the checkout estimate)', async () => {
+    // Garment-only: $9 × 10 = $90 → 0-99 band → $35. Deco-inclusive:
+    // $90 + ($1.50 × 10) = $105 → 100-199 band → $30. The customer-facing
+    // estimate (CheckoutReviewClient) prices from allInUnitPrice (garment +
+    // decoration), so the server MUST band on the same figure.
+    const selects = baseSelects({ productNature: 'mixed' }).map((m) =>
+      m.table === 'b2b_catalogue_items'
+        ? {
+            table: m.table,
+            response: {
+              data: [
+                {
+                  id: CAT_ITEM_ID,
+                  source_product_id: PRODUCT_ID,
+                  moq_override: null,
+                  fulfilment_type_override: null,
+                  price_mode: 'manual_final', // decoration billed as ONE combined figure
+                },
+              ],
+              error: null,
+            },
+          }
+        : m,
     )
+    const { admin, rpcCalls } = makeSupabaseStub({
+      selects,
+      rpc: (name) => {
+        // Lines with a catalogueItemId price via the item-scoped RPC.
+        if (name === 'effective_unit_price_for_item') return { data: 9, error: null }
+        if (name === 'catalogue_item_decoration_price') return { data: 1.5, error: null }
+        return happyRpc(name)
+      },
+    })
+
+    const result = await submitCustomerOrder(
+      admin,
+      buildInput({ catalogueItemId: CAT_ITEM_ID }),
+    )
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(rpcCalls.map((c) => c.name)).toContain('catalogue_item_decoration_price')
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(30)
   })
 
   it('legacy line without a claim is untouched (still MOQ-applicable)', async () => {
@@ -391,10 +429,8 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
 
     const result = await submitCustomerOrder(admin, input)
     expect(result.order_id).toBe(ORDER_ID)
-    expect(createDraftInvoiceForOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ drawsStock: false }),
-    )
+    // claim coerced away → purchase order → no picking fee (was drawsStock=false).
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(0)
   })
 })
 

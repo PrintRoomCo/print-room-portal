@@ -134,6 +134,16 @@ export function buildLineFromQuoteItem(row: QuoteItemForXero): XeroQuoteLineInpu
   return { description, quantity: Number(row.quantity), unitAmount: Number(row.unit_price) }
 }
 
+/** A separate Xero line for the NZ picking fee (billed once per order). */
+export function buildPickFeeLine(feeNzd: number): XeroQuoteLineInput {
+  return { description: 'Picking fee', quantity: 1, unitAmount: feeNzd }
+}
+
+/** Zero a prepaid goods line (100% discount) while keeping it visible on the quote. */
+export function prepaidZeroLine(line: XeroQuoteLineInput): XeroQuoteLineInput {
+  return { ...line, description: `${line.description} (prepaid — no charge)`, unitAmount: 0 }
+}
+
 // --- contact resolution --------------------------------------------------------
 
 interface XeroContactsResponse {
@@ -209,9 +219,12 @@ export interface CreateDraftInvoiceArgs {
   ordererEmail: string | null
   paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
   isTestOrg: boolean
-  /** Computed stock-draw truth. Ignored by Spec A eligibility (every order
-   *  drafts); retained for Spec B and still surfaced to callers/tests. */
-  drawsStock: boolean
+  /** NZ picking fee for this order (0 when none applies). Added as a separate
+   *  Xero line. Computed in submit.ts step 5c (stock-on-hand + NZ, region-gated). */
+  pickingFee: number
+  /** Line keys (product::variant::size, matching makeLineKey) whose prepaid
+   *  stocked goods are zeroed on the draft (billed at $0 — pick fee only). */
+  prepaidStockedLineKeys: Set<string>
   existingInvoiceId: string | null
   today: string // 'YYYY-MM-DD'
   deliveryAddressSummary?: string | null
@@ -235,8 +248,8 @@ export async function createDraftInvoiceForOrder(
   args: CreateDraftInvoiceArgs,
 ): Promise<CreateDraftInvoiceResult> {
   // Spec A: every non-test order is invoiced — purchase orders and stock-on-hand
-  // alike. No payment-terms or stock-draw gate remains. (args.drawsStock is still
-  // computed upstream and passed through for Spec B, but is no longer consulted.)
+  // alike. No payment-terms or stock-draw gate remains. Spec B layers prepaid
+  // goods-zeroing + a separate pick-fee line onto the draft below.
   const elig = evaluateXeroEligibility({
     xeroEnabled: isXeroEnabled(),
     existingInvoiceId: args.existingInvoiceId,
@@ -275,10 +288,27 @@ export async function createDraftInvoiceForOrder(
     .from('quote_items')
     .select(
       `product_name, quantity, unit_price, size_label, decorations,
+       product_id, variant_id, size_id, qty_from_stock,
        product_variants ( product_color_swatches(label) )`,
     )
     .eq('quote_id', args.quoteId)
-  const lines = ((itemRows ?? []) as unknown as QuoteItemForXero[]).map(buildLineFromQuoteItem)
+  const itemRows2 = (itemRows ?? []) as unknown as Array<
+    QuoteItemForXero & {
+      product_id: string
+      variant_id: string | null
+      size_id: number | null
+      qty_from_stock: number
+    }
+  >
+  // Spec B: a prepaid stocked line is billed at $0 (goods already paid); the
+  // pick fee rides on its own line. Key format matches makeLineKey in submit.ts.
+  const lines = itemRows2.map((row) => {
+    const base = buildLineFromQuoteItem(row)
+    const key = `${row.product_id}::${row.variant_id ?? ''}::${row.size_id ?? ''}`
+    const isPrepaidStocked = row.qty_from_stock > 0 && args.prepaidStockedLineKeys.has(key)
+    return isPrepaidStocked ? prepaidZeroLine(base) : base
+  })
+  if (args.pickingFee > 0) lines.push(buildPickFeeLine(args.pickingFee))
 
   const payload = buildDraftQuotePayload({
     contactId,

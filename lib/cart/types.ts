@@ -1,3 +1,5 @@
+import type { BillingMode } from '@/lib/shop/billing-mode'
+
 export interface CartLineDecoration {
   /** b2b_catalogue_item_decorations.id — re-validated on submit. */
   linkId: string
@@ -78,6 +80,12 @@ export interface CartLine {
    * catalogue identity", same as before).
    */
   catalogueItemId?: string | null
+  /**
+   * Per customer×product billing tag, snapshotted from the PDP at add-time so the
+   * checkout summary can show the "Pre-paid" indicator per line. Optional +
+   * nullable: absent on legacy persisted lines (treated as not-prepaid).
+   */
+  billingMode?: BillingMode
   /**
    * Manual-final pricing (2026-06-10). When the catalogue item's price_mode is
    * 'manual_final' the decoration is ONE combined figure per qty band for the
