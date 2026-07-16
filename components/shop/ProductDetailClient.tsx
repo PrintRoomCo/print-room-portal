@@ -371,12 +371,6 @@ export function ProductDetailClient({
   // per-size availability is irrelevant — hide both.
   const showAvailability = isInventoryMode
 
-  // Org_admin drawing From inventory may overflow a size's available stock:
-  // the in-stock units are drawn down and the shortfall becomes a production
-  // run. Restricted staff and stocked-only products are NOT in scope; they
-  // keep the hard cap at available stock (inventoryIntentShortfall below).
-  const isInventoryOverflowScope = canChooseOrderIntent && orderIntent === 'inventory'
-
   // From-inventory mode (spec Item 3) applied to the multi-size variant table:
   // show ONLY sizes with a tracked, in-stock quantity for the current colour,
   // and drop the "Available" status column below. Reorder/MTO mode is
@@ -481,29 +475,6 @@ export function ProductDetailClient({
         ? variantlessTotalQty
         : singleQty
   const setQty = setSingleQty
-
-  // Total units that exceed available stock across every touched variant - the
-  // production ("to be made") portion of a From-inventory order. Summed per
-  // product to match the server-side MOQ rollup (lib/checkout/submit.ts). Only
-  // meaningful inside isInventoryOverflowScope.
-  const toBeMadeSum = useMemo(() => {
-    if (!isInventoryOverflowScope) return 0
-    if (sizingMode === 'multi_size_with_variants') {
-      return orderLines.reduce((sum, line) => sum + line.toBeMade, 0)
-    }
-    // one_size: a single selected variant (colourway).
-    if (selectedVariant) {
-      return Math.max(0, qty - (availableQty ?? 0))
-    }
-    return 0
-  }, [
-    isInventoryOverflowScope,
-    sizingMode,
-    orderLines,
-    selectedVariant,
-    availableQty,
-    qty,
-  ])
 
   useEffect(() => {
     setSingleQty((q) => Math.max(defaultMinQty, q))
@@ -938,27 +909,6 @@ export function ProductDetailClient({
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
 
-          // Org_admin From-inventory overflow: split a partial-stock cell into a
-          // stocked draw + a made_to_order production line. lineSignature keys on
-          // fulfilmentType AND size, so the two lines never merge in the cart.
-          if (
-            isInventoryOverflowScope &&
-            tracked &&
-            !backorderable &&
-            lineQty > available
-          ) {
-            if (available > 0) {
-              cart.addLine({ ...baseLine, qty: available, fulfilmentType: 'stocked' })
-            }
-            cart.addLine({
-              ...baseLine,
-              qty: lineQty - available,
-              fulfilmentType: 'made_to_order',
-            })
-            added += lineQty
-            continue
-          }
-
           // Fulfilment decision: toggle choice wins for org_admin; otherwise a
           // line only claims a stock draw when one is actually possible —
           // drawable product (nature × permission) + tracked cell with enough
@@ -1021,43 +971,6 @@ export function ProductDetailClient({
     // decision as multi-size: toggle choice wins when present (PDP shortfall
     // already enforced From-Stock vs zero-stock); buyer flow auto-routes
     // backorderable to made_to_order.
-    // Mode 3 org_admin From-inventory overflow: split into a stocked draw + a
-    // made_to_order production line, mirroring Mode 1.
-    if (
-      isInventoryOverflowScope &&
-      tracksThisVariant &&
-      !selectedVariantBackorderable &&
-      qty > (availableQty ?? 0)
-    ) {
-      const avail = availableQty ?? 0
-      const oneSizeBase = {
-        productId: product.id,
-        productName: product.name,
-        variantId: '',
-        variantLabel: '—',
-        sizeId,
-        sizeLabel: oneSizeSizeLabel,
-        unitPrice: pricing.unit_price,
-        imageUrl: cartImageForSwatch(colorSwatchId),
-        decorations: cartDecorationsForSwatch(colorSwatchId),
-        brackets: cartLineBrackets,
-        catalogueItemId: product.catalogueItemId,
-        billingMode: product.billingMode,
-        nature: product.fulfilment_type,
-        manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
-        manualDecorationBrackets: manualDecorationBracketsSnapshot,
-      }
-      if (avail > 0) {
-        cart.addLine({ ...oneSizeBase, qty: avail, fulfilmentType: 'stocked' })
-      }
-      cart.addLine({
-        ...oneSizeBase,
-        qty: qty - avail,
-        fulfilmentType: 'made_to_order',
-      })
-      return
-    }
-
     const oneSizeFulfilment = lineFulfilment({
       canDrawStock: options.canDrawStock,
       canChooseOrderIntent,
@@ -1104,9 +1017,10 @@ export function ProductDetailClient({
     available: number
     backorderable: boolean
   } | null = null
-  // Hard cap stays for everyone EXCEPT the org_admin From-inventory overflow
-  // scope, where exceeding stock is allowed and routed into a production run.
-  if (isInventoryMode && !isInventoryOverflowScope) {
+  // Hard cap: a stock-on-hand order can never exceed available stock. When a
+  // buyer wants more than is in stock they must switch to the Purchase Order
+  // (Re-order) pill, which places a production run subject to the product MOQ.
+  if (isInventoryMode) {
     if (sizingMode === 'multi_size_with_variants') {
       const cells = variants.flatMap((variant) => sizes.map((s) => ({ variant, s })))
       for (const { variant, s } of cells) {
@@ -1143,30 +1057,10 @@ export function ProductDetailClient({
     }
   }
 
-  // Production top-up MOQ guard (org_admin From-inventory overflow only). The
-  // to-be-made units trigger a production run, which must reach the product's
-  // real MOQ. Pure stock draws (toBeMadeSum === 0) are exempt; the server check
-  // in lib/checkout/submit.ts is the redundant safety net behind this.
-  let madeMoqShortfall: { toBeMade: number; moq: number; needed: number } | null =
-    null
-  if (
-    isInventoryOverflowScope &&
-    toBeMadeSum > 0 &&
-    effectiveMoq > 1 &&
-    toBeMadeSum < effectiveMoq
-  ) {
-    madeMoqShortfall = {
-      toBeMade: toBeMadeSum,
-      moq: effectiveMoq,
-      needed: effectiveMoq - toBeMadeSum,
-    }
-  }
-
   const canSubmitSelection =
     !isUnavailableToOrder &&
     canAddToCart &&
     inventoryIntentShortfall == null &&
-    madeMoqShortfall == null &&
     !preOrderClosed
 
   return (
@@ -1293,12 +1187,6 @@ export function ProductDetailClient({
                     const trackedRow = row.available !== null
                     const stocked = trackedRow ? (row.available ?? 0) : 0
                     const value = variantQuantities[cellKey(row.variantId, row.sizeId)] ?? 0
-                    // Backorderable lines always go to production — surface
-                    // the full requested qty as "to be made" rather than
-                    // counting the (zero) stock balance against it.
-                    const backorder = !trackedRow || row.allowOrderWithoutStock
-                      ? value
-                      : Math.max(0, value - stocked)
                     const showBackorderableChip =
                       trackedRow && row.allowOrderWithoutStock && stocked === 0
                     // Untracked rows (no inventory record) only ever reach this
@@ -1329,17 +1217,6 @@ export function ProductDetailClient({
                                 Available to order
                               </span>
                             ) : `${stocked}`}
-                            {/* "to be made" is a reorder/MTO concept — qty beyond
-                                stock that goes to production. In From-inventory mode
-                                the shortfall guard already caps orders at available
-                                stock, so we show only the available count there.
-                                Suppressed when the pill already says "Available to
-                                order" (matches backorderable-row behaviour). */}
-                            {(!isInventoryMode || isInventoryOverflowScope) && backorder > 0 && !showAvailableToOrderChip && (
-                              <span className="ml-1 text-amber-700">
-                                ({backorder} to be made)
-                              </span>
-                            )}
                           </td>
                         )}
                         <td className="px-5 py-3 text-right">
@@ -1426,12 +1303,10 @@ export function ProductDetailClient({
                 {orderLines.map((line) => {
                   const label =
                     [line.colourLabel, line.sizeLabel].filter(Boolean).join(' / ') || '—'
-                  // "to be made" is production language — meaningless when the
-                  // order is drawn from existing stock (Stock-on-hand). Mirror the
-                  // size-grid gate above so the summary stays consistent: hidden in
-                  // pure inventory mode, shown for reorder/bulk and the
-                  // From-inventory overflow that genuinely spills into a run.
-                  const showToBeMade = !isInventoryMode || isInventoryOverflowScope
+                  // "to be made" is production language — shown only on the
+                  // Purchase Order side. Stock-on-hand orders are capped at
+                  // available stock, so nothing there is ever "to be made".
+                  const showToBeMade = !isInventoryMode
                   return (
                     <li
                       key={cellKey(line.variantId, line.sizeId)}
@@ -1552,20 +1427,6 @@ export function ProductDetailClient({
                         : 'Reduce quantity to order from stock.'
                     }`}
               </p>
-            )}
-            {isInventoryOverflowScope && toBeMadeSum > 0 && (
-              madeMoqShortfall ? (
-                <p className="mt-3 text-xs text-amber-700">
-                  Production run minimum is {madeMoqShortfall.moq}.{' '}
-                  {madeMoqShortfall.toBeMade} to be made — add{' '}
-                  {madeMoqShortfall.needed} more, or reduce to draw only from
-                  stock.
-                </p>
-              ) : (
-                <p className="mt-3 text-xs text-gray-500">
-                  {toBeMadeSum} to be made · production min {effectiveMoq}
-                </p>
-              )
             )}
           </section>
           </>

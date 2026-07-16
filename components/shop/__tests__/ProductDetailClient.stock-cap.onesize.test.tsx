@@ -79,25 +79,32 @@ beforeEach(() => {
   )
 })
 
-describe('PDP From-inventory production top-up — cart split (one_size)', () => {
-  it('overflowing one_size order adds a stocked line + a made_to_order line', async () => {
+describe('PDP Stock-on-hand cap — one_size', () => {
+  it('ordering beyond stock blocks Add-to-cart with a shortfall prompt', () => {
     renderPDP()
-    // 28 ordered, 4 in stock -> 4 stocked + 24 made (meets MOQ 24).
+    // 28 ordered, only 4 in stock.
     fireEvent.change(screen.getByLabelText('Quantity'), {
       target: { value: '28' },
+    })
+    expect(
+      screen.getByText(/Only 4 available for selected variant/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
+  })
+
+  it('within-stock order adds a single stocked line', async () => {
+    renderPDP()
+    fireEvent.change(screen.getByLabelText('Quantity'), {
+      target: { value: '3' },
     })
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
     )
-    const btn = screen.getByRole('button', { name: /add to cart/i })
-    fireEvent.click(btn)
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }))
 
-    expect(addLine).toHaveBeenCalledTimes(2)
+    expect(addLine).toHaveBeenCalledTimes(1)
     expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({ qty: 4, fulfilmentType: 'stocked' }),
-    )
-    expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({ qty: 24, fulfilmentType: 'made_to_order' }),
+      expect.objectContaining({ qty: 3, fulfilmentType: 'stocked' }),
     )
   })
 })

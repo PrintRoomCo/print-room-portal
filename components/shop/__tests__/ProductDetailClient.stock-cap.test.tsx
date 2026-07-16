@@ -88,44 +88,34 @@ function renderPDP(
 
 beforeEach(() => addLine.mockClear())
 
-describe('PDP From-inventory production top-up — MOQ guard', () => {
-  it('overflow below MOQ shows the production-minimum block message', () => {
+// Stock-on-hand orders are hard-capped at available stock. There is no
+// overflow-into-production from this pill: a buyer who wants more than is in
+// stock is sent to the Purchase Order pill, which places a production run
+// subject to the product MOQ. Nothing on the stock side ever says "to be made".
+describe('PDP Stock-on-hand cap — orders never exceed available stock', () => {
+  it('ordering beyond a size’s stock blocks Add-to-cart and prompts Purchase order', () => {
     renderPDP('org_admin')
-    // Request 5 of S (4 in stock) -> 1 to be made, below MOQ 24.
-    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
-      target: { value: '5' },
-    })
-    expect(
-      screen.getByText(/Production run minimum is 24/i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Production run minimum is 24\.\s+1 to be made.*add\s+23 more/i),
-    ).toBeInTheDocument()
-  })
-
-  it('overflow at/above MOQ shows the neutral hint, not the block', () => {
-    renderPDP('org_admin')
-    // Request 28 of S (4 in stock) -> 24 to be made, meets MOQ 24.
+    // Request 28 of S (only 4 in stock).
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
       target: { value: '28' },
     })
-    expect(screen.queryByText(/Production run minimum is/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/24 to be made · production min 24/i)).toBeInTheDocument()
+    expect(screen.getByText(/Only 4 available for Red \/ S/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Switch to Re-order or reduce quantity/i),
+    ).toBeInTheDocument()
+    // Stock-on-hand never uses production language.
+    expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
   })
 
-  it('pure stock draw (within stock) shows no overflow messaging', () => {
+  it('shows no "to be made" anywhere on the stock-on-hand side', () => {
     renderPDP('org_admin')
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
-      target: { value: '3' },
+      target: { value: '5' },
     })
-    expect(screen.queryByText(/Production run minimum is/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/to be made · production min/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
   })
-})
 
-describe('PDP From-inventory production top-up — cart split (multi-size)', () => {
-  beforeEach(() => {
-    // Pricing is fetched (debounced) before Add-to-cart enables. Stub it OK.
+  it('within-stock order adds a single stocked line', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -133,38 +123,6 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
         json: async () => ({ status: 'ok', unit_price: 10 }),
       })),
     )
-  })
-
-  it('overflowing variant adds a stocked line + a made_to_order line', async () => {
-    renderPDP('org_admin')
-    // 28 of S, 4 in stock -> 4 stocked + 24 made (meets MOQ 24).
-    fireEvent.change(screen.getByLabelText('Quantity for size S'), {
-      target: { value: '28' },
-    })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
-    )
-    const btn = screen.getByRole('button', { name: /add to cart/i })
-    fireEvent.click(btn)
-
-    expect(addLine).toHaveBeenCalledTimes(2)
-    expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variantId: 'red-s',
-        qty: 4,
-        fulfilmentType: 'stocked',
-      }),
-    )
-    expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variantId: 'red-s',
-        qty: 24,
-        fulfilmentType: 'made_to_order',
-      }),
-    )
-  })
-
-  it('within-stock variant adds a single stocked line', async () => {
     renderPDP('org_admin')
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
       target: { value: '3' },
@@ -172,8 +130,7 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
     )
-    const btn = screen.getByRole('button', { name: /add to cart/i })
-    fireEvent.click(btn)
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }))
 
     expect(addLine).toHaveBeenCalledTimes(1)
     expect(addLine).toHaveBeenCalledWith(
@@ -186,30 +143,29 @@ describe('PDP From-inventory production top-up — cart split (multi-size)', () 
   })
 })
 
-describe('PDP From-inventory production top-up — size grid caption', () => {
-  it('shows per-size "to be made" once a size overflows its stock', () => {
+describe('PDP Purchase-order side — production run subject to MOQ', () => {
+  it('the Purchase order pill surfaces "to be made" and enforces the product MOQ', () => {
     renderPDP('org_admin')
+    // Switch to the Purchase order pill (production run).
+    fireEvent.click(screen.getByRole('button', { name: /purchase order/i }))
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
-      target: { value: '28' },
+      target: { value: '5' },
     })
-    // S row Available cell now annotates the 24-unit production portion.
-    expect(screen.getByText(/\(24 to be made\)/i)).toBeInTheDocument()
+    // The whole quantity is a production run — surfaced in the size grid and
+    // echoed in the order summary.
+    expect(screen.getAllByText(/\(5 to be made\)/i).length).toBeGreaterThanOrEqual(1)
+    // MOQ 24 not met -> minimum-order guidance (Add-to-cart stays blocked).
+    expect(screen.getByText(/Minimum order/i)).toBeInTheDocument()
   })
 })
 
-describe('PDP From-inventory production top-up — restricted staff unchanged', () => {
-  it('staff cannot overflow: no production hint, Add-to-cart stays blocked', () => {
-    // Restricted (stock_only) staff: member cap removes the reorder path, so
-    // the overflow-into-production scope never activates.
+describe('PDP Stock-on-hand cap — restricted staff', () => {
+  it('staff cannot exceed stock: shortfall message, no production language', () => {
     renderPDP('staff', 'stock_only')
-    // Staff are inventory-only; the in-stock-only filter keeps S visible.
     fireEvent.change(screen.getByLabelText('Quantity for size S'), {
       target: { value: '28' },
     })
-    // No production top-up surfaces for restricted staff...
-    expect(screen.queryByText(/to be made · production min/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Production run minimum is/i)).not.toBeInTheDocument()
-    // ...and the existing hard-cap shortfall message still fires.
     expect(screen.getByText(/Only 4 available/i)).toBeInTheDocument()
+    expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
   })
 })
