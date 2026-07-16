@@ -1218,7 +1218,9 @@ export async function submitCustomerOrder(
   if (newLines) {
     const rows = newLines as QuoteItemRow[]
     const consumed = new Set<string>()
-    const snapshotUpdates: Array<Promise<unknown>> = []
+    // PostgREST builders are thenables (PromiseLike), not full Promises, so type
+    // the collection as PromiseLike — Promise.all accepts it directly.
+    const snapshotUpdates: Array<PromiseLike<unknown>> = []
     for (const inLine of input.lines) {
       const match = rows.find(
         (x) =>
