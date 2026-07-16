@@ -58,6 +58,11 @@ describe('POST /api/checkout — mixed-cart split', () => {
     // Reconciliation: order_type is NOT passed to submit (it self-classifies);
     // the partition orderType surfaces only in the response.
     expect('order_type' in calls[0][1]).toBe(false)
+    // Volume-tier pooling: each partition call carries the FULL cart as
+    // pricing_pool_lines so a product whose qty spans both partitions still
+    // prices at the pooled tier (matching the cart's claimed price).
+    expect(calls[0][1].pricing_pool_lines?.map((l: { product_id: string }) => l.product_id)).toEqual(['mto', 'stk'])
+    expect(calls[1][1].pricing_pool_lines?.map((l: { product_id: string }) => l.product_id)).toEqual(['mto', 'stk'])
 
     const json = await res.json()
     expect(json.order_id).toBe('po-1')

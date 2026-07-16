@@ -113,6 +113,11 @@ export async function POST(request: Request) {
         notes: body.notes ?? null,
         internal_notes: null,
         lines: part.lines,
+        // Volume-tier pooling must span the WHOLE cart, not this partition:
+        // the cart priced a product's tier off its total qty, so a split
+        // partition re-pricing off its own qty alone would derive a higher
+        // tier (drift 409 / silent overcharge). Pool lines seed pricing only.
+        pricing_pool_lines: body.lines,
         custom_shipping_address: body.custom_shipping_address ?? null,
         intent,
         // order_type intentionally NOT passed: submit self-classifies each
