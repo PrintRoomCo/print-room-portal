@@ -126,6 +126,13 @@ interface Props {
    * snapshot. Absent variant → invoice_on_dispatch (pay at checkout).
    */
   billingModeByVariant?: Record<string, 'invoice_on_dispatch' | 'prepaid'>
+  /**
+   * Spec 3a follow-up — variant_id → per-unit price of the volume band the
+   * PREPAID stock was originally purchased at (linked intake's quote-item
+   * price, else ladder at intake qty). Informational: a prepaid draw is $0
+   * at checkout. Only populated for prepaid variants.
+   */
+  stockPurchasePriceByVariant?: Record<string, number>
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
@@ -165,6 +172,7 @@ export function ProductDetailClient({
   images,
   hiddenViewRows = [],
   billingModeByVariant = {},
+  stockPurchasePriceByVariant = {},
   colourOptions = [],
   decorations,
   effectiveMoq,
@@ -242,6 +250,15 @@ export function ProductDetailClient({
   const selectedColourPrepaid = variantsForSelectedColour.some(
     (v) => billingModeByVariant[v.variant_id] === 'prepaid',
   )
+  // Original purchase per-unit price for the selected (prepaid) colour —
+  // informational display only; the draw itself is $0 at checkout.
+  const selectedColourStockPrice = useMemo<number | null>(() => {
+    for (const v of variantsForSelectedColour) {
+      const price = stockPurchasePriceByVariant[v.variant_id]
+      if (typeof price === 'number') return price
+    }
+    return null
+  }, [variantsForSelectedColour, stockPurchasePriceByVariant])
 
   // Prefer the post-SKUCOLLAPSE sizeless colourway variant, but keep supporting
   // legacy products whose product_variants rows still carry size_id.
@@ -1179,6 +1196,24 @@ export function ProductDetailClient({
             </section>
           )}
 
+          {/* Prepaid stock (Spec 3a follow-up): where Volume Pricing surfaces
+              for purchase orders, a stock draw surfaces the per-unit price of
+              the band the stock was ORIGINALLY purchased at. Informational —
+              the draw itself is billed $0 (goods already paid). */}
+          {isInventoryMode && selectedColourPrepaid && selectedColourStockPrice != null && (
+            <section className="rounded-[24px] bg-white p-6">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                Prepaid Stock
+              </p>
+              <p className="mt-4 text-sm text-gray-700 tabular-nums">
+                <span className="font-medium text-gray-900">
+                  {format(selectedColourStockPrice)}
+                </span>{' '}
+                <span className="text-gray-500">per unit — original purchase price</span>
+              </p>
+            </section>
+          )}
+
           {canChooseOrderIntent && (
             <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
           )}
@@ -1383,7 +1418,17 @@ export function ProductDetailClient({
                 </div>
               )}
               <div className="flex-1 md:text-right">
-                {pricingLoading ? (
+                {isInventoryMode && selectedColourPrepaid ? (
+                  // Prepaid stock draw: goods already paid — no live ladder
+                  // price here (the Prepaid Stock section above carries the
+                  // original purchase price). Checkout bills the line at $0.
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Pre-paid</p>
+                    <p className="text-[11px] text-gray-500">
+                      Goods already purchased — no charge at checkout
+                    </p>
+                  </div>
+                ) : pricingLoading ? (
                   <span className="text-sm text-gray-400">Pricing…</span>
                 ) : pricing && pricing.status === 'ok' ? (
                   <PriceBreakdown

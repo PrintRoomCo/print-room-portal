@@ -6,6 +6,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { resolveCatalogueItemForPdp } from '@/lib/shop/resolve-catalogue-item'
+import { resolveStockPurchasePrices } from '@/lib/shop/stock-purchase-price'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
@@ -412,6 +413,24 @@ const loadProductDetailPageData = cache(async (
     }
   }
 
+  // Spec 3a follow-up — for PREPAID variants, surface the per-unit price of
+  // the band the stock was originally purchased at (informational: a prepaid
+  // draw is $0 at checkout). Linked intake → original quote-item price;
+  // unlinked → current ladder at the intake qty.
+  const prepaidVariantIds = Object.entries(billingModeByVariant)
+    .filter(([, mode]) => mode === 'prepaid')
+    .map(([variantId]) => variantId)
+  const stockPurchasePrices = await resolveStockPurchasePrices(
+    admin,
+    context.organizationId,
+    prepaidVariantIds,
+    bracketRows,
+  )
+  const stockPurchasePriceByVariant: Record<string, number> = {}
+  for (const [variantId, price] of stockPurchasePrices) {
+    stockPurchasePriceByVariant[variantId] = price
+  }
+
   const brandName = Array.isArray(productRow.brands)
     ? (productRow.brands[0]?.name ?? null)
     : productRow.brands?.name ?? null
@@ -499,6 +518,8 @@ const loadProductDetailPageData = cache(async (
       availability,
       // Spec 3a — variant_id → billing class for the "Pre-paid" badge + cart snapshot.
       billingModeByVariant,
+      // Spec 3a follow-up — variant_id → original-purchase unit price (prepaid only).
+      stockPurchasePriceByVariant,
       organizationId: context.organizationId,
       customerRole: context.role,
       orderingPermission: context.orderingPermission,
