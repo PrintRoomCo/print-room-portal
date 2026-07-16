@@ -21,6 +21,7 @@ import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { orderBillingNote } from '@/lib/monday/billing-note'
 import { orderNeedsInvoicing } from './order-billing'
+import { resolveLineBillingModes } from './resolve-line-billing-modes'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
@@ -426,7 +427,7 @@ export async function submitCustomerOrder(
       .in('id', productIds),
     admin
       .from('b2b_catalogue_items')
-      .select('id, source_product_id, moq_override, fulfilment_type_override, billing_mode')
+      .select('id, source_product_id, moq_override, fulfilment_type_override')
       .in('source_product_id', productIds)
       .in('id', Array.from(grantedItemIds)),
   ])
@@ -440,7 +441,6 @@ export async function submitCustomerOrder(
     source_product_id: string
     moq_override: number | null
     fulfilment_type_override: string | null
-    billing_mode: 'invoice_on_dispatch' | 'prepaid' | null
   }>
   const productMoqById = new Map(productRows.map((r) => [r.id, r.moq]))
   const overrideByProductId = new Map(
@@ -1152,19 +1152,26 @@ export async function submitCustomerOrder(
   }
 
   // Spec B — per-order billing signal + NZ picking fee. `billing_mode` per
-  // catalogue item: invoice_on_dispatch = not-paid (draft quote, invoice before
+  // VARIANT (Spec 3a — variant_inventory.billing_mode, not the catalogue
+  // item's): invoice_on_dispatch = not-paid (draft quote, invoice before
   // dispatch), prepaid = goods already paid. `needsInvoicing` drives the Monday
   // billing note; `pickFee` feeds BOTH that note and the Xero draft (single
   // source of truth). Fee applies to stock-on-hand orders only
   // (order_type === 'stock_on_hand') and is NZD-only — AUS ship-to orders are
   // excluded here (region seam) pending the AUD/10%-GST AUS epic.
-  const billingModeByCatItemId = new Map<string, BillingMode>(
-    catItemRows.map((r) => [r.id, (r.billing_mode ?? 'invoice_on_dispatch') as BillingMode]),
+  // Per-variant billing (Spec 3a): the variant's class, not the item's.
+  const billingVariantIds = Array.from(
+    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
+  )
+  const billingModeByVariant = await resolveLineBillingModes(
+    admin,
+    input.context.organizationId,
+    billingVariantIds,
   )
   const orderBillingLines = input.lines.map((l) => ({
     stocked: l.fulfilment_type === 'stocked',
-    billingMode: l.catalogueItemId
-      ? billingModeByCatItemId.get(l.catalogueItemId) ?? 'invoice_on_dispatch'
+    billingMode: l.variant_id
+      ? billingModeByVariant.get(l.variant_id) ?? 'invoice_on_dispatch'
       : ('invoice_on_dispatch' as BillingMode),
   }))
   const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
@@ -1682,9 +1689,15 @@ export async function submitCustomerOrder(
     //     Spec B: prepaid stocked goods are zeroed on the draft and the pick fee
     //     (computed above, region-gated to NZ) rides on its own line.
     try {
-      const prepaidStockedLineKeys = new Set(
-        input.lines.flatMap((l, i) =>
-          l.fulfilment_type === 'stocked' && orderBillingLines[i]?.billingMode === 'prepaid'
+      // Any line whose VARIANT is prepaid. Whether it's actually zeroed is
+      // gated downstream in draft-invoice.ts (qty_from_stock > 0): a drawn
+      // prepaid line is zeroed in FULL; a prepaid variant's made-to-order PO
+      // line (qty_from_stock 0) is charged. No partial draws (see plan header /
+      // spec Domain rules) ⇒ no within-line split. Widened from the old
+      // stocked-only set.
+      const prepaidDrawnLineKeys = new Set(
+        input.lines.flatMap((l) =>
+          l.variant_id && billingModeByVariant.get(l.variant_id) === 'prepaid'
             ? [makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)]
             : [],
         ),
@@ -1712,7 +1725,7 @@ export async function submitCustomerOrder(
         paymentTerms: input.context.paymentTerms ?? null,
         isTestOrg: xeroIsTestOrg,
         pickingFee: pickFee,
-        prepaidStockedLineKeys,
+        prepaidDrawnLineKeys,
         existingInvoiceId: null, // fresh order — no prior draft
         today: new Date().toISOString().slice(0, 10),
         deliveryAddressSummary: formattedShippingAddress,

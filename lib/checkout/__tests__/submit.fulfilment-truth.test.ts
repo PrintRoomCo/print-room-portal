@@ -29,6 +29,22 @@ const { createDraftInvoiceForOrder } = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/xero/draft-invoice', () => ({ createDraftInvoiceForOrder }))
 
+// Spec 3a: billing is per VARIANT (variant_inventory.billing_mode), resolved
+// through this module — mock it so no test touches a DB. Default: every
+// variant pays at checkout; override per-test with mockResolvedValue.
+const { resolveLineBillingModes } = vi.hoisted(() => ({
+  resolveLineBillingModes: vi.fn(
+    async () => new Map<string, 'invoice_on_dispatch' | 'prepaid'>(),
+  ),
+}))
+vi.mock('@/lib/checkout/resolve-line-billing-modes', () => ({
+  resolveLineBillingModes,
+  buildBillingModeMap: (rows: Array<{ variant_id: string; billing_mode: string | null }>) =>
+    new Map(
+      rows.map((r) => [r.variant_id, r.billing_mode === 'prepaid' ? 'prepaid' : 'invoice_on_dispatch']),
+    ),
+}))
+
 import {
   submitCustomerOrder,
   MoqViolationError,
@@ -212,7 +228,6 @@ function buildInput(
 function baseSelects(opts: {
   productNature: string
   itemNatureOverride?: string | null
-  billingMode?: 'invoice_on_dispatch' | 'prepaid' | null
 }): SelectMatcher[] {
   return [
     { table: 'user_organizations', response: { data: { role: 'org_admin' }, error: null } },
@@ -225,7 +240,6 @@ function baseSelects(opts: {
             source_product_id: PRODUCT_ID,
             moq_override: null,
             fulfilment_type_override: opts.itemNatureOverride ?? null,
-            billing_mode: opts.billingMode ?? null,
           },
         ],
         error: null,
@@ -297,6 +311,9 @@ function happyCatalogueItemRpc(name: string): {
 beforeEach(() => {
   vi.clearAllMocks()
   createDraftInvoiceForOrder.mockResolvedValue({ status: 'skipped', reason: 'disabled' })
+  resolveLineBillingModes.mockResolvedValue(
+    new Map<string, 'invoice_on_dispatch' | 'prepaid'>(),
+  )
 })
 
 // Xero draft + Monday billing note now run in Next's after(); flush the
@@ -359,8 +376,12 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
   })
 
   it('posts the prepaid billing note to Monday when every stocked line is prepaid', async () => {
+    // Spec 3a: prepaid is the VARIANT's class now, not the catalogue item's.
+    resolveLineBillingModes.mockResolvedValue(
+      new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'prepaid']]),
+    )
     const { admin } = makeSupabaseStub({
-      selects: baseSelects({ productNature: 'mixed', billingMode: 'prepaid' }),
+      selects: baseSelects({ productNature: 'mixed' }),
       rpc: happyCatalogueItemRpc,
     })
 
@@ -377,11 +398,11 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
   })
 
   it('posts the not-paid billing note to Monday when a stocked line needs invoicing', async () => {
+    resolveLineBillingModes.mockResolvedValue(
+      new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'invoice_on_dispatch']]),
+    )
     const { admin } = makeSupabaseStub({
-      selects: baseSelects({
-        productNature: 'mixed',
-        billingMode: 'invoice_on_dispatch',
-      }),
+      selects: baseSelects({ productNature: 'mixed' }),
       rpc: happyCatalogueItemRpc,
     })
 
