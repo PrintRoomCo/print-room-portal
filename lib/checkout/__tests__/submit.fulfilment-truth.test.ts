@@ -34,6 +34,7 @@ import {
   MoqViolationError,
   type CheckoutInput,
 } from '../submit'
+import { postItemUpdate } from '@/lib/monday/updates'
 
 type AnyRow = Record<string, unknown>
 
@@ -210,6 +211,7 @@ function buildInput(
 function baseSelects(opts: {
   productNature: string
   itemNatureOverride?: string | null
+  billingMode?: 'invoice_on_dispatch' | 'prepaid' | null
 }): SelectMatcher[] {
   return [
     { table: 'user_organizations', response: { data: { role: 'org_admin' }, error: null } },
@@ -222,6 +224,7 @@ function baseSelects(opts: {
             source_product_id: PRODUCT_ID,
             moq_override: null,
             fulfilment_type_override: opts.itemNatureOverride ?? null,
+            billing_mode: opts.billingMode ?? null,
           },
         ],
         error: null,
@@ -282,6 +285,14 @@ function happyRpc(name: string): { data: unknown; error: { message: string } | n
   return { data: null, error: null }
 }
 
+function happyCatalogueItemRpc(name: string): {
+  data: unknown
+  error: { message: string } | null
+} {
+  if (name === 'effective_unit_price_for_item') return { data: 10, error: null }
+  return happyRpc(name)
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   createDraftInvoiceForOrder.mockResolvedValue({ status: 'skipped', reason: 'disabled' })
@@ -336,6 +347,43 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(result.order_id).toBe(ORDER_ID)
     // 'stocked' claim stands → all-stocked order → picking fee applies (was drawsStock=true).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
+  })
+
+  it('posts the prepaid billing note to Monday when every stocked line is prepaid', async () => {
+    const { admin } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed', billingMode: 'prepaid' }),
+      rpc: happyCatalogueItemRpc,
+    })
+
+    await submitCustomerOrder(
+      admin,
+      buildInput({ catalogueItemId: CAT_ITEM_ID }),
+    )
+
+    expect(postItemUpdate).toHaveBeenCalledWith(
+      'mky-1',
+      'Prepaid — no Xero invoice required (pick fee $30.00 only).',
+    )
+  })
+
+  it('posts the not-paid billing note to Monday when a stocked line needs invoicing', async () => {
+    const { admin } = makeSupabaseStub({
+      selects: baseSelects({
+        productNature: 'mixed',
+        billingMode: 'invoice_on_dispatch',
+      }),
+      rpc: happyCatalogueItemRpc,
+    })
+
+    await submitCustomerOrder(
+      admin,
+      buildInput({ catalogueItemId: CAT_ITEM_ID }),
+    )
+
+    expect(postItemUpdate).toHaveBeenCalledWith(
+      'mky-1',
+      'Not paid — draft quote raised, invoice before dispatch. Pick fee $30.00.',
+    )
   })
 
   it('catalogue-item fulfilment override beats the product base (override mixed on a made_to_order base)', async () => {

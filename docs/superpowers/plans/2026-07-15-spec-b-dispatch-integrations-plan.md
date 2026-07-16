@@ -679,7 +679,17 @@ Grounding notes that shape every task below:
 
 ---
 
-### Task: Staff-default invite — role choice + default_store_id (Thursday-critical, ships FIRST)
+### Task: Staff-default invite — role choice + default_store_id (Thursday-critical, ships FIRST) — SUPERSEDED DUPLICATE
+
+> **Reconciled 2026-07-16:** This block is an obsolete alternative to the completed
+> Thursday-critical API task above. Commit `e4c174e4` in `print-room-staff-portal`
+> shipped the same public contract with direct role/store validation, typed
+> `buyer_requires_default_store` errors, org-owned-store validation, membership
+> persistence, audit metadata, and route coverage. The follow-up merge `437eb377`
+> also shipped the role/store UI. No `resolve-membership.ts` helper is needed;
+> adding one now would only refactor an already-tested implementation. The steps
+> below are checked as reconciled/superseded, not as a claim that this unused
+> alternative module was created.
 
 **Files:**
 - Create `/Users/jamierogangeorge/Documents/print-room-staff-portal/src/app/api/b2b-accounts/[id]/invite/resolve-membership.ts`
@@ -691,7 +701,7 @@ Grounding notes that shape every task below:
 - Produces: `resolveInviteMembership(input: { role: string | undefined; defaultStoreId: string | null | undefined; validStoreIds: Set<string> }): { role: 'org_admin' | 'staff'; defaultStoreId: string | null } | { error: string }`
 - Consumes: existing `requireB2BAccountsStaffAccess(request)` and the org-scoped `stores` table (`stores.organization_id`, confirmed used in `members/bulk/route.ts:81`). Consumes the DB invariant `chk_buyer_has_default_store` (role<>'staff' OR default_store_id NOT NULL) — already in the shared DB.
 
-- [ ] **Step 1: Write the failing pure-helper test.** Create `resolve-membership.test.ts`:
+- [x] **Step 1: Write the failing pure-helper test.** Create `resolve-membership.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { resolveInviteMembership } from './resolve-membership'
@@ -721,10 +731,10 @@ Grounding notes that shape every task below:
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL** (module missing):
+- [x] **Step 2: Run it — expect FAIL** (module missing):
   `cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run src/app/api/b2b-accounts/[id]/invite/resolve-membership.test.ts`
   Expected: `Failed to resolve import "./resolve-membership"`.
-- [ ] **Step 3: Implement the pure helper.** Create `resolve-membership.ts`:
+- [x] **Step 3: Implement the pure helper.** Create `resolve-membership.ts`:
   ```ts
   export type InviteRole = 'org_admin' | 'staff'
 
@@ -754,8 +764,8 @@ Grounding notes that shape every task below:
     return { role: 'staff', defaultStoreId: storeId }
   }
   ```
-- [ ] **Step 4: Run it — expect PASS** (same command as Step 2). All 5 pass.
-- [ ] **Step 5: Wire the helper into the route — replace the role gate.** In `route.ts`, delete the current allow-list (line 9) and the role gate (lines 48-53):
+- [x] **Step 4: Run it — expect PASS** (same command as Step 2). All 5 pass.
+- [x] **Step 5: Wire the helper into the route — replace the role gate.** In `route.ts`, delete the current allow-list (line 9) and the role gate (lines 48-53):
   ```ts
   // DELETE line 9:
   const ALLOWED_ROLES = ['org_admin'] as const
@@ -779,7 +789,7 @@ Grounding notes that shape every task below:
     default_store_id?: string | null
   }
   ```
-- [ ] **Step 6: Resolve role+store AFTER the org existence check (after line 63).** The org lookup already runs at lines 55-63; insert immediately after it:
+- [x] **Step 6: Resolve role+store AFTER the org existence check (after line 63).** The org lookup already runs at lines 55-63; insert immediately after it:
   ```ts
   const { data: storeRows } = await auth.admin
     .from('stores')
@@ -798,7 +808,7 @@ Grounding notes that shape every task below:
   }
   ```
   Then delete the now-dead `const role = body.role ?? 'org_admin'` (line 40) — `membership.role` replaces it.
-- [ ] **Step 7: Persist default_store_id on the membership insert (lines 144-150).** Current:
+- [x] **Step 7: Persist default_store_id on the membership insert (lines 144-150).** Current:
   ```ts
   const { error: membershipError } = await auth.admin
     .from('user_organizations')
@@ -820,7 +830,7 @@ Grounding notes that shape every task below:
     })
   ```
   Also update the audit metadata (line 186) `role` -> `role: membership.role` and add `default_store_id: membership.defaultStoreId`.
-- [ ] **Step 8: Extend the route test's fake admin with a `stores` branch, add a staff-happy-path case.** In `route.test.ts` `makeAdmin` (before the `user_organizations` fallthrough at line 93), add:
+- [x] **Step 8: Extend the route test's fake admin with a `stores` branch, add a staff-happy-path case.** In `route.test.ts` `makeAdmin` (before the `user_organizations` fallthrough at line 93), add:
   ```ts
   if (table === 'stores') {
     return {
@@ -840,10 +850,10 @@ Grounding notes that shape every task below:
     expect(f.inserts[0]).toMatchObject({ role: 'staff', default_store_id: 'store-1' })
   })
   ```
-- [ ] **Step 9: Run the route test — expect PASS:**
+- [x] **Step 9: Run the route test — expect PASS:**
   `cd /Users/jamierogangeorge/Documents/print-room-staff-portal && npx vitest run "src/app/api/b2b-accounts/[id]/invite/route.test.ts"`
   All prior cases still pass (default path still inserts `role: 'org_admin'`), plus the new staff case.
-- [ ] **Step 10: Commit.** `git commit -am "feat: staff-default invite gains role choice + default_store_id"`
+- [x] **Step 10: Commit.** `git commit -am "feat: staff-default invite gains role choice + default_store_id"`
 
 ---
 
@@ -1299,7 +1309,7 @@ Grounding notes that shape every task below:
   }
   ```
   `pickFee` is the order picking fee computed in the Xero task (Decision gate: fee scope). Import `orderBillingNote` from `@/lib/monday/billing-note`. **⟳ Spec A's push-with-note flow DOES post a flat note (`stockOnHandMondayNote` at submit.ts ~1421-1435) — replace that call's body with `orderBillingNote(...)`; do not add a second update.** (The "~line 1354" anchor above has drifted to ~1421-1435.)
-- [ ] **Step 11: Run the submit test suite — expect PASS (no regressions):**
+- [x] **Step 11: Run the submit test suite — expect PASS (no regressions):**
   `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/submit.monday-push-failure.test.ts lib/checkout/order-billing.test.ts lib/monday/__tests__/billing-note.test.ts`
   Add a case to `submit.monday-push-failure.test.ts` (or a new `submit.billing-note.test.ts`) asserting `postItemUpdate` receives the "Prepaid …" body when all stocked lines are prepaid, and the "Not paid …" body otherwise.
 - [x] **Step 12: Commit.** `git commit -am "feat: order-level not-paid aggregation + conditional Monday billing note"`
@@ -1456,7 +1466,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
   - `getStarshipitCredentials(): { apiKey: string; subscriptionKey: string }` (throws if either env var is absent)
   - `evaluateStarshipitEligibility(input: StarshipitEligibilityInput): { eligible: boolean; reason: StarshipitEligibilityReason }` where `StarshipitEligibilityInput = { enabled: boolean; intent: 'customer' | 'inventory'; isTestOrg: boolean; hasDeliveryAddress: boolean; orderType?: string | null }` and `StarshipitEligibilityReason = 'ok' | 'disabled' | 'test_org' | 'inventory_intent' | 'non_delivery_type' | 'no_address'`.
 
-- [ ] **Step 1: Write the failing eligibility test.** Mirrors `lib/xero/__tests__/eligibility.test.ts`. Create `lib/starshipit/__tests__/eligibility.test.ts`:
+- [x] **Step 1: Write the failing eligibility test.** Mirrors `lib/xero/__tests__/eligibility.test.ts`. Create `lib/starshipit/__tests__/eligibility.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { evaluateStarshipitEligibility, type StarshipitEligibilityInput } from '../eligibility'
