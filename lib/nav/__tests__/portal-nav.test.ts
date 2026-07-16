@@ -6,6 +6,7 @@ function access(over: Partial<NavAccess> = {}): NavAccess {
     isCompanyUser: over.isCompanyUser ?? true,
     canUseLeavers: over.canUseLeavers ?? false,
     isOrgAdmin: over.isOrgAdmin ?? false,
+    canManageUsers: over.canManageUsers ?? false,
     tenantType: 'tenantType' in over ? over.tenantType! : 'franchise',
   }
 }
@@ -54,5 +55,17 @@ describe('Orders → Past orders rename (Item 10)', () => {
   it('labels the /my-collections item "Past orders"', () => {
     const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/my-collections')
     expect(item?.name).toBe('Past orders')
+  })
+})
+
+describe('getNavigationItems — Team gating (canManageUsers)', () => {
+  it('shows Team to a company org_admin who can manage users', () => {
+    expect(hrefs(access({ canManageUsers: true }))).toContain('/team')
+  })
+  it('hides Team from a member who cannot manage users', () => {
+    expect(hrefs(access({ canManageUsers: false }))).not.toContain('/team')
+  })
+  it('hides Team from an individual with no company', () => {
+    expect(hrefs(access({ isCompanyUser: false, canManageUsers: true }))).not.toContain('/team')
   })
 })
