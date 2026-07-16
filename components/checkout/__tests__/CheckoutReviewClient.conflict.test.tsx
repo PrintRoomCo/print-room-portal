@@ -206,6 +206,40 @@ describe('CheckoutReviewClient double-submit guard', () => {
   })
 })
 
+describe('CheckoutReviewClient placing overlay', () => {
+  it('shows the placing overlay while submitting and keeps it up through the redirect', async () => {
+    let resolveCheckout: (v: Response) => void = () => {}
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/checkout/review-images')) {
+        return Promise.resolve(okJson({ imagesByLineId: {} }))
+      }
+      if (url.includes('/api/checkout')) {
+        return new Promise<Response>((r) => {
+          resolveCheckout = r
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    })
+
+    const user = userEvent.setup()
+    renderReview()
+    await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
+
+    // Overlay visible while the POST is in flight.
+    expect(await screen.findByRole('status')).toHaveTextContent(/placing your order/i)
+
+    // Resolve the POST successfully → the client navigates (router.push) but must
+    // keep the overlay up so the emptied cart never flashes on the review page.
+    await act(async () => {
+      resolveCheckout(okJson({ order_id: 'o1', order_ref: 'R1' }))
+    })
+
+    expect(mocks.push).toHaveBeenCalledWith('/checkout/confirmation/o1')
+    expect(screen.getByRole('status')).toHaveTextContent(/placing your order/i)
+  })
+})
+
 describe('CheckoutReviewClient line display', () => {
   it('uses the catalogue front image when the cart line stored the product fallback', async () => {
     mocks.lines[0] = {

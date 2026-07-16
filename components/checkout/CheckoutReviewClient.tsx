@@ -9,6 +9,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
+import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
 import {
@@ -164,6 +165,7 @@ export function CheckoutReviewClient({
     inFlightRef.current = true
     setSubmitting(true)
     setBanner(null)
+    let navigating = false
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
@@ -316,17 +318,25 @@ export function CheckoutReviewClient({
 
       const result = (await res.json()) as CheckoutResponse
       clearCheckoutReviewState()
-      cart.clear()
+      // Keep `submitting` true so the overlay stays up through the redirect;
+      // navigate first, then clear the cart — the overlay masks the emptied
+      // review page so it never flashes.
+      navigating = true
       router.push(`/checkout/confirmation/${result.order_id}`)
+      cart.clear()
     } catch (error) {
       setBanner({ kind: 'error', msg: (error as Error).message })
     } finally {
-      setSubmitting(false)
-      inFlightRef.current = false
+      // On success we deliberately keep the overlay up (we're leaving this page);
+      // reset only on the failure / early-return paths.
+      if (!navigating) {
+        setSubmitting(false)
+        inFlightRef.current = false
+      }
     }
   }
 
-  if (cart.lines.length === 0) {
+  if (cart.lines.length === 0 && !submitting) {
     return (
       <div className="min-h-screen bg-[#FAFAFA]">
         <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
@@ -387,6 +397,7 @@ export function CheckoutReviewClient({
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
+      <CheckoutPlacingOverlay show={submitting} />
       <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
         <button
           type="button"
