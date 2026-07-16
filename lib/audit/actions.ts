@@ -2,6 +2,9 @@
 // `print-room-staff-portal/src/lib/audit/actions.ts`. Same string values so
 // cross-repo audit queries can group by `action`. Spec 2026-05-13 §G.4 + §M.R7.
 export const AUDIT_ACTIONS = {
+  // MIRROR staff src/lib/audit/actions.ts so member.* events group cross-repo.
+  MEMBER_INVITE: 'member.invite',
+
   ORDER_SUBMIT: 'order.submit',
   ORDER_TYPE_STAMP_FAILED: 'order.order_type_stamp_failed',
   ORDER_MONDAY_PUSH_FAILED: 'order.monday_push_failed',

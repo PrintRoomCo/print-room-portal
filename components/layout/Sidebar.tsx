@@ -34,6 +34,7 @@ export function Sidebar({ children, customer }: SidebarProps) {
     isCompanyUser: customer.isCompanyUser,
     canUseLeavers: customer.canUseLeavers,
     isOrgAdmin: customer.isOrgAdmin,
+    canManageUsers: customer.canManageUsers,
     tenantType: customer.tenantType,
   })
 
@@ -353,6 +354,20 @@ const EXTRA_ICONS: Record<NavIconKey, (p: { className?: string }) => React.React
   proofs: ProofsIcon,
   leavers: LeaversIcon,
   inventory: InventoryIcon,
+  team: TeamIcon,
+}
+
+function TeamIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.5-1.35"
+      />
+    </svg>
+  )
 }
 
 function InventoryIcon({ className }: { className?: string }) {

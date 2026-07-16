@@ -1500,12 +1500,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL (module missing).**
+- [x] **Step 2: Run it — expect FAIL (module missing).**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/eligibility.test.ts
   ```
   Expected: `Failed to resolve import "../eligibility"` (no such file yet).
-- [ ] **Step 3: Create `lib/starshipit/eligibility.ts` (minimal).**
+- [x] **Step 3: Create `lib/starshipit/eligibility.ts` (minimal).**
   ```ts
   // lib/starshipit/eligibility.ts
 
@@ -1556,7 +1556,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return { eligible: true, reason: 'ok' }
   }
   ```
-- [ ] **Step 4: Create `lib/starshipit/config.ts` (mirrors `isXeroEnabled` + studio `getHeaders` cred read).**
+- [x] **Step 4: Create `lib/starshipit/config.ts` (mirrors `isXeroEnabled` + studio `getHeaders` cred read).**
   ```ts
   // lib/starshipit/config.ts
 
@@ -1586,12 +1586,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return { apiKey, subscriptionKey }
   }
   ```
-- [ ] **Step 5: Run — expect PASS.**
+- [x] **Step 5: Run — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/eligibility.test.ts
   ```
   Expected: `7 passed`.
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
   ```
   git add lib/starshipit/config.ts lib/starshipit/eligibility.ts lib/starshipit/__tests__/eligibility.test.ts
   git commit -m "feat: Starshipit config flag + push eligibility (dark)"
@@ -1610,7 +1610,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
 - Produces: `createStarshipitOrder(args: { orderNumber: string; address: NormalizedShippingAddress; customerEmail: string | null }): Promise<string | null>` — returns the Starshipit order id string, or `null` on a handled non-2xx.
 - **Grounding note:** auth headers + `BASE_URL` are copied verbatim from the verified studio client. The `POST /api/orders` create-order payload/response shape is **not** verifiable in-repo (studio only calls `/api/orders/shipped` + `/api/track`) — see Decision gate uncertainty. Kept dark-by-default so it never runs in prod until confirmed.
 
-- [ ] **Step 1: Write the failing client test.** Create `lib/starshipit/__tests__/client.test.ts`:
+- [x] **Step 1: Write the failing client test.** Create `lib/starshipit/__tests__/client.test.ts`:
   ```ts
   import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
   import { createStarshipitOrder } from '../client'
@@ -1666,12 +1666,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     })
   })
   ```
-- [ ] **Step 2: Run — expect FAIL.**
+- [x] **Step 2: Run — expect FAIL.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/client.test.ts
   ```
   Expected: `Failed to resolve import "../client"`.
-- [ ] **Step 3: Create `lib/starshipit/client.ts`.**
+- [x] **Step 3: Create `lib/starshipit/client.ts`.**
   ```ts
   // lib/starshipit/client.ts
   import { getStarshipitCredentials } from './config'
@@ -1746,12 +1746,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return data.order?.order_id != null ? String(data.order.order_id) : null
   }
   ```
-- [ ] **Step 4: Run — expect PASS.**
+- [x] **Step 4: Run — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/client.test.ts
   ```
   Expected: `2 passed`.
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
   ```
   git add lib/starshipit/client.ts lib/starshipit/__tests__/client.test.ts
   git commit -m "feat: Starshipit create-order client (dark)"
@@ -1771,7 +1771,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
 - Consumes: `isStarshipitEnabled()`, `evaluateStarshipitEligibility()` (from config/eligibility task); `createStarshipitOrder()` (from client task); `normalizeShippingAddress()` from `lib/checkout/shipping-address.ts`; `recordAuditEvent(args, admin)` from `lib/audit/recordEvent.ts` (`args = { orgId, actorUserId, action, targetType, targetId, metadata }`). In submit.ts, consumes the in-scope locals `order_id`, `order_ref`, `quote_id`, `shippingAddress`, `input.intent`, `input.context.{organizationId,userId,email}`.
 - Produces: `pushOrderToStarshipit(admin: SupabaseClient, args: PushOrderToStarshipitArgs): Promise<{ status: 'pushed' | 'skipped'; reason: string; starshipitOrderId?: string }>`; `AUDIT_ACTIONS.ORDER_STARSHIPIT_PUSHED | ORDER_STARSHIPIT_SKIPPED | ORDER_STARSHIPIT_PUSH_FAILED`. Contract: **throws** on a Starshipit/DB error (caller wraps + audits); never rolls back the order — identical to `createDraftInvoiceForOrder`.
 
-- [ ] **Step 1: Add the audit actions.** In `lib/audit/actions.ts`, current lines 12-14:
+- [x] **Step 1: Add the audit actions.** In `lib/audit/actions.ts`, current lines 12-14:
   ```ts
     ORDER_XERO_DRAFTED: 'order.xero_drafted',
     ORDER_XERO_MANUAL_REVIEW: 'order.xero_manual_review',
@@ -1786,7 +1786,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     ORDER_STARSHIPIT_SKIPPED: 'order.starshipit_skipped',
     ORDER_STARSHIPIT_PUSH_FAILED: 'order.starshipit_push_failed',
   ```
-- [ ] **Step 2: Write the failing orchestrator test.** Create `lib/starshipit/__tests__/push-order.test.ts` (stubs the client + a minimal admin whose `recordAuditEvent` insert is a no-op):
+- [x] **Step 2: Write the failing orchestrator test.** Create `lib/starshipit/__tests__/push-order.test.ts` (stubs the client + a minimal admin whose `recordAuditEvent` insert is a no-op):
   ```ts
   import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
@@ -1838,12 +1838,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     })
   })
   ```
-- [ ] **Step 3: Run — expect FAIL.**
+- [x] **Step 3: Run — expect FAIL.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/push-order.test.ts
   ```
   Expected: `Failed to resolve import "../push-order"`.
-- [ ] **Step 4: Create `lib/starshipit/push-order.ts`.** Mirrors `createDraftInvoiceForOrder`'s throw-and-audit contract.
+- [x] **Step 4: Create `lib/starshipit/push-order.ts`.** Mirrors `createDraftInvoiceForOrder`'s throw-and-audit contract.
   ```ts
   // lib/starshipit/push-order.ts
   import type { SupabaseClient } from '@supabase/supabase-js'
@@ -1917,16 +1917,16 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return { status: 'pushed', reason: 'ok', starshipitOrderId }
   }
   ```
-- [ ] **Step 5: Run — expect PASS.**
+- [x] **Step 5: Run — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/push-order.test.ts
   ```
   Expected: `4 passed`.
-- [ ] **Step 6: Add the submit.ts import.** In `lib/checkout/submit.ts` after line 16 (`import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'`), add:
+- [x] **Step 6: Add the submit.ts import.** In `lib/checkout/submit.ts` after line 16 (`import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'`), add:
   ```ts
   import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
   ```
-- [ ] **Step 7: Insert step 5d into submit.ts.** The Xero block ends (current lines 1578-1583):
+- [x] **Step 7: Insert step 5d into submit.ts.** The Xero block ends (current lines 1578-1583):
   ```ts
       } catch {
         // truly best-effort
@@ -2002,12 +2002,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     // Fetch the email payload from quotes/quote_items for the confirmation email below.
   ```
   (`recordAuditEvent` and `AUDIT_ACTIONS` are already imported at the top of submit.ts — lines 6-7 — so no new import beyond step 6.)
-- [ ] **Step 8: Typecheck + full-suite the touched dirs — expect PASS.**
+- [x] **Step 8: Typecheck + full-suite the touched dirs — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx tsc --noEmit && npx vitest run lib/starshipit lib/checkout
   ```
   Expected: tsc clean; all Starshipit + existing checkout tests pass (the submit.ts change is additive + dark, so existing checkout tests are unaffected).
-- [ ] **Step 9: Commit.**
+- [x] **Step 9: Commit.**
   ```
   git add lib/audit/actions.ts lib/checkout/submit.ts lib/starshipit/push-order.ts lib/starshipit/__tests__/push-order.test.ts
   git commit -m "feat: push order to Starshipit at placement (dark, best-effort)"
@@ -2035,7 +2035,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
   - `POST /api/webhooks/starshipit`, `GET /api/webhooks/starshipit`
 - **Scope (supplement, per Decision gate):** the route **only** writes `tracking_info` + appends a `'tracking'` production_update + logs. It deliberately does **not** flip `job_trackers.status` or send `sendTrackerStatusEmail` — that is the "supersede vs supplement" decision, left as a gated follow-up.
 
-- [ ] **Step 1: Write the failing `verify-webhook` test.** Create `lib/starshipit/__tests__/verify-webhook.test.ts`:
+- [x] **Step 1: Write the failing `verify-webhook` test.** Create `lib/starshipit/__tests__/verify-webhook.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { verifyStarshipitWebhookSecret } from '../verify-webhook'
@@ -2055,7 +2055,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     })
   })
   ```
-- [ ] **Step 2: Write the failing `apply-webhook` test.** Create `lib/starshipit/__tests__/apply-webhook.test.ts`:
+- [x] **Step 2: Write the failing `apply-webhook` test.** Create `lib/starshipit/__tests__/apply-webhook.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { applyStarshipitWebhook } from '../apply-webhook'
@@ -2094,12 +2094,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     })
   })
   ```
-- [ ] **Step 3: Run both — expect FAIL.**
+- [x] **Step 3: Run both — expect FAIL.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/verify-webhook.test.ts lib/starshipit/__tests__/apply-webhook.test.ts
   ```
   Expected: `Failed to resolve import "../verify-webhook"` / `"../apply-webhook"`.
-- [ ] **Step 4: Create `lib/starshipit/status.ts`** (mirrors the studio `STATUS_MAP`, portal-scoped):
+- [x] **Step 4: Create `lib/starshipit/status.ts`** (mirrors the studio `STATUS_MAP`, portal-scoped):
   ```ts
   // lib/starshipit/status.ts
   // Mirrors print-room-studio/apps/job-tracker/lib/starshipit.js STATUS_MAP.
@@ -2120,7 +2120,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return (status && STATUS_MAP[status]) || { label: status || 'Unknown', category: 'unknown' }
   }
   ```
-- [ ] **Step 5: Create `lib/starshipit/verify-webhook.ts`.**
+- [x] **Step 5: Create `lib/starshipit/verify-webhook.ts`.**
   ```ts
   // lib/starshipit/verify-webhook.ts
 
@@ -2141,7 +2141,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return incoming === input.configuredSecret
   }
   ```
-- [ ] **Step 6: Create `lib/starshipit/apply-webhook.ts`** (pure merge; portal-typed; drops studio-only fields the portal `TrackingInfo` doesn't declare):
+- [x] **Step 6: Create `lib/starshipit/apply-webhook.ts`** (pure merge; portal-typed; drops studio-only fields the portal `TrackingInfo` doesn't declare):
   ```ts
   // lib/starshipit/apply-webhook.ts
   import { randomUUID } from 'node:crypto'
@@ -2207,12 +2207,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return { trackingInfo, productionUpdate }
   }
   ```
-- [ ] **Step 7: Run the two pure-helper tests — expect PASS.**
+- [x] **Step 7: Run the two pure-helper tests — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/starshipit/__tests__/verify-webhook.test.ts lib/starshipit/__tests__/apply-webhook.test.ts
   ```
   Expected: `6 passed`.
-- [ ] **Step 8: Create the migration.** `supabase/migrations/20260715000000_starshipit_webhook_logs.sql` (mirrors `print-room-studio/sql/010-create-starshipit-webhook-logs.sql`; `IF NOT EXISTS` because the shared Supabase project may already carry the table — **verify with `list_tables` before applying**, see Decision gate):
+- [x] **Step 8: Create the migration.** `supabase/migrations/20260715000000_starshipit_webhook_logs.sql` (mirrors `print-room-studio/sql/010-create-starshipit-webhook-logs.sql`; `IF NOT EXISTS` because the shared Supabase project may already carry the table — **verify with `list_tables` before applying**, see Decision gate):
   ```sql
   -- Portal-owned Starshipit webhook log. Mirrors the studio schema
   -- (print-room-studio/sql/010-create-starshipit-webhook-logs.sql). IF NOT EXISTS
@@ -2239,7 +2239,7 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     on public.starshipit_webhook_logs (tracking_number);
   ```
   **Decision gate step (do not auto-apply):** confirm whether the shared DB already has `starshipit_webhook_logs` (studio-created). If yes, this migration is a no-op record-keeper; if no, apply it. Either way it is safe (idempotent).
-- [ ] **Step 9: Create the webhook route.** `app/api/webhooks/starshipit/route.ts` — matches on the portal's own reference first (`order_number` == `job_reference`/`quote_number`/`tracker_token`), then a clean tracking-number match; writes via `applyStarshipitWebhook`; logs; revalidates the order-tracker cache tag. Uses the same `getSupabaseServer` + `cacheTags` + `revalidateTag` conventions as `app/api/webhooks/monday/tracker-status/route.ts`.
+- [x] **Step 9: Create the webhook route.** `app/api/webhooks/starshipit/route.ts` — matches on the portal's own reference first (`order_number` == `job_reference`/`quote_number`/`tracker_token`), then a clean tracking-number match; writes via `applyStarshipitWebhook`; logs; revalidates the order-tracker cache tag. Uses the same `getSupabaseServer` + `cacheTags` + `revalidateTag` conventions as `app/api/webhooks/monday/tracker-status/route.ts`.
   ```ts
   // app/api/webhooks/starshipit/route.ts
   import { NextResponse } from 'next/server'
@@ -2367,12 +2367,12 @@ Spec B, build-order 3. **Consumes from Spec A:** `orders.order_type` (delivery v
     return NextResponse.json({ message: 'Starshipit webhook endpoint' })
   }
   ```
-- [ ] **Step 10: Typecheck + full Starshipit suite — expect PASS.**
+- [x] **Step 10: Typecheck + full Starshipit suite — expect PASS.**
   ```
   cd /Users/jamierogangeorge/Documents/print-room-portal && npx tsc --noEmit && npx vitest run lib/starshipit
   ```
   Expected: tsc clean; all Starshipit tests pass. (No route-level test — the portal has no webhook-route tests today; all logic lives in the TDD'd pure helpers.)
-- [ ] **Step 11: Commit.**
+- [x] **Step 11: Commit.**
   ```
   git add lib/starshipit/status.ts lib/starshipit/apply-webhook.ts lib/starshipit/verify-webhook.ts lib/starshipit/__tests__/apply-webhook.test.ts lib/starshipit/__tests__/verify-webhook.test.ts app/api/webhooks/starshipit/route.ts supabase/migrations/20260715000000_starshipit_webhook_logs.sql
   git commit -m "feat: portal-owned Starshipit webhook writes tracking back onto the tracker (dark)"
@@ -2406,7 +2406,7 @@ Build order within the cluster: **partition (pure)** → **route orchestration**
 
 Steps:
 
-- [ ] **Step 1: Write the failing test.** Create `lib/checkout/__tests__/partition.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `lib/checkout/__tests__/partition.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { partitionCheckoutLines } from '../partition'
@@ -2460,9 +2460,9 @@ Steps:
   })
   ```
 
-- [ ] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/partition.test.ts` → fails to resolve `../partition` (`Failed to load url ../partition` / "Cannot find module").
+- [x] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/partition.test.ts` → fails to resolve `../partition` (`Failed to load url ../partition` / "Cannot find module").
 
-- [ ] **Step 3: Implement the partition.** Create `lib/checkout/partition.ts`:
+- [x] **Step 3: Implement the partition.** Create `lib/checkout/partition.ts`:
   ```ts
   import type { CheckoutLineInput } from '@/lib/checkout/submit'
 
@@ -2499,9 +2499,9 @@ Steps:
   ```
   (The `import type` is erased at build time — no runtime dependency on the heavy `submit.ts` module.)
 
-- [ ] **Step 4: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/partition.test.ts` → `Tests 6 passed`.
+- [x] **Step 4: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run lib/checkout/__tests__/partition.test.ts` → `Tests 6 passed`.
 
-- [ ] **Step 5: Commit.** `git add lib/checkout/partition.ts lib/checkout/__tests__/partition.test.ts && git commit -m "feat: partition checkout lines by fulfilment into purchase-order/stock-on-hand"`
+- [x] **Step 5: Commit.** `git add lib/checkout/partition.ts lib/checkout/__tests__/partition.test.ts && git commit -m "feat: partition checkout lines by fulfilment into purchase-order/stock-on-hand"`
 
 ---
 
@@ -2519,9 +2519,9 @@ Steps:
 
 Steps:
 
-- [ ] **Step 1: ⟳ RECONCILED (Spec A shipped 2026-07-15).** `orders.order_type` is derived **inside** submit by `classifyOrderType(input.lines)` and stamped by a post-RPC `.update()` — the `submit_b2b_order` RPC has **no** `p_order_type` param. Each homogeneous partition therefore self-classifies (all-stocked → `stock_on_hand`; all-made_to_order → `purchase_order`) and self-routes (Monday note + notification + Xero all read that derived local). **F1 threads NO order_type and does not modify submit.ts. Skip Steps 4 and 5 below.** This task only (a) splits the cart and (b) sets the `:po`/`:stock` idempotency suffix + `orders[]` response.
+- [x] **Step 1: ⟳ RECONCILED (Spec A shipped 2026-07-15).** `orders.order_type` is derived **inside** submit by `classifyOrderType(input.lines)` and stamped by a post-RPC `.update()` — the `submit_b2b_order` RPC has **no** `p_order_type` param. Each homogeneous partition therefore self-classifies (all-stocked → `stock_on_hand`; all-made_to_order → `purchase_order`) and self-routes (Monday note + notification + Xero all read that derived local). **F1 threads NO order_type and does not modify submit.ts. Skip Steps 4 and 5 below.** This task only (a) splits the cart and (b) sets the `:po`/`:stock` idempotency suffix + `orders[]` response.
 
-- [ ] **Step 2: Add the failing route test.** Create `app/api/checkout/__tests__/route.split.test.ts` (mirrors the existing `route.permission-denied.test.ts` mock scaffold):
+- [x] **Step 2: Add the failing route test.** Create `app/api/checkout/__tests__/route.split.test.ts` (mirrors the existing `route.permission-denied.test.ts` mock scaffold):
   ```ts
   import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -2601,13 +2601,13 @@ Steps:
   })
   ```
 
-- [ ] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` is called once (not twice), the `:po`/`:stock` idempotency suffixes are absent, and `res.json().orders` is undefined.
+- [x] **Step 3: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → fails: `submitCustomerOrder` is called once (not twice), the `:po`/`:stock` idempotency suffixes are absent, and `res.json().orders` is undefined.
 
-- [ ] **Step 4: ⟳ SKIP (reconciled).** Do **not** add `order_type` to `CheckoutInput`. Submit self-classifies each homogeneous partition via `classifyOrderType(input.lines)`, so an added field would be dead code.
+- [x] **Step 4: ⟳ SKIP (reconciled).** Do **not** add `order_type` to `CheckoutInput`. Submit self-classifies each homogeneous partition via `classifyOrderType(input.lines)`, so an added field would be dead code.
 
-- [ ] **Step 5: ⟳ SKIP (reconciled).** Do **not** add `p_order_type` to the `submit_b2b_order` RPC call — the shipped RPC has no such parameter (Spec A stamps `order_type` via a post-RPC `.update()`), so adding it would break the call. Submit already sets the correct `order_type` for each homogeneous partition.
+- [x] **Step 5: ⟳ SKIP (reconciled).** Do **not** add `p_order_type` to the `submit_b2b_order` RPC call — the shipped RPC has no such parameter (Spec A stamps `order_type` via a post-RPC `.update()`), so adding it would break the call. Submit already sets the correct `order_type` for each homogeneous partition.
 
-- [ ] **Step 6: Partition the route.** In `app/api/checkout/route.ts`, add the import (after line 15's `import { cacheTags }`):
+- [x] **Step 6: Partition the route.** In `app/api/checkout/route.ts`, add the import (after line 15's `import { cacheTags }`):
   ```ts
   import { partitionCheckoutLines, type CheckoutOrderType } from '@/lib/checkout/partition'
   ```
@@ -2667,11 +2667,11 @@ Steps:
   ```
   (The upstream ship-to / org / intent validation on `body.lines`, lines 49-95, is unchanged and still runs across the full cart; its all-or-nothing ship-to rule guarantees each partition stays homogeneous, so the two calls never trip `MixedShippingAddressError`.)
 
-- [ ] **Step 7: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → `Tests 2 passed`.
+- [x] **Step 7: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__/route.split.test.ts` → `Tests 2 passed`.
 
-- [ ] **Step 8: Regression-guard existing submit + route tests.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__ lib/checkout/__tests__` → the pre-existing `route.permission-denied` and `submit.*` suites still pass (the single-line cart in `VALID_BODY` now yields one `:po`-suffixed submit call; those tests assert status codes only, so they remain green).
+- [x] **Step 8: Regression-guard existing submit + route tests.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run app/api/checkout/__tests__ lib/checkout/__tests__` → the pre-existing `route.permission-denied` and `submit.*` suites still pass (the single-line cart in `VALID_BODY` now yields one `:po`-suffixed submit call; those tests assert status codes only, so they remain green).
 
-- [ ] **Step 9: Commit.** `git add app/api/checkout/route.ts lib/checkout/submit.ts app/api/checkout/__tests__/route.split.test.ts && git commit -m "feat: split mixed checkout into purchase-order + stock-on-hand orders"`
+- [x] **Step 9: Commit.** `git add app/api/checkout/route.ts lib/checkout/submit.ts app/api/checkout/__tests__/route.split.test.ts && git commit -m "feat: split mixed checkout into purchase-order + stock-on-hand orders"`
 
 > Note: the checkout client (`components/checkout/CheckoutReviewClient.tsx` line 265-268) reads `result.order_id` and redirects to `/checkout/confirmation/${result.order_id}` — the new top-level `order_id`/`order_ref` (primary order) keeps it working with NO client change. The extra `orders[]` is available for a future two-order confirmation surface (deferred — see uncertainties).
 
@@ -2689,7 +2689,7 @@ Steps:
 
 Steps:
 
-- [ ] **Step 1: Write the failing test.** Create `components/cart/__tests__/CartProvider.test.tsx`:
+- [x] **Step 1: Write the failing test.** Create `components/cart/__tests__/CartProvider.test.tsx`:
   ```tsx
   import { render, screen, fireEvent } from '@testing-library/react'
   import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -2748,9 +2748,9 @@ Steps:
   })
   ```
 
-- [ ] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartProvider.test.tsx` → fails: `cart.setFulfilmentType is not a function` (property missing on `CartApi`).
+- [x] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartProvider.test.tsx` → fails: `cart.setFulfilmentType is not a function` (property missing on `CartApi`).
 
-- [ ] **Step 3: Add the setter to the type + import.** In `CartProvider.tsx`, extend the types import (lines 11-16) to include the fulfilment type:
+- [x] **Step 3: Add the setter to the type + import.** In `CartProvider.tsx`, extend the types import (lines 11-16) to include the fulfilment type:
   ```ts
   import {
     lineSignature,
@@ -2767,7 +2767,7 @@ Steps:
     clear: () => void
   ```
 
-- [ ] **Step 4: Implement the setter.** In the `api` object, immediately after the existing `setShipTo` implementation (lines 237-242) and before `clear` (line 243), add — mirroring `setShipTo` exactly (no price recompute; fulfilmentType is not part of the tier aggregation key, so pooling is unaffected):
+- [x] **Step 4: Implement the setter.** In the `api` object, immediately after the existing `setShipTo` implementation (lines 237-242) and before `clear` (line 243), add — mirroring `setShipTo` exactly (no price recompute; fulfilmentType is not part of the tier aggregation key, so pooling is unaffected):
   ```ts
       setFulfilmentType: (lineId, fulfilmentType) =>
         setState((s) => ({
@@ -2777,9 +2777,9 @@ Steps:
         })),
   ```
 
-- [ ] **Step 5: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartProvider.test.tsx` → `Tests 1 passed`.
+- [x] **Step 5: Run it — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartProvider.test.tsx` → `Tests 1 passed`.
 
-- [ ] **Step 6: Commit.** `git add components/cart/CartProvider.tsx components/cart/__tests__/CartProvider.test.tsx && git commit -m "feat: add setFulfilmentType cart mutation"`
+- [x] **Step 6: Commit.** `git add components/cart/CartProvider.tsx components/cart/__tests__/CartProvider.test.tsx && git commit -m "feat: add setFulfilmentType cart mutation"`
 
 ---
 
@@ -2798,7 +2798,7 @@ Steps:
 
 Steps:
 
-- [ ] **Step 1: Write the failing selector test.** Create `components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` (separate from the pre-existing RED `CartTable.test.tsx`):
+- [x] **Step 1: Write the failing selector test.** Create `components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` (separate from the pre-existing RED `CartTable.test.tsx`):
   ```tsx
   import { render, screen, waitFor } from '@testing-library/react'
   import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -2875,9 +2875,9 @@ Steps:
   })
   ```
 
-- [ ] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` → fails: `Unable to find role "group"` (no selector rendered) and a TS error on the unknown `nature` / `isOrgAdmin` / `onFulfilmentChange` props.
+- [x] **Step 2: Run it — expect FAIL.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` → fails: `Unable to find role "group"` (no selector rendered) and a TS error on the unknown `nature` / `isOrgAdmin` / `onFulfilmentChange` props.
 
-- [ ] **Step 3: Add `nature` to CartLine.** In `lib/cart/types.ts`, add at the very top (before the first `export interface`):
+- [x] **Step 3: Add `nature` to CartLine.** In `lib/cart/types.ts`, add at the very top (before the first `export interface`):
   ```ts
   import type { FulfilmentType } from '@/lib/shop/fulfilment-mode'
   ```
@@ -2896,7 +2896,7 @@ Steps:
   ```
   (`fulfilment-mode.ts` imports nothing from `cart/types`, so this import is one-directional — no cycle.)
 
-- [ ] **Step 4: Populate `nature` at the PDP add sites.** In `ProductDetailClient.tsx`, `product.fulfilment_type` (a `FulfilmentType`, prop declared line 62) is in scope at every add site. Add `nature: product.fulfilment_type,` to each of the four line objects:
+- [x] **Step 4: Populate `nature` at the PDP add sites.** In `ProductDetailClient.tsx`, `product.fulfilment_type` (a `FulfilmentType`, prop declared line 62) is in scope at every add site. Add `nature: product.fulfilment_type,` to each of the four line objects:
   - `baseLine` (after `catalogueItemId: product.catalogueItemId,` line 907).
   - the variantless `cart.addLine({ ... })` object (near line 977).
   - `oneSizeBase` (after `catalogueItemId: product.catalogueItemId,` line 1013).
@@ -2922,7 +2922,7 @@ Steps:
   ```
   (Existing PDP tests assert `addLine` args with `expect.objectContaining(...)`, so an extra field does not break them.)
 
-- [ ] **Step 5: Add the selector to CartTable.** In `CartTable.tsx`, extend the imports (after the `@/lib/cart/types` import block, lines 5-10):
+- [x] **Step 5: Add the selector to CartTable.** In `CartTable.tsx`, extend the imports (after the `@/lib/cart/types` import block, lines 5-10):
   ```ts
   import { pillsFor, PILL_LABELS } from '@/lib/shop/fulfilment-mode'
   ```
@@ -2987,9 +2987,9 @@ Steps:
   ```
   (`PILL_LABELS.reorder` = "Purchase order"; `PILL_LABELS.from_inventory` = "Stock on hand".)
 
-- [ ] **Step 6: Run the selector test — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` → `Tests 4 passed`.
+- [x] **Step 6: Run the selector test — expect PASS.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__/CartTable.fulfilment-selector.test.tsx` → `Tests 4 passed`.
 
-- [ ] **Step 7: Wire it through CartDrawer.** In `CartDrawer.tsx`, add the company hook import (after line 9's `useCurrency` import):
+- [x] **Step 7: Wire it through CartDrawer.** In `CartDrawer.tsx`, add the company hook import (after line 9's `useCurrency` import):
   ```ts
   import { useCompany } from '@/contexts/CompanyContext'
   ```
@@ -3011,9 +3011,9 @@ Steps:
             />
   ```
 
-- [ ] **Step 8: Typecheck the cart surface + re-run the cart suite.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__ components/shop/__tests__` → the new selector + CartProvider suites pass and the existing PDP `addLine` tests stay green (extra `nature` field is objectContaining-safe). The pre-existing RED `CartTable.test.tsx` "produced before dispatch" case remains failing — it is unrelated to F1 and out of scope (see anchorCorrections); do not "fix" it as part of this cluster.
+- [x] **Step 8: Typecheck the cart surface + re-run the cart suite.** `cd /Users/jamierogangeorge/Documents/print-room-portal && npx vitest run components/cart/__tests__ components/shop/__tests__` → the new selector + CartProvider suites pass and the existing PDP `addLine` tests stay green (extra `nature` field is objectContaining-safe). The pre-existing RED `CartTable.test.tsx` "produced before dispatch" case remains failing — it is unrelated to F1 and out of scope (see anchorCorrections); do not "fix" it as part of this cluster.
 
-- [ ] **Step 9: Commit.** `git add lib/cart/types.ts components/shop/ProductDetailClient.tsx components/cart/CartTable.tsx components/cart/CartDrawer.tsx components/cart/__tests__/CartTable.fulfilment-selector.test.tsx && git commit -m "feat: per-line order-type selector in cart for mixed-nature lines"`
+- [x] **Step 9: Commit.** `git add lib/cart/types.ts components/shop/ProductDetailClient.tsx components/cart/CartTable.tsx components/cart/CartDrawer.tsx components/cart/__tests__/CartTable.fulfilment-selector.test.tsx && git commit -m "feat: per-line order-type selector in cart for mixed-nature lines"`
 
 ---
 
@@ -3039,7 +3039,7 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
 - Consumes: nothing.
 - Produces: `INVITABLE_ROLES: ReadonlySet<'staff'>`; `isInvitableRole(role: string): role is 'staff'`.
 
-- [ ] **Step 1: Write the failing guard test.** Create `lib/team/__tests__/invite-guard.test.ts`:
+- [x] **Step 1: Write the failing guard test.** Create `lib/team/__tests__/invite-guard.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { INVITABLE_ROLES, isInvitableRole } from '../invite-guard'
@@ -3058,8 +3058,8 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → fails with `Failed to resolve import "../invite-guard"` (module does not exist yet).
-- [ ] **Step 3: Implement the guard.** Create `lib/team/invite-guard.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → fails with `Failed to resolve import "../invite-guard"` (module does not exist yet).
+- [x] **Step 3: Implement the guard.** Create `lib/team/invite-guard.ts`:
   ```ts
   /**
    * Roles a customer-portal org_admin may CREATE via self-serve invite.
@@ -3072,8 +3072,8 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
     return INVITABLE_ROLES.has(role as 'staff')
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → 3 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: staff-only invite-role guard for portal self-serve invites"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → 3 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: staff-only invite-role guard for portal self-serve invites"`
 
 ---
 
@@ -3089,7 +3089,7 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
 - Consumes: nothing.
 - Produces: `AUDIT_ACTIONS.MEMBER_INVITE === 'member.invite'`.
 
-- [ ] **Step 1: Write the failing test.** Create `lib/audit/__tests__/actions.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `lib/audit/__tests__/actions.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { AUDIT_ACTIONS } from '../actions'
@@ -3100,8 +3100,8 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/audit/__tests__/actions.test.ts` → fails: `expected undefined to be 'member.invite'`.
-- [ ] **Step 3: Add the action.** In `lib/audit/actions.ts`, the object currently opens:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/audit/__tests__/actions.test.ts` → fails: `expected undefined to be 'member.invite'`.
+- [x] **Step 3: Add the action.** In `lib/audit/actions.ts`, the object currently opens:
   ```ts
   export const AUDIT_ACTIONS = {
     ORDER_SUBMIT: 'order.submit',
@@ -3114,8 +3114,8 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
 
     ORDER_SUBMIT: 'order.submit',
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/audit/__tests__/actions.test.ts` → 1 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: add MEMBER_INVITE audit action to portal"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/audit/__tests__/actions.test.ts` → 1 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: add MEMBER_INVITE audit action to portal"`
 
 ---
 
@@ -3134,7 +3134,7 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
   - `recordAuditEvent(args)` from `@/lib/audit/recordEvent`; `AUDIT_ACTIONS.MEMBER_INVITE` from `@/lib/audit/actions`.
 - Produces: `POST` handler; request `{ email, first_name, last_name?, default_store_id, ordering_permission? }` → 201 `{ user_id, email_sent: true }`.
 
-- [ ] **Step 1: Write the failing guard tests.** These hit the early returns (before any Supabase call), so no DB stub is needed. Create `app/api/team/invite/__tests__/route.test.ts`:
+- [x] **Step 1: Write the failing guard tests.** These hit the early returns (before any Supabase call), so no DB stub is needed. Create `app/api/team/invite/__tests__/route.test.ts`:
   ```ts
   import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -3183,8 +3183,8 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → fails with `Failed to resolve import "../route"`.
-- [ ] **Step 3: Implement the route.** Create `app/api/team/invite/route.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → fails with `Failed to resolve import "../route"`.
+- [x] **Step 3: Implement the route.** Create `app/api/team/invite/route.ts`:
   ```ts
   import { NextResponse } from 'next/server'
   import { requireB2BCustomerApi } from '@/lib/checkout/server'
@@ -3383,8 +3383,8 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
     return NextResponse.json({ user_id: userId, email_sent: true }, { status: 201 })
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → 3 passing (all three assert early-return status codes; none reaches Supabase).
-- [ ] **Step 5: Commit.** `git commit -am "feat: /api/team/invite — org_admin self-serve staff invite (staff-only guard)"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → 3 passing (all three assert early-return status codes; none reaches Supabase).
+- [x] **Step 5: Commit.** `git commit -am "feat: /api/team/invite — org_admin self-serve staff invite (staff-only guard)"`
 
 > **Decision gate — ordering_permission for studio tenants.** The route accepts any of stock_only/reorder_only/both and defaults 'stock_only'. Studios keep no stock, so a stock_only studio staff can order nothing (the staff EditRoleDialog scopes this via `orderingPermissionOptions(tenantType)`). Before wiring the UI control, decide whether to tenant-scope the option set / default studios to reorder_only, or leave it open. Do NOT silently pick one.
 
@@ -3402,7 +3402,7 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
 - Consumes: nothing.
 - Produces: `TeamMemberRow`, `TeamMembership`, `TeamProfile`, `buildTeamMemberRow(membership: TeamMembership, profile: TeamProfile | undefined): TeamMemberRow`. `status` = `'active'` when `profile.last_sign_in_at` is set, else `'pending'`.
 
-- [ ] **Step 1: Write the failing test.** Create `lib/team/__tests__/members.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `lib/team/__tests__/members.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { buildTeamMemberRow } from '../members'
@@ -3435,8 +3435,8 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/members.test.ts` → fails: `Failed to resolve import "../members"`.
-- [ ] **Step 3: Implement the builder.** Create `lib/team/members.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/members.test.ts` → fails: `Failed to resolve import "../members"`.
+- [x] **Step 3: Implement the builder.** Create `lib/team/members.ts`:
   ```ts
   // Portal-local member-row builder for the /team page (org_admin self-serve).
   // Pure + DB-free so it is unit-testable. profiles.last_sign_in_at is mirrored
@@ -3488,8 +3488,8 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
     }
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/members.test.ts` → 3 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: portal team member-row builder"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/members.test.ts` → 3 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: portal team member-row builder"`
 
 ---
 
@@ -3506,7 +3506,7 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
 - Consumes: `B2BCustomerAccess.canManageUsers` (already set = `isOrgAdmin` in lib/company.ts buildAccess line 229).
 - Produces: `NavAccess` gains required `canManageUsers: boolean`; `PortalNavItem` gains optional `requiresManageUsers?: boolean`; `NavIconKey` gains `'team'`; a nav item at `/team`.
 
-- [ ] **Step 1: Write the failing nav tests.** In `lib/nav/__tests__/portal-nav.test.ts`, update the helper (lines 4-11) to include the new field:
+- [x] **Step 1: Write the failing nav tests.** In `lib/nav/__tests__/portal-nav.test.ts`, update the helper (lines 4-11) to include the new field:
   ```ts
   function access(over: Partial<NavAccess> = {}): NavAccess {
     return {
@@ -3532,8 +3532,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → the helper now references `canManageUsers` on `NavAccess` (compile error / type failure) and the Team assertions fail (no `/team` item yet).
-- [ ] **Step 3: Extend the nav model.** In `lib/nav/portal-nav.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → the helper now references `canManageUsers` on `NavAccess` (compile error / type failure) and the Team assertions fail (no `/team` item yet).
+- [x] **Step 3: Extend the nav model.** In `lib/nav/portal-nav.ts`:
   - Add `'team'` to `NavIconKey` (lines 3-9):
     ```ts
     export type NavIconKey =
@@ -3592,8 +3592,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
         if (item.requiresOrgAdmin && !access.isOrgAdmin) return false
         if (item.requiresManageUsers && !access.canManageUsers) return false
     ```
-- [ ] **Step 4: Run the nav test — expect PASS.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → all passing (existing Inventory tests still green; the helper's `canManageUsers` defaults false so Team never leaks into them).
-- [ ] **Step 5: Wire Sidebar to pass the flag + register the icon.** In `components/layout/Sidebar.tsx`:
+- [x] **Step 4: Run the nav test — expect PASS.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → all passing (existing Inventory tests still green; the helper's `canManageUsers` defaults false so Team never leaks into them).
+- [x] **Step 5: Wire Sidebar to pass the flag + register the icon.** In `components/layout/Sidebar.tsx`:
   - Update the `getNavigationItems` call (lines 33-38):
     ```ts
     const navigation = getNavigationItems({
@@ -3636,8 +3636,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
       )
     }
     ```
-- [ ] **Step 6: Verify the Sidebar test still passes.** `npx vitest run components/layout/__tests__/Sidebar.test.tsx` → still green (the fixture already sets `canManageUsers`; Team is a classic Link, not an `a[data-row]` SVG row, so the primary-row assertions are unaffected).
-- [ ] **Step 7: Commit.** `git commit -am "feat: consume canManageUsers to gate a Team nav link"`
+- [x] **Step 6: Verify the Sidebar test still passes.** `npx vitest run components/layout/__tests__/Sidebar.test.tsx` → still green (the fixture already sets `canManageUsers`; Team is a classic Link, not an `a[data-row]` SVG row, so the primary-row assertions are unaffected).
+- [x] **Step 7: Commit.** `git commit -am "feat: consume canManageUsers to gate a Team nav link"`
 
 ---
 
@@ -3654,7 +3654,7 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - Consumes: `getCompanyAccess(userId, email?)` from `@/lib/company` (`access.canManageUsers`, `access.companyId`, `access.companyName`); `getSupabaseServerComponent()` / `getSupabaseServer()`; `buildTeamMemberRow` + `TeamProfile` from `@/lib/team/members`; the `POST /api/team/invite` contract.
 - Produces: `TeamClient(props: { organizationName: string; initialMembers: TeamMemberRow[]; stores: { id: string; name: string | null }[] })`.
 
-- [ ] **Step 1: Write the failing client test.** The portal already uses `@testing-library/react` (see `components/layout/__tests__/Sidebar.test.tsx`). Create `app/(portal)/team/__tests__/TeamClient.test.tsx`:
+- [x] **Step 1: Write the failing client test.** The portal already uses `@testing-library/react` (see `components/layout/__tests__/Sidebar.test.tsx`). Create `app/(portal)/team/__tests__/TeamClient.test.tsx`:
   ```tsx
   import { render, screen } from '@testing-library/react'
   import { describe, it, expect, vi } from 'vitest'
@@ -3681,8 +3681,8 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → fails: `Failed to resolve import "../TeamClient"`.
-- [ ] **Step 3: Implement the client.** Create `app/(portal)/team/TeamClient.tsx`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → fails: `Failed to resolve import "../TeamClient"`.
+- [x] **Step 3: Implement the client.** Create `app/(portal)/team/TeamClient.tsx`:
   ```tsx
   'use client'
 
@@ -3881,8 +3881,8 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     )
   }
   ```
-- [ ] **Step 4: Run the client test — expect PASS.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → 2 passing.
-- [ ] **Step 5: Implement the server page.** Create `app/(portal)/team/page.tsx` (mirrors the org_admin server-guard pattern in `app/(portal)/inventory/page.tsx`):
+- [x] **Step 4: Run the client test — expect PASS.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → 2 passing.
+- [x] **Step 5: Implement the server page.** Create `app/(portal)/team/page.tsx` (mirrors the org_admin server-guard pattern in `app/(portal)/inventory/page.tsx`):
   ```tsx
   import type { Metadata } from 'next'
   import { redirect } from 'next/navigation'
@@ -3943,9 +3943,9 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     )
   }
   ```
-- [ ] **Step 6: Type-check the new surface.** `npx tsc --noEmit` (from the portal root) → no new errors. Confirms the page's Supabase row shapes line up with `TeamMembership` / `TeamProfile`.
-- [ ] **Step 7: Manual smoke (real invite).** Sign in as a franchise org_admin with at least one store. Visit `/team` → invite **jamie@theprint-room.co.nz** (never jon@) with a default store selected. Confirm: 201 + "Invite sent"; a `user_organizations` row with `role='staff'`, the chosen `default_store_id`, `invited_at` stamped; an `audit_events` row `action='member.invite'`; and one branded sign-in email lands at jamie@. Then confirm a **staff** user gets 403 from `/team` (redirect to /account) and cannot POST `/api/team/invite`.
-- [ ] **Step 8: Commit.** `git commit -am "feat: /team self-serve staff invites for org admins"`
+- [x] **Step 6: Type-check the new surface.** `npx tsc --noEmit` (from the portal root) → no new errors. Confirms the page's Supabase row shapes line up with `TeamMembership` / `TeamProfile`.
+- [x] **Step 7: Manual smoke (real invite).** Sign in as a franchise org_admin with at least one store. Visit `/team` → invite **jamie@theprint-room.co.nz** (never jon@) with a default store selected. Confirm: 201 + "Invite sent"; a `user_organizations` row with `role='staff'`, the chosen `default_store_id`, `invited_at` stamped; an `audit_events` row `action='member.invite'`; and one branded sign-in email lands at jamie@. Then confirm a **staff** user gets 403 from `/team` (redirect to /account) and cannot POST `/api/team/invite`.
+- [x] **Step 8: Commit.** `git commit -am "feat: /team self-serve staff invites for org admins"`
 
 > **Decision gate — ship posture.** Per the cluster brief the full self-serve UI (F2) stays deferred behind the Thursday slice. If shipping dark, keep the Team nav item removable by leaving `requiresManageUsers` off the item (the route + page stay reachable by URL for QA but no nav entry appears). Confirm whether F2 ships with the nav link visible or dark before merge.
 

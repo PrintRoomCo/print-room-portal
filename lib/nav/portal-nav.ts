@@ -7,6 +7,7 @@ export type NavIconKey =
   | 'proofs'
   | 'leavers'
   | 'inventory'
+  | 'team'
 
 export interface PortalNavItem {
   name: string
@@ -15,6 +16,8 @@ export interface PortalNavItem {
   requiresCompany: boolean
   requiresLeavers: boolean
   requiresOrgAdmin: boolean
+  /** F2 — gates the Team link on B2BCustomerAccess.canManageUsers. Optional so existing items need no edit. */
+  requiresManageUsers?: boolean
   requiredTenantTypes: ReadonlyArray<TenantType> | null
 }
 
@@ -23,6 +26,7 @@ export interface NavAccess {
   isCompanyUser: boolean
   canUseLeavers: boolean
   isOrgAdmin: boolean
+  canManageUsers: boolean
   tenantType: TenantType | null
 }
 
@@ -88,6 +92,16 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiresOrgAdmin: false,
     requiredTenantTypes: null,
   },
+  {
+    name: 'Team',
+    href: '/team',
+    iconKey: 'team',
+    requiresCompany: true,
+    requiresLeavers: false,
+    requiresOrgAdmin: false,
+    requiresManageUsers: true,
+    requiredTenantTypes: null,
+  },
 ]
 
 export function getNavigationItems(access: NavAccess): PortalNavItem[] {
@@ -95,6 +109,7 @@ export function getNavigationItems(access: NavAccess): PortalNavItem[] {
     if (item.requiresCompany && !access.isCompanyUser) return false
     if (item.requiresLeavers && !access.canUseLeavers) return false
     if (item.requiresOrgAdmin && !access.isOrgAdmin) return false
+    if (item.requiresManageUsers && !access.canManageUsers) return false
     if (item.requiredTenantTypes) {
       if (!access.tenantType) return false
       if (!item.requiredTenantTypes.includes(access.tenantType)) return false
