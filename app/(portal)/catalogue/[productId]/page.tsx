@@ -12,7 +12,7 @@ import { cleanDescription } from '@/lib/shop/clean-description'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import { effectiveFulfilment } from '@/lib/shop/fulfilment-mode'
 import { normalizeCatalogueImageView } from '@/lib/shop/catalogue-image-view'
-import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
+import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
 import { resolveColourMatrix, type MatrixVariant } from '@/lib/shop/colour-matrix'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 import {
@@ -195,6 +195,7 @@ const loadProductDetailPageData = cache(async (
     { data: imageRows },
     { data: catalogueColorRows },
     { data: catalogueImageRows },
+    { data: hiddenViewRows },
     decorations,
     manualDecorationSeed,
   ] = await Promise.all([
@@ -228,6 +229,9 @@ const loadProductDetailPageData = cache(async (
       .eq('catalogue_item_id', catItem.id)
       .eq('is_published', true)
       .order('position', { ascending: true }),
+    admin.from('b2b_catalogue_item_hidden_views')
+      .select('color_swatch_id, view')
+      .eq('catalogue_item_id', catItem.id),
     loadCatalogueItemDecorations(admin, catItem.id),
     manualDecorationSeedQuery,
   ])
@@ -404,10 +408,21 @@ const loadProductDetailPageData = cache(async (
     moq_override: number | null
     fulfilment_type_override: FulfilmentType | null
   } | null
+  // Views staff hid from the customer PDP (b2b_catalogue_item_hidden_views),
+  // scoped per (catalogue item, colour). Threaded to the client so the gallery
+  // drops them per selected colour; also applied to the server-side fallback.
+  const hiddenViewRowsClean = ((hiddenViewRows ?? []) as Array<{
+    color_swatch_id: string | null
+    view: string | null
+  }>)
+    .filter((r) => r.color_swatch_id && r.view)
+    .map((r) => ({ color_swatch_id: r.color_swatch_id, view: String(r.view).toLowerCase() }))
+
   const catalogueFallbackImageUrl = pickPreferredGalleryImageUrl(
     images,
     colourOptions[0]?.id ?? null,
     productRow.image_url,
+    hiddenViewSetForColour(hiddenViewRowsClean, colourOptions[0]?.id ?? null),
   )
 
   const displayProduct = {
@@ -470,6 +485,7 @@ const loadProductDetailPageData = cache(async (
       customerRole: context.role,
       orderingPermission: context.orderingPermission,
       images,
+      hiddenViewRows: hiddenViewRowsClean,
       colourOptions,
       decorations,
       effectiveMoq,

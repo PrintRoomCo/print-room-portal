@@ -18,7 +18,7 @@ import {
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
 import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { pickPreferredGalleryImageUrl } from '@/lib/shop/catalogue-images'
+import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
 import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
 import {
   PILL_LABELS,
@@ -116,6 +116,12 @@ interface Props {
    */
   orderingPermission: MemberPermission
   images: GalleryImage[]
+  /**
+   * Views staff hid from the customer PDP (b2b_catalogue_item_hidden_views),
+   * scoped per (catalogue item, colour). Dropped from the gallery and cart
+   * thumbnails for the matching colour. `view` is the canonical token.
+   */
+  hiddenViewRows?: Array<{ color_swatch_id: string | null; view: string | null }>
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
@@ -153,6 +159,7 @@ export function ProductDetailClient({
   customerRole,
   orderingPermission,
   images,
+  hiddenViewRows = [],
   colourOptions = [],
   decorations,
   effectiveMoq,
@@ -211,6 +218,12 @@ export function ProductDetailClient({
     for (const n of Object.values(variantlessQtyBySize)) sum += n
     return sum
   }, [variantlessQtyBySize])
+
+  // Canonical views staff hid from the customer PDP for the active colour.
+  const hiddenViews = useMemo(
+    () => hiddenViewSetForColour(hiddenViewRows, colorSwatchId),
+    [hiddenViewRows, colorSwatchId],
+  )
 
   const variantsForSelectedColour = useMemo(
     () => variants.filter((v) => v.color_swatch_id === colorSwatchId),
@@ -881,7 +894,12 @@ export function ProductDetailClient({
         brackets: isManualPricing ? undefined : buildDecorationBrackets(d.linkId),
       }))
     const cartImageForSwatch = (swatchId: string | null): string | null =>
-      pickPreferredGalleryImageUrl(images, swatchId, product.image_url)
+      pickPreferredGalleryImageUrl(
+        images,
+        swatchId,
+        product.image_url,
+        hiddenViewSetForColour(hiddenViewRows, swatchId),
+      )
     const cartLineBrackets: CartLineBracket[] = brackets.map((b) => ({
       minQty: b.min_quantity,
       maxQty: b.max_quantity,
@@ -1172,6 +1190,7 @@ export function ProductDetailClient({
                 selectedColorSwatchId={colorSwatchId}
                 overlays={galleryOverlays}
                 decorationImages={galleryDecorationImages}
+                hiddenViews={hiddenViews}
               />
             </div>
           </div>
@@ -1389,13 +1408,19 @@ export function ProductDetailClient({
           )}
           {multiSize && orderLines.length > 0 && (
             <section className="rounded-[24px] bg-white p-6">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                Your order
+              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                Your Order
               </p>
               <ul className="mt-4 divide-y divide-gray-100 text-sm">
                 {orderLines.map((line) => {
                   const label =
                     [line.colourLabel, line.sizeLabel].filter(Boolean).join(' / ') || '—'
+                  // "to be made" is production language — meaningless when the
+                  // order is drawn from existing stock (Stock-on-hand). Mirror the
+                  // size-grid gate above so the summary stays consistent: hidden in
+                  // pure inventory mode, shown for reorder/bulk and the
+                  // From-inventory overflow that genuinely spills into a run.
+                  const showToBeMade = !isInventoryMode || isInventoryOverflowScope
                   return (
                     <li
                       key={cellKey(line.variantId, line.sizeId)}
@@ -1404,7 +1429,7 @@ export function ProductDetailClient({
                       <span className="text-gray-800">{label}</span>
                       <span className="text-right text-gray-700">
                         <span className="font-medium tabular-nums">{line.qty}</span>
-                        {line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
+                        {showToBeMade && line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
                           <span className="ml-1 text-xs text-gray-500">
                             ({line.inStock} in stock,{' '}
                             <span className="text-amber-700">
@@ -1413,12 +1438,12 @@ export function ProductDetailClient({
                             )
                           </span>
                         )}
-                        {line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
+                        {showToBeMade && line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
                           <span className="ml-1 text-xs text-amber-700">
                             ({line.toBeMade} to be made)
                           </span>
                         )}
-                        {!line.tracked && (
+                        {showToBeMade && !line.tracked && (
                           <span className="ml-1 text-xs text-amber-700">
                             ({line.toBeMade} to be made)
                           </span>

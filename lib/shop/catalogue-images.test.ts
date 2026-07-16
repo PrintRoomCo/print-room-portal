@@ -5,6 +5,7 @@ import {
   pickCatalogueItemThumbnail,
   pickPreferredGalleryImageUrl,
   resolveGalleryImagesForColour,
+  hiddenViewSetForColour,
   type CatalogueAwareGalleryImage,
   type CatalogueItemImageRow,
 } from './catalogue-images'
@@ -28,9 +29,55 @@ const baseImages: CatalogueAwareGalleryImage[] = [
   },
 ]
 
+describe('hiddenViewSetForColour', () => {
+  const rows = [
+    { color_swatch_id: 'blue', view: 'back' },
+    { color_swatch_id: 'blue', view: 'right' },
+    { color_swatch_id: 'red', view: 'left' },
+  ]
+
+  it('returns only the selected colour’s hidden views', () => {
+    expect(hiddenViewSetForColour(rows, 'blue')).toEqual(new Set(['back', 'right']))
+  })
+
+  it('is empty when no colour is selected', () => {
+    expect(hiddenViewSetForColour(rows, null).size).toBe(0)
+  })
+
+  it('lowercases stored views and ignores blanks', () => {
+    expect(
+      hiddenViewSetForColour(
+        [
+          { color_swatch_id: 'blue', view: 'BACK' },
+          { color_swatch_id: 'blue', view: null },
+        ],
+        'blue',
+      ),
+    ).toEqual(new Set(['back']))
+  })
+})
+
 describe('resolveGalleryImagesForColour', () => {
   it('keeps master fallback images when no catalogue images exist', () => {
     expect(resolveGalleryImagesForColour(baseImages, 'blue')).toEqual(baseImages)
+  })
+
+  it('drops a staff-hidden master view (e.g. back) for the selected colour', () => {
+    const resolved = resolveGalleryImagesForColour(
+      baseImages,
+      'blue',
+      hiddenViewSetForColour([{ color_swatch_id: 'blue', view: 'back' }], 'blue'),
+    )
+    expect(resolved.map((i) => i.id)).toEqual(['master-front'])
+  })
+
+  it('hiding a view for one colour leaves it visible for another', () => {
+    const hiddenForRed = hiddenViewSetForColour(
+      [{ color_swatch_id: 'red', view: 'back' }],
+      'blue',
+    )
+    // Selected colour is blue; the hidden row targets red → back stays.
+    expect(resolveGalleryImagesForColour(baseImages, 'blue', hiddenForRed)).toEqual(baseImages)
   })
 
   it('filters master base views once a colour-specific catalogue image exists', () => {

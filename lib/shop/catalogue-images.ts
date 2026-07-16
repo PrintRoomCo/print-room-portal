@@ -170,9 +170,30 @@ function isStrictFrontView(view: string | null, imageUrl: string | null): boolea
   return normalizeCatalogueImageView(view, imageUrl) === 'front'
 }
 
+/**
+ * Views staff have hidden from the customer PDP for the selected colour, built
+ * from b2b_catalogue_item_hidden_views rows. Stored `view` is the canonical
+ * token, so it compares directly against the gallery's per-view key. Rows are
+ * scoped per (catalogue item, colour); only those matching the selected colour
+ * apply. With no colour selected nothing is hidden.
+ */
+export function hiddenViewSetForColour(
+  rows: Array<{ color_swatch_id: string | null; view: string | null }>,
+  selectedColorSwatchId: string | null,
+): Set<string> {
+  const out = new Set<string>()
+  if (!selectedColorSwatchId) return out
+  for (const r of rows) {
+    if (!r.view) continue
+    if (r.color_swatch_id === selectedColorSwatchId) out.add(r.view.toLowerCase())
+  }
+  return out
+}
+
 export function resolveGalleryImagesForColour(
   images: CatalogueAwareGalleryImage[],
   selectedColorSwatchId: string | null,
+  hiddenViews?: Set<string>,
 ): CatalogueAwareGalleryImage[] {
   const chosenByView = new Map<
     string,
@@ -184,6 +205,9 @@ export function resolveGalleryImagesForColour(
     if (priority == null) continue
 
     const key = normalizeCatalogueImageView(image.view, image.url) ?? image.view ?? `image:${image.id}`
+    // Staff-hidden view: suppress it from the customer gallery entirely, whether
+    // it's a master photo or an own catalogue image.
+    if (hiddenViews?.has(key)) continue
     const current = chosenByView.get(key)
     if (!current || compareCandidates(image, priority, current.image, current.priority) < 0) {
       chosenByView.set(key, { image, priority })
@@ -209,8 +233,9 @@ export function resolveGalleryImagesForColour(
 export function pickPreferredGalleryImage(
   images: CatalogueAwareGalleryImage[],
   selectedColorSwatchId: string | null,
+  hiddenViews?: Set<string>,
 ): CatalogueAwareGalleryImage | null {
-  const ordered = resolveGalleryImagesForColour(images, selectedColorSwatchId)
+  const ordered = resolveGalleryImagesForColour(images, selectedColorSwatchId, hiddenViews)
   if (selectedColorSwatchId) {
     return (
       ordered.find(
@@ -234,8 +259,9 @@ export function pickPreferredGalleryImageUrl(
   images: CatalogueAwareGalleryImage[],
   selectedColorSwatchId: string | null,
   fallbackUrl: string | null,
+  hiddenViews?: Set<string>,
 ): string | null {
-  return pickPreferredGalleryImage(images, selectedColorSwatchId)?.url ?? fallbackUrl
+  return pickPreferredGalleryImage(images, selectedColorSwatchId, hiddenViews)?.url ?? fallbackUrl
 }
 
 const PRIMARY_VIEWS = new Set([

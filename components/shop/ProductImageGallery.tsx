@@ -36,6 +36,9 @@ interface Props {
   selectedColorSwatchId: string | null
   overlays?: GalleryOverlay[]
   decorationImages?: GalleryDecorationImage[]
+  /** Canonical views staff hid from the customer PDP for the selected colour.
+   *  Dropped from the gallery entirely (master photos included). */
+  hiddenViews?: Set<string>
 }
 
 type GalleryItem =
@@ -69,10 +72,11 @@ export function ProductImageGallery({
   selectedColorSwatchId,
   overlays = [],
   decorationImages = [],
+  hiddenViews,
 }: Props) {
   const ordered = useMemo(
-    () => resolveGalleryImagesForColour(images, selectedColorSwatchId),
-    [images, selectedColorSwatchId],
+    () => resolveGalleryImagesForColour(images, selectedColorSwatchId, hiddenViews),
+    [images, selectedColorSwatchId, hiddenViews],
   )
   const galleryItems = useMemo<GalleryItem[]>(
     () => [
@@ -112,13 +116,14 @@ export function ProductImageGallery({
       images,
       selectedColorSwatchId,
       fallbackUrl,
+      hiddenViews,
     )
     return (
       galleryItems.find((item) => item.url === preferredUrl)?.key ??
       galleryItems[0]?.key ??
       null
     )
-  }, [fallbackUrl, galleryItems, images, selectedColorSwatchId])
+  }, [fallbackUrl, galleryItems, images, selectedColorSwatchId, hiddenViews])
   const [activeKey, setActiveKey] = useState<string | null>(() => preferredKey)
   // A gallery image can point at a now-deleted upstream (e.g. a discontinued
   // garment pruned from the old BigCommerce store). Degrade a dead URL to the
