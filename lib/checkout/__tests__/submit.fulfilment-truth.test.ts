@@ -299,6 +299,11 @@ beforeEach(() => {
   createDraftInvoiceForOrder.mockResolvedValue({ status: 'skipped', reason: 'disabled' })
 })
 
+// Xero draft + Monday billing note now run in Next's after(); flush the
+// deferred work (run immediately by the vitest.setup mock) before asserting.
+const flushAfter = () =>
+  (globalThis as unknown as { flushAfter: () => Promise<void> }).flushAfter()
+
 describe('submitCustomerOrder — server-side fulfilment truth', () => {
   it("coerces a false 'stocked' claim on a made_to_order product: MOQ applies and rejects", async () => {
     const { admin } = makeSupabaseStub({
@@ -318,6 +323,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     })
 
     const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
   })
 
@@ -332,6 +338,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       admin,
       buildInput({ qty: 24 }),
     )
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     expect(createDraftInvoiceForOrder).toHaveBeenCalledTimes(1)
     // claim coerced away → purchase order → no picking fee (was drawsStock=false).
@@ -345,6 +352,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     })
 
     const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     // 'stocked' claim stands → all-stocked order → picking fee applies (was drawsStock=true).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
@@ -360,6 +368,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       admin,
       buildInput({ catalogueItemId: CAT_ITEM_ID }),
     )
+    await flushAfter()
 
     expect(postItemUpdate).toHaveBeenCalledWith(
       'mky-1',
@@ -380,6 +389,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       admin,
       buildInput({ catalogueItemId: CAT_ITEM_ID }),
     )
+    await flushAfter()
 
     expect(postItemUpdate).toHaveBeenCalledWith(
       'mky-1',
@@ -401,6 +411,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       admin,
       buildInput({ catalogueItemId: CAT_ITEM_ID }),
     )
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     // 'stocked' claim stands → all-stocked order → picking fee applies (was drawsStock=true).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
@@ -444,6 +455,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
       admin,
       buildInput({ catalogueItemId: CAT_ITEM_ID }),
     )
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     expect(rpcCalls.map((c) => c.name)).toContain('catalogue_item_decoration_price')
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(30)
@@ -477,6 +489,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     })
 
     const result = await submitCustomerOrder(admin, input)
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     // claim coerced away → purchase order → no picking fee (was drawsStock=false).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(0)
@@ -534,6 +547,7 @@ describe('submitCustomerOrder — order_type stamping (Foundation F-1)', () => {
     // 500 the customer or orphan the order — it records an audit breadcrumb and
     // continues (the order stays 'purchase_order' until re-stamped).
     const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
 
     const stampFailureAudit = writes.find(

@@ -21,6 +21,11 @@ vi.mock('@/lib/proofs/autofill-for-order', () => ({
 }))
 
 import { submitCustomerOrder, type CheckoutInput } from '../submit'
+
+// The Monday push now runs in Next's after(); flush the deferred work (run
+// immediately by the vitest.setup mock) before asserting on it.
+const flushAfter = () =>
+  (globalThis as unknown as { flushAfter: () => Promise<void> }).flushAfter()
 import { pushOrderDeal } from '@/lib/monday/deal-item'
 
 // ---------------------------------------------------------------------------
@@ -259,6 +264,7 @@ describe('submitCustomerOrder — Monday push failure', () => {
     })
 
     const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
 
     // 1. Returned order id + ref are populated.
     expect(result.order_id).toBe(ORDER_ID)

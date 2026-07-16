@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CheckoutReviewClient } from '../CheckoutReviewClient'
@@ -170,6 +170,73 @@ describe('CheckoutReviewClient conflict handling', () => {
     expect(mocks.push).not.toHaveBeenCalledWith('/cart')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.clear).not.toHaveBeenCalled()
+  })
+})
+
+describe('CheckoutReviewClient double-submit guard', () => {
+  it('issues only one /api/checkout POST when the place-order button is double-fired', async () => {
+    // review-images resolves so the page hydrates; the checkout POST never
+    // resolves, so the first submit stays in flight. Two clicks dispatched in a
+    // single act() (before React can re-render + disable the button) exercise the
+    // re-entry guard directly rather than relying on the disabled state.
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/checkout/review-images')) {
+        return Promise.resolve(okJson({ imagesByLineId: {} }))
+      }
+      if (url.includes('/api/checkout')) {
+        return new Promise<Response>(() => {}) // never resolves — stays in flight
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    })
+
+    renderReview()
+    const btn = await screen.findByRole('button', { name: /confirm & place order/i })
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    const checkoutPosts = vi.mocked(fetch).mock.calls.filter(([input]) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString()
+      return url.includes('/api/checkout') && !url.includes('review-images')
+    })
+    expect(checkoutPosts).toHaveLength(1)
+  })
+})
+
+describe('CheckoutReviewClient placing overlay', () => {
+  it('shows the placing overlay while submitting and keeps it up through the redirect', async () => {
+    let resolveCheckout: (v: Response) => void = () => {}
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/checkout/review-images')) {
+        return Promise.resolve(okJson({ imagesByLineId: {} }))
+      }
+      if (url.includes('/api/checkout')) {
+        return new Promise<Response>((r) => {
+          resolveCheckout = r
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    })
+
+    const user = userEvent.setup()
+    renderReview()
+    await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
+
+    // Overlay visible while the POST is in flight.
+    expect(await screen.findByRole('status')).toHaveTextContent(/placing your order/i)
+
+    // Resolve the POST successfully → the client navigates (router.push) but must
+    // keep the overlay up so the emptied cart never flashes on the review page.
+    await act(async () => {
+      resolveCheckout(okJson({ order_id: 'o1', order_ref: 'R1' }))
+    })
+
+    expect(mocks.push).toHaveBeenCalledWith('/checkout/confirmation/o1')
+    expect(screen.getByRole('status')).toHaveTextContent(/placing your order/i)
   })
 })
 
