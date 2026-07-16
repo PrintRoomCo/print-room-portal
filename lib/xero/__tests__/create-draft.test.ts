@@ -46,7 +46,7 @@ const args: CreateDraftInvoiceArgs = {
   paymentTerms: 'net20',
   isTestOrg: false,
   pickingFee: 0,
-  prepaidStockedLineKeys: new Set<string>(),
+  prepaidDrawnLineKeys: new Set<string>(),
   existingInvoiceId: null,
   today: '2026-07-02',
 }
@@ -114,7 +114,7 @@ describe('createDraftInvoiceForOrder — eligible', () => {
     const res = await createDraftInvoiceForOrder(admin, {
       ...args,
       pickingFee: 30,
-      prepaidStockedLineKeys: new Set(['p-1::v-1::3']),
+      prepaidDrawnLineKeys: new Set(['p-1::v-1::3']),
     })
 
     expect(res.status).toBe('drafted')
@@ -125,7 +125,7 @@ describe('createDraftInvoiceForOrder — eligible', () => {
     const items = body.Quotes[0].LineItems
     // prepaid line zeroed ($0) + relabelled
     expect(items).toContainEqual(
-      expect.objectContaining({ Description: expect.stringContaining('(prepaid — no charge)'), Quantity: 24, UnitAmount: 0 }),
+      expect.objectContaining({ Description: expect.stringContaining('(prepaid stock — drawn down, no charge)'), Quantity: 24, UnitAmount: 0 }),
     )
     // not-paid line billed as-is
     expect(items).toContainEqual(expect.objectContaining({ Quantity: 10, UnitAmount: 20 }))

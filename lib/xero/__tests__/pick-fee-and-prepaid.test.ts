@@ -8,7 +8,7 @@ describe('Xero prepaid + pick-fee lines', () => {
   it('zeroes a prepaid goods line (100% discount)', () => {
     const line = { description: 'Tee — Black / M', quantity: 24, unitAmount: 12.5 }
     expect(prepaidZeroLine(line)).toEqual({
-      description: 'Tee — Black / M (prepaid — no charge)', quantity: 24, unitAmount: 0,
+      description: 'Tee — Black / M (prepaid stock — drawn down, no charge)', quantity: 24, unitAmount: 0,
     })
   })
 })
