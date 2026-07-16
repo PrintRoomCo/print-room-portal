@@ -1936,19 +1936,24 @@ export async function submitCustomerOrder(
       })),
     })
 
-    const dispatchRecipient = resolveDispatchNotificationRecipient({
-      isTestOrg: notifyIsTestOrg,
-      testEmail: 'jamie@theprint-room.co.nz',
-    })
-    await sendOrderPlacedDispatch({
-      to: dispatchRecipient,
-      orderRef: order_ref,
-      customerName: emailCustomerName,
-      orderType,
-      totalAmount: notifyTotal,
-      orderUrl: notifyOrderUrl,
-      lines: notifyLines,
-    })
+    // Dispatch desk email is internal + fires only for real customer orgs.
+    // Test/demo orgs already route the customer confirmation to the test inbox;
+    // suppress the dispatch copy so a tester sees exactly one email.
+    if (!notifyIsTestOrg) {
+      const dispatchRecipient = resolveDispatchNotificationRecipient({
+        isTestOrg: notifyIsTestOrg,
+        testEmail: 'jamie@theprint-room.co.nz',
+      })
+      await sendOrderPlacedDispatch({
+        to: dispatchRecipient,
+        orderRef: order_ref,
+        customerName: emailCustomerName,
+        orderType,
+        totalAmount: notifyTotal,
+        orderUrl: notifyOrderUrl,
+        lines: notifyLines,
+      })
+    }
   } catch (e) {
     console.error('[Checkout] order-placed dispatch notification failed (swallowed)', {
       orderId: order_id,

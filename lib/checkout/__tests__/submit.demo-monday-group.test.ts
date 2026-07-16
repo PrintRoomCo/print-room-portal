@@ -293,20 +293,27 @@ describe('submitCustomerOrder — demo Monday group routing', () => {
     expect(vi.mocked(pushOrderDeal).mock.calls[0][1]).toEqual({ demo: false })
   })
 
-  it('fails closed to Jamie for dispatch email when the demo-org lookup fails', async () => {
-    const savedDemoTestEmail = process.env.DEMO_TEST_EMAIL
-    process.env.DEMO_TEST_EMAIL = 'someone-else@example.com'
-    try {
-      const { admin } = buildStub(false, { message: 'organization lookup failed' })
-      await submitCustomerOrder(admin, buildInput())
+  it('does NOT send the dispatch email when the org is is_test (only the customer email goes out)', async () => {
+    const { admin } = buildStub(true)
+    await submitCustomerOrder(admin, buildInput())
+    expect(sendOrderPlacedDispatch).not.toHaveBeenCalled()
+  })
 
-      expect(sendOrderPlacedDispatch).toHaveBeenCalledOnce()
-      expect(sendOrderPlacedDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'jamie@theprint-room.co.nz' }),
-      )
-    } finally {
-      if (savedDemoTestEmail === undefined) delete process.env.DEMO_TEST_EMAIL
-      else process.env.DEMO_TEST_EMAIL = savedDemoTestEmail
-    }
+  it('sends the dispatch email to the desk when the org is a real customer', async () => {
+    const { admin } = buildStub(false)
+    await submitCustomerOrder(admin, buildInput())
+    expect(sendOrderPlacedDispatch).toHaveBeenCalledOnce()
+    expect(sendOrderPlacedDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'charlotte@theprint-room.co.nz' }),
+    )
+  })
+
+  it('suppresses the dispatch email when the demo-org lookup fails (fail closed → treated as test)', async () => {
+    // Fail-closed → treated as a test org → dispatch email suppressed (no risk of
+    // emailing the desk for an unclassifiable org). The customer confirmation still
+    // fails closed to the test inbox (asserted elsewhere).
+    const { admin } = buildStub(false, { message: 'organization lookup failed' })
+    await submitCustomerOrder(admin, buildInput())
+    expect(sendOrderPlacedDispatch).not.toHaveBeenCalled()
   })
 })
