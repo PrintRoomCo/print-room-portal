@@ -163,6 +163,59 @@ describe('computed path — pricing resolution ladder', () => {
     ])
   })
 
+  it('resolves embroidery to the RAW static override/base — never the qty-fed engine ladder, no multiplier', async () => {
+    const cfg = baseConfig()
+    // A tier multiplier IS present, to prove embroidery ignores it: the PDP never
+    // fetches embroidery (recalcInputs is screenprint-only), so the cart carries a
+    // raw $14. The engine RPC would return a bogus qty-as-stitches value (~1.04);
+    // embroidery must resolve to the static base and NOT consult the ladder.
+    cfg.tier = { multiplier: 0.85 }
+    cfg.links.push({
+      id: 'link-emb',
+      catalogueItemId: ITEM_C,
+      sourceProductId: PRODUCT_C,
+      orgDecoration: {
+        id: 'dec-emb',
+        organizationId: ORG,
+        name: 'Front embroidery',
+        method: 'embroidery',
+        unitPrice: 14,
+      },
+    })
+    cfg.decorationRpcPrice = (odId) => (odId === 'dec-emb' ? 1.04 : null)
+    const { admin, rpcCalls } = makeFanoutStub(cfg)
+    await submitCustomerOrder(
+      admin,
+      buildInput([
+        line({
+          decorations: [
+            {
+              linkId: 'link-emb',
+              decorationId: 'dec-emb',
+              name: 'Front embroidery',
+              method: 'embroidery',
+              positionLabel: null,
+              unitPrice: 14,
+              artworkUrl: null,
+              snapshotUrl: null,
+            },
+          ],
+        }),
+      ]),
+    )
+    // Folded RAW 14 (not 14×0.85=11.9, not the ~1.04 engine value); no drift → submits.
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+      expect.objectContaining({ unit_price: 12.5 + 14 }),
+    ])
+    // The qty-fed engine ladder must never be consulted for embroidery.
+    expect(
+      rpcCalls.filter(
+        (c) =>
+          c.name === 'effective_decoration_unit_price' && c.args?.p_org_decoration_id === 'dec-emb',
+      ),
+    ).toHaveLength(0)
+  })
+
   it('pools decoration qty across lines sharing product + decoration signature', async () => {
     const { admin, rpcCalls } = makeFanoutStub(baseConfig())
     await submitCustomerOrder(
