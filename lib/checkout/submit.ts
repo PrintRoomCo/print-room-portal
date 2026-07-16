@@ -1150,7 +1150,13 @@ export async function submitCustomerOrder(
   }))
   const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
   const isStockOnHandOrder = orderType === 'stock_on_hand'
-  const goodsSubtotal = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+  // Deco-inclusive: repriced.unit_price is garment-only (decoration is folded
+  // into unit_price only inside the p_lines RPC payload), but the customer's
+  // checkout estimate bands on allInUnitPrice (garment + decoration), so the
+  // server must band on the same figure or the fee charged diverges from the
+  // fee quoted at a $100/$200/$300/$400 boundary.
+  const goodsSubtotal =
+    repriced.reduce((t, l) => t + l.unit_price * l.qty, 0) + totalDecorationRevenue
   const pickFee = orderPickingFee({
     isStockOnHand: isStockOnHandOrder,
     shipCountry: (shippingAddress as { country?: unknown }).country as string | null | undefined,

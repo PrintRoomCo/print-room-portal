@@ -357,6 +357,49 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
   })
 
+  it('picking-fee band uses the DECO-INCLUSIVE goods subtotal (matches the checkout estimate)', async () => {
+    // Garment-only: $9 × 10 = $90 → 0-99 band → $35. Deco-inclusive:
+    // $90 + ($1.50 × 10) = $105 → 100-199 band → $30. The customer-facing
+    // estimate (CheckoutReviewClient) prices from allInUnitPrice (garment +
+    // decoration), so the server MUST band on the same figure.
+    const selects = baseSelects({ productNature: 'mixed' }).map((m) =>
+      m.table === 'b2b_catalogue_items'
+        ? {
+            table: m.table,
+            response: {
+              data: [
+                {
+                  id: CAT_ITEM_ID,
+                  source_product_id: PRODUCT_ID,
+                  moq_override: null,
+                  fulfilment_type_override: null,
+                  price_mode: 'manual_final', // decoration billed as ONE combined figure
+                },
+              ],
+              error: null,
+            },
+          }
+        : m,
+    )
+    const { admin, rpcCalls } = makeSupabaseStub({
+      selects,
+      rpc: (name) => {
+        // Lines with a catalogueItemId price via the item-scoped RPC.
+        if (name === 'effective_unit_price_for_item') return { data: 9, error: null }
+        if (name === 'catalogue_item_decoration_price') return { data: 1.5, error: null }
+        return happyRpc(name)
+      },
+    })
+
+    const result = await submitCustomerOrder(
+      admin,
+      buildInput({ catalogueItemId: CAT_ITEM_ID }),
+    )
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(rpcCalls.map((c) => c.name)).toContain('catalogue_item_decoration_price')
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(30)
+  })
+
   it('legacy line without a claim is untouched (still MOQ-applicable)', async () => {
     const { admin } = makeSupabaseStub({
       selects: baseSelects({ productNature: 'made_to_order' }),
