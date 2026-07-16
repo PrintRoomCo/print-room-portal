@@ -16,6 +16,7 @@ import { classifyOrderType } from '@/lib/orders/order-type'
 import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
+import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { stockOnHandMondayNote } from '@/lib/monday/order-type-note'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
@@ -1660,6 +1661,10 @@ export async function submitCustomerOrder(
   //     Starshipit; the portal webhook writes the tracking link back onto the
   //     job_trackers row. Dark by default (STARSHIPIT_ENABLED). Mirrors the
   //     Monday/Xero side-effects: never throws out of submit, audits on failure.
+  //     While the flag is OFF this block is FULLY INERT — no org query, no
+  //     'disabled' audit row on every checkout (same convention as the Xero
+  //     step's 'disabled' → no write, no audit).
+  if (isStarshipitEnabled()) {
   try {
     const { data: ssOrgRow } = await admin
       .from('organizations')
@@ -1713,6 +1718,7 @@ export async function submitCustomerOrder(
     } catch {
       // truly best-effort
     }
+  }
   }
 
   // Fetch the email payload from quotes/quote_items for the confirmation email below.
