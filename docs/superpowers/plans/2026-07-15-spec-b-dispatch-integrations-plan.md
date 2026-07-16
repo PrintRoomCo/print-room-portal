@@ -3037,7 +3037,7 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
 - Consumes: nothing.
 - Produces: `INVITABLE_ROLES: ReadonlySet<'staff'>`; `isInvitableRole(role: string): role is 'staff'`.
 
-- [ ] **Step 1: Write the failing guard test.** Create `lib/team/__tests__/invite-guard.test.ts`:
+- [x] **Step 1: Write the failing guard test.** Create `lib/team/__tests__/invite-guard.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { INVITABLE_ROLES, isInvitableRole } from '../invite-guard'
@@ -3056,8 +3056,8 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → fails with `Failed to resolve import "../invite-guard"` (module does not exist yet).
-- [ ] **Step 3: Implement the guard.** Create `lib/team/invite-guard.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → fails with `Failed to resolve import "../invite-guard"` (module does not exist yet).
+- [x] **Step 3: Implement the guard.** Create `lib/team/invite-guard.ts`:
   ```ts
   /**
    * Roles a customer-portal org_admin may CREATE via self-serve invite.
@@ -3070,8 +3070,8 @@ Pure, unit-testable rule that the invite endpoint depends on. Kept out of the ro
     return INVITABLE_ROLES.has(role as 'staff')
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → 3 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: staff-only invite-role guard for portal self-serve invites"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/invite-guard.test.ts` → 3 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: staff-only invite-role guard for portal self-serve invites"`
 
 ---
 
@@ -3087,7 +3087,7 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
 - Consumes: nothing.
 - Produces: `AUDIT_ACTIONS.MEMBER_INVITE === 'member.invite'`.
 
-- [ ] **Step 1: Write the failing test.** Create `lib/audit/__tests__/actions.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `lib/audit/__tests__/actions.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { AUDIT_ACTIONS } from '../actions'
@@ -3098,8 +3098,8 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/audit/__tests__/actions.test.ts` → fails: `expected undefined to be 'member.invite'`.
-- [ ] **Step 3: Add the action.** In `lib/audit/actions.ts`, the object currently opens:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/audit/__tests__/actions.test.ts` → fails: `expected undefined to be 'member.invite'`.
+- [x] **Step 3: Add the action.** In `lib/audit/actions.ts`, the object currently opens:
   ```ts
   export const AUDIT_ACTIONS = {
     ORDER_SUBMIT: 'order.submit',
@@ -3112,8 +3112,8 @@ The portal's `AUDIT_ACTIONS` has no member.* actions; add `MEMBER_INVITE` mirror
 
     ORDER_SUBMIT: 'order.submit',
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/audit/__tests__/actions.test.ts` → 1 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: add MEMBER_INVITE audit action to portal"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/audit/__tests__/actions.test.ts` → 1 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: add MEMBER_INVITE audit action to portal"`
 
 ---
 
@@ -3132,7 +3132,7 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
   - `recordAuditEvent(args)` from `@/lib/audit/recordEvent`; `AUDIT_ACTIONS.MEMBER_INVITE` from `@/lib/audit/actions`.
 - Produces: `POST` handler; request `{ email, first_name, last_name?, default_store_id, ordering_permission? }` → 201 `{ user_id, email_sent: true }`.
 
-- [ ] **Step 1: Write the failing guard tests.** These hit the early returns (before any Supabase call), so no DB stub is needed. Create `app/api/team/invite/__tests__/route.test.ts`:
+- [x] **Step 1: Write the failing guard tests.** These hit the early returns (before any Supabase call), so no DB stub is needed. Create `app/api/team/invite/__tests__/route.test.ts`:
   ```ts
   import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -3181,8 +3181,8 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → fails with `Failed to resolve import "../route"`.
-- [ ] **Step 3: Implement the route.** Create `app/api/team/invite/route.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → fails with `Failed to resolve import "../route"`.
+- [x] **Step 3: Implement the route.** Create `app/api/team/invite/route.ts`:
   ```ts
   import { NextResponse } from 'next/server'
   import { requireB2BCustomerApi } from '@/lib/checkout/server'
@@ -3381,8 +3381,8 @@ The core endpoint. Mirrors the staff `src/app/api/b2b-accounts/[id]/invite/route
     return NextResponse.json({ user_id: userId, email_sent: true }, { status: 201 })
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → 3 passing (all three assert early-return status codes; none reaches Supabase).
-- [ ] **Step 5: Commit.** `git commit -am "feat: /api/team/invite — org_admin self-serve staff invite (staff-only guard)"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run app/api/team/invite/__tests__/route.test.ts` → 3 passing (all three assert early-return status codes; none reaches Supabase).
+- [x] **Step 5: Commit.** `git commit -am "feat: /api/team/invite — org_admin self-serve staff invite (staff-only guard)"`
 
 > **Decision gate — ordering_permission for studio tenants.** The route accepts any of stock_only/reorder_only/both and defaults 'stock_only'. Studios keep no stock, so a stock_only studio staff can order nothing (the staff EditRoleDialog scopes this via `orderingPermissionOptions(tenantType)`). Before wiring the UI control, decide whether to tenant-scope the option set / default studios to reorder_only, or leave it open. Do NOT silently pick one.
 
@@ -3400,7 +3400,7 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
 - Consumes: nothing.
 - Produces: `TeamMemberRow`, `TeamMembership`, `TeamProfile`, `buildTeamMemberRow(membership: TeamMembership, profile: TeamProfile | undefined): TeamMemberRow`. `status` = `'active'` when `profile.last_sign_in_at` is set, else `'pending'`.
 
-- [ ] **Step 1: Write the failing test.** Create `lib/team/__tests__/members.test.ts`:
+- [x] **Step 1: Write the failing test.** Create `lib/team/__tests__/members.test.ts`:
   ```ts
   import { describe, it, expect } from 'vitest'
   import { buildTeamMemberRow } from '../members'
@@ -3433,8 +3433,8 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/members.test.ts` → fails: `Failed to resolve import "../members"`.
-- [ ] **Step 3: Implement the builder.** Create `lib/team/members.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/team/__tests__/members.test.ts` → fails: `Failed to resolve import "../members"`.
+- [x] **Step 3: Implement the builder.** Create `lib/team/members.ts`:
   ```ts
   // Portal-local member-row builder for the /team page (org_admin self-serve).
   // Pure + DB-free so it is unit-testable. profiles.last_sign_in_at is mirrored
@@ -3486,8 +3486,8 @@ Pure builder for the SSR member list on the `/team` page. A portal-local analogu
     }
   }
   ```
-- [ ] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/members.test.ts` → 3 passing.
-- [ ] **Step 5: Commit.** `git commit -am "feat: portal team member-row builder"`
+- [x] **Step 4: Run it — expect PASS.** `npx vitest run lib/team/__tests__/members.test.ts` → 3 passing.
+- [x] **Step 5: Commit.** `git commit -am "feat: portal team member-row builder"`
 
 ---
 
@@ -3504,7 +3504,7 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
 - Consumes: `B2BCustomerAccess.canManageUsers` (already set = `isOrgAdmin` in lib/company.ts buildAccess line 229).
 - Produces: `NavAccess` gains required `canManageUsers: boolean`; `PortalNavItem` gains optional `requiresManageUsers?: boolean`; `NavIconKey` gains `'team'`; a nav item at `/team`.
 
-- [ ] **Step 1: Write the failing nav tests.** In `lib/nav/__tests__/portal-nav.test.ts`, update the helper (lines 4-11) to include the new field:
+- [x] **Step 1: Write the failing nav tests.** In `lib/nav/__tests__/portal-nav.test.ts`, update the helper (lines 4-11) to include the new field:
   ```ts
   function access(over: Partial<NavAccess> = {}): NavAccess {
     return {
@@ -3530,8 +3530,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → the helper now references `canManageUsers` on `NavAccess` (compile error / type failure) and the Team assertions fail (no `/team` item yet).
-- [ ] **Step 3: Extend the nav model.** In `lib/nav/portal-nav.ts`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → the helper now references `canManageUsers` on `NavAccess` (compile error / type failure) and the Team assertions fail (no `/team` item yet).
+- [x] **Step 3: Extend the nav model.** In `lib/nav/portal-nav.ts`:
   - Add `'team'` to `NavIconKey` (lines 3-9):
     ```ts
     export type NavIconKey =
@@ -3590,8 +3590,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
         if (item.requiresOrgAdmin && !access.isOrgAdmin) return false
         if (item.requiresManageUsers && !access.canManageUsers) return false
     ```
-- [ ] **Step 4: Run the nav test — expect PASS.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → all passing (existing Inventory tests still green; the helper's `canManageUsers` defaults false so Team never leaks into them).
-- [ ] **Step 5: Wire Sidebar to pass the flag + register the icon.** In `components/layout/Sidebar.tsx`:
+- [x] **Step 4: Run the nav test — expect PASS.** `npx vitest run lib/nav/__tests__/portal-nav.test.ts` → all passing (existing Inventory tests still green; the helper's `canManageUsers` defaults false so Team never leaks into them).
+- [x] **Step 5: Wire Sidebar to pass the flag + register the icon.** In `components/layout/Sidebar.tsx`:
   - Update the `getNavigationItems` call (lines 33-38):
     ```ts
     const navigation = getNavigationItems({
@@ -3634,8 +3634,8 @@ Gives `canManageUsers` its first consumer. Adds a `requiresManageUsers` gate to 
       )
     }
     ```
-- [ ] **Step 6: Verify the Sidebar test still passes.** `npx vitest run components/layout/__tests__/Sidebar.test.tsx` → still green (the fixture already sets `canManageUsers`; Team is a classic Link, not an `a[data-row]` SVG row, so the primary-row assertions are unaffected).
-- [ ] **Step 7: Commit.** `git commit -am "feat: consume canManageUsers to gate a Team nav link"`
+- [x] **Step 6: Verify the Sidebar test still passes.** `npx vitest run components/layout/__tests__/Sidebar.test.tsx` → still green (the fixture already sets `canManageUsers`; Team is a classic Link, not an `a[data-row]` SVG row, so the primary-row assertions are unaffected).
+- [x] **Step 7: Commit.** `git commit -am "feat: consume canManageUsers to gate a Team nav link"`
 
 ---
 
@@ -3652,7 +3652,7 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
 - Consumes: `getCompanyAccess(userId, email?)` from `@/lib/company` (`access.canManageUsers`, `access.companyId`, `access.companyName`); `getSupabaseServerComponent()` / `getSupabaseServer()`; `buildTeamMemberRow` + `TeamProfile` from `@/lib/team/members`; the `POST /api/team/invite` contract.
 - Produces: `TeamClient(props: { organizationName: string; initialMembers: TeamMemberRow[]; stores: { id: string; name: string | null }[] })`.
 
-- [ ] **Step 1: Write the failing client test.** The portal already uses `@testing-library/react` (see `components/layout/__tests__/Sidebar.test.tsx`). Create `app/(portal)/team/__tests__/TeamClient.test.tsx`:
+- [x] **Step 1: Write the failing client test.** The portal already uses `@testing-library/react` (see `components/layout/__tests__/Sidebar.test.tsx`). Create `app/(portal)/team/__tests__/TeamClient.test.tsx`:
   ```tsx
   import { render, screen } from '@testing-library/react'
   import { describe, it, expect, vi } from 'vitest'
@@ -3679,8 +3679,8 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     })
   })
   ```
-- [ ] **Step 2: Run it — expect FAIL.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → fails: `Failed to resolve import "../TeamClient"`.
-- [ ] **Step 3: Implement the client.** Create `app/(portal)/team/TeamClient.tsx`:
+- [x] **Step 2: Run it — expect FAIL.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → fails: `Failed to resolve import "../TeamClient"`.
+- [x] **Step 3: Implement the client.** Create `app/(portal)/team/TeamClient.tsx`:
   ```tsx
   'use client'
 
@@ -3879,8 +3879,8 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     )
   }
   ```
-- [ ] **Step 4: Run the client test — expect PASS.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → 2 passing.
-- [ ] **Step 5: Implement the server page.** Create `app/(portal)/team/page.tsx` (mirrors the org_admin server-guard pattern in `app/(portal)/inventory/page.tsx`):
+- [x] **Step 4: Run the client test — expect PASS.** `npx vitest run app/(portal)/team/__tests__/TeamClient.test.tsx` → 2 passing.
+- [x] **Step 5: Implement the server page.** Create `app/(portal)/team/page.tsx` (mirrors the org_admin server-guard pattern in `app/(portal)/inventory/page.tsx`):
   ```tsx
   import type { Metadata } from 'next'
   import { redirect } from 'next/navigation'
@@ -3941,9 +3941,9 @@ The customer-facing surface. Server component guards on `canManageUsers` (its se
     )
   }
   ```
-- [ ] **Step 6: Type-check the new surface.** `npx tsc --noEmit` (from the portal root) → no new errors. Confirms the page's Supabase row shapes line up with `TeamMembership` / `TeamProfile`.
-- [ ] **Step 7: Manual smoke (real invite).** Sign in as a franchise org_admin with at least one store. Visit `/team` → invite **jamie@theprint-room.co.nz** (never jon@) with a default store selected. Confirm: 201 + "Invite sent"; a `user_organizations` row with `role='staff'`, the chosen `default_store_id`, `invited_at` stamped; an `audit_events` row `action='member.invite'`; and one branded sign-in email lands at jamie@. Then confirm a **staff** user gets 403 from `/team` (redirect to /account) and cannot POST `/api/team/invite`.
-- [ ] **Step 8: Commit.** `git commit -am "feat: /team self-serve staff invites for org admins"`
+- [x] **Step 6: Type-check the new surface.** `npx tsc --noEmit` (from the portal root) → no new errors. Confirms the page's Supabase row shapes line up with `TeamMembership` / `TeamProfile`.
+- [x] **Step 7: Manual smoke (real invite).** Sign in as a franchise org_admin with at least one store. Visit `/team` → invite **jamie@theprint-room.co.nz** (never jon@) with a default store selected. Confirm: 201 + "Invite sent"; a `user_organizations` row with `role='staff'`, the chosen `default_store_id`, `invited_at` stamped; an `audit_events` row `action='member.invite'`; and one branded sign-in email lands at jamie@. Then confirm a **staff** user gets 403 from `/team` (redirect to /account) and cannot POST `/api/team/invite`.
+- [x] **Step 8: Commit.** `git commit -am "feat: /team self-serve staff invites for org admins"`
 
 > **Decision gate — ship posture.** Per the cluster brief the full self-serve UI (F2) stays deferred behind the Thursday slice. If shipping dark, keep the Team nav item removable by leaving `requiresManageUsers` off the item (the route + page stay reachable by URL for QA but no nav entry appears). Confirm whether F2 ships with the nav link visible or dark before merge.
 
