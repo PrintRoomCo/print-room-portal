@@ -1389,13 +1389,19 @@ export function ProductDetailClient({
           )}
           {multiSize && orderLines.length > 0 && (
             <section className="rounded-[24px] bg-white p-6">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                Your order
+              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                Your Order
               </p>
               <ul className="mt-4 divide-y divide-gray-100 text-sm">
                 {orderLines.map((line) => {
                   const label =
                     [line.colourLabel, line.sizeLabel].filter(Boolean).join(' / ') || '—'
+                  // "to be made" is production language — meaningless when the
+                  // order is drawn from existing stock (Stock-on-hand). Mirror the
+                  // size-grid gate above so the summary stays consistent: hidden in
+                  // pure inventory mode, shown for reorder/bulk and the
+                  // From-inventory overflow that genuinely spills into a run.
+                  const showToBeMade = !isInventoryMode || isInventoryOverflowScope
                   return (
                     <li
                       key={cellKey(line.variantId, line.sizeId)}
@@ -1404,7 +1410,7 @@ export function ProductDetailClient({
                       <span className="text-gray-800">{label}</span>
                       <span className="text-right text-gray-700">
                         <span className="font-medium tabular-nums">{line.qty}</span>
-                        {line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
+                        {showToBeMade && line.tracked && line.toBeMade > 0 && line.inStock > 0 && (
                           <span className="ml-1 text-xs text-gray-500">
                             ({line.inStock} in stock,{' '}
                             <span className="text-amber-700">
@@ -1413,12 +1419,12 @@ export function ProductDetailClient({
                             )
                           </span>
                         )}
-                        {line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
+                        {showToBeMade && line.tracked && line.toBeMade > 0 && line.inStock === 0 && (
                           <span className="ml-1 text-xs text-amber-700">
                             ({line.toBeMade} to be made)
                           </span>
                         )}
-                        {!line.tracked && (
+                        {showToBeMade && !line.tracked && (
                           <span className="ml-1 text-xs text-amber-700">
                             ({line.toBeMade} to be made)
                           </span>
