@@ -43,3 +43,31 @@ describe('normalizePersisted — catalogue identity round-trip (phase 2)', () =>
     expect(lines[0].catalogueItemId).toBeNull()
   })
 })
+
+describe('normalizePersisted — nature round-trip (Spec B / F1)', () => {
+  it("preserves a 'mixed' nature so the cart order-type selector survives reload", () => {
+    const payload = {
+      lines: [
+        { lineId: 'l1', productId: 'p1', qty: 5, unitPrice: 10, nature: 'mixed' },
+      ],
+    }
+    const { lines } = normalizePersisted(payload)
+    expect(lines[0].nature).toBe('mixed')
+  })
+
+  it('preserves the homogeneous natures and drops garbage values', () => {
+    const payload = {
+      lines: [
+        { lineId: 'l1', productId: 'p1', qty: 1, unitPrice: 1, nature: 'stocked' },
+        { lineId: 'l2', productId: 'p2', qty: 1, unitPrice: 1, nature: 'made_to_order' },
+        { lineId: 'l3', productId: 'p3', qty: 1, unitPrice: 1, nature: 'evil' },
+        { lineId: 'l4', productId: 'p4', qty: 1, unitPrice: 1 },
+      ],
+    }
+    const { lines } = normalizePersisted(payload)
+    expect(lines[0].nature).toBe('stocked')
+    expect(lines[1].nature).toBe('made_to_order')
+    expect(lines[2].nature).toBeUndefined()
+    expect(lines[3].nature).toBeUndefined()
+  })
+})

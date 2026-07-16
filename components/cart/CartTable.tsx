@@ -8,6 +8,7 @@ import {
   cartLineDisplayImageUrl,
   type CartLine,
 } from '@/lib/cart/types'
+import { pillsFor, PILL_LABELS } from '@/lib/shop/fulfilment-mode'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
@@ -21,6 +22,10 @@ interface CartTableProps {
   onOversellChange?: (anyOversell: boolean) => void
   /** Reports to parent so it can disable "Proceed to checkout" when any line is below MOQ. */
   onMoqViolationChange?: (anyShort: boolean) => void
+  /** Reports a per-line order-type (fulfilment) change from the selector. */
+  onFulfilmentChange?: (lineId: string, fulfilmentType: 'stocked' | 'made_to_order') => void
+  /** Gates the per-line order-type selector to org admins (Spec B / F1). */
+  isOrgAdmin?: boolean
 }
 
 type AvailabilityMap = Record<string, number | undefined>
@@ -32,6 +37,8 @@ export function CartTable({
   onRemove,
   onOversellChange,
   onMoqViolationChange,
+  onFulfilmentChange,
+  isOrgAdmin = false,
 }: CartTableProps) {
   const { format } = useCurrency()
   const [availability, setAvailability] = useState<AvailabilityMap>({})
@@ -131,6 +138,10 @@ export function CartTable({
       {lines.map((line) => {
         const avail = availability[`${line.variantId}::${line.sizeId ?? ''}`]
         const isMadeToOrder = line.fulfilmentType === 'made_to_order'
+        // Selector only for a mixed-nature line an org admin can steer both ways.
+        const showFulfilmentSelector =
+          pillsFor(line.nature ?? 'made_to_order', isOrgAdmin).length === 2
+        const isStockMode = line.fulfilmentType === 'stocked'
         const isOversell = !isMadeToOrder && avail !== undefined && line.qty > avail
         const moq = moqByProduct[line.productId]
         const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
@@ -177,6 +188,39 @@ export function CartTable({
                 Remove
               </button>
             </div>
+
+            {/* Per-line order-type selector (mixed-nature lines, org admins only) */}
+            {showFulfilmentSelector && (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 pt-3">
+                <span className="text-xs text-gray-500">Order type</span>
+                <div
+                  className="inline-flex rounded-full bg-gray-100 p-0.5"
+                  role="group"
+                  aria-label="Order type"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onFulfilmentChange?.(line.lineId, 'made_to_order')}
+                    aria-pressed={!isStockMode}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      !isStockMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    {PILL_LABELS.reorder}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onFulfilmentChange?.(line.lineId, 'stocked')}
+                    aria-pressed={isStockMode}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      isStockMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    {PILL_LABELS.from_inventory}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Inline status messages */}
             {(isOversell || isMoqShort) && (

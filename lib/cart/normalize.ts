@@ -5,6 +5,7 @@ import type {
   CartLineFulfilmentType,
   CartState,
 } from './types'
+import type { FulfilmentType } from '@/lib/shop/fulfilment-mode'
 
 /**
  * Pure cart-persistence normalizers. Extracted from CartProvider so the
@@ -63,6 +64,16 @@ export function normalizeFulfilmentType(raw: unknown): CartLineFulfilmentType | 
   return undefined
 }
 
+/**
+ * Validate a persisted line's product NATURE (Spec B / F1 — drives the cart
+ * order-type selector for 'mixed' products). Distinct from fulfilmentType:
+ * nature is the product's capability, fulfilmentType the line's chosen mode.
+ */
+export function normalizeNature(raw: unknown): FulfilmentType | undefined {
+  if (raw === 'stocked' || raw === 'made_to_order' || raw === 'mixed') return raw
+  return undefined
+}
+
 export function normalizePersisted(raw: unknown): CartState {
   if (!raw || typeof raw !== 'object') return { lines: [] }
   const lines = (raw as { lines?: unknown }).lines
@@ -91,6 +102,9 @@ export function normalizePersisted(raw: unknown): CartState {
           : null,
       decorations: normalizeDecorations(l.decorations),
       fulfilmentType: normalizeFulfilmentType(l.fulfilmentType),
+      // F1 — nature must survive the round-trip or the mixed-cart order-type
+      // selector silently disappears after any page reload.
+      nature: normalizeNature(l.nature),
       brackets: normalizeBrackets(l.brackets),
       // Phase 2 — catalogue identity must survive the localStorage round-trip,
       // else the order line loses which skin sold on reload.

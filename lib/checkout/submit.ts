@@ -97,6 +97,15 @@ export interface CheckoutInput {
   custom_shipping_address?: Record<string, unknown> | null
   /** Slice 4: 'inventory' routes the order into the org's stock shelf; 'customer' (default) is the existing delivery path. */
   intent?: 'customer' | 'inventory'
+  /**
+   * F1 mixed-cart split: when the checkout route partitions one cart into two
+   * submit calls, tier/garment price pooling would otherwise see only this
+   * partition's qty and re-derive a HIGHER tier price than the cart claimed
+   * (drift 409, or silent overcharge on legacy lines). Pass the FULL cart here
+   * — it seeds ONLY the qty-pooling aggregations; the submitted/validated
+   * lines are still `lines`. Defaults to `lines` (single-order path unchanged).
+   */
+  pricing_pool_lines?: CheckoutLineInput[]
 }
 
 export interface CheckoutResult {
@@ -523,8 +532,12 @@ export async function submitCustomerOrder(
   // the cart's historical tier behavior for decorated runs. Decoration pricing
   // below keeps its own product+decoration aggregation, so item-aware garment
   // pricing does not silently alter decoration-tier pooling.
+  // Pooling seeds from the FULL cart when the route split it into partitions
+  // (pricing_pool_lines), so a product spanning both partitions still prices
+  // at the tier the whole cart earned — identical to a single submit call.
+  const poolLines = input.pricing_pool_lines ?? input.lines
   const totalQtyByDecorationTierKey = new Map<string, number>()
-  for (const line of input.lines) {
+  for (const line of poolLines) {
     const k = tierAggregationKey(line.product_id, line.decorations)
     totalQtyByDecorationTierKey.set(
       k,
@@ -536,7 +549,7 @@ export async function submitCustomerOrder(
     string,
     { productId: string; catalogueItemId: string | null; totalQty: number }
   >()
-  for (const line of input.lines) {
+  for (const line of poolLines) {
     const k = garmentPriceAggregationKey(line)
     const existing = garmentPriceGroups.get(k)
     if (existing) {
@@ -552,9 +565,11 @@ export async function submitCustomerOrder(
 
   // PRE-ORDER: lines on pre_order items price from the period snapshot
   // (worst case = own qty band; the close worker can only lower it).
+  // Pool-wide so a shared price group prices via the correct path even when
+  // the pre_order line itself sits in the other partition.
   const cartCatalogueItemIds = Array.from(
     new Set(
-      input.lines
+      poolLines
         .map((l) => l.catalogueItemId)
         .filter((v): v is string => Boolean(v)),
     ),

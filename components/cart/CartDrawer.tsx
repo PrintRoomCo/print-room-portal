@@ -7,12 +7,15 @@ import { decorationPerUnit } from '@/lib/cart/types'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useCompany } from '@/contexts/CompanyContext'
 import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
 import { CartTable } from './CartTable'
 import { useCart } from './useCart'
 
 export function CartDrawer() {
   const cart = useCart()
+  const { access } = useCompany()
+  const isOrgAdmin = access?.role === 'org_admin'
   const drawer = useCartDrawer()
   const pathname = usePathname()
   const router = useRouter()
@@ -84,6 +87,8 @@ export function CartDrawer() {
               onRemove={cart.removeLine}
               onOversellChange={handleOversellChange}
               onMoqViolationChange={handleMoqViolationChange}
+              onFulfilmentChange={cart.setFulfilmentType}
+              isOrgAdmin={isOrgAdmin}
             />
           </div>
 

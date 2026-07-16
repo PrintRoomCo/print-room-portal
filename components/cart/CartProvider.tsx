@@ -12,6 +12,7 @@ import {
   lineSignature,
   recomputeProductTierPrices,
   type CartLine,
+  type CartLineFulfilmentType,
   type CartState,
 } from '@/lib/cart/types'
 import { normalizePersisted } from '@/lib/cart/normalize'
@@ -23,6 +24,7 @@ export interface CartApi {
   updateLine: (lineId: string, patch: Partial<CartLine>) => void
   removeLine: (lineId: string) => void
   setShipTo: (lineId: string, storeId: string | null) => void
+  setFulfilmentType: (lineId: string, fulfilmentType: CartLineFulfilmentType) => void
   clear: () => void
 }
 
@@ -238,6 +240,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setState((s) => ({
         lines: s.lines.map((l) =>
           l.lineId === lineId ? { ...l, shipToStoreId: storeId } : l
+        ),
+      })),
+    // fulfilmentType is NOT part of the tier aggregation key, so flipping it
+    // never re-pools pricing — a plain field update, mirroring setShipTo.
+    setFulfilmentType: (lineId, fulfilmentType) =>
+      setState((s) => ({
+        lines: s.lines.map((l) =>
+          l.lineId === lineId ? { ...l, fulfilmentType } : l
         ),
       })),
     clear: () => setState({ lines: [] }),

@@ -915,6 +915,7 @@ export function ProductDetailClient({
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
             billingMode: product.billingMode,
+            nature: product.fulfilment_type,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
           }
@@ -986,6 +987,7 @@ export function ProductDetailClient({
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
           billingMode: product.billingMode,
+          nature: product.fulfilment_type,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
           manualDecorationBrackets: manualDecorationBracketsSnapshot,
         })
@@ -1023,6 +1025,7 @@ export function ProductDetailClient({
         brackets: cartLineBrackets,
         catalogueItemId: product.catalogueItemId,
         billingMode: product.billingMode,
+        nature: product.fulfilment_type,
         manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
         manualDecorationBrackets: manualDecorationBracketsSnapshot,
       }
@@ -1061,6 +1064,7 @@ export function ProductDetailClient({
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       billingMode: product.billingMode,
+      nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
