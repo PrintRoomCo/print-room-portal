@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { effectiveDecorationPrice, loadTierMultiplier } from '@/lib/checkout/decoration-effective-price'
@@ -1383,150 +1384,205 @@ export async function submitCustomerOrder(
     }
   }
 
-  // 5. Hold the order for staff proof review. Customer-facing portal flow:
-  //    submit → autofill proof + Monday deal + AM email → staff edits → staff
-  //    push-to-customer → customer approves. No more AM-approve gate.
-  //    See spec: 2026-05-21-checkout-monday-proof-pipeline-design.md.
+  // 5b (moved in-request). Flip status to awaiting-proof-review BEFORE the
+  //     deferred side-effects run: the confirmation page and order tracker read
+  //     this status, so it must be set within the request — not in after().
+  //     Independent of the Monday push result.
+  await admin
+    .from('orders')
+    .update({ status: 'awaiting-proof-review' })
+    .eq('id', order_id)
 
-  // 5a. Push to Monday CRM Deals board. Best-effort: if it fails, order still
-  //     commits, audit row records the failure, staff can retry from the order
-  //     detail page (Stage 4 surface).
-  //
-  // TODO(2026-05-21): this data-build block is duplicated in
-  //   print-room-staff-portal/src/app/api/orders/[id]/retry-monday-push/route.ts.
-  //   Extract to lib/orders/build-monday-payload.ts when a 3rd caller appears.
-  //   Stage 4 deliberately kept the duplicate to avoid re-touching submit.ts.
-  let mondayItemId: string | null = null
-  const subitemIdByQuoteItemId: Record<string, string> = {}
-  try {
-    const { data: dealLines } = await admin
-      .from('quote_items')
-      .select(`
-        id, product_name, quantity, unit_price, decorations, size_label,
-        product_variants ( product_color_swatches(label) )
-      `)
-      .eq('quote_id', quote_id)
-
-    const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
-      id: string
-      product_name: string
-      quantity: number
-      unit_price: number
-      decorations: Array<{ name: string }> | null
-      size_label: string | null
-      product_variants: {
-        product_color_swatches: { label: string | null } | { label: string | null }[] | null
-      } | null
-    }>).map((row) => {
-      const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
-      const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
-      const designName = row.decorations?.[0]?.name ?? 'No decoration'
-      return {
-        quoteItemId: row.id,
-        productName: row.product_name,
-        variantLabel,
-        colorName: swatch?.label ?? null,
-        sizeLabel: row.size_label,
-        designName,
-        quantity: row.quantity,
-      }
-    })
-
-    // emailTotalAmount is declared AFTER step 5 in this file, so it's not in
-    // scope here. Compute directly from repriced.
-    const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
-
-    // Demo orgs route their Monday deal to the Demo group (same board) so
-    // production's New Deals stays clean while the tracking round-trip
-    // (monday_item_id → tracker-status webhook) keeps working.
-    const { data: orgFlagRow } = await admin
-      .from('organizations')
-      .select('is_test')
-      .eq('id', input.context.organizationId)
-      .maybeSingle()
-    const isTestOrg = Boolean((orgFlagRow as { is_test?: boolean } | null)?.is_test)
-
-    const { itemId, subitemIds } = await pushOrderDeal(
-      {
-        customerEmail: input.context.email ?? '',
-        customerName: input.context.organizationName,
-        customerCompany: input.context.organizationName,
-        orderRef: order_ref,
-        inHandDate: input.required_by ?? null,
-        notes: input.notes ?? null,
-        totalAmount,
-        lines,
-        deliveryAddress: formattedShippingAddress,
-      },
-      { demo: isTestOrg },
-    )
-
-    mondayItemId = itemId
-    Object.assign(subitemIdByQuoteItemId, subitemIds)
-
-    // Persist back. Order row gets monday_item_id; each quote_items row gets
-    // its monday_subitem_id so the existing tracker-status webhook can match
-    // inbound Monday updates to portal-side lines.
-    await admin.from('orders').update({ monday_item_id: itemId }).eq('id', order_id)
-    for (const [quoteItemId, subitemId] of Object.entries(subitemIds)) {
-      await admin
-        .from('quote_items')
-        .update({ monday_subitem_id: subitemId })
-        .eq('id', quoteItemId)
-    }
-
-    // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
-    // Monday card so the floor pulls from stock instead of producing. Purchase
-    // orders get no note. Own try/catch so a note failure never marks the whole
-    // Monday push as failed (mirrors the Xero manual-review note in step 5c).
-    // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
-    // billing note stating whether goods need invoicing (not-paid) or are
-    // prepaid, plus the pick fee. Purchase orders still get no note.
-    const billingNote = isStockOnHandOrder
-      ? orderBillingNote({ needsInvoicing, pickFee })
-      : null
-    if (billingNote) {
-      try {
-        await postItemUpdate(itemId, billingNote)
-      } catch (noteErr) {
-        console.error('[Checkout] billing note failed (swallowed)', {
-          orderId: order_id,
-          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
-        })
-      }
-    }
-
-    // Stamp the same Monday item id onto the job_trackers shell created in
-    // step 4c. Webhook-driven status updates from Monday already key off
-    // monday_item_id (job_tracker_webhook_logs) so this enables inbound
-    // status sync. Best-effort: failure audits but does NOT roll back.
-    try {
-      const { error: tErr } = await admin
-        .from('job_trackers')
-        .update({
-          monday_item_id: Number(itemId),
-          // Orders now land on the Production board — stamp it so tracker-based
-          // Monday deep links resolve there, not a dead Deals URL.
-          monday_board_id: PRODUCTION_BOARD_ID,
-          last_synced_at: new Date().toISOString(),
-        })
-        .eq('quote_id', quote_id)
-      if (tErr) throw new Error(tErr.message)
-    } catch (tErr) {
-      const tMsg = tErr instanceof Error ? tErr.message : String(tErr)
-      console.error('[Checkout] job tracker monday_item_id stamp failed (swallowed)', {
+  // External side-effects (Monday, Xero, confirmation + dispatch emails,
+  // Slack, Starshipit) run AFTER the response flushes — none are needed to
+  // render the confirmation page. A dispatch-once compare-and-set on
+  // orders.notifications_dispatched_at makes them idempotent across replays
+  // and concurrent double-submits.
+  after(async () => {
+    const { data: claimed, error: claimErr } = await admin
+      .from('orders')
+      .update({ notifications_dispatched_at: new Date().toISOString() })
+      .eq('id', order_id)
+      .is('notifications_dispatched_at', null)
+      .select('id')
+    if (claimErr) {
+      console.error('[Checkout] side-effect dispatch claim failed (swallowed)', {
         orderId: order_id,
-        err: tMsg,
+        err: claimErr.message,
       })
+      return
+    }
+    // Skip only when the compare-and-set explicitly claimed zero rows (this
+    // order was already dispatched by a prior submit). A null payload without
+    // an error only arises under test stubs that do not model .select(); treat
+    // it as a fresh claim so real (array) semantics drive production.
+    if (Array.isArray(claimed) && claimed.length === 0) {
+      return
+    }
+
+    // 5. Hold the order for staff proof review. Customer-facing portal flow:
+    //    submit → autofill proof + Monday deal + AM email → staff edits → staff
+    //    push-to-customer → customer approves. No more AM-approve gate.
+    //    See spec: 2026-05-21-checkout-monday-proof-pipeline-design.md.
+
+    // 5a. Push to Monday CRM Deals board. Best-effort: if it fails, order still
+    //     commits, audit row records the failure, staff can retry from the order
+    //     detail page (Stage 4 surface).
+    //
+    // TODO(2026-05-21): this data-build block is duplicated in
+    //   print-room-staff-portal/src/app/api/orders/[id]/retry-monday-push/route.ts.
+    //   Extract to lib/orders/build-monday-payload.ts when a 3rd caller appears.
+    //   Stage 4 deliberately kept the duplicate to avoid re-touching submit.ts.
+    let mondayItemId: string | null = null
+    const subitemIdByQuoteItemId: Record<string, string> = {}
+    try {
+      const { data: dealLines } = await admin
+        .from('quote_items')
+        .select(`
+          id, product_name, quantity, unit_price, decorations, size_label,
+          product_variants ( product_color_swatches(label) )
+        `)
+        .eq('quote_id', quote_id)
+
+      const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
+        id: string
+        product_name: string
+        quantity: number
+        unit_price: number
+        decorations: Array<{ name: string }> | null
+        size_label: string | null
+        product_variants: {
+          product_color_swatches: { label: string | null } | { label: string | null }[] | null
+        } | null
+      }>).map((row) => {
+        const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
+        const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
+        const designName = row.decorations?.[0]?.name ?? 'No decoration'
+        return {
+          quoteItemId: row.id,
+          productName: row.product_name,
+          variantLabel,
+          colorName: swatch?.label ?? null,
+          sizeLabel: row.size_label,
+          designName,
+          quantity: row.quantity,
+        }
+      })
+
+      // emailTotalAmount is declared AFTER step 5 in this file, so it's not in
+      // scope here. Compute directly from repriced.
+      const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+      // Demo orgs route their Monday deal to the Demo group (same board) so
+      // production's New Deals stays clean while the tracking round-trip
+      // (monday_item_id → tracker-status webhook) keeps working.
+      const { data: orgFlagRow } = await admin
+        .from('organizations')
+        .select('is_test')
+        .eq('id', input.context.organizationId)
+        .maybeSingle()
+      const isTestOrg = Boolean((orgFlagRow as { is_test?: boolean } | null)?.is_test)
+
+      const { itemId, subitemIds } = await pushOrderDeal(
+        {
+          customerEmail: input.context.email ?? '',
+          customerName: input.context.organizationName,
+          customerCompany: input.context.organizationName,
+          orderRef: order_ref,
+          inHandDate: input.required_by ?? null,
+          notes: input.notes ?? null,
+          totalAmount,
+          lines,
+          deliveryAddress: formattedShippingAddress,
+        },
+        { demo: isTestOrg },
+      )
+
+      mondayItemId = itemId
+      Object.assign(subitemIdByQuoteItemId, subitemIds)
+
+      // Persist back. Order row gets monday_item_id; each quote_items row gets
+      // its monday_subitem_id so the existing tracker-status webhook can match
+      // inbound Monday updates to portal-side lines.
+      await admin.from('orders').update({ monday_item_id: itemId }).eq('id', order_id)
+      for (const [quoteItemId, subitemId] of Object.entries(subitemIds)) {
+        await admin
+          .from('quote_items')
+          .update({ monday_subitem_id: subitemId })
+          .eq('id', quoteItemId)
+      }
+
+      // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
+      // Monday card so the floor pulls from stock instead of producing. Purchase
+      // orders get no note. Own try/catch so a note failure never marks the whole
+      // Monday push as failed (mirrors the Xero manual-review note in step 5c).
+      // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
+      // billing note stating whether goods need invoicing (not-paid) or are
+      // prepaid, plus the pick fee. Purchase orders still get no note.
+      const billingNote = isStockOnHandOrder
+        ? orderBillingNote({ needsInvoicing, pickFee })
+        : null
+      if (billingNote) {
+        try {
+          await postItemUpdate(itemId, billingNote)
+        } catch (noteErr) {
+          console.error('[Checkout] billing note failed (swallowed)', {
+            orderId: order_id,
+            err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+          })
+        }
+      }
+
+      // Stamp the same Monday item id onto the job_trackers shell created in
+      // step 4c. Webhook-driven status updates from Monday already key off
+      // monday_item_id (job_tracker_webhook_logs) so this enables inbound
+      // status sync. Best-effort: failure audits but does NOT roll back.
+      try {
+        const { error: tErr } = await admin
+          .from('job_trackers')
+          .update({
+            monday_item_id: Number(itemId),
+            // Orders now land on the Production board — stamp it so tracker-based
+            // Monday deep links resolve there, not a dead Deals URL.
+            monday_board_id: PRODUCTION_BOARD_ID,
+            last_synced_at: new Date().toISOString(),
+          })
+          .eq('quote_id', quote_id)
+        if (tErr) throw new Error(tErr.message)
+      } catch (tErr) {
+        const tMsg = tErr instanceof Error ? tErr.message : String(tErr)
+        console.error('[Checkout] job tracker monday_item_id stamp failed (swallowed)', {
+          orderId: order_id,
+          err: tMsg,
+        })
+        try {
+          await recordAuditEvent(
+            {
+              orgId: input.context.organizationId,
+              actorUserId: input.context.userId,
+              action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_MONDAY_LINK_FAILED,
+              targetType: 'order',
+              targetId: order_id,
+              metadata: { order_ref, quote_id, monday_item_id: itemId, error: tMsg },
+            },
+            admin,
+          )
+        } catch {
+          // truly best-effort
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[Checkout] Monday push failed (swallowed)', { orderId: order_id, err: message })
       try {
         await recordAuditEvent(
           {
             orgId: input.context.organizationId,
             actorUserId: input.context.userId,
-            action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_MONDAY_LINK_FAILED,
+            action: AUDIT_ACTIONS.ORDER_MONDAY_PUSH_FAILED,
             targetType: 'order',
             targetId: order_id,
-            metadata: { order_ref, quote_id, monday_item_id: itemId, error: tMsg },
+            metadata: { order_ref, quote_id, error: message },
           },
           admin,
         )
@@ -1534,437 +1590,411 @@ export async function submitCustomerOrder(
         // truly best-effort
       }
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error('[Checkout] Monday push failed (swallowed)', { orderId: order_id, err: message })
+
+    // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards
+    //     populate with customer-originated drafts the same way they do for staff-
+    //     originated B2B submits. Pulls org/customer/order_ref from the quote
+    //     because `orders` itself carries none of those signals (schema reality
+    //     check — see §F.1). The helper never throws; failure paths collapse to
+    //     an audit_events row so the order submit always succeeds.
     try {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.ORDER_MONDAY_PUSH_FAILED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: { order_ref, quote_id, error: message },
-        },
-        admin,
-      )
-    } catch {
-      // truly best-effort
-    }
-  }
+      const { data: quote, error: quoteError } = await admin
+        .from('quotes')
+        .select('id, organization_id, customer_name, customer_email, order_ref')
+        .eq('id', quote_id)
+        .single<{
+          id: string
+          organization_id: string | null
+          customer_name: string | null
+          customer_email: string | null
+          order_ref: string | null
+        }>()
+      if (quoteError) {
+        throw new Error(`Autofill quote lookup failed: ${quoteError.message}`)
+      }
 
-  // 5b. Flip status to awaiting-proof-review. Replaces the old
-  //     'awaiting-approval'. Independent of the Monday push result —
-  //     order proceeds even if Monday push failed.
-  await admin
-    .from('orders')
-    .update({ status: 'awaiting-proof-review' })
-    .eq('id', order_id)
+      const { data: lineRows, error: lineRowsError } = await admin
+        .from('quote_items')
+        .select('product_id')
+        .eq('quote_id', quote_id)
+      if (lineRowsError) {
+        throw new Error(`Autofill quote item lookup failed: ${lineRowsError.message}`)
+      }
 
-  // 5b. F1 (spec 2026-05-13 §G.4) — best-effort proof shell so staff dashboards
-  //     populate with customer-originated drafts the same way they do for staff-
-  //     originated B2B submits. Pulls org/customer/order_ref from the quote
-  //     because `orders` itself carries none of those signals (schema reality
-  //     check — see §F.1). The helper never throws; failure paths collapse to
-  //     an audit_events row so the order submit always succeeds.
-  try {
-    const { data: quote, error: quoteError } = await admin
-      .from('quotes')
-      .select('id, organization_id, customer_name, customer_email, order_ref')
-      .eq('id', quote_id)
-      .single<{
-        id: string
-        organization_id: string | null
-        customer_name: string | null
-        customer_email: string | null
-        order_ref: string | null
-      }>()
-    if (quoteError) {
-      throw new Error(`Autofill quote lookup failed: ${quoteError.message}`)
-    }
+      const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
+        .map((r) => r.product_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
 
-    const { data: lineRows, error: lineRowsError } = await admin
-      .from('quote_items')
-      .select('product_id')
-      .eq('quote_id', quote_id)
-    if (lineRowsError) {
-      throw new Error(`Autofill quote item lookup failed: ${lineRowsError.message}`)
-    }
-
-    const productIds = ((lineRows ?? []) as Array<{ product_id: string | null }>)
-      .map((r) => r.product_id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
-
-    if (quote?.organization_id && quote.order_ref) {
-      await autofillProofForOrder(
-        {
-          orderId: order_id,
-          quoteId: quote_id,
-          organizationId: quote.organization_id,
-          customerName: quote.customer_name ?? input.context.organizationName,
-          customerEmail: quote.customer_email ?? input.context.email ?? '',
-          orderRef: quote.order_ref,
-          productIds,
-        },
-        admin,
-      )
-    }
-  } catch (e) {
-    // Defence-in-depth — the helper is contracted never to throw, but a
-    // failure here must NEVER bubble out of submit and break the order.
-    const message = e instanceof Error ? e.message : String(e)
-    console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
-      orderId: order_id,
-      err: message,
-    })
-    try {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.PROOF_AUTOFILL_FAILED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: {
-            order_ref,
-            quote_id,
-            error: message,
-            source: 'checkout_submit_outer_catch',
+      if (quote?.organization_id && quote.order_ref) {
+        await autofillProofForOrder(
+          {
+            orderId: order_id,
+            quoteId: quote_id,
+            organizationId: quote.organization_id,
+            customerName: quote.customer_name ?? input.context.organizationName,
+            customerEmail: quote.customer_email ?? input.context.email ?? '',
+            orderRef: quote.order_ref,
+            productIds,
           },
-        },
-        admin,
-      )
-    } catch (auditErr) {
-      console.error('[Checkout] proof autofill failure audit threw (swallowed)', {
-        orderId: order_id,
-        err: auditErr instanceof Error ? auditErr.message : String(auditErr),
-      })
-    }
-  }
-
-  // 5c. Best-effort Xero DRAFT quote. Mirrors the Monday/email side-effects:
-  //     never throws, audits on failure. Spec A: EVERY non-test order drafts —
-  //     purchase orders and stock-on-hand alike. Only a test org is skipped
-  //     (xero_invoice_status='skipped'); disabled/already-drafted are inert.
-  //     Spec B: prepaid stocked goods are zeroed on the draft and the pick fee
-  //     (computed above, region-gated to NZ) rides on its own line.
-  try {
-    const prepaidStockedLineKeys = new Set(
-      input.lines.flatMap((l, i) =>
-        l.fulfilment_type === 'stocked' && orderBillingLines[i]?.billingMode === 'prepaid'
-          ? [makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)]
-          : [],
-      ),
-    )
-    const xeroOrgResult = await admin
-      .from('organizations')
-      .select('is_test')
-      .eq('id', input.context.organizationId)
-      .maybeSingle()
-    // Fail closed on error OR a missing row: treat as a test org so we never push
-    // a live Xero draft for an org we could not classify (mirrors the email +
-    // dispatch recipient lookups).
-    const xeroIsTestOrg = isTestOrgFailClosed(
-      xeroOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
-    )
-
-    const xeroResult = await createDraftInvoiceForOrder(admin, {
-      orderId: order_id,
-      orderRef: order_ref,
-      quoteId: quote_id,
-      organizationId: input.context.organizationId,
-      organizationName: input.context.organizationName,
-      actorUserId: input.context.userId,
-      ordererEmail: input.context.email ?? null,
-      paymentTerms: input.context.paymentTerms ?? null,
-      isTestOrg: xeroIsTestOrg,
-      pickingFee: pickFee,
-      prepaidStockedLineKeys,
-      existingInvoiceId: null, // fresh order — no prior draft
-      today: new Date().toISOString().slice(0, 10),
-      deliveryAddressSummary: formattedShippingAddress,
-    })
-
-    // Surface a manual-quote flag where Charlotte works (best-effort within
-    // this already-best-effort block). The orchestrator already set the DB
-    // status + audit; this is just the human-visible nudge on the Monday card.
-    if (xeroResult.status === 'manual_review' && mondayItemId) {
-      try {
-        await postItemUpdate(
-          mondayItemId,
-          `Manual Xero quote required — this order was not auto-drafted in Xero ` +
-            `(reason: ${xeroResult.reason}). Please raise the quote manually.`,
+          admin,
         )
-      } catch (noteErr) {
-        console.error('[Checkout] Xero manual-review Monday note failed (swallowed)', {
+      }
+    } catch (e) {
+      // Defence-in-depth — the helper is contracted never to throw, but a
+      // failure here must NEVER bubble out of submit and break the order.
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[Checkout] autofillProofForOrder threw (swallowed)', {
+        orderId: order_id,
+        err: message,
+      })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.PROOF_AUTOFILL_FAILED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: {
+              order_ref,
+              quote_id,
+              error: message,
+              source: 'checkout_submit_outer_catch',
+            },
+          },
+          admin,
+        )
+      } catch (auditErr) {
+        console.error('[Checkout] proof autofill failure audit threw (swallowed)', {
           orderId: order_id,
-          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+          err: auditErr instanceof Error ? auditErr.message : String(auditErr),
         })
       }
     }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    console.error('[Checkout] Xero draft quote failed (swallowed)', { orderId: order_id, err: message })
+
+    // 5c. Best-effort Xero DRAFT quote. Mirrors the Monday/email side-effects:
+    //     never throws, audits on failure. Spec A: EVERY non-test order drafts —
+    //     purchase orders and stock-on-hand alike. Only a test org is skipped
+    //     (xero_invoice_status='skipped'); disabled/already-drafted are inert.
+    //     Spec B: prepaid stocked goods are zeroed on the draft and the pick fee
+    //     (computed above, region-gated to NZ) rides on its own line.
     try {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_FAILED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: { order_ref, quote_id, error: message },
-        },
-        admin,
+      const prepaidStockedLineKeys = new Set(
+        input.lines.flatMap((l, i) =>
+          l.fulfilment_type === 'stocked' && orderBillingLines[i]?.billingMode === 'prepaid'
+            ? [makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)]
+            : [],
+        ),
       )
-    } catch {
-      // truly best-effort
-    }
-  }
-
-  // 5d. Best-effort Starshipit push-at-placement. Registers an UNSHIPPED order
-  //     carrying delivery details so staff can generate the label + tracking in
-  //     Starshipit; the portal webhook writes the tracking link back onto the
-  //     job_trackers row. Dark by default (STARSHIPIT_ENABLED). Mirrors the
-  //     Monday/Xero side-effects: never throws out of submit, audits on failure.
-  //     While the flag is OFF this block is FULLY INERT — no org query, no
-  //     'disabled' audit row on every checkout (same convention as the Xero
-  //     step's 'disabled' → no write, no audit).
-  if (isStarshipitEnabled()) {
-  try {
-    const { data: ssOrgRow } = await admin
-      .from('organizations')
-      .select('is_test')
-      .eq('id', input.context.organizationId)
-      .maybeSingle()
-    const ssIsTestOrg = Boolean((ssOrgRow as { is_test?: boolean } | null)?.is_test)
-
-    const ssResult = await pushOrderToStarshipit(admin, {
-      orderId: order_id,
-      orderRef: order_ref,
-      organizationId: input.context.organizationId,
-      actorUserId: input.context.userId,
-      intent: input.intent ?? 'customer',
-      isTestOrg: ssIsTestOrg,
-      customerEmail: input.context.email ?? null,
-      shippingAddress,
-      // orderType intentionally NOT passed: Spec A orders.order_type is a
-      // stock/production axis ('stock_on_hand'|'purchase_order'), NOT a
-      // delivery/pickup discriminator — passing it would skip every order via
-      // the eligibility's non_delivery_type gate. `intent` is the real signal.
-    })
-    if (ssResult.status === 'skipped') {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.ORDER_STARSHIPIT_SKIPPED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: { order_ref, reason: ssResult.reason },
-        },
-        admin,
+      const xeroOrgResult = await admin
+        .from('organizations')
+        .select('is_test')
+        .eq('id', input.context.organizationId)
+        .maybeSingle()
+      // Fail closed on error OR a missing row: treat as a test org so we never push
+      // a live Xero draft for an org we could not classify (mirrors the email +
+      // dispatch recipient lookups).
+      const xeroIsTestOrg = isTestOrgFailClosed(
+        xeroOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
       )
-    }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    console.error('[Checkout] Starshipit push failed (swallowed)', { orderId: order_id, err: message })
-    try {
-      await recordAuditEvent(
-        {
-          orgId: input.context.organizationId,
-          actorUserId: input.context.userId,
-          action: AUDIT_ACTIONS.ORDER_STARSHIPIT_PUSH_FAILED,
-          targetType: 'order',
-          targetId: order_id,
-          metadata: { order_ref, quote_id, error: message },
-        },
-        admin,
-      )
-    } catch {
-      // truly best-effort
-    }
-  }
-  }
 
-  // Fetch the email payload from quotes/quote_items for the confirmation email below.
-  let emailLines: OrderConfirmationLine[] = []
-  let emailTotalAmount: number | null = null
-  let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
-  let emailRequiredBy: string | null = input.required_by ?? null
-  let emailCustomerName = input.context.organizationName
-  try {
-    const { data: q } = await admin
-      .from('quotes')
-      .select('customer_name, total_amount, required_by, payment_terms')
-      .eq('id', quote_id)
-      .single()
-    const quote = q as QuoteRowForEmail | null
-    if (quote) {
-      emailTotalAmount = Number(quote.total_amount)
-      emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
-      emailRequiredBy = quote.required_by ?? emailRequiredBy
-      emailCustomerName = quote.customer_name
-    }
-
-    const { data: lines } = await admin
-      .from('quote_items')
-      .select(
-        `product_name, quantity, unit_price, size_label,
-         product_variants (
-           product_color_swatches (label)
-         )`
-      )
-      .eq('quote_id', quote_id)
-    const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
-    emailLines = lineRows.map((l) => {
-      const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
-      const variantLabel = [swatch?.label, l.size_label].filter(Boolean).join(' / ') || '—'
-      return {
-        productName: l.product_name,
-        variantLabel,
-        quantity: l.quantity,
-        unitPrice: Number(l.unit_price),
-      }
-    })
-  } catch {
-    // Email payload fetch failure shouldn't block the order; fall through to
-    // the fallback shape built from `repriced` in step 6.
-  }
-
-  // 6. Order-confirmation email. Failure here must not roll back the order or
-  //    depend on the Monday push result.
-  try {
-    if (input.context.email) {
-      const fallbackLines =
-        emailLines.length > 0
-          ? emailLines
-          : repriced.map((line) => ({
-              productName: line.product_name,
-              variantLabel: '-',
-              quantity: line.qty,
-              unitPrice: line.unit_price,
-            }))
-      const fallbackTotal =
-        emailTotalAmount ??
-        repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
-
-      const emailOrgResult = await admin
-        .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
-      // Fail closed on error OR a missing row: route to the test inbox rather than risk emailing a real customer.
-      const isTestOrgForEmail = isTestOrgFailClosed(
-        emailOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
-      )
-      const emailRecipient = resolveOrderEmailRecipient({
-        isTestOrg: isTestOrgForEmail,
-        customerEmail: input.context.email,
-        testEmail: 'jamie@theprint-room.co.nz',
-      })
-
-      const result = await sendOrderConfirmation({
-        to: emailRecipient,
-        customerName: emailCustomerName,
+      const xeroResult = await createDraftInvoiceForOrder(admin, {
         orderId: order_id,
         orderRef: order_ref,
-        totalAmount: fallbackTotal,
-        paymentTerms: emailPaymentTerms,
-        contractNotes: input.context.contractNotes,
-        pricingMode: input.context.pricingMode,
-        requiredBy: emailRequiredBy,
-        lines: fallbackLines,
-        provisionalUntil:
-          openPeriod && preOrderItemIds.size > 0 ? openPeriod.closesAt : null,
+        quoteId: quote_id,
+        organizationId: input.context.organizationId,
+        organizationName: input.context.organizationName,
+        actorUserId: input.context.userId,
+        ordererEmail: input.context.email ?? null,
+        paymentTerms: input.context.paymentTerms ?? null,
+        isTestOrg: xeroIsTestOrg,
+        pickingFee: pickFee,
+        prepaidStockedLineKeys,
+        existingInvoiceId: null, // fresh order — no prior draft
+        today: new Date().toISOString().slice(0, 10),
+        deliveryAddressSummary: formattedShippingAddress,
       })
-      if (!result.success) {
-        console.error(
-          '[Checkout] Order-confirmation email failed:',
-          result.error ?? 'Unknown error'
+
+      // Surface a manual-quote flag where Charlotte works (best-effort within
+      // this already-best-effort block). The orchestrator already set the DB
+      // status + audit; this is just the human-visible nudge on the Monday card.
+      if (xeroResult.status === 'manual_review' && mondayItemId) {
+        try {
+          await postItemUpdate(
+            mondayItemId,
+            `Manual Xero quote required — this order was not auto-drafted in Xero ` +
+              `(reason: ${xeroResult.reason}). Please raise the quote manually.`,
+          )
+        } catch (noteErr) {
+          console.error('[Checkout] Xero manual-review Monday note failed (swallowed)', {
+            orderId: order_id,
+            err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+          })
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[Checkout] Xero draft quote failed (swallowed)', { orderId: order_id, err: message })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_FAILED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: { order_ref, quote_id, error: message },
+          },
+          admin,
         )
+      } catch {
+        // truly best-effort
       }
     }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error'
-    console.error('[Checkout] Order-confirmation email failed:', message)
-  }
 
-  // 7. Order-placed dispatch notification (Item 13). Fires for EVERY order the
-  //    moment it commits: a Block Kit Slack message (no-op until the webhook env
-  //    exists) plus an email to the dispatch desk (charlotte@ in prod, or the
-  //    test inbox for demo orgs). Best-effort — a notification failure must
-  //    never break the order. Reuses the step-6 email summary + a portal deep
-  //    link to the order's confirmation page (the only order_id-keyed route).
-  try {
-    const notifyOrderUrl = `${
-      process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
-    }/checkout/confirmation/${order_id}`
+    // 5d. Best-effort Starshipit push-at-placement. Registers an UNSHIPPED order
+    //     carrying delivery details so staff can generate the label + tracking in
+    //     Starshipit; the portal webhook writes the tracking link back onto the
+    //     job_trackers row. Dark by default (STARSHIPIT_ENABLED). Mirrors the
+    //     Monday/Xero side-effects: never throws out of submit, audits on failure.
+    //     While the flag is OFF this block is FULLY INERT — no org query, no
+    //     'disabled' audit row on every checkout (same convention as the Xero
+    //     step's 'disabled' → no write, no audit).
+    if (isStarshipitEnabled()) {
+    try {
+      const { data: ssOrgRow } = await admin
+        .from('organizations')
+        .select('is_test')
+        .eq('id', input.context.organizationId)
+        .maybeSingle()
+      const ssIsTestOrg = Boolean((ssOrgRow as { is_test?: boolean } | null)?.is_test)
 
-    const notifyLines =
-      emailLines.length > 0
-        ? emailLines
-        : repriced.map((l) => ({
-            productName: l.product_name,
-            variantLabel: '—',
-            quantity: l.qty,
-            unitPrice: l.unit_price,
-          }))
-    const notifyTotal =
-      emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
-
-    const notifyOrgResult = await admin
-      .from('organizations')
-      .select('is_test')
-      .eq('id', input.context.organizationId)
-      .maybeSingle()
-    // Fail closed: an unknown org classification (lookup error OR missing row)
-    // must never notify Charlotte — route to the test inbox instead.
-    const notifyIsTestOrg = isTestOrgFailClosed(
-      notifyOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
-    )
-    if (notifyOrgResult.error || !notifyOrgResult.data) {
-      console.error(
-        '[Checkout] dispatch recipient lookup unresolved; routing to test inbox',
-        notifyOrgResult.error?.message ?? 'org row not found',
-      )
+      const ssResult = await pushOrderToStarshipit(admin, {
+        orderId: order_id,
+        orderRef: order_ref,
+        organizationId: input.context.organizationId,
+        actorUserId: input.context.userId,
+        intent: input.intent ?? 'customer',
+        isTestOrg: ssIsTestOrg,
+        customerEmail: input.context.email ?? null,
+        shippingAddress,
+        // orderType intentionally NOT passed: Spec A orders.order_type is a
+        // stock/production axis ('stock_on_hand'|'purchase_order'), NOT a
+        // delivery/pickup discriminator — passing it would skip every order via
+        // the eligibility's non_delivery_type gate. `intent` is the real signal.
+      })
+      if (ssResult.status === 'skipped') {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.ORDER_STARSHIPIT_SKIPPED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: { order_ref, reason: ssResult.reason },
+          },
+          admin,
+        )
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[Checkout] Starshipit push failed (swallowed)', { orderId: order_id, err: message })
+      try {
+        await recordAuditEvent(
+          {
+            orgId: input.context.organizationId,
+            actorUserId: input.context.userId,
+            action: AUDIT_ACTIONS.ORDER_STARSHIPIT_PUSH_FAILED,
+            targetType: 'order',
+            targetId: order_id,
+            metadata: { order_ref, quote_id, error: message },
+          },
+          admin,
+        )
+      } catch {
+        // truly best-effort
+      }
+    }
     }
 
-    await postOrderPlacedSlack({
-      orderRef: order_ref,
-      customerName: emailCustomerName,
-      orderType,
-      totalAmount: notifyTotal,
-      orderUrl: notifyOrderUrl,
-      lines: notifyLines.map((l) => ({
-        productName: l.productName,
-        variantLabel: l.variantLabel,
-        quantity: l.quantity,
-      })),
-    })
+    // Fetch the email payload from quotes/quote_items for the confirmation email below.
+    let emailLines: OrderConfirmationLine[] = []
+    let emailTotalAmount: number | null = null
+    let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
+    let emailRequiredBy: string | null = input.required_by ?? null
+    let emailCustomerName = input.context.organizationName
+    try {
+      const { data: q } = await admin
+        .from('quotes')
+        .select('customer_name, total_amount, required_by, payment_terms')
+        .eq('id', quote_id)
+        .single()
+      const quote = q as QuoteRowForEmail | null
+      if (quote) {
+        emailTotalAmount = Number(quote.total_amount)
+        emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
+        emailRequiredBy = quote.required_by ?? emailRequiredBy
+        emailCustomerName = quote.customer_name
+      }
 
-    // Dispatch desk email is internal + fires only for real customer orgs.
-    // Test/demo orgs already route the customer confirmation to the test inbox;
-    // suppress the dispatch copy so a tester sees exactly one email.
-    if (!notifyIsTestOrg) {
-      const dispatchRecipient = resolveDispatchNotificationRecipient({
-        isTestOrg: notifyIsTestOrg,
-        testEmail: 'jamie@theprint-room.co.nz',
+      const { data: lines } = await admin
+        .from('quote_items')
+        .select(
+          `product_name, quantity, unit_price, size_label,
+           product_variants (
+             product_color_swatches (label)
+           )`
+        )
+        .eq('quote_id', quote_id)
+      const lineRows = (lines ?? []) as unknown as QuoteItemForEmail[]
+      emailLines = lineRows.map((l) => {
+        const swatch = pickOne(l.product_variants?.product_color_swatches ?? null)
+        const variantLabel = [swatch?.label, l.size_label].filter(Boolean).join(' / ') || '—'
+        return {
+          productName: l.product_name,
+          variantLabel,
+          quantity: l.quantity,
+          unitPrice: Number(l.unit_price),
+        }
       })
-      await sendOrderPlacedDispatch({
-        to: dispatchRecipient,
+    } catch {
+      // Email payload fetch failure shouldn't block the order; fall through to
+      // the fallback shape built from `repriced` in step 6.
+    }
+
+    // 6. Order-confirmation email. Failure here must not roll back the order or
+    //    depend on the Monday push result.
+    try {
+      if (input.context.email) {
+        const fallbackLines =
+          emailLines.length > 0
+            ? emailLines
+            : repriced.map((line) => ({
+                productName: line.product_name,
+                variantLabel: '-',
+                quantity: line.qty,
+                unitPrice: line.unit_price,
+              }))
+        const fallbackTotal =
+          emailTotalAmount ??
+          repriced.reduce((total, line) => total + line.unit_price * line.qty, 0)
+
+        const emailOrgResult = await admin
+          .from('organizations').select('is_test').eq('id', input.context.organizationId).maybeSingle()
+        // Fail closed on error OR a missing row: route to the test inbox rather than risk emailing a real customer.
+        const isTestOrgForEmail = isTestOrgFailClosed(
+          emailOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
+        )
+        const emailRecipient = resolveOrderEmailRecipient({
+          isTestOrg: isTestOrgForEmail,
+          customerEmail: input.context.email,
+          testEmail: 'jamie@theprint-room.co.nz',
+        })
+
+        const result = await sendOrderConfirmation({
+          to: emailRecipient,
+          customerName: emailCustomerName,
+          orderId: order_id,
+          orderRef: order_ref,
+          totalAmount: fallbackTotal,
+          paymentTerms: emailPaymentTerms,
+          contractNotes: input.context.contractNotes,
+          pricingMode: input.context.pricingMode,
+          requiredBy: emailRequiredBy,
+          lines: fallbackLines,
+          provisionalUntil:
+            openPeriod && preOrderItemIds.size > 0 ? openPeriod.closesAt : null,
+        })
+        if (!result.success) {
+          console.error(
+            '[Checkout] Order-confirmation email failed:',
+            result.error ?? 'Unknown error'
+          )
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error'
+      console.error('[Checkout] Order-confirmation email failed:', message)
+    }
+
+    // 7. Order-placed dispatch notification (Item 13). Fires for EVERY order the
+    //    moment it commits: a Block Kit Slack message (no-op until the webhook env
+    //    exists) plus an email to the dispatch desk (charlotte@ in prod, or the
+    //    test inbox for demo orgs). Best-effort — a notification failure must
+    //    never break the order. Reuses the step-6 email summary + a portal deep
+    //    link to the order's confirmation page (the only order_id-keyed route).
+    try {
+      const notifyOrderUrl = `${
+        process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
+      }/checkout/confirmation/${order_id}`
+
+      const notifyLines =
+        emailLines.length > 0
+          ? emailLines
+          : repriced.map((l) => ({
+              productName: l.product_name,
+              variantLabel: '—',
+              quantity: l.qty,
+              unitPrice: l.unit_price,
+            }))
+      const notifyTotal =
+        emailTotalAmount ?? repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+      const notifyOrgResult = await admin
+        .from('organizations')
+        .select('is_test')
+        .eq('id', input.context.organizationId)
+        .maybeSingle()
+      // Fail closed: an unknown org classification (lookup error OR missing row)
+      // must never notify Charlotte — route to the test inbox instead.
+      const notifyIsTestOrg = isTestOrgFailClosed(
+        notifyOrgResult as { data: { is_test?: boolean | null } | null; error: unknown },
+      )
+      if (notifyOrgResult.error || !notifyOrgResult.data) {
+        console.error(
+          '[Checkout] dispatch recipient lookup unresolved; routing to test inbox',
+          notifyOrgResult.error?.message ?? 'org row not found',
+        )
+      }
+
+      await postOrderPlacedSlack({
         orderRef: order_ref,
         customerName: emailCustomerName,
         orderType,
         totalAmount: notifyTotal,
         orderUrl: notifyOrderUrl,
-        lines: notifyLines,
+        lines: notifyLines.map((l) => ({
+          productName: l.productName,
+          variantLabel: l.variantLabel,
+          quantity: l.quantity,
+        })),
+      })
+
+      // Dispatch desk email is internal + fires only for real customer orgs.
+      // Test/demo orgs already route the customer confirmation to the test inbox;
+      // suppress the dispatch copy so a tester sees exactly one email.
+      if (!notifyIsTestOrg) {
+        const dispatchRecipient = resolveDispatchNotificationRecipient({
+          isTestOrg: notifyIsTestOrg,
+          testEmail: 'jamie@theprint-room.co.nz',
+        })
+        await sendOrderPlacedDispatch({
+          to: dispatchRecipient,
+          orderRef: order_ref,
+          customerName: emailCustomerName,
+          orderType,
+          totalAmount: notifyTotal,
+          orderUrl: notifyOrderUrl,
+          lines: notifyLines,
+        })
+      }
+    } catch (e) {
+      console.error('[Checkout] order-placed dispatch notification failed (swallowed)', {
+        orderId: order_id,
+        err: e instanceof Error ? e.message : String(e),
       })
     }
-  } catch (e) {
-    console.error('[Checkout] order-placed dispatch notification failed (swallowed)', {
-      orderId: order_id,
-      err: e instanceof Error ? e.message : String(e),
-    })
-  }
+  })
 
   return { order_id, order_ref }
 }

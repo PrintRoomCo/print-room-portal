@@ -21,6 +21,11 @@ vi.mock('@/lib/orders/job-tracker', () => ({
 }))
 
 import { submitCustomerOrder, type CheckoutInput } from '../submit'
+
+// The Monday-id attach (5a) now runs in Next's after(); flush the deferred work
+// (run immediately by the vitest.setup mock) before asserting on it.
+const flushAfter = () =>
+  (globalThis as unknown as { flushAfter: () => Promise<void> }).flushAfter()
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 const createJobTrackerShellForOrderMock = vi.mocked(createJobTrackerShellForOrder)
 
@@ -247,6 +252,7 @@ describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', 
     })
 
     await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
 
     expect(createJobTrackerShellForOrderMock).toHaveBeenCalledTimes(1)
     expect(createJobTrackerShellForOrderMock).toHaveBeenCalledWith(admin, {
@@ -297,6 +303,7 @@ describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', 
     })
 
     const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
     expect(result.order_id).toBe(ORDER_ID)
     expect(result.order_ref).toBe('ORD-TEST-1')
 
@@ -327,6 +334,7 @@ describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', 
     })
 
     await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
 
     const trackerUpdates = writes.filter(
       (w) =>
