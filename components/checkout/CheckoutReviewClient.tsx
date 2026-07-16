@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
@@ -66,6 +66,11 @@ export function CheckoutReviewClient({
   const [reviewState, setReviewState] = useState<CheckoutReviewState | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Live re-entry guard. `submitting` state is stale inside a synchronous
+  // double-fire, and the button's disabled state only kicks in after a
+  // re-render, so a ref is the only thing that reliably blocks a second
+  // in-flight submit.
+  const inFlightRef = useRef(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
@@ -130,6 +135,7 @@ export function CheckoutReviewClient({
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
 
   async function confirmOrder() {
+    if (inFlightRef.current) return // re-entry guard: one submit in flight at a time
     if (isPreview) return // read-only preview — never POST
     if (!reviewState || cart.lines.length === 0) return
 
@@ -155,6 +161,7 @@ export function CheckoutReviewClient({
       }
     }
 
+    inFlightRef.current = true
     setSubmitting(true)
     setBanner(null)
     try {
@@ -315,6 +322,7 @@ export function CheckoutReviewClient({
       setBanner({ kind: 'error', msg: (error as Error).message })
     } finally {
       setSubmitting(false)
+      inFlightRef.current = false
     }
   }
 
