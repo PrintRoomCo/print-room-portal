@@ -36,14 +36,6 @@ interface CheckoutReviewClientProps {
   defaultDepositPercent: number | null
   /** organizations.is_test — when true, hide the deposit/payment-terms block (demo org). */
   isTest: boolean
-  /**
-   * Fresh catalogueItemId → billing_mode resolved at SSR. The cart's own
-   * billingMode is an add-to-cart snapshot that can go stale if staff flip an
-   * item's billing_mode while it sits in a persisted cart — the server bills
-   * from the fresh value, so the badge must too. Snapshot is the fallback for
-   * lines with no map entry (legacy carts).
-   */
-  billingModeByItemId?: Record<string, 'invoice_on_dispatch' | 'prepaid'>
 }
 
 interface CheckoutResponse {
@@ -57,7 +49,6 @@ export function CheckoutReviewClient({
   paymentTerms,
   defaultDepositPercent,
   isTest,
-  billingModeByItemId,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -463,13 +454,12 @@ export function CheckoutReviewClient({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
+                      {/* Spec 3a: the cart line's own per-variant snapshot
+                          (set from variant_inventory.billing_mode on the PDP)
+                          is the badge source — no item-level SSR fetch. */}
                       {showsPrepaidTag(
-                        line.fulfilmentType ?? 'stocked',
-                        (line.catalogueItemId
-                          ? billingModeByItemId?.[line.catalogueItemId]
-                          : undefined) ??
-                          line.billingMode ??
-                          null,
+                        line.nature as 'stocked' | 'made_to_order' | 'mixed',
+                        line.billingMode ?? null,
                       ) && (
                         <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                           Pre-paid

@@ -79,7 +79,6 @@ describe('resolveCatalogueItemForPdp', () => {
           source_product_id: TEE_PRODUCT,
           name: 'Tee (draft)',
           price_mode: 'computed',
-          billing_mode: 'prepaid',
         },
       ],
     })
@@ -96,7 +95,7 @@ describe('resolveCatalogueItemForPdp', () => {
       { getGrantedItemIds: async () => [] },
     )
     expect(result?.id).toBe(TEE_ITEM)
-    expect(result?.billing_mode).toBe('prepaid')
+    expect(result?.price_mode).toBe('computed')
   })
 
   it('non-preview uses the granted lookup', async () => {

@@ -241,6 +241,24 @@ const loadProductDetailPageData = cache(async (
   // when the staff preview launched straight to this item's PDP.
   if (!productRow || (!productRow.is_active && !context.isPreview)) return { status: 'not-found' }
 
+  // Spec 3a — per-variant billing class (variant_inventory.billing_mode), keyed
+  // by the product's variants for this org. Replaces the item-level read: the
+  // "Pre-paid" badge + cart snapshot now follow the SELECTED variant's class.
+  // A variant is prepaid if ANY of its size rows is prepaid; absent → invoiced.
+  const variantIds = ((variants ?? []) as Array<{ id: string }>).map((v) => v.id)
+  const { data: billingRows } = variantIds.length
+    ? await admin
+        .from('variant_inventory')
+        .select('variant_id, billing_mode')
+        .eq('organization_id', context.organizationId)
+        .in('variant_id', variantIds)
+    : { data: [] as Array<{ variant_id: string; billing_mode: string | null }> }
+  const billingModeByVariant: Record<string, 'invoice_on_dispatch' | 'prepaid'> = {}
+  for (const r of (billingRows ?? []) as Array<{ variant_id: string; billing_mode: string | null }>) {
+    if (r.billing_mode === 'prepaid') billingModeByVariant[r.variant_id] = 'prepaid'
+    else if (!(r.variant_id in billingModeByVariant)) billingModeByVariant[r.variant_id] = 'invoice_on_dispatch'
+  }
+
   const catalogueColors = (catalogueColorRows ?? []) as Array<{
     color_swatch_id: string
     sort_order: number | null
@@ -471,8 +489,6 @@ const loadProductDetailPageData = cache(async (
         // Manual-final pricing (2026-06-10). Drives the client to read the
         // item's combined decoration figure instead of summing per-placement.
         priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',
-        // Per customer×product billing tag — drives the customer "Pre-paid" indicator.
-        billingMode: (catItem.billing_mode as 'invoice_on_dispatch' | 'prepaid' | null) ?? 'invoice_on_dispatch',
         // Manual-final: combined decoration per canonical breakpoint, resolved
         // server-side so the PDP shows the right decoration immediately.
         manualDecorationSeed,
@@ -481,6 +497,8 @@ const loadProductDetailPageData = cache(async (
       sizes: mappedSizes,
       brackets: bracketRows,
       availability,
+      // Spec 3a — variant_id → billing class for the "Pre-paid" badge + cart snapshot.
+      billingModeByVariant,
       organizationId: context.organizationId,
       customerRole: context.role,
       orderingPermission: context.orderingPermission,

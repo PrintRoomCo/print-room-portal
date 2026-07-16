@@ -10,14 +10,13 @@ export type PdpCatalogueItem = {
   moq_override: number | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
   price_mode: 'computed' | 'manual_final' | null
-  billing_mode: 'invoice_on_dispatch' | 'prepaid' | null
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
    *  widget (display only). Empty = show the full ladder. */
   volume_display_hidden_bands: number[]
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, billing_mode, volume_display_hidden_bands, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string

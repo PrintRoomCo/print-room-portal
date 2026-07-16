@@ -61,8 +61,6 @@ interface ProductData {
   garment_family: string | null
   default_sizes: string[] | null
   fulfilment_type: FulfilmentType
-  // Per customer×product billing tag — drives the customer "Pre-paid" indicator.
-  billingMode?: 'invoice_on_dispatch' | 'prepaid'
   brand_name: string | null
   category_name: string | null
   // Phase 2 — catalogue-item identity (named to avoid colliding with the
@@ -122,6 +120,12 @@ interface Props {
    * thumbnails for the matching colour. `view` is the canonical token.
    */
   hiddenViewRows?: Array<{ color_swatch_id: string | null; view: string | null }>
+  /**
+   * Spec 3a — variant_id → billing class (variant_inventory.billing_mode).
+   * Drives the "Pre-paid" badge for the SELECTED colour and the per-line cart
+   * snapshot. Absent variant → invoice_on_dispatch (pay at checkout).
+   */
+  billingModeByVariant?: Record<string, 'invoice_on_dispatch' | 'prepaid'>
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
@@ -160,6 +164,7 @@ export function ProductDetailClient({
   orderingPermission,
   images,
   hiddenViewRows = [],
+  billingModeByVariant = {},
   colourOptions = [],
   decorations,
   effectiveMoq,
@@ -228,6 +233,14 @@ export function ProductDetailClient({
   const variantsForSelectedColour = useMemo(
     () => variants.filter((v) => v.color_swatch_id === colorSwatchId),
     [variants, colorSwatchId],
+  )
+
+  // Spec 3a — the line's billing class is the VARIANT's (absent → invoiced);
+  // the "Pre-paid" badge shows when any variant of the selected colour is prepaid.
+  const billingModeForVariant = (variantId: string | null): 'invoice_on_dispatch' | 'prepaid' =>
+    (variantId && billingModeByVariant[variantId]) || 'invoice_on_dispatch'
+  const selectedColourPrepaid = variantsForSelectedColour.some(
+    (v) => billingModeByVariant[v.variant_id] === 'prepaid',
   )
 
   // Prefer the post-SKUCOLLAPSE sizeless colourway variant, but keep supporting
@@ -903,7 +916,7 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
-            billingMode: product.billingMode,
+            billingMode: billingModeForVariant(variant.variant_id),
             nature: product.fulfilment_type,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
             manualDecorationBrackets: manualDecorationBracketsSnapshot,
@@ -954,7 +967,7 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
-          billingMode: product.billingMode,
+          billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
           nature: product.fulfilment_type,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
           manualDecorationBrackets: manualDecorationBracketsSnapshot,
@@ -994,7 +1007,7 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
-      billingMode: product.billingMode,
+      billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
       nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
@@ -1104,7 +1117,7 @@ export function ProductDetailClient({
                     }
                   />
                 )}
-                {showsPrepaidTag(product.fulfilment_type, product.billingMode ?? null) && (
+                {showsPrepaidTag(product.fulfilment_type, selectedColourPrepaid ? 'prepaid' : 'invoice_on_dispatch') && (
                   <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                     Pre-paid
                   </span>

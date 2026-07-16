@@ -48,13 +48,13 @@ function line(over: Record<string, unknown> = {}) {
     imageUrl: null,
     decorations: [],
     fulfilmentType: 'stocked',
+    nature: 'stocked',
     catalogueItemId: 'catalogue-item-1',
     ...over,
   }
 }
 
 function renderReview(
-  billingModeByItemId: Record<string, 'invoice_on_dispatch' | 'prepaid'>,
   stores = [{ id: 'store-1', name: 'Main store', city: 'Auckland', country: 'NZ' }],
 ) {
   return render(
@@ -64,7 +64,6 @@ function renderReview(
       paymentTerms="net20"
       defaultDepositPercent={null}
       isTest={false}
-      billingModeByItemId={billingModeByItemId}
     />,
   )
 }
@@ -93,24 +92,37 @@ beforeEach(() => {
   )
 })
 
-describe('CheckoutReviewClient — Pre-paid badge uses fresh billing_mode over the cart snapshot', () => {
-  it('hides the badge when the item was flipped to invoice_on_dispatch after add-to-cart', async () => {
-    mocks.lines = [line({ billingMode: 'prepaid' })] // stale snapshot
-    renderReview({ 'catalogue-item-1': 'invoice_on_dispatch' }) // fresh truth
+// Spec 3a: billing is per VARIANT. The cart line's own billingMode snapshot
+// (set from variant_inventory.billing_mode on the PDP) drives the badge — the
+// item-level SSR billing fetch is gone.
+describe('CheckoutReviewClient — Pre-paid badge reads the cart line per-variant snapshot', () => {
+  it('shows the badge for a prepaid stock-drawing line', async () => {
+    mocks.lines = [line({ billingMode: 'prepaid', nature: 'stocked' })]
+    renderReview()
+    expect(await screen.findByText(/pre-paid/i)).toBeTruthy()
+  })
+
+  it('hides the badge for a pay-at-checkout line', async () => {
+    mocks.lines = [line({ billingMode: 'invoice_on_dispatch', nature: 'stocked' })]
+    renderReview()
     expect((await screen.findAllByText('Test tee')).length).toBeGreaterThan(0)
     expect(screen.queryByText(/pre-paid/i)).toBeNull()
   })
 
-  it('shows the badge when the item was flipped to prepaid after add-to-cart', async () => {
-    mocks.lines = [line({ billingMode: 'invoice_on_dispatch' })] // stale snapshot
-    renderReview({ 'catalogue-item-1': 'prepaid' }) // fresh truth
-    expect(await screen.findByText(/pre-paid/i)).toBeTruthy()
+  it('hides the badge on a made_to_order nature even if the variant is prepaid', async () => {
+    // showsPrepaidTag gates on a stock-drawing nature (stocked/mixed) — a
+    // prepaid variant's production-run line is charged, so no badge.
+    mocks.lines = [line({ billingMode: 'prepaid', nature: 'made_to_order' })]
+    renderReview()
+    expect((await screen.findAllByText('Test tee')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/pre-paid/i)).toBeNull()
   })
 
-  it('falls back to the cart snapshot when the fresh map has no entry (legacy line)', async () => {
-    mocks.lines = [line({ billingMode: 'prepaid', catalogueItemId: null })]
-    renderReview({})
-    expect(await screen.findByText(/pre-paid/i)).toBeTruthy()
+  it('hides the badge for a legacy line with no snapshot', async () => {
+    mocks.lines = [line({ billingMode: undefined, catalogueItemId: null })]
+    renderReview()
+    expect((await screen.findAllByText('Test tee')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/pre-paid/i)).toBeNull()
   })
 
   it('shows the stock-partition picking fee for a mixed cart', async () => {
@@ -132,6 +144,7 @@ describe('CheckoutReviewClient — Pre-paid badge uses fresh billing_mode over t
         qty: 10,
         unitPrice: 10,
         fulfilmentType: 'made_to_order',
+        nature: 'made_to_order',
       }),
       line({
         lineId: 'line-2',
@@ -141,10 +154,11 @@ describe('CheckoutReviewClient — Pre-paid badge uses fresh billing_mode over t
         qty: 10,
         unitPrice: 10,
         fulfilmentType: 'stocked',
+        nature: 'stocked',
       }),
     ]
 
-    renderReview({}, [
+    renderReview([
       { id: 'store-au', name: 'Sydney', city: 'Sydney', country: 'Australia' },
       { id: 'store-nz', name: 'Auckland', city: 'Auckland', country: 'NZ' },
     ])
