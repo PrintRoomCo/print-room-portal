@@ -71,3 +71,21 @@ describe('normalizePersisted — nature round-trip (Spec B / F1)', () => {
     expect(lines[3].nature).toBeUndefined()
   })
 })
+
+describe('normalizePersisted — billingMode round-trip (Spec 3a)', () => {
+  it('preserves the per-variant billing snapshot so the Pre-paid badge survives reload', () => {
+    const payload = {
+      lines: [
+        { lineId: 'l1', productId: 'p1', qty: 1, unitPrice: 1, billingMode: 'prepaid' },
+        { lineId: 'l2', productId: 'p2', qty: 1, unitPrice: 1, billingMode: 'invoice_on_dispatch' },
+        { lineId: 'l3', productId: 'p3', qty: 1, unitPrice: 1, billingMode: 'evil' },
+        { lineId: 'l4', productId: 'p4', qty: 1, unitPrice: 1 },
+      ],
+    }
+    const { lines } = normalizePersisted(payload)
+    expect(lines[0].billingMode).toBe('prepaid')
+    expect(lines[1].billingMode).toBe('invoice_on_dispatch')
+    expect(lines[2].billingMode).toBeUndefined()
+    expect(lines[3].billingMode).toBeUndefined()
+  })
+})

@@ -42,6 +42,13 @@ export interface RebuildLine {
   decorations: CartLineDecoration[]
   fulfilmentType: CartLineFulfilmentType
   catalogueItemId: string | null
+  /** Product's effective fulfilment NATURE (override ?? base). The review
+   *  page's Pre-paid badge gates on it. Enriched by the route; the pure
+   *  mapper leaves it unset. */
+  nature?: 'stocked' | 'made_to_order' | 'mixed'
+  /** Spec 3a per-variant billing snapshot (variant_inventory.billing_mode),
+   *  enriched by the route so a reordered prepaid line keeps its badge. */
+  billingMode?: 'invoice_on_dispatch' | 'prepaid'
 }
 
 export interface BuildRebuildResult {

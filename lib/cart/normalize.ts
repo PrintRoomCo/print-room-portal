@@ -105,6 +105,13 @@ export function normalizePersisted(raw: unknown): CartState {
       // F1 — nature must survive the round-trip or the mixed-cart order-type
       // selector silently disappears after any page reload.
       nature: normalizeNature(l.nature),
+      // Spec 3a — the per-variant billing snapshot must survive the round-trip
+      // or the review page's Pre-paid badge silently disappears after a reload
+      // (billing itself is safe: submit re-resolves per variant server-side).
+      billingMode:
+        l.billingMode === 'prepaid' || l.billingMode === 'invoice_on_dispatch'
+          ? l.billingMode
+          : undefined,
       brackets: normalizeBrackets(l.brackets),
       // Phase 2 — catalogue identity must survive the localStorage round-trip,
       // else the order line loses which skin sold on reload.

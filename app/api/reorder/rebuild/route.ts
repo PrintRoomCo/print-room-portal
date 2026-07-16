@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { decorationSignature } from '@/lib/cart/types'
+import { resolveLineBillingModes } from '@/lib/checkout/resolve-line-billing-modes'
 import {
   buildRebuildLines,
   type QuoteItemRebuildRow,
@@ -67,13 +68,19 @@ export async function POST(request: Request) {
     ),
   )
   const imageByProductId = new Map<string, string | null>()
+  const natureByProductId = new Map<string, string | null>()
   if (productIds.length > 0) {
     const { data: products } = await auth.admin
       .from('products')
-      .select('id, image_url')
+      .select('id, image_url, fulfilment_type')
       .in('id', productIds)
-    for (const p of (products ?? []) as Array<{ id: string; image_url: string | null }>) {
+    for (const p of (products ?? []) as Array<{
+      id: string
+      image_url: string | null
+      fulfilment_type: string | null
+    }>) {
       imageByProductId.set(p.id, p.image_url)
+      natureByProductId.set(p.id, p.fulfilment_type)
     }
   }
 
@@ -85,15 +92,28 @@ export async function POST(request: Request) {
     ),
   )
   let catalogueImageRowsByItemId = new Map<string, CatalogueFrontImageRow[]>()
+  const natureOverrideByItemId = new Map<string, string | null>()
   if (catalogueItemIds.length > 0) {
-    const { data: catalogueImages } = await auth.admin
-      .from('b2b_catalogue_item_images')
-      .select('catalogue_item_id, color_swatch_id, image_url, view, source, position')
-      .in('catalogue_item_id', catalogueItemIds)
-      .eq('is_published', true)
+    const [{ data: catalogueImages }, { data: catItems }] = await Promise.all([
+      auth.admin
+        .from('b2b_catalogue_item_images')
+        .select('catalogue_item_id, color_swatch_id, image_url, view, source, position')
+        .in('catalogue_item_id', catalogueItemIds)
+        .eq('is_published', true),
+      auth.admin
+        .from('b2b_catalogue_items')
+        .select('id, fulfilment_type_override')
+        .in('id', catalogueItemIds),
+    ])
     catalogueImageRowsByItemId = groupCatalogueFrontImageRows(
       (catalogueImages ?? []) as CatalogueFrontImageRow[],
     )
+    for (const ci of (catItems ?? []) as Array<{
+      id: string
+      fulfilment_type_override: string | null
+    }>) {
+      natureOverrideByItemId.set(ci.id, ci.fulfilment_type_override)
+    }
   }
 
   const rows: QuoteItemRebuildRow[] = raw.map((r) => {
@@ -157,9 +177,35 @@ export async function POST(request: Request) {
     }),
   )
 
+  // Spec 3a — the review page's Pre-paid badge reads the cart line's own
+  // nature + billingMode snapshot, so a rebuilt line must carry both or a
+  // reordered prepaid line silently loses its badge (billing itself is safe:
+  // submit re-resolves per variant server-side).
+  const rebuildVariantIds = Array.from(
+    new Set(lines.map((l) => l.variantId).filter((v) => v.length > 0)),
+  )
+  const billingModeByVariant = await resolveLineBillingModes(
+    auth.admin,
+    auth.context.organizationId,
+    rebuildVariantIds,
+  )
+  const natureOf = (l: RebuildLine): RebuildLine['nature'] => {
+    const nature =
+      (l.catalogueItemId ? natureOverrideByItemId.get(l.catalogueItemId) : null) ??
+      natureByProductId.get(l.productId) ??
+      null
+    return nature === 'stocked' || nature === 'made_to_order' || nature === 'mixed'
+      ? nature
+      : undefined
+  }
+
   const priced: RebuildLine[] = lines.map((l) => ({
     ...l,
     unitPrice: priceByKey.get(aggKey(l)) ?? 0,
+    nature: natureOf(l),
+    billingMode: l.variantId
+      ? billingModeByVariant.get(l.variantId) ?? 'invoice_on_dispatch'
+      : undefined,
   }))
 
   return NextResponse.json({ lines: priced, degradedCount })
