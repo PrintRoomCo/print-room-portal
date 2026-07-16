@@ -1,9 +1,55 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/checkout/server', () => ({ requireB2BCustomerApi: vi.fn() }))
+vi.mock('@/lib/audit/recordEvent', () => ({ recordAuditEvent: vi.fn() }))
 
 import { POST } from '../route'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+
+/**
+ * Fake admin for the membership-invariant test: store lookup succeeds,
+ * createUser reports the email already registered, the profile lookup
+ * resolves the existing user, and user_organizations holds their current
+ * membership row (possibly in ANOTHER org).
+ */
+function makeAdmin(existingMembership: { user_id: string; organization_id: string } | null) {
+  return {
+    auth: {
+      admin: {
+        createUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: { message: 'A user with this email address has already been registered' },
+        }),
+        listUsers: vi.fn().mockResolvedValue({ data: { users: [] } }),
+      },
+    },
+    from(table: string) {
+      if (table === 'stores') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ maybeSingle: () => Promise.resolve({ data: { id: 's1' } }) }),
+            }),
+          }),
+        }
+      }
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: { id: 'u-existing' } }) }),
+          }),
+        }
+      }
+      // user_organizations — membership lookup keyed on user_id ONLY
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: () => Promise.resolve({ data: existingMembership }) }),
+        }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+      }
+    },
+  }
+}
 
 function req(body: unknown): Request {
   return new Request('http://t/api/team/invite', {
@@ -42,6 +88,22 @@ describe('POST /api/team/invite — guards', () => {
     vi.mocked(requireB2BCustomerApi).mockResolvedValue(ADMIN_CTX)
     const res = await POST(req({ email: 'x@y.co', first_name: 'X' }))
     expect(res.status).toBe(400)
+  })
+
+  it('409s when the email already belongs to a user in a DIFFERENT organisation (single-membership invariant)', async () => {
+    const admin = makeAdmin({ user_id: 'u-existing', organization_id: 'org-OTHER' })
+    vi.mocked(requireB2BCustomerApi).mockResolvedValue({ ...ADMIN_CTX, admin: admin as never })
+    const res = await POST(req({ email: 'x@y.co', first_name: 'X', default_store_id: 's1' }))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/different organisation/i)
+  })
+
+  it('409s when the email is already a member of THIS organisation', async () => {
+    const admin = makeAdmin({ user_id: 'u-existing', organization_id: 'org-1' })
+    vi.mocked(requireB2BCustomerApi).mockResolvedValue({ ...ADMIN_CTX, admin: admin as never })
+    const res = await POST(req({ email: 'x@y.co', first_name: 'X', default_store_id: 's1' }))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/already a member/i)
   })
 
   it('400s a studio tenant given a stock_only permission (tenant-scoped)', async () => {

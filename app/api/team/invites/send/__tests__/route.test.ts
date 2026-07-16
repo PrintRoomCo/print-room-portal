@@ -22,6 +22,7 @@ function makeAdmin(
     members?: Array<{ user_id: string }>
     profiles?: Array<{ id: string; email: string | null }>
     otpError?: { message: string } | null
+    updateError?: { message: string } | null
   } = {},
 ) {
   const updates: Array<Record<string, unknown>> = []
@@ -49,6 +50,7 @@ function makeAdmin(
         update: (payload: Record<string, unknown>) => ({
           eq: () => ({
             eq: () => {
+              if (opts.updateError) return Promise.resolve({ error: opts.updateError })
               updates.push(payload)
               return Promise.resolve({ error: null })
             },
@@ -120,6 +122,25 @@ describe('POST /api/team/invites/send', () => {
     const json = (await res.json()) as { sent: number; failed: number }
     expect(json).toMatchObject({ sent: 0, failed: 1 })
     expect(f.updates).toHaveLength(0)
+  })
+
+  it('counts a failed invited_at stamp as failed (prevents silent duplicate re-sends)', async () => {
+    const f = makeAdmin({
+      members: [{ user_id: 'u1' }],
+      profiles: [{ id: 'u1', email: 'a@x.nz' }],
+      updateError: { message: 'connection reset' },
+    })
+    mocks.requireB2BCustomerApi.mockResolvedValue(adminCtx(f.admin))
+
+    const res = await POST(req({}))
+    const json = (await res.json()) as {
+      sent: number
+      failed: number
+      rows: Array<{ status: string; reason?: string }>
+    }
+    expect(json).toMatchObject({ sent: 0, failed: 1 })
+    expect(json.rows[0].reason).toMatch(/stamp/i)
+    expect(mocks.recordAuditEvent).not.toHaveBeenCalled()
   })
 
   it('ignores explicit userIds outside the org (no OTP fires for foreign users)', async () => {

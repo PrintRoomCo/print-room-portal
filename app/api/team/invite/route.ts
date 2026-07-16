@@ -132,16 +132,23 @@ export async function POST(request: Request) {
     )
   }
 
-  // Don't re-add someone already in this org.
+  // Single-membership invariant: getCompanyAccess/requireB2BCustomer resolve a
+  // user's org via a user_id-only .single()/.maybeSingle(), so a second
+  // user_organizations row for ANY org silently breaks that user's portal
+  // access everywhere. Check by user_id alone — not (user_id, org_id).
   const { data: existing } = await admin
     .from('user_organizations')
-    .select('user_id')
+    .select('user_id, organization_id')
     .eq('user_id', userId)
-    .eq('organization_id', orgId)
     .maybeSingle()
   if (existing) {
     return NextResponse.json(
-      { error: 'This user is already a member of your organisation' },
+      {
+        error:
+          existing.organization_id === orgId
+            ? 'This user is already a member of your organisation'
+            : 'This email is already linked to a different organisation — contact The Print Room to move them.',
+      },
       { status: 409 },
     )
   }

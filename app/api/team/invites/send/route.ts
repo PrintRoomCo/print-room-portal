@@ -88,11 +88,24 @@ export async function POST(request: Request) {
       rows.push({ user_id: userId, email, status: 'failed', reason: otpError.message })
       continue
     }
-    await admin
+    // If the stamp fails, the OTP already went out but invited_at stays NULL —
+    // the member would be re-emailed on every future batch send. Surface it as
+    // a failure so the admin sees it rather than silently double-sending.
+    const { error: stampError } = await admin
       .from('user_organizations')
       .update({ invited_at: new Date().toISOString() })
       .eq('organization_id', orgId)
       .eq('user_id', userId)
+    if (stampError) {
+      failed++
+      rows.push({
+        user_id: userId,
+        email,
+        status: 'failed',
+        reason: `Email sent but the invited_at stamp failed: ${stampError.message}`,
+      })
+      continue
+    }
     await recordAuditEvent({
       orgId,
       actorUserId: auth.context.userId,
