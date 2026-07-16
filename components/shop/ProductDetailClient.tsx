@@ -1478,10 +1478,10 @@ export function ProductDetailClient({
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">
                 {inventoryIntentShortfall.backorderable && canChooseOrderIntent
-                  ? `No available stock for ${inventoryIntentShortfall.label} — select Re-order to order this.`
+                  ? `No available stock for ${inventoryIntentShortfall.label} — select Purchase order to order this.`
                   : `Only ${inventoryIntentShortfall.available} available for ${inventoryIntentShortfall.label}. ${
                       canChooseOrderIntent
-                        ? 'Switch to Re-order or reduce quantity.'
+                        ? 'Switch to Purchase order or reduce quantity.'
                         : 'Reduce quantity to order from stock.'
                     }`}
               </p>

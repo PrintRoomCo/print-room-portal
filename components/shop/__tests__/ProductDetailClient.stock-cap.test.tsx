@@ -101,7 +101,7 @@ describe('PDP Stock-on-hand cap — orders never exceed available stock', () => 
     })
     expect(screen.getByText(/Only 4 available for Red \/ S/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/Switch to Re-order or reduce quantity/i),
+      screen.getByText(/Switch to Purchase order or reduce quantity/i),
     ).toBeInTheDocument()
     // Stock-on-hand never uses production language.
     expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
