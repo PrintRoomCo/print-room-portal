@@ -61,6 +61,23 @@ describe('TeamClient', () => {
     expect(screen.queryByRole('button', { name: /send invites/i })).toBeNull()
   })
 
+  it('never counts an org admin as a pending self-serve staff invite', () => {
+    render(
+      <TeamClient
+        organizationName="Acme"
+        tenantType="franchise"
+        initialMembers={[
+          member(),
+          member({ user_id: 'u-admin', email: 'admin@acme.co', role: 'org_admin' }),
+          member({ user_id: 'u-active', email: 'active@acme.co', status: 'active' }),
+        ]}
+        stores={[{ id: 's1', name: 'HQ' }]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /send invites \(1\)/i })).toBeTruthy()
+  })
+
   it('scopes ordering permissions to the tenant (studio → reorder only)', () => {
     render(
       <TeamClient

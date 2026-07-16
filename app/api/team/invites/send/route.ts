@@ -41,12 +41,14 @@ export async function POST(request: Request) {
 
   // Resolve targets INSIDE this org only. Explicit ids are intersected with
   // the org's memberships so an admin can never fire an OTP email at a user
-  // outside their organisation; explicit ids may re-send to already-invited
-  // members (lost email), the default path targets invited_at IS NULL only.
+  // outside their organisation. Both paths are staff-only; active profiles are
+  // excluded below. Explicit ids may re-send to pending members (lost email),
+  // while the default path targets invited_at IS NULL only.
   const base = admin
     .from('user_organizations')
     .select('user_id')
     .eq('organization_id', orgId)
+    .eq('role', 'staff')
   const { data: memberships } =
     Array.isArray(body.userIds) && body.userIds.length > 0
       ? await base.in('user_id', body.userIds)
@@ -57,9 +59,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ sent: 0, failed: 0, rows: [] }, { status: 200 })
   }
 
-  const { data: profiles } = await admin.from('profiles').select('id, email').in('id', targetIds)
-  const emailById = new Map<string, string | null>(
-    (profiles ?? []).map((p: { id: string; email: string | null }) => [p.id, p.email]),
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, email, last_sign_in_at')
+    .in('id', targetIds)
+  const profileById = new Map<
+    string,
+    { email: string | null; last_sign_in_at: string | null }
+  >(
+    (profiles ?? []).map(
+      (profile: { id: string; email: string | null; last_sign_in_at?: string | null }) => [
+        profile.id,
+        {
+          email: profile.email,
+          last_sign_in_at: profile.last_sign_in_at ?? null,
+        },
+      ],
+    ),
   )
 
   const redirectBase = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.theprintroom.nz'
@@ -69,7 +85,11 @@ export async function POST(request: Request) {
 
   // Sequential — stays under GoTrue email rate limits (mirrors the staff bulk send).
   for (const userId of targetIds) {
-    const email = emailById.get(userId) ?? null
+    const profile = profileById.get(userId)
+    // A legacy active staff membership can have invited_at NULL. They have
+    // already signed in, so silently exclude them from the pending invite batch.
+    if (profile?.last_sign_in_at) continue
+    const email = profile?.email ?? null
     if (!email) {
       failed++
       rows.push({ user_id: userId, email, status: 'failed', reason: 'No email on file' })

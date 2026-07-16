@@ -19,14 +19,42 @@ import { POST } from '../route'
  */
 function makeAdmin(
   opts: {
-    members?: Array<{ user_id: string }>
-    profiles?: Array<{ id: string; email: string | null }>
+    members?: Array<{ user_id: string; role?: 'staff' | 'org_admin'; invited_at?: string | null }>
+    profiles?: Array<{ id: string; email: string | null; last_sign_in_at?: string | null }>
     otpError?: { message: string } | null
     updateError?: { message: string } | null
   } = {},
 ) {
   const updates: Array<Record<string, unknown>> = []
   const signInWithOtp = vi.fn().mockResolvedValue({ error: opts.otpError ?? null })
+  const membershipFilters = new Map<string, unknown>()
+  const filteredMemberships = () =>
+    (opts.members ?? []).filter((member) =>
+      [...membershipFilters].every(([column, value]) => {
+        if (column === 'organization_id') return value === 'org-1'
+        if (column === 'role') return (member.role ?? 'staff') === value
+        return true
+      }),
+    )
+  const membershipSelect = {
+    eq(column: string, value: unknown) {
+      membershipFilters.set(column, value)
+      return membershipSelect
+    },
+    is(column: string, value: unknown) {
+      const data = filteredMemberships().filter((member) => {
+        if (column === 'invited_at') return (member.invited_at ?? null) === value
+        return true
+      })
+      return Promise.resolve({ data, error: null })
+    },
+    in(_column: string, ids: string[]) {
+      return Promise.resolve({
+        data: filteredMemberships().filter((member) => ids.includes(member.user_id)),
+        error: null,
+      })
+    },
+  }
   const admin = {
     auth: { signInWithOtp },
     from(table: string) {
@@ -37,16 +65,7 @@ function makeAdmin(
       }
       // user_organizations
       return {
-        select: () => ({
-          eq: () => ({
-            is: () => Promise.resolve({ data: opts.members ?? [], error: null }),
-            in: (_col: string, ids: string[]) =>
-              Promise.resolve({
-                data: (opts.members ?? []).filter((m) => ids.includes(m.user_id)),
-                error: null,
-              }),
-          }),
-        }),
+        select: () => membershipSelect,
         update: (payload: Record<string, unknown>) => ({
           eq: () => ({
             eq: () => {
@@ -108,6 +127,49 @@ describe('POST /api/team/invites/send', () => {
     expect(f.updates[0]).toHaveProperty('invited_at')
     expect(json).toMatchObject({ sent: 2, failed: 0 })
     expect(mocks.recordAuditEvent).toHaveBeenCalledTimes(2)
+  })
+
+  it('never emails an org admin whose legacy membership has invited_at NULL', async () => {
+    const f = makeAdmin({
+      members: [
+        { user_id: 'u-staff', role: 'staff', invited_at: null },
+        { user_id: 'u-admin', role: 'org_admin', invited_at: null },
+      ],
+      profiles: [
+        { id: 'u-staff', email: 'staff@x.nz' },
+        { id: 'u-admin', email: 'admin@x.nz' },
+      ],
+    })
+    mocks.requireB2BCustomerApi.mockResolvedValue(adminCtx(f.admin))
+
+    const res = await POST(req({}))
+    const json = (await res.json()) as { sent: number; failed: number }
+
+    expect(json).toMatchObject({ sent: 1, failed: 0 })
+    expect(f.signInWithOtp).toHaveBeenCalledTimes(1)
+    expect(f.signInWithOtp).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'staff@x.nz' }),
+    )
+  })
+
+  it('never emails active staff whose legacy membership has invited_at NULL', async () => {
+    const f = makeAdmin({
+      members: [{ user_id: 'u-active', role: 'staff', invited_at: null }],
+      profiles: [
+        {
+          id: 'u-active',
+          email: 'active@x.nz',
+          last_sign_in_at: '2026-07-01T00:00:00Z',
+        },
+      ],
+    })
+    mocks.requireB2BCustomerApi.mockResolvedValue(adminCtx(f.admin))
+
+    const res = await POST(req({}))
+    const json = (await res.json()) as { sent: number; failed: number }
+
+    expect(json).toMatchObject({ sent: 0, failed: 0 })
+    expect(f.signInWithOtp).not.toHaveBeenCalled()
   })
 
   it('counts an OTP failure as failed and does not stamp invited_at for it', async () => {

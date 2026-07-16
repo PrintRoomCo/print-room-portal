@@ -11,7 +11,6 @@ import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
-import { classifyOrderType } from '@/lib/orders/order-type'
 import {
   allInLineTotal,
   allInUnitPrice,
@@ -83,15 +82,17 @@ export function CheckoutReviewClient({
 
   // Ship-to country mirrors the server's single-shipping-address resolution
   // (submit.ts): the custom address when every line ships custom, else the FIRST
-  // line's store. Drives the NZ picking-fee region gate so the customer's figure
-  // matches the Xero draft + Monday billing note.
+  // STOCKED line's store. F1 submits the stocked partition separately, so using
+  // the first overall cart line can disagree when a made-to-order line comes first.
+  // Drives the NZ picking-fee region gate so review matches server/Xero/Monday.
   const shipCountry = useMemo<string | null>(() => {
     if (!reviewState) return null
     if (allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)) {
       return reviewState.customAddress.country ?? null
     }
-    const firstStoreId = cart.lines[0]
-      ? reviewState.perLineShipTo[cart.lines[0].lineId]
+    const firstStockedLine = cart.lines.find((line) => line.fulfilmentType === 'stocked')
+    const firstStoreId = firstStockedLine
+      ? reviewState.perLineShipTo[firstStockedLine.lineId]
       : null
     return firstStoreId ? storeById.get(firstStoreId)?.country ?? null : null
   }, [reviewState, cart.lines, storeById])
@@ -100,11 +101,15 @@ export function CheckoutReviewClient({
     // NZ picking fee (shared helper — same logic as the server) shown to the
     // customer. goodsSubtotal is ex-GST goods incl. folded decoration, matching
     // computeOrderBreakdown's grossSubtotal and the server's repriced total.
-    const goodsSubtotal = cart.lines.reduce((t, l) => t + allInUnitPrice(l) * l.qty, 0)
+    // F1 submits the stocked partition as its own stock-on-hand order, so its
+    // fee is based only on that partition even when the review cart is mixed.
+    const stockedLines = cart.lines.filter((line) => line.fulfilmentType === 'stocked')
+    const goodsSubtotal = stockedLines.reduce(
+      (total, line) => total + allInUnitPrice(line) * line.qty,
+      0,
+    )
     const pickingFee = orderPickingFee({
-      isStockOnHand:
-        classifyOrderType(cart.lines.map((l) => ({ fulfilment_type: l.fulfilmentType ?? null }))) ===
-        'stock_on_hand',
+      isStockOnHand: stockedLines.length > 0,
       shipCountry,
       goodsSubtotal,
     })

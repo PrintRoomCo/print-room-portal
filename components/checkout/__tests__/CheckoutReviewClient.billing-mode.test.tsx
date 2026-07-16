@@ -53,10 +53,13 @@ function line(over: Record<string, unknown> = {}) {
   }
 }
 
-function renderReview(billingModeByItemId: Record<string, 'invoice_on_dispatch' | 'prepaid'>) {
+function renderReview(
+  billingModeByItemId: Record<string, 'invoice_on_dispatch' | 'prepaid'>,
+  stores = [{ id: 'store-1', name: 'Main store', city: 'Auckland', country: 'NZ' }],
+) {
   return render(
     <CheckoutReviewClient
-      stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
+      stores={stores}
       customerCode="CUST-1"
       paymentTerms="net20"
       defaultDepositPercent={null}
@@ -108,5 +111,45 @@ describe('CheckoutReviewClient — Pre-paid badge uses fresh billing_mode over t
     mocks.lines = [line({ billingMode: 'prepaid', catalogueItemId: null })]
     renderReview({})
     expect(await screen.findByText(/pre-paid/i)).toBeTruthy()
+  })
+
+  it('shows the stock-partition picking fee for a mixed cart', async () => {
+    sessionStorage.setItem(
+      CHECKOUT_REVIEW_STORAGE_KEY,
+      JSON.stringify({
+        idempotencyKey: 'idem-1',
+        requiredBy: '',
+        notes: '',
+        intent: 'customer',
+        perLineShipTo: { 'line-1': 'store-au', 'line-2': 'store-nz' },
+        customAddress: { name: '', address: '', city: '', postal_code: '', country: '' },
+        createdAt: '2026-06-05T00:00:00.000Z',
+      }),
+    )
+    mocks.lines = [
+      line({
+        productName: 'Made-to-order tee',
+        qty: 10,
+        unitPrice: 10,
+        fulfilmentType: 'made_to_order',
+      }),
+      line({
+        lineId: 'line-2',
+        productId: 'product-2',
+        productName: 'Stock tee',
+        catalogueItemId: 'catalogue-item-2',
+        qty: 10,
+        unitPrice: 10,
+        fulfilmentType: 'stocked',
+      }),
+    ]
+
+    renderReview({}, [
+      { id: 'store-au', name: 'Sydney', city: 'Sydney', country: 'Australia' },
+      { id: 'store-nz', name: 'Auckland', city: 'Auckland', country: 'NZ' },
+    ])
+
+    expect(await screen.findByText('Picking fee')).toBeTruthy()
+    expect(screen.getByText('$30.00')).toBeTruthy()
   })
 })

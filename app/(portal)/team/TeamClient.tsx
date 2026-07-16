@@ -53,7 +53,12 @@ export function TeamClient({
     !busy && email.trim() !== '' && firstName.trim() !== '' && defaultStoreId !== ''
   // Deferred send: adding a member provisions them (invited_at NULL); the
   // sign-in email only goes out via the batch "Send invites (N)" button.
-  const pendingSendCount = initialMembers.filter((m) => m.invited_at === null).length
+  const pendingSendCount = initialMembers.filter(
+    (member) =>
+      member.role === 'staff' &&
+      member.status === 'pending' &&
+      member.invited_at === null,
+  ).length
 
   async function submitInvite() {
     setBusy(true)

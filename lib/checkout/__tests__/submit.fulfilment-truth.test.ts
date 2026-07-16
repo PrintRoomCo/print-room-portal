@@ -193,6 +193,7 @@ function buildInput(
     required_by: null,
     notes: null,
     internal_notes: null,
+    custom_shipping_address: { country: 'NZ' },
     lines: [
       {
         product_id: PRODUCT_ID,
