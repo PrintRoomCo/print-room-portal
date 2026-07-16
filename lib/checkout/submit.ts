@@ -1217,6 +1217,7 @@ export async function submitCustomerOrder(
   if (newLines) {
     const rows = newLines as QuoteItemRow[]
     const consumed = new Set<string>()
+    const snapshotUpdates: Array<Promise<unknown>> = []
     for (const inLine of input.lines) {
       const match = rows.find(
         (x) =>
@@ -1236,9 +1237,13 @@ export async function submitCustomerOrder(
         validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null, inLine.size_id ?? null)) ?? []
       update.decorations = validated
       if (Object.keys(update).length > 0) {
-        await admin.from('quote_items').update(update).eq('id', match.id)
+        // Collect and dispatch concurrently — one round-trip per line, but all
+        // in flight at once instead of a serial await chain (N× faster tail on
+        // large orders).
+        snapshotUpdates.push(admin.from('quote_items').update(update).eq('id', match.id))
       }
     }
+    await Promise.all(snapshotUpdates)
   }
 
   // 4b. Pre-approved inventory write-through. When the customer ticked "Add
