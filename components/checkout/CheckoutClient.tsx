@@ -12,8 +12,10 @@ import {
   writeCheckoutReviewState,
   type CustomAddress,
 } from './checkoutReviewState'
-import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
-import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
+import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import { resolveShipCountry } from '@/lib/checkout/ship-country'
+import { useFreshBillingModes } from './useFreshBillingModes'
+import { BilledOrderSummary } from './BilledOrderSummary'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -124,20 +126,58 @@ export function CheckoutClient({
   }
   const customIncomplete = Object.values(customAddressErrors).some(Boolean)
 
-  const breakdown = useMemo(
+  const { modeByVariantId, status: billingStatus } = useFreshBillingModes(cart.lines)
+  // Hold the total back for the sub-second fresh read rather than flashing a
+  // number we might not honour. 'error' is a usable fail-closed answer (empty
+  // map ⇒ every line bills at full price), so only 'loading' blocks.
+  const pricingReady = billingStatus !== 'loading'
+
+  const storeById = useMemo(() => {
+    const map = new Map<string, StoreOption>()
+    for (const store of stores) map.set(store.id, store)
+    return map
+  }, [stores])
+
+  const shipCountry = useMemo(
     () =>
-      computeOrderBreakdown({
-        lines: cart.lines.map((l) => ({
-          qty: l.qty,
-          unitEffective: l.unitPrice,
-          decorationPerUnit: decorationPerUnit(l),
+      resolveShipCountry({
+        lines: cart.lines,
+        perLineShipTo,
+        customAddressCountry: customAddress.country,
+        countryByStoreId: new Map(
+          Array.from(storeById.entries()).map(([id, store]) => [id, store.country ?? null]),
+        ),
+      }),
+    [cart.lines, perLineShipTo, customAddress.country, storeById],
+  )
+
+  const shape = useMemo(
+    () =>
+      billedOrderShape({
+        lines: cart.lines.map((line) => ({
+          lineId: line.lineId,
+          qty: line.qty,
+          unitPrice: line.unitPrice,
+          decorationPerUnit: decorationPerUnit(line),
+          fulfilmentType: line.fulfilmentType,
+          // FRESH mode only — the cart's own billingMode snapshot is a PDP
+          // reading and can be days stale. Absent ⇒ null ⇒ billed (fail closed).
+          billingMode: modeByVariantId[line.variantId] ?? null,
         })),
         gstRate: 0.15,
+        shipCountry,
       }),
-    [cart.lines]
+    [cart.lines, modeByVariantId, shipCountry],
+  )
+
+  const lineById = useMemo(
+    () => new Map(cart.lines.map((line) => [line.lineId, line])),
+    [cart.lines],
   )
   const depositPct = defaultDepositPercent ?? 0
-  const depositAmount = (breakdown.netSubtotal * depositPct) / 100
+  // Off the BILLED subtotal: a deposit on stock the org already paid for would
+  // be asking twice.
+  const depositAmount = (shape.billedSubtotal * depositPct) / 100
 
   const customerCodeMissing = !customerCode
   const canSubmitOrder =
@@ -250,11 +290,25 @@ export function CheckoutClient({
             </p>
           </div>
         )}
-        <div className="divide-y divide-gray-100">
-          {cart.lines.map((line) => {
+        <BilledOrderSummary
+          shape={shape}
+          format={format}
+          afterLines={
+            canRouteToInventory ? (
+              <div className="mt-5 flex justify-end">
+                <AddAllToInventoryToggle
+                  checked={addToInventory}
+                  onChange={setAddToInventory}
+                  disabled={submitting !== false}
+                />
+              </div>
+            ) : null
+          }
+          renderLine={(billedLine: BilledLine) => {
+            const line = lineById.get(billedLine.lineId)
+            if (!line) return null
             return (
               <ShipToRow
-                key={line.lineId}
                 line={line}
                 stores={selectableStores}
                 format={format}
@@ -266,32 +320,12 @@ export function CheckoutClient({
                 disabled={submitting !== false}
                 allowCustom={!buyerMisconfigured}
                 hideShipTo={inventoryMode}
+                prepaidDrawn={!billedLine.billed}
+                billedGoodsValue={billedLine.goodsValue}
               />
             )
-          })}
-        </div>
-        {canRouteToInventory && (
-          <div className="mt-5 flex justify-end">
-            <AddAllToInventoryToggle
-              checked={addToInventory}
-              onChange={setAddToInventory}
-              disabled={submitting !== false}
-            />
-          </div>
-        )}
-        <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
-          <span className="text-base font-medium text-gray-900">Total</span>
-          <span className="text-xl font-medium text-gray-900">{format(breakdown.total)}</span>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">incl. GST · billed per account terms</p>
-        <details className="mt-3">
-          <summary className="cursor-pointer select-none text-xs text-gray-500 hover:text-gray-700">
-            Show breakdown
-          </summary>
-          <div className="mt-3">
-            <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
-          </div>
-        </details>
+          }}
+        />
       </section>
 
       {mixedCustom && (
@@ -430,7 +464,7 @@ export function CheckoutClient({
       </div>
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}
-        totalLabel={format(breakdown.total)}
+        totalLabel={pricingReady ? format(shape.grandTotal) : '—'}
         onSubmit={proceedToReview}
         disabled={!canSubmitOrder}
         submitting={submitting === 'review'}

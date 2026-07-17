@@ -17,6 +17,13 @@ interface BilledOrderSummaryProps {
   renderLine: (line: BilledLine) => ReactNode
   /** Review opens the breakdown by default; checkout leaves it collapsed. */
   defaultBreakdownOpen?: boolean
+  /**
+   * Order-level controls that belong with the lines rather than the totals —
+   * /checkout puts its "Add all to my inventory" toggle here. Rendered after the
+   * last line and before the grand total, which is where such a control reads
+   * as applying to the items, not to the money.
+   */
+  afterLines?: ReactNode
 }
 
 /**
@@ -36,6 +43,7 @@ export function BilledOrderSummary({
   format,
   renderLine,
   defaultBreakdownOpen = false,
+  afterLines,
 }: BilledOrderSummaryProps) {
   const multi = shape.invoiceCount > 1
 
@@ -66,6 +74,8 @@ export function BilledOrderSummary({
           )}
         </section>
       ))}
+
+      {afterLines}
 
       <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
         <span className="text-base font-medium text-gray-900">

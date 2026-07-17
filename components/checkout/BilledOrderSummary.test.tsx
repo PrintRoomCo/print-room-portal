@@ -79,6 +79,27 @@ describe('BilledOrderSummary — single prepaid order', () => {
     expect(screen.queryByText('Stock-on-hand order')).not.toBeInTheDocument()
     expect(screen.queryByText(/You'll receive/)).not.toBeInTheDocument()
   })
+
+  it('renders afterLines between the last line and the grand total', () => {
+    const { container } = render(
+      <BilledOrderSummary
+        shape={prepaidShape()}
+        format={format}
+        renderLine={renderLine}
+        afterLines={<div data-testid="inventory-toggle">toggle</div>}
+      />,
+    )
+    const toggle = screen.getByTestId('inventory-toggle')
+    const row = screen.getByTestId('row-tee')
+    // [0] is the headline Total; the closed <details> breakdown holds a second.
+    const headlineTotal = screen.getAllByText('Total')[0]
+    // An order-level control must read as applying to the items, not the money.
+    expect(row.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      toggle.compareDocumentPosition(headlineTotal) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(container).toBeTruthy()
+  })
 })
 
 describe('BilledOrderSummary — mixed cart', () => {
