@@ -15,7 +15,6 @@ const baseParams = {
   orderId: 'ord-1',
   orderRef: 'TPRC-000042',
   totalAmount: 432.5,
-  paymentTerms: 'net30' as const,
   requiredBy: null,
   lines: [
     { productName: 'Staple Tee', variantLabel: 'Ecru / M', quantity: 10, unitPrice: 24.0 },
@@ -64,20 +63,17 @@ describe('buildOrderConfirmationEmail', () => {
     expect(html).toContain('Tee &lt;b&gt;x&lt;/b&gt;')
   })
 
-  it('surfaces contract notes only under contract pricing', () => {
-    const withNotes = buildOrderConfirmationEmail({
-      ...baseParams,
-      pricingMode: 'contract',
-      contractNotes: 'Agreed rate card v3',
-    })
-    expect(withNotes.html).toContain('Agreed rate card v3')
-    // Same notes, non-contract pricing → suppressed.
-    const withoutNotes = buildOrderConfirmationEmail({
-      ...baseParams,
-      pricingMode: 'standard',
-      contractNotes: 'Agreed rate card v3',
-    })
-    expect(withoutNotes.html).not.toContain('Agreed rate card v3')
+  it('never mentions payment terms', () => {
+    // The confirmation deliberately states no terms — the invoice carries them.
+    // This guards the removal; the section must not creep back in.
+    const { html, text } = buildOrderConfirmationEmail(baseParams)
+    expect(html).not.toContain('Payment terms')
+    expect(text).not.toContain('Payment terms')
+    // The old copy for every terms value the builder used to format.
+    for (const copy of ['Net 30 days', 'Net 20 days', 'Prepaid (100% upfront)', 'Contract terms', 'as per agreement']) {
+      expect(html).not.toContain(copy)
+      expect(text).not.toContain(copy)
+    }
   })
 
   it('never renders a Required-by line, even when a date is supplied', () => {
