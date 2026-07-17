@@ -23,6 +23,8 @@ import { orderBillingNote } from '@/lib/monday/billing-note'
 import { orderNeedsInvoicing } from './order-billing'
 import { resolveLineBillingModes } from './resolve-line-billing-modes'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { round2 } from '@/lib/pricing/pricingMath'
+import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
@@ -186,6 +188,37 @@ export class BillingModeDriftError extends Error {
  * on unit_price_drift). An unknown variant, or no variant at all, resolves to
  * invoice_on_dispatch — the same fail-closed rule as resolve-line-billing-modes.
  */
+export interface BilledTotalLine {
+  /** fulfilment_type === 'stocked' — this line DREW stock. */
+  stocked: boolean
+  billingMode: BillingMode
+  /** qty × repriced garment unit price, ex decoration. */
+  goodsValue: number
+  /** qty × per-unit decoration for this line. */
+  decorationRevenue: number
+}
+
+/**
+ * The ex-GST figure we actually invoice: goods + decoration for every line that
+ * is NOT a prepaid stock draw, plus the picking fee.
+ *
+ * Decoration on a prepaid draw is excluded too — it was paid for along with the
+ * stock. Handled per line rather than folded into goodsValue because decoration
+ * revenue is tracked separately for finance (quotes.decoration_cost).
+ *
+ * Uses the same isPrepaidDrawn predicate as the customer-facing shape, so the
+ * server and the checkout page cannot disagree about which lines are free.
+ */
+export function billedOrderTotal(lines: BilledTotalLine[], pickFee: number): number {
+  const billedGoods = lines.reduce((total, line) => {
+    if (isPrepaidDrawn(line.stocked ? 'stocked' : 'made_to_order', line.billingMode)) {
+      return total
+    }
+    return total + line.goodsValue + line.decorationRevenue
+  }, 0)
+  return round2(billedGoods + pickFee)
+}
+
 export function buildBillingModeDrift(
   lines: Array<
     Pick<
@@ -1098,6 +1131,11 @@ export async function submitCustomerOrder(
   //    Without this, the quote would store garment-only and we'd under-bill
   //    the customer for the decoration they ordered.
   const decorationCostByLineKey = new Map<string, number>()
+  // Index-aligned to `repriced` (and therefore to input.lines and
+  // orderBillingLines, both .map over it). The billed-total snapshot below needs
+  // the per-line figure; built in this same loop so it cannot disagree with the
+  // running total.
+  const decorationRevenueByLineIndex: number[] = []
   let totalDecorationRevenue = 0
   for (const l of repriced) {
     const lineKey = makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)
@@ -1108,7 +1146,9 @@ export async function submitCustomerOrder(
     const perUnit =
       manualDeco != null ? manualDeco : validated.reduce((s, d) => s + d.unitPrice, 0)
     decorationCostByLineKey.set(lineKey, perUnit)
-    totalDecorationRevenue += perUnit * l.qty
+    const lineRevenue = perUnit * l.qty
+    decorationRevenueByLineIndex.push(lineRevenue)
+    totalDecorationRevenue += lineRevenue
   }
 
   // Phase 2 — drift signal only (we never throw): if a line's own catalogue
@@ -1274,6 +1314,30 @@ export async function submitCustomerOrder(
       .update({ decoration_cost: totalDecorationRevenue })
       .eq('id', quote_id)
   }
+
+  // The BILLED figures (spec 2026-07-17 D5) — what the customer is actually
+  // invoiced, as against total_amount, which stays the full goods value so
+  // Monday, staff order views and reporting are untouched.
+  //
+  // A SNAPSHOT, never recomputed on read: variant_inventory.billing_mode is
+  // mutable, so re-deriving this later would silently rewrite what an old order
+  // was billed.
+  //
+  // Written post-RPC with a plain update, exactly like decoration_cost above —
+  // which is why neither needs a submit_b2b_order change.
+  const billedTotal = billedOrderTotal(
+    orderBillingLines.map((billing, index) => ({
+      stocked: billing.stocked,
+      billingMode: billing.billingMode,
+      goodsValue: repriced[index].unit_price * repriced[index].qty,
+      decorationRevenue: decorationRevenueByLineIndex[index] ?? 0,
+    })),
+    pickFee,
+  )
+  await admin
+    .from('quotes')
+    .update({ picking_fee: round2(pickFee), billed_total: billedTotal })
+    .eq('id', quote_id)
 
   await recordAuditEvent(
     {
