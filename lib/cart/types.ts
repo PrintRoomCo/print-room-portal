@@ -21,8 +21,9 @@ export interface CartLineDecoration {
   /**
    * Decoration's own qty-band ladder, snapshotted at add-time. When present,
    * `recomputeProductTierPrices` re-picks `unitPrice` from this ladder on cart
-   * qty edits — matching how the garment tier already re-picks. Absent for
-   * legacy lines + decorations without qty-aware pricing (embroidery, heatpress
+   * qty edits — matching how the garment tier already re-picks. Embroidery
+   * snapshots a flat single-band ladder (stitch-priced, qty-independent).
+   * Absent for legacy lines + decorations without a recompute path (heatpress
    * etc.); in those cases unitPrice stays frozen until checkout re-prices.
    */
   brackets?: CartLineBracket[]

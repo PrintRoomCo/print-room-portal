@@ -933,7 +933,6 @@ export async function submitCustomerOrder(
         {
           orgDecorationId: od.id,
           organizationId: input.context.organizationId,
-          method: od.decoration_method,
           unitPriceOverride: pair.row.unit_price_override,
           baseUnitPrice: od.unit_price,
         },

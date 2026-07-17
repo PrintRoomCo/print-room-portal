@@ -33,17 +33,33 @@ export interface DecorationOption {
   isDefault: boolean
   sortOrder: number
   /**
-   * Inputs needed to recompute the unit price at customer qty for screen-print.
-   * Only populated when method = 'screenprint' AND all required inputs are present.
-   * Null for embroidery and any decoration created before the autofill flow.
+   * Inputs needed to recompute the unit price at customer qty.
+   *   - screenprint: populated when all engine inputs are present
+   *     (dims + colour count + placement). Price varies with qty.
+   *   - embroidery: populated when the decoration is priceable off the stitch
+   *     ladder — an actual stitch_count, or width+height for the provisional
+   *     area estimate. The ladder is qty-independent; the same fetched price
+   *     applies at every qty.
+   * Null for legacy decorations created before the autofill flow, and for an
+   * embroidery decoration with neither stitch_count nor dimensions — on a
+   * computed-price item that means pricing-pending and the PDP blocks
+   * add-to-cart (mirrors the RPC's NULL soft gate).
    */
-  recalcInputs: {
-    method: 'screenprint'
-    widthMm: number
-    heightMm: number
-    colourCount: number
-    placementKey: string
-  } | null
+  recalcInputs:
+    | {
+        method: 'screenprint'
+        widthMm: number
+        heightMm: number
+        colourCount: number
+        placementKey: string
+      }
+    | {
+        method: 'embroidery'
+        stitchCount: number | null
+        widthMm: number | null
+        heightMm: number | null
+      }
+    | null
   /**
    * Live PDP overlay payload — null when staff hasn't assigned a print area
    * or any required placement coord is missing.
@@ -99,6 +115,7 @@ interface RawDecoration {
   width_mm: number | null
   height_mm: number | null
   colour_count: number | null
+  stitch_count: number | null
   artwork:
     | RawArtwork
     | RawArtwork[]
@@ -139,6 +156,7 @@ const LINK_SELECT = `
     width_mm,
     height_mm,
     colour_count,
+    stitch_count,
     artwork:organization_artworks!org_decorations_artwork_id_fkey(
       id,
       name,
@@ -201,7 +219,7 @@ export async function loadCatalogueItemDecorations(
     const unitPrice = Number.isFinite(overridePrice as number)
       ? (overridePrice as number)
       : baseUnitPrice
-    const recalcInputs =
+    const recalcInputs: DecorationOption['recalcInputs'] =
       dec.decoration_method === 'screenprint' &&
       dec.width_mm != null &&
       dec.height_mm != null &&
@@ -214,7 +232,16 @@ export async function loadCatalogueItemDecorations(
             colourCount: dec.colour_count,
             placementKey: loc.placement_key,
           }
-        : null
+        : dec.decoration_method === 'embroidery' &&
+            (dec.stitch_count != null ||
+              (dec.width_mm != null && dec.height_mm != null))
+          ? {
+              method: 'embroidery' as const,
+              stitchCount: dec.stitch_count,
+              widthMm: dec.width_mm,
+              heightMm: dec.height_mm,
+            }
+          : null
 
     const overlay = buildOverlay(admin, row, printArea, art)
 

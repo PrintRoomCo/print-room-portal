@@ -163,12 +163,62 @@ describe('computed path — pricing resolution ladder', () => {
     ])
   })
 
-  it('resolves embroidery to the RAW static override/base — never the qty-fed engine ladder, no multiplier', async () => {
+  it('prices embroidery through the stitch-ladder RPC × tier, same path as screenprint', async () => {
     const cfg = baseConfig()
-    // A tier multiplier IS present, to prove embroidery ignores it: the PDP never
-    // fetches embroidery (recalcInputs is screenprint-only), so the cart carries a
-    // raw $14. The engine RPC would return a bogus qty-as-stitches value (~1.04);
-    // embroidery must resolve to the static base and NOT consult the ladder.
+    // Stitch-ladder cutover (2026-07-17): embroidery resolves via
+    // effective_decoration_unit_price (whose embroidery branch is the
+    // stitch-count ladder, qty-independent) with the tier multiplier applied —
+    // identical resolution to screenprint. The PDP fetches the same RPC × tier
+    // via /api/shop/decoration-pricing, so the cart claim matches exactly.
+    cfg.tier = { multiplier: 0.85 }
+    cfg.links.push({
+      id: 'link-emb',
+      catalogueItemId: ITEM_C,
+      sourceProductId: PRODUCT_C,
+      orgDecoration: {
+        id: 'dec-emb',
+        organizationId: ORG,
+        name: 'Front embroidery',
+        method: 'embroidery',
+        unitPrice: 14, // stale static snapshot — must NOT be billed
+      },
+    })
+    // 7k-stitch band on the apparel ladder → $8.00; × 0.85 tier = $6.80.
+    cfg.decorationRpcPrice = (odId) => (odId === 'dec-emb' ? 8 : null)
+    const { admin, rpcCalls } = makeFanoutStub(cfg)
+    await submitCustomerOrder(
+      admin,
+      buildInput([
+        line({
+          decorations: [
+            {
+              linkId: 'link-emb',
+              decorationId: 'dec-emb',
+              name: 'Front embroidery',
+              method: 'embroidery',
+              positionLabel: null,
+              unitPrice: 6.8,
+              artworkUrl: null,
+              snapshotUrl: null,
+            },
+          ],
+        }),
+      ]),
+    )
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+      expect.objectContaining({ unit_price: 12.5 + 6.8 }),
+    ])
+    // The stitch ladder IS consulted for embroidery now.
+    expect(
+      rpcCalls.filter(
+        (c) =>
+          c.name === 'effective_decoration_unit_price' && c.args?.p_org_decoration_id === 'dec-emb',
+      ).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('blocks a stale static embroidery claim with price_drift (pre-cutover cart lines)', async () => {
+    const cfg = baseConfig()
     cfg.tier = { multiplier: 0.85 }
     cfg.links.push({
       id: 'link-emb',
@@ -182,9 +232,11 @@ describe('computed path — pricing resolution ladder', () => {
         unitPrice: 14,
       },
     })
-    cfg.decorationRpcPrice = (odId) => (odId === 'dec-emb' ? 1.04 : null)
-    const { admin, rpcCalls } = makeFanoutStub(cfg)
-    await submitCustomerOrder(
+    cfg.decorationRpcPrice = (odId) => (odId === 'dec-emb' ? 8 : null)
+    const { admin } = makeFanoutStub(cfg)
+    // A cart line added before the cutover still claims the raw static $14 —
+    // the zero-tolerance guard must block it (customer re-adds at the real price).
+    const err = await submitCustomerOrder(
       admin,
       buildInput([
         line({
@@ -202,18 +254,14 @@ describe('computed path — pricing resolution ladder', () => {
           ],
         }),
       ]),
+    ).then(
+      () => null,
+      (e) => e,
     )
-    // Folded RAW 14 (not 14×0.85=11.9, not the ~1.04 engine value); no drift → submits.
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
-      expect.objectContaining({ unit_price: 12.5 + 14 }),
+    expect(err).toBeInstanceOf(DecorationDriftError)
+    expect((err as DecorationDriftError).drift).toEqual([
+      expect.objectContaining({ linkId: 'link-emb', was: 14, now: 6.8, reason: 'price_drift' }),
     ])
-    // The qty-fed engine ladder must never be consulted for embroidery.
-    expect(
-      rpcCalls.filter(
-        (c) =>
-          c.name === 'effective_decoration_unit_price' && c.args?.p_org_decoration_id === 'dec-emb',
-      ),
-    ).toHaveLength(0)
   })
 
   it('pools decoration qty across lines sharing product + decoration signature', async () => {

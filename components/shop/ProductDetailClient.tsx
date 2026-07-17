@@ -516,8 +516,8 @@ export function ProductDetailClient({
 
   // Decoration prices keyed by qty bucket: { [qty]: { [linkId]: unitPrice } }
   // Populated for: every bracket's min_quantity + the current qty.
-  // For decorations without recalcInputs (embroidery + legacy), the static
-  // d.unitPrice is used as a fallback.
+  // For decorations without recalcInputs (legacy rows; unpriceable embroidery
+  // is blocked from add-to-cart instead), the static d.unitPrice is the fallback.
   const [decorationPricesByQty, setDecorationPricesByQty] = useState<
     Record<number, Record<string, number>>
   >({})
@@ -568,17 +568,22 @@ export function ProductDetailClient({
   }, [qty, product.id])
 
   useEffect(() => {
-    const recalcItems = decorations
-      .filter((d) => d.recalcInputs != null)
-      .map((d) => ({
-        linkId: d.linkId,
-        placementKey: d.recalcInputs!.placementKey,
-        colourCount: d.recalcInputs!.colourCount,
-      }))
+    // The pricing API only needs the linkId (it re-resolves the decoration
+    // server-side); placement/colour ride along for screenprint only.
+    // Embroidery is included too: its stitch-ladder price is qty-independent,
+    // so every probed qty returns the same figure — the fetch is what applies
+    // the tier multiplier and keeps cart == checkout.
+    const recalcItems = decorations.flatMap((d) => {
+      const ri = d.recalcInputs
+      if (ri == null) return []
+      return ri.method === 'screenprint'
+        ? [{ linkId: d.linkId, placementKey: ri.placementKey, colourCount: ri.colourCount }]
+        : [{ linkId: d.linkId }]
+    })
     // Manual-final items need the combined decoration figure regardless of
     // per-placement recalc inputs — it's resolved from the catalogue item id, not
     // from placement/colour-count. Without this a manual item whose decoration
-    // has no recalcInputs (e.g. embroidery, or a manually-attached decoration)
+    // has no recalcInputs (e.g. a legacy or manually-attached decoration)
     // would never fetch the combined and the PDP would show $0 decoration.
     if (recalcItems.length === 0 && !isManualPricing) return
     if (!Number.isInteger(qty) || qty <= 0) return
@@ -696,6 +701,22 @@ export function ProductDetailClient({
     [decorations, selectedLinkIds, colorSwatchId],
   )
 
+  // Soft gate (mirrors the RPC's NULL for embroidery with no stitch_count and
+  // no dimensions): on a computed-price item such a decoration has no real
+  // price — the static fallback would drift against the server recompute — so
+  // the PDP shows pricing-pending and blocks add-to-cart. Manual-final items
+  // are exempt: their decoration billing is the item-level combined figure and
+  // placements are metadata.
+  const pendingPricingDecorations = useMemo(
+    () =>
+      isManualPricing
+        ? []
+        : pricedDecorations.filter(
+            (d) => d.method === 'embroidery' && d.recalcInputs == null,
+          ),
+    [isManualPricing, pricedDecorations],
+  )
+
   const galleryOverlays = useMemo<GalleryOverlay[]>(
     () =>
       visibleDecorations.flatMap((d) =>
@@ -727,8 +748,8 @@ export function ProductDetailClient({
     [swatchVisibleDecorations],
   )
 
-  // Resolve decoration unit price for a specific qty (falls back to static unitPrice
-  // for embroidery / legacy rows / cache miss).
+  // Resolve decoration unit price for a specific qty (falls back to static
+  // unitPrice for legacy rows / cache miss).
   const decorationPriceAt = useMemo(
     () => (linkId: string, atQty: number, fallback: number) =>
       decorationPricesByQty[atQty]?.[linkId] ?? fallback,
@@ -800,6 +821,7 @@ export function ProductDetailClient({
 
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
+    if (pendingPricingDecorations.length > 0) return
     const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
     // one_size: the lone product size carried onto the order line.
     const oneSizeSizeLabel = sizes.find((s) => s.size_id === sizeId)?.size_label ?? null
@@ -1091,7 +1113,8 @@ export function ProductDetailClient({
     !isUnavailableToOrder &&
     canAddToCart &&
     inventoryIntentShortfall == null &&
-    !preOrderClosed
+    !preOrderClosed &&
+    pendingPricingDecorations.length === 0
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
@@ -1475,6 +1498,14 @@ export function ProductDetailClient({
                   ? 'Ordering opens with the next window'
                   : 'Add to cart'}
             </button>
+            {pendingPricingDecorations.length > 0 && (
+              <p className="mt-3 text-xs text-amber-700">
+                Decoration pricing pending for{' '}
+                {pendingPricingDecorations.map((d) => d.name).join(', ')} — our
+                team is finalising the embroidery details. Check back soon or
+                contact us.
+              </p>
+            )}
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">
                 {inventoryIntentShortfall.backorderable && canChooseOrderIntent

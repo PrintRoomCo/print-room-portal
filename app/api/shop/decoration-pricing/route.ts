@@ -4,8 +4,10 @@ import { requireB2BCustomerApi } from '@/lib/checkout/server'
 
 interface Item {
   linkId: string
-  placementKey: string
-  colourCount: number
+  /** Screenprint context from the PDP. Informational — priceLink re-resolves
+   *  everything server-side from the linkId. Absent for embroidery items. */
+  placementKey?: string
+  colourCount?: number
 }
 
 interface Body {
