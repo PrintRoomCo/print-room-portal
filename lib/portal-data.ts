@@ -10,6 +10,12 @@ import {
   getJobTrackerForUserByToken,
 } from '@/lib/job-tracker-queries'
 import { getTrackingNumber, type JobTracker, type TrackingInfo } from '@/lib/job-tracker'
+import {
+  mapPastOrderRow,
+  queryPastOrders,
+  type PortalPastOrder,
+  type PastOrderTracking,
+} from '@/lib/orders/past-orders-query'
 import type { B2BCustomerAccess } from '@/types/company'
 import { cacheTags, cacheRevalidate } from '@/lib/cache/tags'
 import { readPreviewSession } from '@/lib/preview/cookie'
@@ -49,53 +55,12 @@ export interface PortalAccountData {
   ownerKey: string | null
 }
 
-export interface PastOrderTracking {
-  carrier: string | null
-  trackingNumber: string | null
-  url: string | null
-}
-
-export interface PortalPastOrder {
-  orderId: string
-  quoteId: string | null
-  orderRef: string | null
-  quoteNumber: string | null
-  reference: string | null
-  status: string
-  customerName: string | null
-  customerEmail: string | null
-  customerCompany: string | null
-  subtotal: number
-  totalAmount: number
-  currency: string
-  createdAt: string
-  tracking: PastOrderTracking | null
-}
+export type { PortalPastOrder, PastOrderTracking } from '@/lib/orders/past-orders-query'
 
 export interface PortalPastOrdersData {
   orders: PortalPastOrder[]
   stores: PortalAccountStore[]
   ownerKey: string | null
-}
-
-interface PastOrderRow {
-  id: string
-  status: string | null
-  created_at: string | null
-  quote_id: string | null
-  quotes: {
-    organization_id: string | null
-    created_by: string | null
-    order_ref: string | null
-    quote_number: string | null
-    reference: string | null
-    customer_name: string | null
-    customer_email: string | null
-    customer_company: string | null
-    subtotal: number | null
-    total_amount: number | null
-    currency: string | null
-  } | null
 }
 
 interface PortalAccountOrderStatusRow {
@@ -335,25 +300,6 @@ export const getPortalAccountData = cache(async (): Promise<PortalAccountData> =
   return fetchAccountDataForUser(user.id, user.email ?? null)
 })
 
-function mapPastOrderRow(row: PastOrderRow): PortalPastOrder {
-  return {
-    orderId: row.id,
-    quoteId: row.quote_id,
-    orderRef: row.quotes?.order_ref ?? null,
-    quoteNumber: row.quotes?.quote_number ?? null,
-    reference: row.quotes?.reference ?? null,
-    status: row.status ?? 'awaiting-approval',
-    customerName: row.quotes?.customer_name ?? null,
-    customerEmail: row.quotes?.customer_email ?? null,
-    customerCompany: row.quotes?.customer_company ?? null,
-    subtotal: Number(row.quotes?.subtotal ?? 0),
-    totalAmount: Number(row.quotes?.total_amount ?? 0),
-    currency: row.quotes?.currency ?? 'NZD',
-    createdAt: row.created_at ?? new Date().toISOString(),
-    tracking: null,
-  }
-}
-
 async function overlayTrackingInfo(
   adminClient: SupabaseClient,
   orders: PortalPastOrder[],
@@ -391,7 +337,6 @@ async function overlayTrackingInfo(
 
 const fetchPastOrdersForUser = unstable_cache(
   async (userId: string, email: string | null): Promise<PortalPastOrdersData> => {
-    void email
     const adminClient = getSupabaseServer()
     const { data: membership } = await adminClient
       .from('user_organizations')
@@ -410,36 +355,17 @@ const fetchPastOrdersForUser = unstable_cache(
         .order('created_at', { ascending: true })
       stores = (storesData || []) as PortalAccountStore[]
 
-      // Past orders = placed stock_on_hand orders. Display fields come from the
-      // joined quote (orders carries no org/customer columns). order_type is
-      // added by the Order-type foundation task.
-      const canSeeAllOrgOrders = membership.role === 'org_admin'
+      // Orders view = every placed order for the org, both order types,
+      // including awaiting-period-close pre-orders. Scoping (org_admin
+      // org-wide, staff own-by-email) lives in queryPastOrders — shared with
+      // the CSV export route so the two can never drift.
+      const rows = await queryPastOrders(adminClient, {
+        organizationId: membership.organization_id,
+        canSeeAllOrgOrders: membership.role === 'org_admin',
+        userEmail: email,
+      })
 
-      let orderQuery = adminClient
-        .from('orders')
-        .select(
-          `id, status, created_at, quote_id,
-           quotes!inner (
-             organization_id, created_by, order_ref, quote_number, reference,
-             customer_name, customer_email, customer_company,
-             subtotal, total_amount, currency
-           )`,
-        )
-        .eq('order_type', 'stock_on_hand')
-        .eq('quotes.organization_id', membership.organization_id)
-
-      // staff (non-admin) see only their own placed stock orders; org_admin sees the
-      // whole org. This is the same rule buildAccess().canSeeAllOrgOrders encodes.
-      if (!canSeeAllOrgOrders) {
-        orderQuery = orderQuery.eq('quotes.created_by', userId)
-      }
-
-      const { data: orderRows } = await orderQuery.order('created_at', { ascending: false })
-
-      orders = await overlayTrackingInfo(
-        adminClient,
-        ((orderRows ?? []) as unknown as PastOrderRow[]).map(mapPastOrderRow),
-      )
+      orders = await overlayTrackingInfo(adminClient, rows.map(mapPastOrderRow))
     }
 
     return {

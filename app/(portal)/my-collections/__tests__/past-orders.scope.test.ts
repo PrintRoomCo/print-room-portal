@@ -52,16 +52,21 @@ async function run(role: string) {
   return mocks.ordersEq.mock.calls
 }
 
-describe('Past-orders role scope (Item 3)', () => {
-  it('staff: scopes orders to quotes.created_by = userId', async () => {
+describe('Orders view role scope', () => {
+  it('staff: scopes to own orders via quotes.customer_email (created_by is NULL on all ordered quotes)', async () => {
     const calls = await run('staff')
-    expect(calls).toContainEqual(['order_type', 'stock_on_hand'])
     expect(calls).toContainEqual(['quotes.organization_id', 'org-1'])
-    expect(calls).toContainEqual(['quotes.created_by', 'user-1'])
+    expect(calls).toContainEqual(['quotes.customer_email', 'b@x.co'])
+    expect(calls).not.toContainEqual(['quotes.created_by', 'user-1'])
   })
-  it('org_admin: does NOT add the created_by filter', async () => {
+  it('org_admin: org-wide — no email or created_by filter', async () => {
     const calls = await run('org_admin')
     expect(calls).toContainEqual(['quotes.organization_id', 'org-1'])
+    expect(calls).not.toContainEqual(['quotes.customer_email', 'b@x.co'])
     expect(calls).not.toContainEqual(['quotes.created_by', 'user-1'])
+  })
+  it('includes every order type: no order_type filter', async () => {
+    const calls = await run('org_admin')
+    expect(calls.map((c) => c[0])).not.toContain('order_type')
   })
 })
