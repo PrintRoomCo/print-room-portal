@@ -6,14 +6,14 @@ import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
-import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
-import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
-import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
-import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import { resolveShipCountry } from '@/lib/checkout/ship-country'
+import { useFreshBillingModes } from './useFreshBillingModes'
+import { BilledOrderSummary } from './BilledOrderSummary'
+import { PrepaidBadge, PrepaidLinePrice } from './PrepaidLinePrice'
 import {
-  allInLineTotal,
   allInUnitPrice,
   cartLineDisplayImageUrl,
   decorationPerUnit,
@@ -77,51 +77,46 @@ export function CheckoutReviewClient({
     return map
   }, [stores])
 
-  // Ship-to country mirrors the server's single-shipping-address resolution
-  // (submit.ts): the custom address when every line ships custom, else the FIRST
-  // STOCKED line's store. F1 submits the stocked partition separately, so using
-  // the first overall cart line can disagree when a made-to-order line comes first.
-  // Drives the NZ picking-fee region gate so review matches server/Xero/Monday.
   const shipCountry = useMemo<string | null>(() => {
     if (!reviewState) return null
-    if (allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)) {
-      return reviewState.customAddress.country ?? null
-    }
-    const firstStockedLine = cart.lines.find((line) => line.fulfilmentType === 'stocked')
-    const firstStoreId = firstStockedLine
-      ? reviewState.perLineShipTo[firstStockedLine.lineId]
-      : null
-    return firstStoreId ? storeById.get(firstStoreId)?.country ?? null : null
+    return resolveShipCountry({
+      lines: cart.lines,
+      perLineShipTo: reviewState.perLineShipTo,
+      customAddressCountry: reviewState.customAddress.country,
+      countryByStoreId: new Map(
+        Array.from(storeById.entries()).map(([id, store]) => [id, store.country ?? null]),
+      ),
+    })
   }, [reviewState, cart.lines, storeById])
 
-  const breakdown = useMemo(() => {
-    // NZ picking fee (shared helper — same logic as the server) shown to the
-    // customer. goodsSubtotal is ex-GST goods incl. folded decoration, matching
-    // computeOrderBreakdown's grossSubtotal and the server's repriced total.
-    // F1 submits the stocked partition as its own stock-on-hand order, so its
-    // fee is based only on that partition even when the review cart is mixed.
-    const stockedLines = cart.lines.filter((line) => line.fulfilmentType === 'stocked')
-    const goodsSubtotal = stockedLines.reduce(
-      (total, line) => total + allInUnitPrice(line) * line.qty,
-      0,
-    )
-    const pickingFee = orderPickingFee({
-      isStockOnHand: stockedLines.length > 0,
-      shipCountry,
-      goodsSubtotal,
-    })
-    return computeOrderBreakdown({
-      lines: cart.lines.map((line) => ({
-        qty: line.qty,
-        unitEffective: line.unitPrice,
-        decorationPerUnit: decorationPerUnit(line),
-      })),
-      gstRate: 0.15,
-      pickingFee,
-    })
-  }, [cart.lines, shipCountry])
+  const { modeByVariantId, status: billingStatus } = useFreshBillingModes(cart.lines)
+  const pricingReady = billingStatus !== 'loading'
+
+  const shape = useMemo(
+    () =>
+      billedOrderShape({
+        lines: cart.lines.map((line) => ({
+          lineId: line.lineId,
+          qty: line.qty,
+          unitPrice: line.unitPrice,
+          decorationPerUnit: decorationPerUnit(line),
+          fulfilmentType: line.fulfilmentType,
+          // FRESH mode only — never the cart's PDP-time snapshot.
+          billingMode: modeByVariantId[line.variantId] ?? null,
+        })),
+        gstRate: 0.15,
+        shipCountry,
+      }),
+    [cart.lines, modeByVariantId, shipCountry],
+  )
+
+  const lineById = useMemo(
+    () => new Map(cart.lines.map((line) => [line.lineId, line])),
+    [cart.lines],
+  )
   const depositPct = defaultDepositPercent ?? 0
-  const depositAmount = (breakdown.netSubtotal * depositPct) / 100
+  // Off the BILLED subtotal — never charge a deposit on prepaid stock.
+  const depositAmount = (shape.billedSubtotal * depositPct) / 100
 
   const allCustom =
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
@@ -183,6 +178,13 @@ export function CheckoutReviewClient({
             // Manual-final: the cart's claimed combined decoration figure for the
             // whole item. The server re-derives it from the engine and drift-checks.
             claimed_manual_decoration: line.manualDecorationPerUnit ?? null,
+            // Drift guard (D4). The server re-resolves and 409s on ANY mismatch,
+            // in both directions: even drift that favours the customer means the
+            // page disagreed with the quote, which is the defect being fixed.
+            // Null for a variantless line — nothing to claim.
+            claimed_billing_mode: line.variantId
+              ? modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
+              : null,
           })),
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),
@@ -205,6 +207,13 @@ export function CheckoutReviewClient({
             qty: number
             claimedUnitPrice: number
             canonicalUnitPrice: number
+          }>
+          billingDrift?: Array<{
+            cartLineId: string | null
+            productId: string
+            productName: string
+            claimedBillingMode: string
+            canonicalBillingMode: string
           }>
           violations?: Array<{
             cartLineId: string | null
@@ -256,6 +265,13 @@ export function CheckoutReviewClient({
           setBanner({
             kind: 'error',
             msg: `Decoration pricing has changed - review your cart. ${summary}`,
+          })
+          return
+        }
+        if (data.error === 'billing_mode_drift') {
+          setBanner({
+            kind: 'error',
+            msg: 'Pre-paid status changed — review your cart.',
           })
           return
         }
@@ -426,10 +442,13 @@ export function CheckoutReviewClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <div className="divide-y divide-gray-100">
-          {cart.lines.map((line) => {
-            const unitPrice = allInUnitPrice(line)
-            const lineTotal = allInLineTotal(line)
+        <BilledOrderSummary
+          shape={shape}
+          format={format}
+          defaultBreakdownOpen
+          renderLine={(billedLine: BilledLine) => {
+            const line = lineById.get(billedLine.lineId)
+            if (!line) return null
             const imageUrl = cartLineDisplayImageUrl(line, {
               catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
             })
@@ -437,7 +456,7 @@ export function CheckoutReviewClient({
               (decoration) => !isGenericCustomDecorationName(decoration.name),
             )
             return (
-              <article key={line.lineId} className="py-5 first:pt-0 last:pb-0">
+              <article className="py-5 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
@@ -454,15 +473,9 @@ export function CheckoutReviewClient({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
-                      {/* Keyed on the CHOSEN fulfilment, never the product's
-                          `nature`: a mixed-nature prepaid variant ordered
-                          made-to-order is produced, and produced goods are
-                          charged (draft-invoice.ts gates on qty_from_stock). */}
-                      {isPrepaidDrawn(line.fulfilmentType, line.billingMode ?? null) && (
-                        <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                          Pre-paid
-                        </span>
-                      )}
+                      {/* From the billed shape, so the badge and the $0 are the
+                          same decision — they cannot disagree. */}
+                      {!billedLine.billed && <PrepaidBadge />}
                       <p className="mt-1 text-xs tracking-wide text-gray-500">
                         {line.variantLabel}
                       </p>
@@ -479,29 +492,20 @@ export function CheckoutReviewClient({
                     </div>
                   </div>
                   <div className="text-right text-sm">
-                    <p className="text-gray-500">Unit {format(unitPrice)}</p>
-                    <p className="mt-1 font-semibold text-gray-900">{format(lineTotal)}</p>
+                    <p className="text-gray-500">Unit {format(allInUnitPrice(line))}</p>
+                    <div className="mt-1">
+                      <PrepaidLinePrice
+                        goodsValue={billedLine.goodsValue}
+                        billed={billedLine.billed}
+                        format={format}
+                      />
+                    </div>
                   </div>
                 </div>
               </article>
             )
-          })}
-        </div>
-
-        <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
-          <span className="text-base font-medium text-gray-900">Total</span>
-          <span className="text-xl font-medium text-gray-900">{format(breakdown.total)}</span>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">incl. GST · billed per account terms</p>
-
-        <details open className="mt-3">
-          <summary className="cursor-pointer select-none text-xs text-gray-500 hover:text-gray-700">
-            Show breakdown
-          </summary>
-          <div className="mt-3">
-            <PriceBreakdown breakdown={breakdown} variant="checkout-review" format={format} />
-          </div>
-        </details>
+          }}
+        />
 
         {!isTest && (depositPct > 0 || paymentTerms) && (
           <div className="mt-4 space-y-1 text-xs text-gray-500">
@@ -581,9 +585,11 @@ export function CheckoutReviewClient({
 
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}
-        totalLabel={format(breakdown.total)}
+        totalLabel={pricingReady ? format(shape.grandTotal) : '—'}
         onSubmit={confirmOrder}
-        disabled={isPreview || !customerCode}
+        // Unlike /checkout, this button PLACES the order — it must never fire
+        // against a total the fresh billing read hasn't resolved yet.
+        disabled={!pricingReady || isPreview || !customerCode}
         submitting={submitting}
         submitLabel={isPreview ? 'Preview only' : 'Confirm & place order'}
         submittingLabel="Placing order…"
