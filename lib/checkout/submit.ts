@@ -87,6 +87,15 @@ export interface CheckoutLineInput {
    * into the line's unit price. Null/absent for computed lines (today's path).
    */
   claimed_manual_decoration?: number | null
+  /**
+   * The cart's claimed per-variant billing class at submit time (spec 2026-07-17
+   * D4). The server re-resolves from variant_inventory and throws
+   * BillingModeDriftError on ANY mismatch, in BOTH directions — even drift that
+   * favours the customer means checkout disagreed with the quote, which is the
+   * defect this guard exists for. Absent for legacy carts, which skip the guard
+   * (mirrors the has_brackets gate on unit_price_drift).
+   */
+  claimed_billing_mode?: BillingMode | null
 }
 
 export interface CheckoutInput {
@@ -150,6 +159,59 @@ export class UnitPriceDriftError extends Error {
     this.name = 'UnitPriceDriftError'
     this.drift = drift
   }
+}
+
+export interface BillingModeDrift {
+  cartLineId: string | null
+  productId: string
+  productName: string
+  claimedBillingMode: BillingMode
+  canonicalBillingMode: BillingMode
+}
+
+export class BillingModeDriftError extends Error {
+  readonly drift: BillingModeDrift[]
+  constructor(drift: BillingModeDrift[]) {
+    super('billing_mode_drift')
+    this.name = 'BillingModeDriftError'
+    this.drift = drift
+  }
+}
+
+/**
+ * Compare each line's claimed billing mode against the canonical one. Pure, so
+ * the both-directions rule is testable without a database.
+ *
+ * A line with no claim is skipped (legacy cart — mirrors the has_brackets gate
+ * on unit_price_drift). An unknown variant, or no variant at all, resolves to
+ * invoice_on_dispatch — the same fail-closed rule as resolve-line-billing-modes.
+ */
+export function buildBillingModeDrift(
+  lines: Array<
+    Pick<
+      CheckoutLineInput,
+      'product_id' | 'product_name' | 'variant_id' | 'cart_line_id' | 'claimed_billing_mode'
+    >
+  >,
+  canonicalByVariant: Map<string, BillingMode>,
+): BillingModeDrift[] {
+  const drift: BillingModeDrift[] = []
+  for (const line of lines) {
+    if (line.claimed_billing_mode == null) continue
+    const canonical: BillingMode = line.variant_id
+      ? canonicalByVariant.get(line.variant_id) ?? 'invoice_on_dispatch'
+      : 'invoice_on_dispatch'
+    if (line.claimed_billing_mode !== canonical) {
+      drift.push({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        productName: line.product_name,
+        claimedBillingMode: line.claimed_billing_mode,
+        canonicalBillingMode: canonical,
+      })
+    }
+  }
+  return drift
 }
 
 export interface AccessDrift {
@@ -650,6 +712,25 @@ export async function submitCustomerOrder(
   }
   if (unitPriceDrift.length > 0) {
     throw new UnitPriceDriftError(unitPriceDrift)
+  }
+
+  // 2c. Per-variant billing modes + the drift guard (spec 2026-07-17 D4).
+  //     MUST run before the RPC at step 3: this throws, and a throw after the
+  //     RPC would leave a committed order behind while still failing the
+  //     customer. The resolved map is reused at step 5c (Xero zeroing), by the
+  //     Monday billing note and by the billed-total snapshot, so there is
+  //     exactly ONE read per submit.
+  const billingVariantIds = Array.from(
+    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
+  )
+  const billingModeByVariant = await resolveLineBillingModes(
+    admin,
+    input.context.organizationId,
+    billingVariantIds,
+  )
+  const billingModeDrift = buildBillingModeDrift(input.lines, billingModeByVariant)
+  if (billingModeDrift.length > 0) {
+    throw new BillingModeDriftError(billingModeDrift)
   }
 
   // 2b. Re-validate every selected decoration on every line. Server-side
@@ -1159,15 +1240,10 @@ export async function submitCustomerOrder(
   // source of truth). Fee applies to stock-on-hand orders only
   // (order_type === 'stock_on_hand') and is NZD-only — AUS ship-to orders are
   // excluded here (region seam) pending the AUD/10%-GST AUS epic.
-  // Per-variant billing (Spec 3a): the variant's class, not the item's.
-  const billingVariantIds = Array.from(
-    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
-  )
-  const billingModeByVariant = await resolveLineBillingModes(
-    admin,
-    input.context.organizationId,
-    billingVariantIds,
-  )
+  //
+  // `billingModeByVariant` is resolved once at step 2c, before the RPC — the
+  // drift guard there has to be able to throw without stranding a committed
+  // order, and one read serves this note, the Xero zeroing and the billed total.
   const orderBillingLines = input.lines.map((l) => ({
     stocked: l.fulfilment_type === 'stocked',
     billingMode: l.variant_id
