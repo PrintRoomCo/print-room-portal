@@ -23,6 +23,9 @@ import { orderBillingNote } from '@/lib/monday/billing-note'
 import { orderNeedsInvoicing } from './order-billing'
 import { resolveLineBillingModes } from './resolve-line-billing-modes'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { round2 } from '@/lib/pricing/pricingMath'
+import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
+import { billedFigures } from '@/lib/checkout/billed-figures'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
@@ -87,6 +90,15 @@ export interface CheckoutLineInput {
    * into the line's unit price. Null/absent for computed lines (today's path).
    */
   claimed_manual_decoration?: number | null
+  /**
+   * The cart's claimed per-variant billing class at submit time (spec 2026-07-17
+   * D4). The server re-resolves from variant_inventory and throws
+   * BillingModeDriftError on ANY mismatch, in BOTH directions — even drift that
+   * favours the customer means checkout disagreed with the quote, which is the
+   * defect this guard exists for. Absent for legacy carts, which skip the guard
+   * (mirrors the has_brackets gate on unit_price_drift).
+   */
+  claimed_billing_mode?: BillingMode | null
 }
 
 export interface CheckoutInput {
@@ -150,6 +162,90 @@ export class UnitPriceDriftError extends Error {
     this.name = 'UnitPriceDriftError'
     this.drift = drift
   }
+}
+
+export interface BillingModeDrift {
+  cartLineId: string | null
+  productId: string
+  productName: string
+  claimedBillingMode: BillingMode
+  canonicalBillingMode: BillingMode
+}
+
+export class BillingModeDriftError extends Error {
+  readonly drift: BillingModeDrift[]
+  constructor(drift: BillingModeDrift[]) {
+    super('billing_mode_drift')
+    this.name = 'BillingModeDriftError'
+    this.drift = drift
+  }
+}
+
+/**
+ * Compare each line's claimed billing mode against the canonical one. Pure, so
+ * the both-directions rule is testable without a database.
+ *
+ * A line with no claim is skipped (legacy cart — mirrors the has_brackets gate
+ * on unit_price_drift). An unknown variant, or no variant at all, resolves to
+ * invoice_on_dispatch — the same fail-closed rule as resolve-line-billing-modes.
+ */
+export interface BilledTotalLine {
+  /** fulfilment_type === 'stocked' — this line DREW stock. */
+  stocked: boolean
+  billingMode: BillingMode
+  /** qty × repriced garment unit price, ex decoration. */
+  goodsValue: number
+  /** qty × per-unit decoration for this line. */
+  decorationRevenue: number
+}
+
+/**
+ * The ex-GST figure we actually invoice: goods + decoration for every line that
+ * is NOT a prepaid stock draw, plus the picking fee.
+ *
+ * Decoration on a prepaid draw is excluded too — it was paid for along with the
+ * stock. Handled per line rather than folded into goodsValue because decoration
+ * revenue is tracked separately for finance (quotes.decoration_cost).
+ *
+ * Uses the same isPrepaidDrawn predicate as the customer-facing shape, so the
+ * server and the checkout page cannot disagree about which lines are free.
+ */
+export function billedOrderTotal(lines: BilledTotalLine[], pickFee: number): number {
+  const billedGoods = lines.reduce((total, line) => {
+    if (isPrepaidDrawn(line.stocked ? 'stocked' : 'made_to_order', line.billingMode)) {
+      return total
+    }
+    return total + line.goodsValue + line.decorationRevenue
+  }, 0)
+  return round2(billedGoods + pickFee)
+}
+
+export function buildBillingModeDrift(
+  lines: Array<
+    Pick<
+      CheckoutLineInput,
+      'product_id' | 'product_name' | 'variant_id' | 'cart_line_id' | 'claimed_billing_mode'
+    >
+  >,
+  canonicalByVariant: Map<string, BillingMode>,
+): BillingModeDrift[] {
+  const drift: BillingModeDrift[] = []
+  for (const line of lines) {
+    if (line.claimed_billing_mode == null) continue
+    const canonical: BillingMode = line.variant_id
+      ? canonicalByVariant.get(line.variant_id) ?? 'invoice_on_dispatch'
+      : 'invoice_on_dispatch'
+    if (line.claimed_billing_mode !== canonical) {
+      drift.push({
+        cartLineId: line.cart_line_id ?? null,
+        productId: line.product_id,
+        productName: line.product_name,
+        claimedBillingMode: line.claimed_billing_mode,
+        canonicalBillingMode: canonical,
+      })
+    }
+  }
+  return drift
 }
 
 export interface AccessDrift {
@@ -236,8 +332,9 @@ interface QuoteItemRow {
 interface QuoteRowForEmail {
   customer_name: string
   total_amount: number
+  picking_fee: number | null
+  billed_total: number | null
   required_by: string | null
-  payment_terms: string | null
 }
 
 interface QuoteItemForEmail {
@@ -652,6 +749,25 @@ export async function submitCustomerOrder(
     throw new UnitPriceDriftError(unitPriceDrift)
   }
 
+  // 2c. Per-variant billing modes + the drift guard (spec 2026-07-17 D4).
+  //     MUST run before the RPC at step 3: this throws, and a throw after the
+  //     RPC would leave a committed order behind while still failing the
+  //     customer. The resolved map is reused at step 5c (Xero zeroing), by the
+  //     Monday billing note and by the billed-total snapshot, so there is
+  //     exactly ONE read per submit.
+  const billingVariantIds = Array.from(
+    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
+  )
+  const billingModeByVariant = await resolveLineBillingModes(
+    admin,
+    input.context.organizationId,
+    billingVariantIds,
+  )
+  const billingModeDrift = buildBillingModeDrift(input.lines, billingModeByVariant)
+  if (billingModeDrift.length > 0) {
+    throw new BillingModeDriftError(billingModeDrift)
+  }
+
   // 2b. Re-validate every selected decoration on every line. Server-side
   //     read of the link table + org_decoration; reject on cross-org reuse,
   //     unattached link, inactive decoration, mismatched catalogue item, or
@@ -1017,6 +1133,11 @@ export async function submitCustomerOrder(
   //    Without this, the quote would store garment-only and we'd under-bill
   //    the customer for the decoration they ordered.
   const decorationCostByLineKey = new Map<string, number>()
+  // Index-aligned to `repriced` (and therefore to input.lines and
+  // orderBillingLines, both .map over it). The billed-total snapshot below needs
+  // the per-line figure; built in this same loop so it cannot disagree with the
+  // running total.
+  const decorationRevenueByLineIndex: number[] = []
   let totalDecorationRevenue = 0
   for (const l of repriced) {
     const lineKey = makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)
@@ -1027,7 +1148,9 @@ export async function submitCustomerOrder(
     const perUnit =
       manualDeco != null ? manualDeco : validated.reduce((s, d) => s + d.unitPrice, 0)
     decorationCostByLineKey.set(lineKey, perUnit)
-    totalDecorationRevenue += perUnit * l.qty
+    const lineRevenue = perUnit * l.qty
+    decorationRevenueByLineIndex.push(lineRevenue)
+    totalDecorationRevenue += lineRevenue
   }
 
   // Phase 2 — drift signal only (we never throw): if a line's own catalogue
@@ -1159,15 +1282,10 @@ export async function submitCustomerOrder(
   // source of truth). Fee applies to stock-on-hand orders only
   // (order_type === 'stock_on_hand') and is NZD-only — AUS ship-to orders are
   // excluded here (region seam) pending the AUD/10%-GST AUS epic.
-  // Per-variant billing (Spec 3a): the variant's class, not the item's.
-  const billingVariantIds = Array.from(
-    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
-  )
-  const billingModeByVariant = await resolveLineBillingModes(
-    admin,
-    input.context.organizationId,
-    billingVariantIds,
-  )
+  //
+  // `billingModeByVariant` is resolved once at step 2c, before the RPC — the
+  // drift guard there has to be able to throw without stranding a committed
+  // order, and one read serves this note, the Xero zeroing and the billed total.
   const orderBillingLines = input.lines.map((l) => ({
     stocked: l.fulfilment_type === 'stocked',
     billingMode: l.variant_id
@@ -1198,6 +1316,30 @@ export async function submitCustomerOrder(
       .update({ decoration_cost: totalDecorationRevenue })
       .eq('id', quote_id)
   }
+
+  // The BILLED figures (spec 2026-07-17 D5) — what the customer is actually
+  // invoiced, as against total_amount, which stays the full goods value so
+  // Monday, staff order views and reporting are untouched.
+  //
+  // A SNAPSHOT, never recomputed on read: variant_inventory.billing_mode is
+  // mutable, so re-deriving this later would silently rewrite what an old order
+  // was billed.
+  //
+  // Written post-RPC with a plain update, exactly like decoration_cost above —
+  // which is why neither needs a submit_b2b_order change.
+  const billedTotal = billedOrderTotal(
+    orderBillingLines.map((billing, index) => ({
+      stocked: billing.stocked,
+      billingMode: billing.billingMode,
+      goodsValue: repriced[index].unit_price * repriced[index].qty,
+      decorationRevenue: decorationRevenueByLineIndex[index] ?? 0,
+    })),
+    pickFee,
+  )
+  await admin
+    .from('quotes')
+    .update({ picking_fee: round2(pickFee), billed_total: billedTotal })
+    .eq('id', quote_id)
 
   await recordAuditEvent(
     {
@@ -1836,19 +1978,28 @@ export async function submitCustomerOrder(
     // Fetch the email payload from quotes/quote_items for the confirmation email below.
     let emailLines: OrderConfirmationLine[] = []
     let emailTotalAmount: number | null = null
-    let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
+    let emailPickingFee = 0
+    let emailPrepaidGoodsValue = 0
     let emailRequiredBy: string | null = input.required_by ?? null
     let emailCustomerName = input.context.organizationName
     try {
       const { data: q } = await admin
         .from('quotes')
-        .select('customer_name, total_amount, required_by, payment_terms')
+        .select('customer_name, total_amount, picking_fee, billed_total, required_by')
         .eq('id', quote_id)
         .single()
       const quote = q as QuoteRowForEmail | null
       if (quote) {
-        emailTotalAmount = Number(quote.total_amount)
-        emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
+        // The customer email shows what we INVOICE, not the goods value — the
+        // same billedFigures the confirmation page uses, so the two agree.
+        const figures = billedFigures({
+          goodsExGst: Number(quote.total_amount),
+          billedTotal: quote.billed_total,
+          pickingFee: quote.picking_fee,
+        })
+        emailTotalAmount = figures.billedExGst
+        emailPickingFee = figures.pickingFee
+        emailPrepaidGoodsValue = figures.prepaidGoodsValue
         emailRequiredBy = quote.required_by ?? emailRequiredBy
         emailCustomerName = quote.customer_name
       }
@@ -1913,9 +2064,11 @@ export async function submitCustomerOrder(
           orderId: order_id,
           orderRef: order_ref,
           totalAmount: fallbackTotal,
-          paymentTerms: emailPaymentTerms,
-          contractNotes: input.context.contractNotes,
-          pricingMode: input.context.pricingMode,
+          // Both 0 on the fallback path (quote fetch failed): fallbackTotal is
+          // the goods sum, so the order over-quotes rather than under-quotes —
+          // the same fail-closed trade as everywhere else.
+          pickingFee: emailPickingFee,
+          prepaidGoodsValue: emailPrepaidGoodsValue,
           requiredBy: emailRequiredBy,
           lines: fallbackLines,
           provisionalUntil:

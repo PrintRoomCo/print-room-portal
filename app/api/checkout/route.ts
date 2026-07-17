@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import {
+  BillingModeDriftError,
   BuyerScopeError,
   DecorationDriftError,
   MemberAccessDriftError,
@@ -144,6 +145,12 @@ export async function POST(request: Request) {
     if (e instanceof UnitPriceDriftError) {
       return NextResponse.json(
         { error: 'unit_price_drift', priceDrift: e.drift },
+        { status: 409 },
+      )
+    }
+    if (e instanceof BillingModeDriftError) {
+      return NextResponse.json(
+        { error: 'billing_mode_drift', billingDrift: e.drift },
         { status: 409 },
       )
     }

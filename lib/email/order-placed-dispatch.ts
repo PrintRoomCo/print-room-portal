@@ -24,6 +24,14 @@ export interface OrderPlacedDispatchParams {
   /** Ordering org / customer display name. */
   customerName: string
   orderType: 'stock_on_hand' | 'purchase_order'
+  /**
+   * The GOODS value, NOT the invoice — rendered as "Goods value".
+   *
+   * Staff care what is leaving the building. A prepaid order's invoice is just
+   * the picking fee, so a dispatch note reading "$17.25" against 120 tees would
+   * be actively misleading. The customer-facing billed figure lives on the
+   * order-confirmation email instead.
+   */
   totalAmount: number
   /** Absolute portal deep link to the order. */
   orderUrl: string
@@ -99,7 +107,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
               <tbody>${rowsHtml}
               </tbody>
               <tfoot><tr>
-                <td colspan="2" style="padding:16px 0 0;text-align:right;${labelStyle}">Total</td>
+                <td colspan="2" style="padding:16px 0 0;text-align:right;${labelStyle}">Goods value</td>
                 <td style="padding:16px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
               </tr></tfoot>
             </table>
@@ -126,7 +134,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
     `Customer: ${params.customerName}\n` +
     `Order type: ${typeLabel}\n\n` +
     `${textLines}\n\n` +
-    `Total: ${formatMoney(params.totalAmount)}\n\n` +
+    `Goods value: ${formatMoney(params.totalAmount)}\n\n` +
     `Open order: ${params.orderUrl}\n`
 
   return { subject, html, text }

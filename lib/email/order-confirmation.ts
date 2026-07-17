@@ -19,14 +19,16 @@ export interface OrderConfirmationParams {
   /** orders.id — used by the email log writer. */
   orderId: string
   orderRef: string
-  totalAmount: number
-  paymentTerms: string | null
   /**
-   * Plain-text contract notes from b2b_accounts.contract_notes. Surfaced under
-   * the payment-terms line when pricingMode === 'contract'. Null otherwise.
+   * What the customer is INVOICED, ex-GST: billed goods + pickingFee. Prepaid
+   * stock draws contribute 0. NOT the goods value — the staff dispatch email
+   * carries that instead, labelled "Goods value".
    */
-  contractNotes?: string | null
-  pricingMode?: string | null
+  totalAmount: number
+  /** NZ picking fee, ex-GST. 0 when none applies. */
+  pickingFee?: number
+  /** Goods drawn from pre-paid stock and NOT invoiced. 0 for a normal order. */
+  prepaidGoodsValue?: number
   requiredBy: string | null
   /** ISO timestamp of the ordering-period close — renders the provisional-pricing note. */
   provisionalUntil?: string | null
@@ -36,21 +38,6 @@ export interface OrderConfirmationParams {
     quantity: number
     unitPrice: number
   }>
-}
-
-function formatPaymentTerms(terms: string | null | undefined): string {
-  switch (terms) {
-    case 'prepay':
-      return 'Prepaid (100% upfront)'
-    case 'net20':
-      return 'Net 20 days'
-    case 'net30':
-      return 'Net 30 days'
-    case 'contract':
-      return 'Contract terms'
-    default:
-      return terms ?? 'as per agreement'
-  }
 }
 
 function formatMoney(n: number): string {
@@ -74,11 +61,6 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
   html: string
   text: string
 } {
-  const paymentTerms = formatPaymentTerms(params.paymentTerms)
-  const contractNotes =
-    params.pricingMode === 'contract' && params.contractNotes
-      ? params.contractNotes
-      : null
   const provisionalNote = params.provisionalUntil
     ? `Pricing is provisional until your ordering window closes on ${new Date(
         params.provisionalUntil,
@@ -136,7 +118,23 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
               </thead>
               <tbody>${lineRowsHtml}
               </tbody>
-              <tfoot>
+              <tfoot>${
+                (params.prepaidGoodsValue ?? 0) > 0
+                  ? `
+                <tr>
+                  <td colspan="3" style="padding:14px 0 0;text-align:right;font-size:12px;color:#6b7280;">Drawn from pre-paid stock</td>
+                  <td style="padding:14px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:12px;color:#6b7280;white-space:nowrap;">${formatMoney(params.prepaidGoodsValue ?? 0)}</td>
+                </tr>`
+                  : ''
+              }${
+                (params.pickingFee ?? 0) > 0
+                  ? `
+                <tr>
+                  <td colspan="3" style="padding:6px 0 0;text-align:right;font-size:13px;color:#374151;">Picking fee</td>
+                  <td style="padding:6px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:13px;color:#374151;white-space:nowrap;">${formatMoney(params.pickingFee ?? 0)}</td>
+                </tr>`
+                  : ''
+              }
                 <tr>
                   <td colspan="3" style="padding:18px 0 0;text-align:right;${labelStyle}">Total</td>
                   <td style="padding:18px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
@@ -153,20 +151,6 @@ ${
             </table>`
     : ''
 }
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;background-color:${SURFACE};border-radius:12px;">
-              <tr>
-                <td style="padding:18px 20px;font-family:${BRAND_FONT};">
-                  <div style="${labelStyle}margin:0 0 4px;">Payment terms</div>
-                  <div style="font-size:15px;font-weight:600;color:${INK};">${escapeHtml(paymentTerms)}</div>${
-                    contractNotes
-                      ? `
-                  <div style="margin-top:10px;font-size:13px;line-height:1.6;color:${BODY};">${escapeHtml(contractNotes)}</div>`
-                      : ''
-                  }
-                </td>
-              </tr>
-            </table>
-
             <p style="margin:30px 0 0;font-family:${BRAND_FONT};font-size:15px;line-height:1.65;color:${BODY};">Thanks,<br/><span style="color:${INK};font-weight:700;">The Print Room team</span></p>`
 
   const subject = `Order received - ${params.orderRef}`
@@ -187,9 +171,13 @@ ${
     `Hi ${params.customerName}, thanks for your order. We've received it and we're on it. We'll be in touch with the next steps shortly.\n\n` +
     `Your reference: ${params.orderRef}\n\n` +
     `${textLines}\n\n` +
+    ((params.prepaidGoodsValue ?? 0) > 0
+      ? `Drawn from pre-paid stock: ${formatMoney(params.prepaidGoodsValue ?? 0)}\n`
+      : '') +
+    ((params.pickingFee ?? 0) > 0
+      ? `Picking fee: ${formatMoney(params.pickingFee ?? 0)}\n`
+      : '') +
     `Total: ${formatMoney(params.totalAmount)}\n` +
-    `Payment terms: ${paymentTerms}\n` +
-    (contractNotes ? `${contractNotes}\n` : '') +
     (provisionalNote ? `\n${provisionalNote}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room team`

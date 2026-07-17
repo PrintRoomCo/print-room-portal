@@ -15,7 +15,10 @@ export default async function CheckoutPage() {
 
   const { data: rawStores } = await admin
     .from('stores')
-    .select('id, name, city')
+    // `country` region-gates the NZ picking fee. The review page has always
+    // selected it; omitting it here would quote a $0 fee on /checkout and $15 on
+    // /checkout/review — the exact divergence this page is being fixed for.
+    .select('id, name, city, country')
     .eq('organization_id', context.organizationId)
     .order('name')
 

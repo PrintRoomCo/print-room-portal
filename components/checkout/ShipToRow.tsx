@@ -7,13 +7,15 @@ import {
   cartLineDisplayImageUrl,
   type CartLine,
 } from '@/lib/cart/types'
+import { PrepaidBadge, PrepaidLinePrice } from './PrepaidLinePrice'
 
 export interface StoreOption {
   id: string
   name: string | null
   city: string | null
-  /** Free-text ship-to country. Optional — only the checkout review page loads
-   *  it (to region-gate the NZ picking-fee display). */
+  /** Free-text ship-to country. Loaded by BOTH checkout pages — it region-gates
+   *  the NZ picking fee, so a page that omits it would quote a $0 fee while the
+   *  other quotes $15. */
   country?: string | null
 }
 
@@ -37,6 +39,14 @@ interface ShipToRowProps {
    * there is no per-line destination in that mode.
    */
   hideShipTo?: boolean
+  /**
+   * From the billed shape (never a local guess): true ⇒ this line is a prepaid
+   * stock draw and is invoiced at $0.
+   */
+  prepaidDrawn?: boolean
+  /** Full goods value from the billed shape. Falls back to the cart's own
+   *  all-in line total when the shape hasn't resolved yet. */
+  billedGoodsValue?: number
 }
 
 export function ShipToRow({
@@ -49,6 +59,8 @@ export function ShipToRow({
   allowCustom = true,
   catalogueFrontImageUrl = null,
   hideShipTo = false,
+  prepaidDrawn = false,
+  billedGoodsValue,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
   const imageUrl = cartLineDisplayImageUrl(line, { catalogueFrontImageUrl })
@@ -70,6 +82,7 @@ export function ShipToRow({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-base font-medium text-gray-900">{line.productName}</div>
+          {prepaidDrawn && <PrepaidBadge />}
           <div className="text-xs text-gray-500">{line.variantLabel}</div>
         </div>
       </div>
@@ -101,8 +114,12 @@ export function ShipToRow({
             {' × '}
             <span className="tabular-nums text-gray-700">{line.qty}</span>
           </div>
-          <div className="mt-1 font-medium text-gray-900 tabular-nums">
-            {format(allInLineTotal(line))}
+          <div className="mt-1">
+            <PrepaidLinePrice
+              goodsValue={billedGoodsValue ?? allInLineTotal(line)}
+              billed={!prepaidDrawn}
+              format={format}
+            />
           </div>
         </div>
       </div>

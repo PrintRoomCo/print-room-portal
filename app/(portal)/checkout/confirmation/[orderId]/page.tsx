@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
+import { billedFigures } from '@/lib/checkout/billed-figures'
 import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
 import {
   ConfirmationView,
@@ -29,6 +30,8 @@ interface OrderRow {
     subtotal: number | null
     decoration_cost: number | null
     tax: number | null
+    picking_fee: number | null
+    billed_total: number | null
     shipping_address: unknown
     required_by: string | null
   } | null
@@ -116,7 +119,7 @@ export default async function ConfirmationPage({
       `id, status, total_price, intent,
        quotes!inner (
          id, order_ref, monday_item_id, organization_id,
-         subtotal, decoration_cost, tax,
+         subtotal, decoration_cost, tax, picking_fee, billed_total,
          shipping_address, required_by
        )`,
     )
@@ -145,14 +148,24 @@ export default async function ConfirmationPage({
   const mondaySynced = Boolean(order.quotes.monday_item_id)
   const isInventoryOrder = order.intent === 'inventory'
 
-  // Stored total_amount / total_price is ex-GST (matches Xero invoice convention).
-  // Re-derive the inc-GST view the cart showed so the customer doesn't see a
-  // different total than the one they agreed to at checkout.
-  const subtotalExGst = Number(order.quotes.subtotal ?? order.total_price ?? 0)
+  // Stored subtotal / total_price is the ex-GST GOODS value; billed_total is
+  // what we actually invoiced. Both are READ, not recomputed — billing_mode is
+  // mutable, so re-deriving would rewrite the history of an old order.
+  // Shared with the customer email so the two cannot disagree.
   const decorationCost = Number(order.quotes.decoration_cost ?? 0)
+  const { billedExGst, pickingFee, prepaidGoodsValue } = billedFigures({
+    goodsExGst: Number(order.quotes.subtotal ?? order.total_price ?? 0),
+    billedTotal: order.quotes.billed_total,
+    pickingFee: order.quotes.picking_fee,
+  })
   const storedTax = Number(order.quotes.tax ?? 0)
-  const gst = storedTax > 0 ? storedTax : Math.round(subtotalExGst * GST_RATE * 100) / 100
-  const totalIncGst = Math.round((subtotalExGst + gst) * 100) / 100
+  // storedTax was computed off the goods value, so it is only trustworthy when
+  // nothing was zeroed. Otherwise derive GST from what is actually billed.
+  const gst =
+    prepaidGoodsValue === 0 && storedTax > 0
+      ? storedTax
+      : Math.round(billedExGst * GST_RATE * 100) / 100
+  const totalIncGst = Math.round((billedExGst + gst) * 100) / 100
 
   // Line items live on the joined quote. We surface them on the confirmation
   // card so the customer can scan what they actually placed; if this fetch
@@ -296,8 +309,10 @@ export default async function ConfirmationPage({
           fulfilmentLabel={fulfilmentLabel}
           requiredBy={order.quotes.required_by}
           lines={lines}
-          subtotalExGst={subtotalExGst}
+          subtotalExGst={billedExGst}
           decorationCost={decorationCost}
+          pickingFee={pickingFee}
+          prepaidGoodsValue={prepaidGoodsValue}
           gst={gst}
           totalIncGst={totalIncGst}
           gstRate={GST_RATE}

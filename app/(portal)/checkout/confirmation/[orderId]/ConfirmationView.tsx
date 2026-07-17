@@ -55,8 +55,13 @@ interface ConfirmationViewProps {
   fulfilmentLabel: string
   requiredBy: string | null
   lines: ConfirmationLine[]
+  /** Ex-GST goods actually INVOICED — prepaid draws count 0, plus pickingFee. */
   subtotalExGst: number
   decorationCost: number
+  /** NZ picking fee charged on this order, ex-GST. 0 when none applies. */
+  pickingFee: number
+  /** Goods drawn from pre-paid stock and NOT invoiced. 0 for a normal order. */
+  prepaidGoodsValue: number
   gst: number
   totalIncGst: number
   gstRate: number
@@ -99,6 +104,8 @@ export function ConfirmationView(props: ConfirmationViewProps) {
     requiredBy,
     lines,
     subtotalExGst,
+    pickingFee,
+    prepaidGoodsValue,
     gst,
     totalIncGst,
     gstRate,
@@ -315,11 +322,26 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             <h2 className={`mb-5 ${LABEL_CAP}`}>Order total</h2>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600">Subtotal (ex-GST)</span>
+                <span className="text-gray-600">
+                  {prepaidGoodsValue > 0 ? 'Goods (pre-paid)' : 'Subtotal (ex-GST)'}
+                </span>
                 <span className="tabular-nums text-gray-900">
-                  {format(subtotalExGst)}
+                  {format(subtotalExGst - pickingFee)}
                 </span>
               </div>
+              {/*
+                Load-bearing: once goods read $0 this is the only place the
+                picking-fee band basis appears, so the customer can tell why the
+                fee is $15 rather than $35.
+              */}
+              {prepaidGoodsValue > 0 && (
+                <div className="flex justify-between pl-3">
+                  <span className="text-xs text-gray-500">Drawn from pre-paid stock</span>
+                  <span className="text-xs tabular-nums text-gray-500">
+                    {format(prepaidGoodsValue)}
+                  </span>
+                </div>
+              )}
               {/*
                 props.decorationCost remains available for diagnostics, but the
                 customer-facing order total treats decoration as baked into the
@@ -329,6 +351,12 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                 <span className="text-gray-600">Shipping</span>
                 <span className="text-gray-900">Included</span>
               </div>
+              {pickingFee > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Picking fee</span>
+                  <span className="tabular-nums text-gray-900">{format(pickingFee)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-600">
                   GST ({Math.round(gstRate * 100)}%)

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
 import { AvailabilityBadge } from './AvailabilityBadge'
-import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
+import { showsPrepaidStockBadge } from '@/lib/shop/prepaid-tag'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
@@ -1134,7 +1134,7 @@ export function ProductDetailClient({
                     }
                   />
                 )}
-                {showsPrepaidTag(product.fulfilment_type, selectedColourPrepaid ? 'prepaid' : 'invoice_on_dispatch') && (
+                {showsPrepaidStockBadge(product.fulfilment_type, selectedColourPrepaid ? 'prepaid' : 'invoice_on_dispatch') && (
                   <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                     Pre-paid
                   </span>

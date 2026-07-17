@@ -184,6 +184,12 @@ describe('CheckoutReviewClient double-submit guard', () => {
       if (url.includes('/api/checkout/review-images')) {
         return Promise.resolve(okJson({ imagesByLineId: {} }))
       }
+      // Must precede the '/api/checkout' catch-all below, which would otherwise
+      // hand the POST's response to the billing read. The page holds its total
+      // (and disables the CTA) until this resolves.
+      if (url.includes('/api/checkout/billing-modes')) {
+        return Promise.resolve(okJson({ modeByVariantId: {} }))
+      }
       if (url.includes('/api/checkout')) {
         return new Promise<Response>(() => {}) // never resolves — stays in flight
       }
@@ -200,7 +206,11 @@ describe('CheckoutReviewClient double-submit guard', () => {
 
     const checkoutPosts = vi.mocked(fetch).mock.calls.filter(([input]) => {
       const url = typeof input === 'string' ? input : (input as URL).toString()
-      return url.includes('/api/checkout') && !url.includes('review-images')
+      return (
+        url.includes('/api/checkout') &&
+        !url.includes('review-images') &&
+        !url.includes('billing-modes')
+      )
     })
     expect(checkoutPosts).toHaveLength(1)
   })
@@ -213,6 +223,12 @@ describe('CheckoutReviewClient placing overlay', () => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/api/checkout/review-images')) {
         return Promise.resolve(okJson({ imagesByLineId: {} }))
+      }
+      // Must precede the '/api/checkout' catch-all below, which would otherwise
+      // hand the POST's response to the billing read. The page holds its total
+      // (and disables the CTA) until this resolves.
+      if (url.includes('/api/checkout/billing-modes')) {
+        return Promise.resolve(okJson({ modeByVariantId: {} }))
       }
       if (url.includes('/api/checkout')) {
         return new Promise<Response>((r) => {
