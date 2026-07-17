@@ -335,7 +335,6 @@ interface QuoteRowForEmail {
   picking_fee: number | null
   billed_total: number | null
   required_by: string | null
-  payment_terms: string | null
 }
 
 interface QuoteItemForEmail {
@@ -1981,13 +1980,12 @@ export async function submitCustomerOrder(
     let emailTotalAmount: number | null = null
     let emailPickingFee = 0
     let emailPrepaidGoodsValue = 0
-    let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
     let emailRequiredBy: string | null = input.required_by ?? null
     let emailCustomerName = input.context.organizationName
     try {
       const { data: q } = await admin
         .from('quotes')
-        .select('customer_name, total_amount, picking_fee, billed_total, required_by, payment_terms')
+        .select('customer_name, total_amount, picking_fee, billed_total, required_by')
         .eq('id', quote_id)
         .single()
       const quote = q as QuoteRowForEmail | null
@@ -2002,7 +2000,6 @@ export async function submitCustomerOrder(
         emailTotalAmount = figures.billedExGst
         emailPickingFee = figures.pickingFee
         emailPrepaidGoodsValue = figures.prepaidGoodsValue
-        emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
         emailRequiredBy = quote.required_by ?? emailRequiredBy
         emailCustomerName = quote.customer_name
       }
@@ -2072,9 +2069,6 @@ export async function submitCustomerOrder(
           // the same fail-closed trade as everywhere else.
           pickingFee: emailPickingFee,
           prepaidGoodsValue: emailPrepaidGoodsValue,
-          paymentTerms: emailPaymentTerms,
-          contractNotes: input.context.contractNotes,
-          pricingMode: input.context.pricingMode,
           requiredBy: emailRequiredBy,
           lines: fallbackLines,
           provisionalUntil:
