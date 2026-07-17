@@ -175,15 +175,15 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                   return (
                     <article
                       key={line.id}
-                      className="flex items-start gap-x-6 gap-y-4 border-b border-gray-100 pb-5 last:border-0 last:pb-0 md:gap-5"
+                      className="flex items-start gap-x-6 gap-y-4 md:gap-5"
                     >
-                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
+                      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
                         {imageUrl ? (
                           <Image
                             src={imageUrl}
                             alt={line.productName}
                             fill
-                            sizes="80px"
+                            sizes="96px"
                             className="object-contain p-2"
                             unoptimized
                           />
@@ -347,7 +347,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                 customer-facing order total treats decoration as baked into the
                 subtotal/unit prices.
               */}
-              <div className="flex justify-between border-t border-gray-100 pt-2.5">
+              <div className="flex justify-between">
                 <span className="text-gray-600">Shipping</span>
                 <span className="text-gray-900">Included</span>
               </div>
@@ -363,7 +363,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                 </span>
                 <span className="tabular-nums text-gray-900">{format(gst)}</span>
               </div>
-              <div className="mt-2 flex items-baseline justify-between border-t border-gray-100 pt-3">
+              <div className="mt-3 flex items-baseline justify-between">
                 <span className="font-dm-sans text-base font-medium text-gray-900">
                   Total
                 </span>
