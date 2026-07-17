@@ -151,7 +151,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
           {/* Order summary */}
           <section className="rounded-[32px] bg-white p-6 md:p-8">
             <h2 className={`mb-6 ${LABEL_CAP}`}>Order summary</h2>
-            <div className="space-y-4">
+            <div className="space-y-6">
               {lines.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   No items recorded for this order.{' '}
@@ -175,7 +175,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                   return (
                     <article
                       key={line.id}
-                      className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 md:gap-5"
+                      className="flex items-start gap-x-6 gap-y-4 border-b border-gray-100 pb-5 last:border-0 last:pb-0 md:gap-5"
                     >
                       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
                         {imageUrl ? (
@@ -220,17 +220,17 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                             })}
                           </div>
                         )}
-                        <p className="mt-3 text-sm text-gray-500">
-                          <span className="tabular-nums text-gray-700">
-                            {line.quantity}
-                          </span>{' '}
-                          ×{' '}
-                          <span className="tabular-nums text-gray-700">
+                        <p className="mt-3 text-xs text-gray-500">
+                          <span className="tabular-nums text-gray-600">
                             {format(line.unitPrice)}
+                          </span>
+                          <span className="px-1.5 text-gray-300">×</span>
+                          <span className="tabular-nums text-gray-600">
+                            {line.quantity}
                           </span>
                         </p>
                       </div>
-                      <p className="font-dm-sans text-base font-medium tabular-nums text-gray-900">
+                      <p className="shrink-0 font-dm-sans text-base font-medium tabular-nums text-gray-900">
                         {format(lineTotal)}
                       </p>
                     </article>

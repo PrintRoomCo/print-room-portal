@@ -66,15 +66,15 @@ export function ShipToRow({
   const imageUrl = cartLineDisplayImageUrl(line, { catalogueFrontImageUrl })
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 bg-white py-5 text-sm first:pt-0 last:pb-0">
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 bg-white text-sm">
       <div className="flex min-w-0 flex-1 items-start gap-4">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-50">
           {imageUrl ? (
             <Image
               src={imageUrl}
               alt=""
               fill
-              sizes="80px"
+              sizes="96px"
               className="object-contain p-1"
               unoptimized
             />
@@ -86,7 +86,7 @@ export function ShipToRow({
           <div className="text-xs text-gray-500">{line.variantLabel}</div>
         </div>
       </div>
-      <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-col items-end gap-4">
         {!hideShipTo && (
           <label className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Ship to</span>
@@ -109,12 +109,12 @@ export function ShipToRow({
           </label>
         )}
         <div className="text-right">
-          <div className="text-gray-500">
-            <span className="tabular-nums text-gray-700">{format(allInUnitPrice(line))}</span>
-            {' × '}
-            <span className="tabular-nums text-gray-700">{line.qty}</span>
+          <div className="text-xs text-gray-500">
+            <span className="tabular-nums text-gray-600">{format(allInUnitPrice(line))}</span>
+            <span className="px-1.5 text-gray-300">×</span>
+            <span className="tabular-nums text-gray-600">{line.qty}</span>
           </div>
-          <div className="mt-1">
+          <div className="mt-2 text-base">
             <PrepaidLinePrice
               goodsValue={billedGoodsValue ?? allInLineTotal(line)}
               billed={!prepaidDrawn}

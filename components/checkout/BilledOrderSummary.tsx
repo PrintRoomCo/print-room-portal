@@ -52,22 +52,22 @@ export function BilledOrderSummary({
       {shape.partitions.map((partition) => (
         <section
           key={partition.orderType}
-          className={multi ? 'mb-5 rounded-2xl border border-gray-100 p-5' : undefined}
+          className={multi ? 'mb-5 rounded-2xl bg-gray-50/60 p-5' : undefined}
         >
           {multi && (
             <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
               {ORDER_TYPE_LABEL[partition.orderType]}
             </h3>
           )}
-          <div className="divide-y divide-gray-100">
+          <div className="space-y-6">
             {partition.lines.map((line) => (
               <div key={line.lineId}>{renderLine(line)}</div>
             ))}
           </div>
           {multi && (
-            <div className="mt-4 space-y-1.5 border-t border-gray-200 pt-3 text-sm">
+            <div className="mt-4 space-y-1.5 text-sm">
               <PartitionRows partition={partition} gstRate={shape.gstRate} format={format} />
-              <div className="border-t border-gray-100 pt-1.5">
+              <div className="mt-1.5">
                 <Row label="Order total" value={partition.total} bold format={format} />
               </div>
             </div>
@@ -77,7 +77,7 @@ export function BilledOrderSummary({
 
       {afterLines}
 
-      <div className="mt-6 flex items-baseline justify-between border-t border-gray-200 pt-5">
+      <div className="mt-8 flex items-baseline justify-between">
         <span className="text-base font-medium text-gray-900">
           {multi ? `Total across ${shape.invoiceCount} orders` : 'Total'}
         </span>
@@ -102,7 +102,7 @@ export function BilledOrderSummary({
               format={format}
               showShipping
             />
-            <div className="mt-1 border-t border-gray-100 pt-1.5">
+            <div className="mt-2">
               <Row label="Total" value={shape.partitions[0].total} bold format={format} />
             </div>
           </div>
