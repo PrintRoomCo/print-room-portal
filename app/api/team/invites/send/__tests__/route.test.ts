@@ -3,9 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => ({
   requireB2BCustomerApi: vi.fn(),
   recordAuditEvent: vi.fn(),
+  sendEmail: vi.fn(),
 }))
 vi.mock('@/lib/checkout/server', () => ({ requireB2BCustomerApi: mocks.requireB2BCustomerApi }))
 vi.mock('@/lib/audit/recordEvent', () => ({ recordAuditEvent: mocks.recordAuditEvent }))
+vi.mock('@/lib/email/client', () => ({ sendEmail: mocks.sendEmail }))
 
 import { POST } from '../route'
 
@@ -21,12 +23,12 @@ function makeAdmin(
   opts: {
     members?: Array<{ user_id: string; role?: 'staff' | 'org_admin'; invited_at?: string | null }>
     profiles?: Array<{ id: string; email: string | null; last_sign_in_at?: string | null }>
-    otpError?: { message: string } | null
     updateError?: { message: string } | null
+    orgName?: string
   } = {},
 ) {
   const updates: Array<Record<string, unknown>> = []
-  const signInWithOtp = vi.fn().mockResolvedValue({ error: opts.otpError ?? null })
+  const signInWithOtp = vi.fn().mockResolvedValue({ error: null })
   const membershipFilters = new Map<string, unknown>()
   const filteredMemberships = () =>
     (opts.members ?? []).filter((member) =>
@@ -63,6 +65,16 @@ function makeAdmin(
           select: () => ({ in: () => Promise.resolve({ data: opts.profiles ?? [], error: null }) }),
         }
       }
+      if (table === 'organizations') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({ data: { name: opts.orgName ?? 'Org One' }, error: null }),
+            }),
+          }),
+        }
+      }
       // user_organizations
       return {
         select: () => membershipSelect,
@@ -94,7 +106,10 @@ function adminCtx(admin: unknown) {
   }
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.sendEmail.mockResolvedValue({ success: true, messageId: 'm1' })
+})
 
 describe('POST /api/team/invites/send', () => {
   it('403s a staff member', async () => {
@@ -105,6 +120,7 @@ describe('POST /api/team/invites/send', () => {
     })
     const res = await POST(req({}))
     expect(res.status).toBe(403)
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
     expect(f.signInWithOtp).not.toHaveBeenCalled()
   })
 
@@ -122,7 +138,12 @@ describe('POST /api/team/invites/send', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as { sent: number; failed: number }
 
-    expect(f.signInWithOtp).toHaveBeenCalledTimes(2)
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(2)
+    const firstSend = mocks.sendEmail.mock.calls[0][0]
+    expect(firstSend.to).toBe('a@x.nz')
+    expect(firstSend.subject).toBe('Welcome to The Print Room portal')
+    expect(firstSend.html).toContain('https://portal.theprintroom.nz/sign-in')
+    expect(f.signInWithOtp).not.toHaveBeenCalled()
     expect(f.updates).toHaveLength(2)
     expect(f.updates[0]).toHaveProperty('invited_at')
     expect(json).toMatchObject({ sent: 2, failed: 0 })
@@ -146,10 +167,11 @@ describe('POST /api/team/invites/send', () => {
     const json = (await res.json()) as { sent: number; failed: number }
 
     expect(json).toMatchObject({ sent: 1, failed: 0 })
-    expect(f.signInWithOtp).toHaveBeenCalledTimes(1)
-    expect(f.signInWithOtp).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'staff@x.nz' }),
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1)
+    expect(mocks.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'staff@x.nz' }),
     )
+    expect(f.signInWithOtp).not.toHaveBeenCalled()
   })
 
   it('never emails active staff whose legacy membership has invited_at NULL', async () => {
@@ -169,20 +191,25 @@ describe('POST /api/team/invites/send', () => {
     const json = (await res.json()) as { sent: number; failed: number }
 
     expect(json).toMatchObject({ sent: 0, failed: 0 })
-    expect(f.signInWithOtp).not.toHaveBeenCalled()
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
   })
 
-  it('counts an OTP failure as failed and does not stamp invited_at for it', async () => {
+  it('counts a welcome-send failure as failed and does not stamp invited_at for it', async () => {
     const f = makeAdmin({
       members: [{ user_id: 'u1' }],
       profiles: [{ id: 'u1', email: 'a@x.nz' }],
-      otpError: { message: 'rate limited' },
     })
+    mocks.sendEmail.mockResolvedValueOnce({ success: false, error: 'rate limited' })
     mocks.requireB2BCustomerApi.mockResolvedValue(adminCtx(f.admin))
 
     const res = await POST(req({}))
-    const json = (await res.json()) as { sent: number; failed: number }
+    const json = (await res.json()) as {
+      sent: number
+      failed: number
+      rows: Array<{ status: string; reason?: string }>
+    }
     expect(json).toMatchObject({ sent: 0, failed: 1 })
+    expect(json.rows[0]).toMatchObject({ status: 'failed', reason: 'rate limited' })
     expect(f.updates).toHaveLength(0)
   })
 
@@ -216,6 +243,7 @@ describe('POST /api/team/invites/send', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as { sent: number; failed: number }
     expect(json).toMatchObject({ sent: 0, failed: 0 })
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
     expect(f.signInWithOtp).not.toHaveBeenCalled()
   })
 })

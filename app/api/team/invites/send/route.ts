@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
+import { buildCustomerWelcomeEmail } from '@/lib/email/customer-welcome'
+import { sendEmail } from '@/lib/email/client'
 
 interface SendBody {
   userIds?: string[]
@@ -16,8 +18,9 @@ interface SendRowResult {
 
 // Deferred-send half of the self-serve invite flow: POST /api/team/invite
 // provisions members with invited_at NULL; this endpoint emails them the
-// branded sign-in OTP in a batch and stamps invited_at. Mirrors the staff
-// portal's /api/b2b-accounts/[id]/invites/send, org-scoped to the caller.
+// branded welcome email (no code, no magic link) in a batch and stamps
+// invited_at. Recipients request their own fresh sign-in code at /sign-in.
+// Mirrors the staff portal's /api/b2b-accounts/[id]/invites/send, org-scoped.
 export async function POST(request: Request) {
   const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
@@ -59,6 +62,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ sent: 0, failed: 0, rows: [] }, { status: 200 })
   }
 
+  // Org name personalises the welcome email; fetch once for the whole batch.
+  const { data: org } = await admin
+    .from('organizations')
+    .select('name')
+    .eq('id', orgId)
+    .maybeSingle()
+  const orgName = org?.name ?? undefined
+
   const { data: profiles } = await admin
     .from('profiles')
     .select('id, email, last_sign_in_at')
@@ -95,20 +106,22 @@ export async function POST(request: Request) {
       rows.push({ user_id: userId, email, status: 'failed', reason: 'No email on file' })
       continue
     }
-    const { error: otpError } = await admin.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: `${redirectBase}/callback?next=/welcome`,
-        data: { invited_org_id: orgId },
-      },
+    const { subject, html, text } = buildCustomerWelcomeEmail({
+      orgName,
+      signInUrl: `${redirectBase}/sign-in`,
     })
-    if (otpError) {
+    const welcome = await sendEmail({ to: email, subject, html, text })
+    if (!welcome.success) {
       failed++
-      rows.push({ user_id: userId, email, status: 'failed', reason: otpError.message })
+      rows.push({
+        user_id: userId,
+        email,
+        status: 'failed',
+        reason: welcome.error ?? 'Email send failed',
+      })
       continue
     }
-    // If the stamp fails, the OTP already went out but invited_at stays NULL —
+    // If the stamp fails, the welcome email already went out but invited_at stays NULL —
     // the member would be re-emailed on every future batch send. Surface it as
     // a failure so the admin sees it rather than silently double-sending.
     const { error: stampError } = await admin
