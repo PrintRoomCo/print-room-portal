@@ -1425,7 +1425,7 @@ export function ProductDetailClient({
                   <div>
                     <p className="text-sm font-medium text-gray-900">Pre-paid</p>
                     <p className="text-[11px] text-gray-500">
-                      Goods already purchased — no charge at checkout
+                      Goods already paid for — picking fee charged at checkout
                     </p>
                   </div>
                 ) : pricingLoading ? (
