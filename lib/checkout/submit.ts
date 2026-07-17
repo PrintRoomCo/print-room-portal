@@ -237,7 +237,6 @@ interface QuoteRowForEmail {
   customer_name: string
   total_amount: number
   required_by: string | null
-  payment_terms: string | null
 }
 
 interface QuoteItemForEmail {
@@ -1836,19 +1835,17 @@ export async function submitCustomerOrder(
     // Fetch the email payload from quotes/quote_items for the confirmation email below.
     let emailLines: OrderConfirmationLine[] = []
     let emailTotalAmount: number | null = null
-    let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
     let emailRequiredBy: string | null = input.required_by ?? null
     let emailCustomerName = input.context.organizationName
     try {
       const { data: q } = await admin
         .from('quotes')
-        .select('customer_name, total_amount, required_by, payment_terms')
+        .select('customer_name, total_amount, required_by')
         .eq('id', quote_id)
         .single()
       const quote = q as QuoteRowForEmail | null
       if (quote) {
         emailTotalAmount = Number(quote.total_amount)
-        emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
         emailRequiredBy = quote.required_by ?? emailRequiredBy
         emailCustomerName = quote.customer_name
       }
@@ -1913,9 +1910,6 @@ export async function submitCustomerOrder(
           orderId: order_id,
           orderRef: order_ref,
           totalAmount: fallbackTotal,
-          paymentTerms: emailPaymentTerms,
-          contractNotes: input.context.contractNotes,
-          pricingMode: input.context.pricingMode,
           requiredBy: emailRequiredBy,
           lines: fallbackLines,
           provisionalUntil:
