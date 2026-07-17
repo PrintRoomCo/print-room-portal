@@ -347,7 +347,18 @@ Renaming it to `isPrepaidDrawn` is the point of the task, not decoration: one fu
 
 **Interfaces:**
 - Consumes: `BillingMode` from `lib/shop/billing-mode.ts`; `CartLineFulfilmentType` from `lib/cart/types.ts`.
-- Produces: `isPrepaidDrawn(fulfilmentType: CartLineFulfilmentType | undefined, billingMode: BillingMode | null): boolean`. Tasks 5, 9 and 12 call it. `showsPrepaidTag` no longer exists.
+- Produces: `isPrepaidDrawn(fulfilmentType: CartLineFulfilmentType | undefined, billingMode: BillingMode | null): boolean` — Tasks 5, 9, 12 and 14 call it. Also `showsPrepaidStockBadge(nature: FulfilmentType, billingMode: BillingMode | null): boolean` (see the correction below). `showsPrepaidTag` no longer exists.
+
+**CORRECTION (found during execution).** This task originally claimed one production caller and said to fix any other "the same way". That was wrong, and `tsc` caught it: **the PDP is a second caller** (`components/shop/ProductDetailClient.tsx:1137`) passing `product.fulfilment_type`, which is `FulfilmentType` — including `'mixed'`.
+
+The two surfaces ask different questions:
+
+- **PDP** — "*can* this product be drawn from prepaid stock?" A capability, asked before the customer picks an ordering mode. `'mixed'` must answer **yes**.
+- **Checkout** — "*is* this line a prepaid draw?" A fact, knowable only after the choice. This is the money predicate.
+
+Routing the PDP through `isPrepaidDrawn` would type-error on `'mixed'` and silently drop the badge from mixed-nature prepaid products. So the file exports **two** predicates: `isPrepaidDrawn` (money; chosen `fulfilmentType`; `'mixed'` not expressible) and `showsPrepaidStockBadge` (PDP; product `nature`; informational, must never drive a price). The spec's "badge and money cannot diverge" still holds where it matters — the *checkout* badge and the money are one function.
+
+One existing test also changed fixture: `CheckoutReviewClient.billing-mode.test.tsx` drove the made-to-order case via `nature` while leaving the default `fulfilmentType: 'stocked'` — a line the PDP cannot produce. It now drives `fulfilmentType`. The assertion and its intent are unchanged.
 
 - [ ] **Step 1: Write the failing test**
 

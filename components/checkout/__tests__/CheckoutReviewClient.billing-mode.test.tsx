@@ -109,10 +109,15 @@ describe('CheckoutReviewClient — Pre-paid badge reads the cart line per-varian
     expect(screen.queryByText(/pre-paid/i)).toBeNull()
   })
 
-  it('hides the badge on a made_to_order nature even if the variant is prepaid', async () => {
-    // showsPrepaidTag gates on a stock-drawing nature (stocked/mixed) — a
-    // prepaid variant's production-run line is charged, so no badge.
-    mocks.lines = [line({ billingMode: 'prepaid', nature: 'made_to_order' })]
+  it('hides the badge on a made_to_order line even if the variant is prepaid', async () => {
+    // isPrepaidDrawn gates on the CHOSEN fulfilment, not the product's nature:
+    // a prepaid variant's production-run line draws no stock (qty_from_stock 0)
+    // and is charged, so it must not be badged.
+    //
+    // Drives fulfilmentType, not nature. The old fixture set nature alone and
+    // left fulfilmentType 'stocked' — a line the PDP can't produce, since a
+    // made_to_order product is never offered the stock pill.
+    mocks.lines = [line({ billingMode: 'prepaid', fulfilmentType: 'made_to_order', nature: 'made_to_order' })]
     renderReview()
     expect((await screen.findAllByText('Test tee')).length).toBeGreaterThan(0)
     expect(screen.queryByText(/pre-paid/i)).toBeNull()

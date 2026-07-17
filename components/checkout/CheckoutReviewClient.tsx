@@ -7,7 +7,7 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
-import { showsPrepaidTag } from '@/lib/shop/prepaid-tag'
+import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
@@ -454,13 +454,11 @@ export function CheckoutReviewClient({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
-                      {/* Spec 3a: the cart line's own per-variant snapshot
-                          (set from variant_inventory.billing_mode on the PDP)
-                          is the badge source — no item-level SSR fetch. */}
-                      {showsPrepaidTag(
-                        line.nature as 'stocked' | 'made_to_order' | 'mixed',
-                        line.billingMode ?? null,
-                      ) && (
+                      {/* Keyed on the CHOSEN fulfilment, never the product's
+                          `nature`: a mixed-nature prepaid variant ordered
+                          made-to-order is produced, and produced goods are
+                          charged (draft-invoice.ts gates on qty_from_stock). */}
+                      {isPrepaidDrawn(line.fulfilmentType, line.billingMode ?? null) && (
                         <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                           Pre-paid
                         </span>
