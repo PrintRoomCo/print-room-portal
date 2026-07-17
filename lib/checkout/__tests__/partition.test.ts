@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { partitionCheckoutLines } from '../partition'
+import { partitionByFulfilment, partitionCheckoutLines } from '../partition'
 import type { CheckoutLineInput } from '../submit'
 
 function line(overrides: Partial<CheckoutLineInput> = {}): CheckoutLineInput {
@@ -46,5 +46,41 @@ describe('partitionCheckoutLines', () => {
     const a = line({ product_id: 'a', fulfilment_type: 'stocked' })
     const b = line({ product_id: 'b', fulfilment_type: 'stocked' })
     expect(partitionCheckoutLines([a, b])[0].lines).toEqual([a, b])
+  })
+})
+
+describe('partitionByFulfilment', () => {
+  it('splits an arbitrary line shape via the supplied predicate', () => {
+    const lines = [
+      { id: 'a', mode: 'stocked' },
+      { id: 'b', mode: 'made_to_order' },
+      { id: 'c', mode: 'stocked' },
+    ]
+    expect(partitionByFulfilment(lines, (l) => l.mode === 'stocked')).toEqual([
+      { orderType: 'purchase_order', lines: [{ id: 'b', mode: 'made_to_order' }] },
+      {
+        orderType: 'stock_on_hand',
+        lines: [
+          { id: 'a', mode: 'stocked' },
+          { id: 'c', mode: 'stocked' },
+        ],
+      },
+    ])
+  })
+
+  it('returns purchase_order FIRST (the primary/tracked order)', () => {
+    const lines = [{ stocked: true }, { stocked: false }]
+    const out = partitionByFulfilment(lines, (l) => l.stocked)
+    expect(out.map((p) => p.orderType)).toEqual(['purchase_order', 'stock_on_hand'])
+  })
+
+  it('never returns an empty-lines partition', () => {
+    expect(partitionByFulfilment([{ stocked: true }], (l) => l.stocked)).toEqual([
+      { orderType: 'stock_on_hand', lines: [{ stocked: true }] },
+    ])
+  })
+
+  it('returns [] for empty input', () => {
+    expect(partitionByFulfilment([], () => true)).toEqual([])
   })
 })

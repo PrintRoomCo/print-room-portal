@@ -22,6 +22,11 @@
 - **Copy is fixed by the spec:** `Pre-paid`, `Drawn from pre-paid stock`, `Goods (pre-paid)`, `Picking fee`, `Stock-on-hand order`, `Purchase order`, `Total across N orders`, `You'll receive N invoices.`, `Goods value` (staff email), `Pre-paid status changed — review your cart.`
 - **This is a customer-portal change only.** No staff-portal deploy is coupled to it.
 - **Line numbers are from the branch point** (`68937c8` on `feat/checkout-billed-total-parity`) and drift as earlier tasks land — Task 13 alone shifts everything below it in `submit.ts` by roughly +17. Locate code by the quoted anchor text; treat the number as a hint, never as the target.
+- **`npx tsc --noEmit` is NOT clean at the branch point.** The baseline is **5 pre-existing errors**, all in two test files this work never touches:
+  - `lib/__tests__/next-config-redirects.test.ts` — 1 (unused `@ts-expect-error`)
+  - `lib/email/__tests__/tracker-notification.test.ts` — 4 (stale `sendTrackerNotification` signature)
+
+  Every "typecheck" step below means **no NEW errors** — expect exactly these 5 and no others. If a sixth appears, or one lands in a file you touched, that one is yours. Do not fix the baseline five as part of this work; they are unrelated and would muddy a money-critical diff.
 
 ## Deploy Sequencing
 
