@@ -119,7 +119,9 @@ server-side sort are non-problems at this scale.
   Clicking a header toggles asc/desc; default `created_at` desc. Sorting is a pure
   helper (`sortPastOrders` next to `filterPastOrders` in
   `lib/orders/past-orders-filter.ts`) so it unit-tests without the component.
-- Rows link to the existing `/orders/[id]` detail page.
+- Rows keep the existing detail link, `/my-collections/[collectionId]` (keyed on
+  `quoteId ?? orderId`, as the cards do today). (`/orders/[id]` has only proof
+  pages — no order detail route exists there.)
 - Keep the status and date-range filter pills. Add a "Placed by" filter (distinct
   `placedBy` values) rendered only when `isCompanyWide`. The blocked store-filter
   TODO stays as-is.
