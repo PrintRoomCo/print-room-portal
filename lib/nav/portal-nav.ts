@@ -30,9 +30,8 @@ export interface NavAccess {
   tenantType: TenantType | null
 }
 
-// Display order. Items whose iconKey is NOT a hand-drawn SVG row
-// (tracking/catalogue/orders/proofs) render as classic Link rows in the
-// Sidebar's extraItems list — that's the path Leavers Quotes and Inventory take.
+// Display order. Every item renders as a row of the Sidebar's hand-drawn
+// SVG menu; adding a NavIconKey requires a matching ROW_ICONS entry there.
 export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
   {
     name: 'Catalogue',

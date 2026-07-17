@@ -57,6 +57,12 @@ describe('Sidebar', () => {
       (link) => link.getAttribute('aria-label'),
     )
 
-    expect(rows).toEqual(['Catalogue', 'Track my Project', 'Past orders'])
+    expect(rows).toEqual([
+      'Catalogue',
+      'Track my Project',
+      'Past orders',
+      'Inventory',
+      'Team',
+    ])
   })
 })
