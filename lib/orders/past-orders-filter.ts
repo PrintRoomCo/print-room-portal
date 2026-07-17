@@ -20,3 +20,40 @@ export function filterPastOrders(orders: PortalPastOrder[], f: PastOrderFilters)
     return withinDateRange(o.createdAt, f.from, f.to)
   })
 }
+
+export type PastOrderSortKey =
+  | 'createdAt'
+  | 'orderRef'
+  | 'placedBy'
+  | 'orderType'
+  | 'status'
+  | 'productValue'
+  | 'billed'
+
+export interface PastOrderSort {
+  key: PastOrderSortKey
+  dir: 'asc' | 'desc'
+}
+
+const SORT_VALUE: Record<PastOrderSortKey, (o: PortalPastOrder) => string | number> = {
+  createdAt: (o) => o.createdAt,
+  orderRef: (o) => o.orderRef ?? o.reference ?? o.quoteNumber ?? '',
+  placedBy: (o) => o.customerEmail ?? '',
+  orderType: (o) => o.orderType,
+  status: (o) => o.status,
+  productValue: (o) => o.subtotal,
+  billed: (o) => o.billed,
+}
+
+/** Non-mutating; Array.prototype.sort is stable, so ties keep fetch order. */
+export function sortPastOrders(orders: PortalPastOrder[], sort: PastOrderSort): PortalPastOrder[] {
+  const value = SORT_VALUE[sort.key]
+  const sign = sort.dir === 'asc' ? 1 : -1
+  return [...orders].sort((x, y) => {
+    const vx = value(x)
+    const vy = value(y)
+    if (vx === vy) return 0
+    if (typeof vx === 'number' && typeof vy === 'number') return (vx - vy) * sign
+    return String(vx).localeCompare(String(vy)) * sign
+  })
+}

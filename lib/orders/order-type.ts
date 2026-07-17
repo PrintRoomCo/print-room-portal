@@ -21,3 +21,7 @@ export function classifyOrderType(
     ? 'stock_on_hand'
     : 'purchase_order'
 }
+
+export function orderTypeLabel(type: string): string {
+  return type === 'stock_on_hand' ? 'Stock' : 'Purchase order'
+}
