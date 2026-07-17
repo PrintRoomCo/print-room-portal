@@ -19,7 +19,16 @@ export interface OrderConfirmationParams {
   /** orders.id — used by the email log writer. */
   orderId: string
   orderRef: string
+  /**
+   * What the customer is INVOICED, ex-GST: billed goods + pickingFee. Prepaid
+   * stock draws contribute 0. NOT the goods value — the staff dispatch email
+   * carries that instead, labelled "Goods value".
+   */
   totalAmount: number
+  /** NZ picking fee, ex-GST. 0 when none applies. */
+  pickingFee?: number
+  /** Goods drawn from pre-paid stock and NOT invoiced. 0 for a normal order. */
+  prepaidGoodsValue?: number
   paymentTerms: string | null
   /**
    * Plain-text contract notes from b2b_accounts.contract_notes. Surfaced under
@@ -136,7 +145,23 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
               </thead>
               <tbody>${lineRowsHtml}
               </tbody>
-              <tfoot>
+              <tfoot>${
+                (params.prepaidGoodsValue ?? 0) > 0
+                  ? `
+                <tr>
+                  <td colspan="3" style="padding:14px 0 0;text-align:right;font-size:12px;color:#6b7280;">Drawn from pre-paid stock</td>
+                  <td style="padding:14px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:12px;color:#6b7280;white-space:nowrap;">${formatMoney(params.prepaidGoodsValue ?? 0)}</td>
+                </tr>`
+                  : ''
+              }${
+                (params.pickingFee ?? 0) > 0
+                  ? `
+                <tr>
+                  <td colspan="3" style="padding:6px 0 0;text-align:right;font-size:13px;color:#374151;">Picking fee</td>
+                  <td style="padding:6px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:13px;color:#374151;white-space:nowrap;">${formatMoney(params.pickingFee ?? 0)}</td>
+                </tr>`
+                  : ''
+              }
                 <tr>
                   <td colspan="3" style="padding:18px 0 0;text-align:right;${labelStyle}">Total</td>
                   <td style="padding:18px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
@@ -187,6 +212,12 @@ ${
     `Hi ${params.customerName}, thanks for your order. We've received it and we're on it. We'll be in touch with the next steps shortly.\n\n` +
     `Your reference: ${params.orderRef}\n\n` +
     `${textLines}\n\n` +
+    ((params.prepaidGoodsValue ?? 0) > 0
+      ? `Drawn from pre-paid stock: ${formatMoney(params.prepaidGoodsValue ?? 0)}\n`
+      : '') +
+    ((params.pickingFee ?? 0) > 0
+      ? `Picking fee: ${formatMoney(params.pickingFee ?? 0)}\n`
+      : '') +
     `Total: ${formatMoney(params.totalAmount)}\n` +
     `Payment terms: ${paymentTerms}\n` +
     (contractNotes ? `${contractNotes}\n` : '') +

@@ -25,6 +25,7 @@ import { resolveLineBillingModes } from './resolve-line-billing-modes'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
 import { round2 } from '@/lib/pricing/pricingMath'
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
+import { billedFigures } from '@/lib/checkout/billed-figures'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
@@ -331,6 +332,8 @@ interface QuoteItemRow {
 interface QuoteRowForEmail {
   customer_name: string
   total_amount: number
+  picking_fee: number | null
+  billed_total: number | null
   required_by: string | null
   payment_terms: string | null
 }
@@ -1976,18 +1979,29 @@ export async function submitCustomerOrder(
     // Fetch the email payload from quotes/quote_items for the confirmation email below.
     let emailLines: OrderConfirmationLine[] = []
     let emailTotalAmount: number | null = null
+    let emailPickingFee = 0
+    let emailPrepaidGoodsValue = 0
     let emailPaymentTerms: string | null = input.context.paymentTerms ?? PAYMENT_TERMS_FALLBACK
     let emailRequiredBy: string | null = input.required_by ?? null
     let emailCustomerName = input.context.organizationName
     try {
       const { data: q } = await admin
         .from('quotes')
-        .select('customer_name, total_amount, required_by, payment_terms')
+        .select('customer_name, total_amount, picking_fee, billed_total, required_by, payment_terms')
         .eq('id', quote_id)
         .single()
       const quote = q as QuoteRowForEmail | null
       if (quote) {
-        emailTotalAmount = Number(quote.total_amount)
+        // The customer email shows what we INVOICE, not the goods value — the
+        // same billedFigures the confirmation page uses, so the two agree.
+        const figures = billedFigures({
+          goodsExGst: Number(quote.total_amount),
+          billedTotal: quote.billed_total,
+          pickingFee: quote.picking_fee,
+        })
+        emailTotalAmount = figures.billedExGst
+        emailPickingFee = figures.pickingFee
+        emailPrepaidGoodsValue = figures.prepaidGoodsValue
         emailPaymentTerms = quote.payment_terms ?? emailPaymentTerms
         emailRequiredBy = quote.required_by ?? emailRequiredBy
         emailCustomerName = quote.customer_name
@@ -2053,6 +2067,11 @@ export async function submitCustomerOrder(
           orderId: order_id,
           orderRef: order_ref,
           totalAmount: fallbackTotal,
+          // Both 0 on the fallback path (quote fetch failed): fallbackTotal is
+          // the goods sum, so the order over-quotes rather than under-quotes —
+          // the same fail-closed trade as everywhere else.
+          pickingFee: emailPickingFee,
+          prepaidGoodsValue: emailPrepaidGoodsValue,
           paymentTerms: emailPaymentTerms,
           contractNotes: input.context.contractNotes,
           pricingMode: input.context.pricingMode,
