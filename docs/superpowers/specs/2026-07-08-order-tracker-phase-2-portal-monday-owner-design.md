@@ -286,6 +286,45 @@ handler is idempotent and additive, no data cleanup is required on rollback.
 - **Auth:** event POST without the correct `secret` → 401; `challenge` still answered.
 - `next build` green; manual end-to-end on a test item as above (emails → jamie@).
 
+## Gaps found by the 2026-07-20 diagnosis (address before/with cutover)
+
+A live diagnosis (see issue **#77**) confirmed this spec's three defects against prod and
+exposed gaps the plumbing fix (un-filter + engine) does **not** close on its own. All three
+must be resolved for the tracker to actually reflect reality.
+
+1. **Upstream data ownership — the headline gap (blocks the whole premise).** This spec
+   assumes the Monday Job-Status column *is* the actively-maintained truth for portal orders.
+   It is not. All 6 real Anytime-Fitness orders + 11 test orders sit **untouched at index 1
+   ("Need: Mockup (Quote Approved)")** since the portal created them — staff have changed zero
+   of them (`0` rows in `job_tracker_webhook_logs`; each Monday item's `updated_at ≈ creation`;
+   the still-live studio poller logged nothing for them). If staff continue not to advance
+   portal-created items — because they work the job elsewhere or treat these production-board
+   rows as duplicates — then an un-filtered webhook + full engine will still deliver and emit
+   **nothing**. **Add an operational acceptance gate:** verify that the item the portal creates
+   on board 1992701981 is the row staff actually progress (group/ownership check), and make
+   the cutover verification (§H.5) move a **real** order through stages via the normal staff
+   workflow, not just one implementer-driven test item.
+2. **Checkout creation default is one stage optimistic and is out of this spec's scope.**
+   `lib/orders/job-tracker.ts:219` hardcodes `status: 'need-proof'` ("Proof Prep", 3/7) at
+   checkout, independent of Monday — one stage ahead of the Monday item's real "Need: Mockup"
+   (2/7). Porting the engine does not touch this path, so new portal orders keep being *born*
+   at "Proof Prep" until the first real status change arrives. Decide explicitly: either seed
+   the checkout status from the Monday label via the engine (recommended), or seed
+   `quote-accepted-mockup` / `quote-stage` to stop overstating progress. Fold this into the
+   Phase 2 work rather than leaving it to Phase 4.
+3. **The studio poller stays live until Phase 4 → double-write on shared rows.** The
+   kill-switch (§H.4) disables the studio *webhook* handler, but the studio *poller*
+   (`apps/job-tracker/pages/api/sync-monday.js`, cron `/api/worker` every minute) is left
+   running until Phase 4 and writes `status` + `status_history` to the **same** `job_trackers`
+   rows via the full engine (evidence: 63 `color_mkpnas0e` events, 50 processed, since
+   2026-07-01). Post-cutover, both the portal webhook and the poller process the same change.
+   The poller does **not** email (double-email risk is low), but duplicate `status_history`
+   entries and racy `status` writes are possible; §"Idempotency & safety" reasons only about
+   the portal's own re-deliveries and a brief webhook overlap, not a permanent parallel poller.
+   **Add a test** for concurrent poller+webhook processing of one transition, and consider
+   gating the poller off board 1992701981 status at cutover (bring the "retire sync-monday.js"
+   item forward from Phase 4, or scope it to non-portal rows).
+
 ## Implementation staging (one design, likely two plans)
 
 1. **Build (safe behind the still-filtered webhook):** engine (A/B), de-dup (C), logging (F),
