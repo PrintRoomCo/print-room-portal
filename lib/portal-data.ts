@@ -5,7 +5,7 @@ import { getSupabaseServer } from '@/lib/supabase'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getCompanyAccess } from '@/lib/company'
 import {
-  getJobsForCompany,
+  getJobsForOrganization,
   getJobsForUser,
   getJobTrackerForUserByToken,
 } from '@/lib/job-tracker-queries'
@@ -141,25 +141,12 @@ const fetchOrderTrackerDataForUser = unstable_cache(
       const canSeeAllOrgOrders = membership?.role === 'org_admin'
 
       if (canSeeAllOrgOrders && membership?.organization_id) {
-        const { data: b2bAccount } = await adminClient
-          .from('b2b_accounts')
-          .select('company_id')
-          .eq('organization_id', membership.organization_id)
-          .maybeSingle()
-
-        if (b2bAccount?.company_id) {
-          const { data: stores } = await adminClient
-            .from('stores')
-            .select('id')
-            .eq('organization_id', membership.organization_id)
-
-          const locationIds = stores?.map((s) => s.id) || []
-          trackers = await getJobsForCompany(b2bAccount.company_id, locationIds)
-          isCompanyWide = trackers.length > 0
-        }
-      }
-
-      if (trackers.length === 0) {
+        // Org-wide is a superset of the admin's own trackers (they are a member
+        // and their quotes are in the org), so there is no fall-through to a
+        // personal list — an admin with zero org trackers correctly sees none.
+        trackers = await getJobsForOrganization(membership.organization_id)
+        isCompanyWide = true
+      } else {
         trackers = await getJobsForUser(userId, email || undefined)
         isCompanyWide = false
       }

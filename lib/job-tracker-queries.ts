@@ -198,38 +198,113 @@ export async function getJobsForCustomer(
   }
 }
 
-export async function getJobsForCompany(
-  companyId: string,
-  locationIds?: string[]
+/**
+ * Every tracker belonging to an organisation, for the org_admin list view.
+ *
+ * Tenancy runs through the QUOTE or the OWNING USER — never
+ * `job_trackers.company_id` / `location_id` (both null on all 1314 rows; the
+ * 2026-06-03 spec assumed a tenancy model that was never wired up), and never
+ * `customer_email` (an email is not a tenancy key — two orgs could share one,
+ * which would leak).
+ *
+ * Two round-trips plus a JS dedupe rather than one `.or(...in...)` string:
+ * clearer, and it avoids PostgREST or/in string-building pitfalls. Known limit:
+ * `.in()` on a very large id list could hit URL limits — not reachable at
+ * current org sizes (a handful of quotes, ~68 members); revisit past a few
+ * hundred.
+ */
+export async function getJobsForOrganization(
+  organizationId: string
 ): Promise<JobTracker[]> {
   try {
     const supabase = getSupabaseServer()
 
-    let query = supabase
-      .from('job_trackers')
-      .select('*')
-      .eq('company_id', companyId)
-      .order('created_at', { ascending: false })
+    const [{ data: quoteRows }, { data: memberRows }] = await Promise.all([
+      supabase.from('quotes').select('id').eq('organization_id', organizationId),
+      supabase
+        .from('user_organizations')
+        .select('user_id')
+        .eq('organization_id', organizationId),
+    ])
 
-    if (locationIds && locationIds.length > 0) {
-      query = query.in('location_id', locationIds)
+    const quoteIds = (quoteRows || []).map((r: { id: string }) => r.id)
+    const memberIds = (memberRows || []).map((r: { user_id: string }) => r.user_id)
+
+    if (quoteIds.length === 0 && memberIds.length === 0) return []
+
+    const [byQuote, byUser] = await Promise.all([
+      quoteIds.length > 0
+        ? supabase
+            .from('job_trackers')
+            .select('*')
+            .in('quote_id', quoteIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      memberIds.length > 0
+        ? supabase
+            .from('job_trackers')
+            .select('*')
+            .in('user_id', memberIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    for (const result of [byQuote, byUser]) {
+      if (result.error) {
+        if ((result.error as { code?: string }).code === '42P01') return []
+        console.error('[JobTracker] Failed to fetch org jobs:', result.error)
+        return []
+      }
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      if (error.code === '42P01') return []
-      console.error('[JobTracker] Failed to fetch company jobs:', error)
-      return []
+    // A tracker matched by BOTH quote and owning user must appear once.
+    const byId = new Map<number | string, JobTracker>()
+    for (const row of [...(byQuote.data || []), ...(byUser.data || [])] as JobTracker[]) {
+      if (!byId.has(row.id)) byId.set(row.id, row)
     }
 
-    const trackers = (data || []) as JobTracker[]
+    const trackers = Array.from(byId.values()).sort((a, b) =>
+      String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
+    )
+
     fireAndForgetItemsSync(trackers)
     return attachProductImages(trackers)
   } catch (error) {
-    console.error('[JobTracker] Error fetching company jobs:', error)
+    console.error('[JobTracker] Error fetching org jobs:', error)
     return []
   }
+}
+
+/**
+ * Does `tracker` belong to `orgId`? Encodes the SAME tenancy rule as
+ * getJobsForOrganization (quote-org OR owning-user membership), so the list and
+ * the deep-link cannot drift on who may see what.
+ */
+async function trackerBelongsToOrg(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  tracker: { quote_id?: string | null; user_id?: string | null },
+  orgId: string,
+): Promise<boolean> {
+  if (tracker.quote_id) {
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('organization_id')
+      .eq('id', tracker.quote_id)
+      .maybeSingle()
+    if (quote?.organization_id === orgId) return true
+  }
+
+  if (tracker.user_id) {
+    const { data: membership } = await supabase
+      .from('user_organizations')
+      .select('user_id')
+      .eq('user_id', tracker.user_id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (membership) return true
+  }
+
+  return false
 }
 
 /**
@@ -239,9 +314,9 @@ export async function getJobsForCompany(
  * Authorization (any one):
  *   - the tracker's `user_id` is the requester, or
  *   - the requester's email matches the tracker's `customer_email`, or
- *   - the requester is an `org_admin` of the org whose b2b account owns the
- *     tracker's `company_id`, and the tracker's `location_id` is one of that
- *     org's stores (mirrors `getJobsForCompany` scoping used by the list view).
+ *   - the requester is an `org_admin` of the org that owns the tracker — via its
+ *     quote's `organization_id` or its owning user's membership (mirrors
+ *     `getJobsForOrganization`, the list view's scoping).
  *
  * Returns `null` for an unknown token OR an unauthorised requester — callers
  * surface both as not-found, so a token guess never leaks another org's order.
@@ -285,21 +360,7 @@ export async function getJobTrackerForUserByToken(
         .maybeSingle()
 
       if (membership?.role === 'org_admin' && membership.organization_id) {
-        const { data: b2bAccount } = await supabase
-          .from('b2b_accounts')
-          .select('company_id')
-          .eq('organization_id', membership.organization_id)
-          .maybeSingle()
-
-        if (b2bAccount?.company_id && b2bAccount.company_id === tracker.company_id) {
-          const { data: stores } = await supabase
-            .from('stores')
-            .select('id')
-            .eq('organization_id', membership.organization_id)
-
-          const locationIds = (stores || []).map((s: { id: string }) => s.id)
-          authorized = !!tracker.location_id && locationIds.includes(tracker.location_id)
-        }
+        authorized = await trackerBelongsToOrg(supabase, tracker, membership.organization_id)
       }
     }
 
