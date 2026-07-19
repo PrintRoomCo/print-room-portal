@@ -82,6 +82,27 @@ async function withCatalogueFrontLineImages(
   }
 }
 
+/**
+ * Org-admin access mirrors the Orders list's scoping rule (queryPastOrders in
+ * lib/orders/past-orders-query.ts): a quote belongs to the admin's org via
+ * quotes.organization_id. Email is never a tenancy key at org level — two orgs
+ * could share one, which would leak. An unauthorized requester falls through to
+ * the collection branch and gets 404, so quote existence is not leaked.
+ */
+async function isOrgAdminForOrganization(
+  adminClient: SupabaseClient,
+  userId: string,
+  organizationId: string | null,
+): Promise<boolean> {
+  if (!organizationId) return false
+  const { data: membership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id, role')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return membership?.role === 'org_admin' && membership.organization_id === organizationId
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -107,7 +128,13 @@ export async function GET(
     .eq('id', collectionId)
     .single()
 
-  if (quote && quote.customer_email?.toLowerCase() === email) {
+  const ownsQuote = quote?.customer_email?.toLowerCase() === email
+  const authorizedForQuote =
+    !!quote &&
+    (ownsQuote ||
+      (await isOrgAdminForOrganization(adminClient, user.id, quote.organization_id ?? null)))
+
+  if (quote && authorizedForQuote) {
     const [linkedCollection, tracker] = await Promise.all([
       getCollectionByQuoteId(quote.id),
       getLatestJobTrackerByQuoteId(quote.id),
