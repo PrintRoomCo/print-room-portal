@@ -143,3 +143,23 @@ export function lineFulfilment(ctx: LineFulfilmentContext): 'stocked' | 'made_to
   if (ctx.tracked) return ctx.lineQty > ctx.available ? 'made_to_order' : 'stocked'
   return 'made_to_order'
 }
+
+/**
+ * Can this viewer actually order this (colourway, size) cell?
+ *
+ * `lineFulfilment` resolves a line to a stock draw or a production run, but its
+ * two-value return can't say "no valid path" — so a stock_only member (a viewer
+ * who cannot reorder) got an untracked/backorderable/over-stock cell silently
+ * tagged `made_to_order`, added at full price, and only rejected at the final
+ * checkout click with "not stocked for your account" (submit_b2b_order coerces
+ * their line to `stocked` and raises NO_INVENTORY / PERMISSION_DENIED).
+ *
+ * The rule: a viewer who can't reorder may only take a genuine `stocked` draw.
+ * This mirrors the server one-to-one (stock_only + backorderable/made_to_order →
+ * member_cannot_produce), so the cell is blocked up front instead of failing
+ * late. Viewers who CAN reorder are unaffected — a production run is valid for
+ * them.
+ */
+export function lineIsOrderable(ctx: LineFulfilmentContext, canReorder: boolean): boolean {
+  return lineFulfilment(ctx) === 'stocked' || canReorder
+}
