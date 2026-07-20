@@ -197,6 +197,29 @@ describe('tracker-status route — idempotency (gap c)', () => {
     expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
     expect(markWebhookLog).toHaveBeenCalledWith(expect.anything(), 'log-1', expect.objectContaining({ status: 'noop' }))
   })
+
+  it('poller-then-webhook race: the second writer produces zero duplicate history + zero extra email', async () => {
+    // Writer 1 (could be the still-live studio poller OR the portal webhook)
+    // lands the transition first.
+    trackerRow.current = baseTracker({ status: 'need-proof' })
+    await post(statusEvent()) // -> in-production, one write
+    expect(supaUpdates).toHaveLength(1)
+    await flushAfter()
+    expect(sendTrackerStatusEmail).toHaveBeenCalledTimes(1)
+
+    // Writer 2 processes the SAME transition, but now sees the already-advanced
+    // status. Convergent: no duplicate status_history row, no duplicate email.
+    supaUpdates.length = 0
+    sendTrackerStatusEmail.mockClear()
+    trackerRow.current = baseTracker({
+      status: 'in-production',
+      status_history: [{ id: 'h1', status_key: 'in-production', changed_at: '2026-07-20T01:00:00.000Z' }],
+    })
+    await post(statusEvent())
+    expect(supaUpdates).toHaveLength(0)
+    await flushAfter()
+    expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+  })
 })
 
 describe('tracker-status route — email de-dup', () => {
