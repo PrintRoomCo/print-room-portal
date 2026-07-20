@@ -1,12 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { getSupabaseServer } from '@/lib/supabase'
 import { cacheTags } from '@/lib/cache/tags'
-import {
-  mapMondayToCollectionStatus,
-  mapMondayToTrackerStatus,
-} from '@/lib/monday/status-mappings'
+import { mapMondayToCollectionStatus } from '@/lib/monday/status-mappings'
+import { deriveStatusValue } from '@/lib/monday/tracker-status-engine'
 import { sendTrackerStatusEmail } from '@/lib/email/tracker-notification'
+import {
+  hasEmailBeenSent,
+  recordEmailSend,
+  statusEmailType,
+} from '@/lib/email/tracker-email-log'
+import { logWebhookEvent, markWebhookLog } from '@/lib/monday/webhook-log'
+import { mirrorStatusToQuote } from '@/lib/monday/quote-mirror'
+import {
+  provisionTrackerForJobReferenceEvent,
+  provisionTrackerForCreateEvent,
+  handleTrackerTokenEvent,
+} from '@/lib/monday/tracker-provisioning'
 import {
   detectCarrierFromUrl,
   getTrackingNumber,
@@ -28,11 +38,18 @@ interface MondayWebhookPayload {
     pulseName: string
     parentItemId?: number
     parentItemBoardId?: number
-    columnId: string
-    columnType: string
-    columnTitle: string
-    value: {
+    // Absent on item-create events; text columns carry `text`/`value`.
+    columnId?: string
+    columnType?: string
+    columnTitle?: string
+    // Monday's event timestamp — stable across at-least-once re-delivery, so it
+    // keys status_history.changed_at and the email de-dup type.
+    triggerTime?: string
+    userId?: number
+    value?: {
       label?: { index: number; text: string }
+      text?: string
+      value?: string
       date?: string
       time?: string
     }
@@ -58,8 +75,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
+  // Monday's verification handshake carries no secret — answer it first.
   if (payload.challenge) {
     return NextResponse.json({ challenge: payload.challenge })
+  }
+
+  // Webhook authenticity (spec §G). Enforced only once MONDAY_WEBHOOK_SECRET is
+  // configured, so the currently-live Shipped-only subscription (no secret in
+  // its URL) keeps working until the cutover recreates the subscriptions.
+  const secret = process.env.MONDAY_WEBHOOK_SECRET
+  if (secret) {
+    const provided = new URL(request.url).searchParams.get('secret')
+    if (provided !== secret) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const { event } = payload
@@ -81,6 +110,25 @@ export async function POST(request: Request) {
       })
     }
     return handleCollectionsBoardEvent(supabase, event)
+  }
+
+  // Monday-origin provisioning + tracker-link validation (production board).
+  // These text/create events only start firing once the cutover repoints their
+  // subscriptions at the portal — inert before then.
+  if (boardId === PRODUCTION_BOARD_ID) {
+    if (
+      !event.columnId &&
+      typeof event.type === 'string' &&
+      event.type.toLowerCase().includes('create')
+    ) {
+      return handleCreateEvent(supabase, event)
+    }
+    if (event.columnId === PRODUCTION_COLUMNS.poRef) {
+      return handleJobReferenceEvent(supabase, event)
+    }
+    if (event.columnId === PRODUCTION_COLUMNS.trackerUrl) {
+      return handleTrackerTokenColumnEvent(supabase, event)
+    }
   }
 
   if (boardId === PRODUCTION_BOARD_ID && event.columnType === 'date') {
@@ -241,37 +289,147 @@ async function findTrackerByEvent(
   return data
 }
 
+/** Extract a plain text value from a Monday text-column event payload. */
+function textFromEventValue(
+  event: NonNullable<MondayWebhookPayload['event']>
+): string | null {
+  return event.value?.text ?? event.value?.value ?? event.value?.label?.text ?? null
+}
+
+/** Item-create → provision a tracker if the item already has a valid job ref. */
+async function handleCreateEvent(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  event: NonNullable<MondayWebhookPayload['event']>
+) {
+  const mondayItemId = String(event.pulseId)
+  const logId = await logWebhookEvent(supabase, {
+    mondayItemId,
+    boardId: event.boardId,
+    columnId: null,
+    eventType: event.type,
+    payload: { pulseId: event.pulseId, type: event.type, triggerTime: event.triggerTime },
+  })
+  const r = await provisionTrackerForCreateEvent({ admin: supabase, mondayItemId, boardId: event.boardId })
+  await markWebhookLog(supabase, logId, { status: r.logStatus, notes: r.logNotes ?? null })
+  return NextResponse.json(r.body, { status: r.statusCode })
+}
+
+/** Job Reference (text_mkqxcmvz) set/changed → provision keyed on the ref. */
+async function handleJobReferenceEvent(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  event: NonNullable<MondayWebhookPayload['event']>
+) {
+  const mondayItemId = String(event.pulseId)
+  const jobReference = textFromEventValue(event)
+  const logId = await logWebhookEvent(supabase, {
+    mondayItemId,
+    boardId: event.boardId,
+    columnId: event.columnId ?? null,
+    eventType: event.type,
+    payload: { value: event.value, triggerTime: event.triggerTime },
+  })
+  if (!jobReference) {
+    await markWebhookLog(supabase, logId, { status: 'noop', notes: 'Job Reference cleared' })
+    return NextResponse.json({ success: true, action: 'noop', message: 'Job Reference cleared' })
+  }
+  const r = await provisionTrackerForJobReferenceEvent({
+    admin: supabase,
+    mondayItemId,
+    boardId: event.boardId,
+    jobReference,
+  })
+  await markWebhookLog(supabase, logId, { status: r.logStatus, notes: r.logNotes ?? null })
+  return NextResponse.json(r.body, { status: r.statusCode })
+}
+
+/** Tracker-link column (text_mkxvmsha) pasted → validate against the job ref. */
+async function handleTrackerTokenColumnEvent(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  event: NonNullable<MondayWebhookPayload['event']>
+) {
+  const mondayItemId = String(event.pulseId)
+  const pastedValue = textFromEventValue(event)
+  const tracker = await findTrackerByEvent(supabase, event)
+  const logId = await logWebhookEvent(supabase, {
+    mondayItemId,
+    boardId: event.boardId,
+    columnId: event.columnId ?? null,
+    eventType: event.type,
+    payload: { value: event.value, triggerTime: event.triggerTime },
+  })
+  const r = await handleTrackerTokenEvent({
+    admin: supabase,
+    mondayItemId,
+    boardId: event.boardId,
+    pastedValue,
+    tracker: tracker
+      ? { job_reference: tracker.job_reference, tracker_token: tracker.tracker_token }
+      : null,
+  })
+  await markWebhookLog(supabase, logId, { status: r.applied ? 'processed' : 'noop' })
+  return NextResponse.json({ success: true, applied: r.applied, correctedTo: r.correctedTo ?? null })
+}
+
 async function handleTrackerStatusChange(
   supabase: ReturnType<typeof getSupabaseServer>,
   event: NonNullable<MondayWebhookPayload['event']>
 ) {
   const displayLabel = event.value?.label?.text ?? ''
-  const canonicalKey = mapMondayToTrackerStatus(displayLabel)
+  const mondayItemId = String(event.pulseId)
+  const columnId = event.columnId ?? PRODUCTION_COLUMNS.mainStatus
 
-  if (!canonicalKey) {
-    return NextResponse.json({
-      success: true,
-      message: 'Ignored — unknown tracker status',
-    })
-  }
+  const logId = await logWebhookEvent(supabase, {
+    mondayItemId,
+    boardId: event.boardId,
+    columnId,
+    eventType: event.type,
+    payload: {
+      value: event.value,
+      previousValue: event.previousValue,
+      triggerTime: event.triggerTime,
+      userId: event.userId,
+    },
+  })
 
-  // Inventory decrement: subitem dispatched event.
-  // Runs alongside the existing tracker-status flow so other side-effects
-  // (emails, status_history, etc.) still run for the parent tracker.
-  if (event.parentItemId && canonicalKey === 'dispatched') {
-    const { shipMondaySubitem } = await import('@/lib/inventory/ship-quote-line')
-    await shipMondaySubitem(
-      supabase,
-      String(event.pulseId),
-      event.pulseName ?? null,
-      event
-    )
-    // Do not return — continue to the existing tracker-status path.
-  }
+  // Trigger time is stable across Monday's at-least-once re-delivery — key
+  // status_history + the email de-dup on it (falls back to now()).
+  const changedAt =
+    event.triggerTime && !Number.isNaN(Date.parse(event.triggerTime))
+      ? new Date(event.triggerTime).toISOString()
+      : new Date().toISOString()
 
   const tracker = await findTrackerByEvent(supabase, event)
+  const derived = deriveStatusValue(displayLabel, { previousStatus: tracker?.status ?? null })
+
+  // Inventory decrement: subitem dispatched event — independent of the parent
+  // tracker, so it runs even when the subitem has no tracker row of its own.
+  if (event.parentItemId && derived.canonical === 'dispatched') {
+    const { shipMondaySubitem } = await import('@/lib/inventory/ship-quote-line')
+    await shipMondaySubitem(supabase, String(event.pulseId), event.pulseName ?? null, event)
+  }
+
   if (!tracker) {
+    await markWebhookLog(supabase, logId, { status: 'missing-job' })
     return NextResponse.json({ success: true, message: 'Tracker not linked' })
+  }
+
+  // Internal / hold / unknown → never advance the customer tracker, never email.
+  if (!derived.isCustomerFacing) {
+    await markWebhookLog(supabase, logId, {
+      status: 'noop',
+      notes: derived.preserveExisting ? 'hold/internal — preserved previous' : 'unknown status — ignored',
+    })
+    return NextResponse.json({ success: true, message: 'Ignored — non-customer-facing status' })
+  }
+
+  const canonicalKey = derived.storageValue as string
+
+  // Idempotency (issue #77 gap c): if the tracker is already at this stage
+  // (e.g. the studio poller landed the same transition first), do nothing —
+  // no duplicate history, no duplicate email.
+  if (canonicalKey === tracker.status) {
+    await markWebhookLog(supabase, logId, { status: 'noop', notes: 'status unchanged' })
+    return NextResponse.json({ success: true, message: 'No status change' })
   }
 
   const history: StatusHistoryEntry[] = Array.isArray(tracker.status_history)
@@ -283,10 +441,10 @@ async function handleTrackerStatusChange(
     lastEntry?.status_key === canonicalKey &&
     Date.now() - new Date(lastEntry.changed_at).getTime() < DUPLICATE_WINDOW_MS
   ) {
+    await markWebhookLog(supabase, logId, { status: 'noop', notes: 'duplicate within window' })
     return NextResponse.json({ success: true, message: 'Duplicate ignored' })
   }
 
-  const nowIso = new Date().toISOString()
   const previousLabel = event.previousValue?.label?.text ?? undefined
 
   const statusEntry: StatusHistoryEntry = {
@@ -294,9 +452,9 @@ async function handleTrackerStatusChange(
     status: displayLabel || canonicalKey,
     status_key: canonicalKey,
     previous_status: previousLabel,
-    changed_at: nowIso,
-    column_id: event.columnId,
-    user_id: null,
+    changed_at: changedAt,
+    column_id: columnId,
+    user_id: event.userId != null ? String(event.userId) : null,
   }
 
   const updates: ProductionUpdate[] = Array.isArray(tracker.production_updates)
@@ -308,7 +466,7 @@ async function handleTrackerStatusChange(
     type: 'status',
     title: `Status updated to ${displayLabel || canonicalKey}`,
     body: `Status changed from "${previousLabel ?? 'unknown'}" to "${displayLabel || canonicalKey}"`,
-    changed_at: nowIso,
+    changed_at: changedAt,
     source: 'system',
     metadata: { createdBy: 'monday-webhook', status_key: canonicalKey },
   }
@@ -320,13 +478,13 @@ async function handleTrackerStatusChange(
   }
 
   if (canonicalKey === 'proof-approved' && !tracker.design_approval_at) {
-    patch.design_approval_at = nowIso
+    patch.design_approval_at = changedAt
   }
   if (canonicalKey === 'in-production' && !tracker.production_start_at) {
-    patch.production_start_at = nowIso
+    patch.production_start_at = changedAt
   }
   if (canonicalKey === 'dispatched' && !tracker.production_complete_at) {
-    patch.production_complete_at = nowIso
+    patch.production_complete_at = changedAt
   }
 
   const { error: updateErr } = await supabase
@@ -336,6 +494,7 @@ async function handleTrackerStatusChange(
 
   if (updateErr) {
     console.error('[TrackerWebhook] Update failed:', updateErr)
+    await markWebhookLog(supabase, logId, { status: 'failed', error: updateErr.message })
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
 
@@ -343,24 +502,51 @@ async function handleTrackerStatusChange(
   revalidateTag(cacheTags.orderTracker, { expire: 0 })
   revalidateTag(cacheTags.accountData, { expire: 0 })
 
-  if (tracker.customer_email) {
-    const trackingInfo = (tracker.tracking_info as TrackingInfo | null) ?? null
-    const trackingUrl = trackingInfo?.url || null
-    const carrier = trackingUrl ? detectCarrierFromUrl(trackingUrl) : null
+  await markWebhookLog(supabase, logId, { status: 'processed' })
 
-    sendTrackerStatusEmail({
-      contactEmail: tracker.customer_email,
-      trackerToken: tracker.tracker_token,
-      jobReference: tracker.job_reference,
-      quoteNumber: tracker.quote_number || undefined,
-      newStatus: canonicalKey,
-      trackingNumber: getTrackingNumber(trackingInfo),
-      trackingUrl: trackingUrl || undefined,
-      carrier: carrier || undefined,
-    }).catch((err) => {
-      console.error('[TrackerWebhook] Email send failed (non-blocking):', err)
-    })
-  }
+  // Best-effort side-effects, deferred past the response (spec §C/§E). Email is
+  // de-duped per transition on the Monday trigger time; the quote mirror is
+  // inert unless ENABLE_QUOTE_STATUS_MIRROR is set.
+  after(async () => {
+    if (tracker.customer_email) {
+      const emailType = statusEmailType(canonicalKey, event.triggerTime)
+      const already = await hasEmailBeenSent(supabase, { mondayItemId, emailType })
+      if (!already) {
+        const trackingInfo = (tracker.tracking_info as TrackingInfo | null) ?? null
+        const trackingUrl = trackingInfo?.url || null
+        const carrier = trackingUrl ? detectCarrierFromUrl(trackingUrl) : null
+        const result = await sendTrackerStatusEmail({
+          contactEmail: tracker.customer_email,
+          trackerToken: tracker.tracker_token,
+          jobReference: tracker.job_reference,
+          quoteNumber: tracker.quote_number || undefined,
+          newStatus: canonicalKey,
+          trackingNumber: getTrackingNumber(trackingInfo),
+          trackingUrl: trackingUrl || undefined,
+          carrier: carrier || undefined,
+        })
+        await recordEmailSend(supabase, {
+          mondayItemId,
+          trackerToken: tracker.tracker_token,
+          customerEmail: tracker.customer_email,
+          emailType,
+          emailSent: result.success,
+          errorMessage: result.error,
+          triggerType: 'automatic',
+        })
+      }
+    }
+
+    if (tracker.quote_id) {
+      await mirrorStatusToQuote(supabase, {
+        quoteId: tracker.quote_id,
+        rawMondayStatus: displayLabel,
+        columnId,
+        changedAt,
+        userId: event.userId,
+      })
+    }
+  })
 
   if (process.env.ENABLE_MONDAY_ITEMS_SYNC === 'true') {
     syncJobTrackerItemsFromMonday(Number(tracker.id)).catch((err) => {
