@@ -117,7 +117,7 @@ describe('provisionTrackerForJobReferenceEvent', () => {
   })
 
   it('skips (validation_failed) on an invalid job reference — no insert', async () => {
-    mockedMonday.mockImplementation((q: string) => Promise.resolve({ items: [mondayItem({ jobRef: 'bad ref' })] }))
+    mockedMonday.mockImplementation(() => Promise.resolve({ items: [mondayItem({ jobRef: 'bad ref' })] }))
     const { admin, inserts } = makeAdmin({ existingTracker: null })
     const res = await provisionTrackerForJobReferenceEvent({ admin, mondayItemId: '555', boardId: 1992701981, jobReference: 'bad ref' })
     expect((res.body as { action: string }).action).toBe('validation_failed')
@@ -156,7 +156,7 @@ describe('provisionTrackerForJobReferenceEvent', () => {
 
 describe('provisionTrackerForCreateEvent', () => {
   it('skips (no insert) when the created item has no valid job reference', async () => {
-    mockedMonday.mockImplementation((_q: string) => Promise.resolve({ items: [mondayItem({ jobRef: '' })] }))
+    mockedMonday.mockImplementation(() => Promise.resolve({ items: [mondayItem({ jobRef: '' })] }))
     const { admin, inserts } = makeAdmin({ existingTracker: null })
     const res = await provisionTrackerForCreateEvent({ admin, mondayItemId: '555', boardId: 1992701981 })
     expect((res.body as { applied: boolean }).applied).toBe(false)

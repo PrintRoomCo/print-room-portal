@@ -36,7 +36,9 @@ vi.mock('@/lib/supabase', () => ({
 
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }))
 
-const sendTrackerStatusEmail = vi.fn((_args?: unknown) => Promise.resolve({ success: true }))
+const sendTrackerStatusEmail = vi.fn<(args?: unknown) => Promise<{ success: boolean; error?: string }>>(
+  () => Promise.resolve({ success: true })
+)
 vi.mock('@/lib/email/tracker-notification', () => ({
   sendTrackerStatusEmail: (a: unknown) => sendTrackerStatusEmail(a),
 }))
