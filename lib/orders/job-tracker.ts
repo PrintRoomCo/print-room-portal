@@ -17,6 +17,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import type { QuoteData, QuoteDataItem } from '@/lib/job-tracker'
 import { normalizeShippingAddress } from '@/lib/checkout/shipping-address'
+import { deriveStatusValue } from '@/lib/monday/tracker-status-engine'
+
+// Gap b (issue #77): the shell is created in submit step 4c, BEFORE the Monday
+// push (step 5a), so there is no Monday item to read yet. Monday creates the
+// production-board item at "Need: Mockup (Quote Approved)" — seed the tracker at
+// the SAME stage the engine derives from that label so a fresh order is not born
+// one stage ahead of Monday. Falls back to the literal key if the mapping moves.
+export const CHECKOUT_SEED_STATUS =
+  deriveStatusValue('Need: Mockup (Quote Approved)').canonical ?? 'quote-accepted-mockup'
 
 export interface CreateJobTrackerShellArgs {
   quoteId: string
@@ -216,13 +225,13 @@ export async function createJobTrackerShellForOrder(
     company_id:
       (b2bAccountRes.data as { company_id: string | null } | null)?.company_id ??
       null,
-    status: 'need-proof',
+    status: CHECKOUT_SEED_STATUS,
     tracking_info: {},
     status_history: [
       {
         id: randomUUID(),
-        status: 'need-proof',
-        status_key: 'need-proof',
+        status: CHECKOUT_SEED_STATUS,
+        status_key: CHECKOUT_SEED_STATUS,
         changed_at: nowIso,
       },
     ],
@@ -231,7 +240,7 @@ export async function createJobTrackerShellForOrder(
         id: randomUUID(),
         type: 'milestone',
         title: 'Order received',
-        body: 'Your order has been received. Our team is preparing the proof for your approval.',
+        body: 'Your order has been received. Our team is preparing your mockup.',
         changed_at: nowIso,
         source: 'system',
       },

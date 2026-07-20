@@ -150,7 +150,7 @@ function baseSelects(): SelectMatcher[] {
 }
 
 describe('createJobTrackerShellForOrder', () => {
-  it('inserts a job_trackers row with platform=b2b-portal, status=need-proof, monday_item_id=null and the QuoteData shape /order-tracker renders', async () => {
+  it('inserts a job_trackers row with platform=b2b-portal, status=quote-accepted-mockup, monday_item_id=null and the QuoteData shape /order-tracker renders', async () => {
     const { admin, writes } = makeStub({
       selects: baseSelects(),
       insertResponses: [
@@ -183,7 +183,9 @@ describe('createJobTrackerShellForOrder', () => {
     const row = inserts[0].payload as AnyRow
 
     expect(row.platform).toBe('b2b-portal')
-    expect(row.status).toBe('need-proof')
+    // Gap b (issue #77): seeded at the Mockup stage to match Monday's fresh-item
+    // default "Need: Mockup (Quote Approved)", NOT one stage ahead at Proof Prep.
+    expect(row.status).toBe('quote-accepted-mockup')
     expect(row.monday_item_id).toBeNull()
     expect(row.quote_id).toBe(QUOTE_ID)
     expect(row.user_id).toBe(USER_ID)
