@@ -48,14 +48,18 @@ const SIZES = [{ size_id: 1, size_label: 'S', size_order: 0 }]
 function renderPDP(
   role: 'org_admin' | 'staff' = 'org_admin',
   orderingPermission: 'stock_only' | 'reorder_only' | 'both' = 'both',
+  opts: {
+    fulfilmentType?: 'stocked' | 'made_to_order' | 'mixed'
+    availability?: Record<string, { available_qty: number; allow_order_without_stock: boolean }>
+  } = {},
 ) {
   return render(
     <ProductDetailClient
-      product={{ ...baseProduct, fulfilment_type: 'made_to_order' }}
+      product={{ ...baseProduct, fulfilment_type: opts.fulfilmentType ?? 'made_to_order' }}
       variants={variants}
       sizes={SIZES}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
-      availability={{} as never} // production product: NO inventory rows anywhere
+      availability={(opts.availability ?? {}) as never} // default: NO inventory rows anywhere
       organizationId="o1"
       customerRole={role}
       orderingPermission={orderingPermission}
@@ -79,6 +83,64 @@ beforeEach(() => {
   )
 })
 
+describe('one_size colour product — variant identity on the cart line', () => {
+  // A product with colourway variants but NO `sizes` rows resolves to `one_size`
+  // (resolveSizingMode). The line MUST carry the selected colourway variant_id —
+  // resolveSizingMode's own contract is "ordered straight off the colourway
+  // variant". Dropping it (variantId: '') sent variant_id: null to checkout,
+  // where submit_b2b_order raised NO_INVENTORY ("stocked product line missing
+  // variant_id") for a stock_only member and lost the per-variant billing_mode
+  // (prepaid → full price). The Staple Tee escaped only because it is multi_size.
+  it('carries the SELECTED colourway variant_id onto the cart line, not empty', async () => {
+    render(
+      <ProductDetailClient
+        product={{ ...baseProduct, fulfilment_type: 'stocked' }}
+        variants={[
+          {
+            variant_id: 'white',
+            color_swatch_id: 'w',
+            color_label: 'White',
+            color_hex: '#fff',
+            color_position: 0,
+            size_id: null,
+            size_label: null,
+            size_order: 0,
+          },
+          {
+            variant_id: 'black',
+            color_swatch_id: 'b',
+            color_label: 'Black',
+            color_hex: '#000',
+            color_position: 1,
+            size_id: null,
+            size_label: null,
+            size_order: 0,
+          },
+        ]}
+        sizes={[]} // no sizes → one_size mode
+        brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
+        availability={{ 'white::': { available_qty: 250, allow_order_without_stock: false } } as never}
+        organizationId="o1"
+        customerRole="org_admin"
+        orderingPermission="both"
+        images={[]}
+        colourOptions={[]}
+        decorations={[]}
+        effectiveMoq={1}
+      />,
+    )
+    fireEvent.change(await screen.findByLabelText('Quantity'), { target: { value: '5' } })
+    const button = await screen.findByRole('button', { name: /add to cart/i })
+    await waitFor(() => expect(button).toBeEnabled())
+    fireEvent.click(button)
+
+    expect(addLine).toHaveBeenCalledTimes(1)
+    expect(addLine).toHaveBeenCalledWith(
+      expect.objectContaining({ variantId: 'white', qty: 5 }),
+    )
+  })
+})
+
 describe('PDP fulfilment fallback — untracked made_to_order product', () => {
   it('org_admin add tags the line made_to_order, NOT stocked (regression: TEST-000080)', async () => {
     renderPDP('org_admin', 'both')
@@ -98,6 +160,26 @@ describe('PDP fulfilment fallback — untracked made_to_order product', () => {
         fulfilmentType: 'made_to_order',
       }),
     )
+  })
+
+  it('stock_only member CANNOT add a backorderable variant (server would PERMISSION_DENIED)', async () => {
+    // Mixed product, backorderable cell (zero stock, allow_order_without_stock).
+    // submit_b2b_order rejects a stock_only member here (member_cannot_produce),
+    // so the PDP must not let it into the cart. Before the fix the inventory
+    // shortfall guard SKIPPED backorderable cells → Add-to-cart stayed enabled.
+    renderPDP('staff', 'stock_only', {
+      fulfilmentType: 'mixed',
+      availability: { 'red-s::1': { available_qty: 0, allow_order_without_stock: true } },
+    })
+    fireEvent.change(screen.getByLabelText('Quantity for size S'), { target: { value: '5' } })
+
+    // Settle: the button label flips off "Checking price..." once pricing loads,
+    // regardless of whether it ends up enabled or disabled.
+    const button = await screen.findByRole('button', { name: /add to cart/i })
+    expect(button).toBeDisabled()
+
+    fireEvent.click(button)
+    expect(addLine).not.toHaveBeenCalled()
   })
 
   it('reorder_only staff add also tags made_to_order', async () => {

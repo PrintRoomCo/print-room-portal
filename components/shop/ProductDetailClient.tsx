@@ -24,7 +24,9 @@ import {
   PILL_LABELS,
   effectivePermission,
   lineFulfilment,
+  lineIsOrderable,
   orderingOptions,
+  type LineFulfilmentContext,
   type MemberPermission,
 } from '@/lib/shop/fulfilment-mode'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
@@ -1013,8 +1015,14 @@ export function ProductDetailClient({
     cart.addLine({
       productId: product.id,
       productName: product.name,
-      variantId: '',
-      variantLabel: '—',
+      // one_size still has a colourway variant (SKUCOLLAPSE: a variant IS a
+      // colour). Carry the SELECTED variant so checkout can resolve its
+      // billing_mode (prepaid → $0) and draw its stock — dropping it here
+      // (variantId '') sent variant_id: null and made submit_b2b_order raise
+      // NO_INVENTORY ("missing variant_id") for stock_only members. Genuinely
+      // variantless single-SKU products keep '' (selectedVariant is null).
+      variantId: selectedVariant?.variant_id ?? '',
+      variantLabel: selectedVariant?.color_label ?? '—',
       sizeId,
       sizeLabel: oneSizeSizeLabel,
       qty,
@@ -1024,7 +1032,7 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
-      billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
+      billingMode: billingModeForVariant(selectedVariant?.variant_id ?? null),
       nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
@@ -1087,10 +1095,77 @@ export function ProductDetailClient({
     }
   }
 
+  // A viewer who cannot reorder (a stock_only member) may only take a genuine
+  // stock draw. submit_b2b_order coerces their line to `stocked` and then
+  // rejects it (member_cannot_produce for backorderable/made_to_order, or
+  // NO_INVENTORY for an untracked cell) — surfaced as the opaque "not stocked
+  // for your account" at the final confirm. Mirror that rule up front so an
+  // un-drawable selection is blocked at the PDP instead. `lineIsOrderable`
+  // encodes the same predicate the server uses; viewers who can reorder are
+  // unaffected (a production run is valid for them).
+  const selectionBlockedByPermission = useMemo(() => {
+    if (options.canReorder) return false
+    const blocked = (c: LineFulfilmentContext) => !lineIsOrderable(c, options.canReorder)
+    if (sizingMode === 'multi_size_with_variants') {
+      for (const variant of variants) {
+        for (const s of sizes) {
+          const lineQty = variantQuantities[cellKey(variant.variant_id, s.size_id)] ?? 0
+          if (lineQty <= 0) continue
+          const a = availability[cellKey(variant.variant_id, s.size_id)]
+          const tracked = a !== undefined
+          if (
+            blocked({
+              canDrawStock: options.canDrawStock,
+              canChooseOrderIntent,
+              orderIntent,
+              tracked,
+              available: tracked ? a.available_qty : 0,
+              backorderable: tracked && a.allow_order_without_stock,
+              lineQty,
+            })
+          )
+            return true
+        }
+      }
+      return false
+    }
+    if (sizingMode === 'multi_size_variantless') {
+      // Variantless lines are always a production run — a non-reorderer can't take them.
+      return variantlessTotalQty > 0
+    }
+    // one_size
+    if (qty <= 0) return false
+    return blocked({
+      canDrawStock: options.canDrawStock,
+      canChooseOrderIntent,
+      orderIntent,
+      tracked: tracksThisVariant,
+      available: availableQty ?? 0,
+      backorderable: selectedVariantBackorderable,
+      lineQty: qty,
+    })
+  }, [
+    options.canReorder,
+    options.canDrawStock,
+    canChooseOrderIntent,
+    orderIntent,
+    sizingMode,
+    variants,
+    sizes,
+    variantQuantities,
+    availability,
+    variantlessTotalQty,
+    qty,
+    tracksThisVariant,
+    availableQty,
+    selectedVariantBackorderable,
+  ])
+
   const canSubmitSelection =
     !isUnavailableToOrder &&
     canAddToCart &&
     inventoryIntentShortfall == null &&
+    !selectionBlockedByPermission &&
     !preOrderClosed
 
   return (
@@ -1484,6 +1559,12 @@ export function ProductDetailClient({
                         ? 'Switch to Purchase order or reduce quantity.'
                         : 'Reduce quantity to order from stock.'
                     }`}
+              </p>
+            )}
+            {selectionBlockedByPermission && inventoryIntentShortfall == null && (
+              <p className="mt-3 text-xs text-amber-700">
+                Not stocked for your account — contact staff to add stock, or remove it from
+                your selection.
               </p>
             )}
           </section>
