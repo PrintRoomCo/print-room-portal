@@ -52,11 +52,17 @@ Target URL for all four: `https://portal.theprintroom.nz/api/webhooks/monday/tra
 - [ ] **Delete** the four replaced studio-era subscriptions once the portal ones verify.
 - [ ] **Leave untouched:** 19365146, 26353740 (Stock), 18483144, 18484284 (group moves).
 
-## 3. Studio kill-switch (proposed diff — apply to print-room-studio on Jon's go)
+> **Studio changes are BUILT and staged:** `jimile/print-room-studio` **PR #50**
+> (branch `feat/tracker-phase-2-studio-cutover`) contains both §3 and §4 below,
+> **gated behind the single env var `STUDIO_TRACKER_WEBHOOKS_DISABLED`**. While it
+> is unset the studio is byte-for-byte unchanged. Merge PR #50 first (safe, inert),
+> then flip the env at cutover. The inline diffs below document exactly what it does.
 
-The portal build does not touch the studio repo. Apply this only at cutover so the
-studio webhook handler stops double-processing tracker events. It leaves the
-collections path and the polling `sync-monday.js` alive for Phase 4.
+## 3. Studio kill-switch (in studio PR #50 — apply the env at cutover)
+
+The portal build does not touch the studio repo. This is inert until the env is set,
+so the studio webhook handler stops double-processing tracker events only at cutover.
+It leaves the collections path and the polling `sync-monday.js` alive for Phase 4.
 
 In `print-room-studio/apps/job-tracker/pages/api/webhooks/monday.js`, right after the
 board check (`if (expectedBoardId && String(event.boardId) !== expectedBoardId) …`):
@@ -80,8 +86,10 @@ minute) polls board 1992701981 and writes `status`/`status_history` to `job_trac
 events processed since 2026-07-14). Post-cutover both the portal webhook and this poller
 process the same change. The portal handler is idempotent (unchanged-status → no-op, so
 no duplicate history; and it de-dups email on trigger time) — the certified safeguard —
-but eliminate the parallel writer to be safe. **Proposed studio change (bring forward
-from Phase 4):** scope the poller's tracker update to skip portal-owned rows —
+but eliminate the parallel writer to be safe. **Done in studio PR #50 (same env gate):**
+`syncTrackerFromMondayItem` skips portal-owned rows BEFORE `ensureTrackerForMondayItem`
+when `STUDIO_TRACKER_WEBHOOKS_DISABLED=true` — which also protects the portal's UUID
+`tracker_token` from `forceTokenSync` clobbering. The scope check —
 
 ```js
 // in the tracker-update path, skip rows the portal now owns:
