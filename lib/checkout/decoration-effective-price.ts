@@ -6,7 +6,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *
  * Resolution (must match /api/shop/decoration-pricing):
  *   1. effective_decoration_unit_price(org_decoration_id, qty) RPC
- *        - includes decoration_price_overrides + engine rate
+ *        - screenprint: qty-fed engine ladder
+ *        - embroidery: stitch-count ladder (qty-independent). NULL when the
+ *          decoration has no stitch_count and no usable dimensions — that soft
+ *          gate is why the PDP marks such decorations pricing-pending and
+ *          blocks add-to-cart on computed items.
  *   2. fall back to b2b_catalogue_item_decorations.unit_price_override
  *      (per-link AM override) when the RPC returns NULL
  *   3. fall back to org_decorations.unit_price (flat)
@@ -17,9 +21,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export interface DecorationPriceInput {
   orgDecorationId: string
   organizationId: string
-  /** org_decorations.decoration_method (server-authoritative). Embroidery is not
-   *  priced through the qty-fed engine ladder — see effectiveDecorationPrice. */
-  method: string
   unitPriceOverride: number | string | null
   baseUnitPrice: number | string
 }
@@ -52,23 +53,6 @@ export async function effectiveDecorationPrice(
    */
   tierMultiplier?: number,
 ): Promise<number> {
-  // Embroidery is NOT priced through the qty-fed engine ladder. The RPC's
-  // embroidery branch calls pick_embroidery_unit(family, qty), which expects the
-  // second arg to be thousands-of-stitches, not the order quantity — so it
-  // returns a meaningless ~$1/garment. The PDP never fetches embroidery either
-  // (recalcInputs is screenprint-only), so the cart carries the RAW static
-  // override/base with no tier multiplier applied. Mirror that exactly here:
-  // resolve to the static override/base, no RPC, no multiplier — otherwise the
-  // client's $14 vs the server's ~$1 (or 14×tier) trips the zero-tolerance drift
-  // guard and blocks checkout on every embroidery line.
-  if (input.method === 'embroidery') {
-    const staticBase =
-      input.unitPriceOverride != null
-        ? Number(input.unitPriceOverride)
-        : Number(input.baseUnitPrice)
-    return Number(staticBase.toFixed(2))
-  }
-
   const { data, error } = await admin.rpc('effective_decoration_unit_price', {
     p_org_decoration_id: input.orgDecorationId,
     p_qty: qty,
