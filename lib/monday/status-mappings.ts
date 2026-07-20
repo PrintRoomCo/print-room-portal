@@ -81,37 +81,16 @@ export function mapMondayToQuickQuoteEvent(
 
 // --- Tracker status mappings ---
 
-import { STATUS_STEPS } from '@/lib/job-tracker'
+import { deriveStatusValue } from '@/lib/monday/tracker-status-engine'
 
 /**
- * Map a Monday status label to a job tracker status step.
- * Returns null if no match.
+ * Map a Monday status label to a customer-facing job-tracker stage key.
+ * Thin wrapper over the canonical engine (see tracker-status-engine.ts): returns
+ * the canonical key for a customer-facing label, or null for internal / hold /
+ * unknown labels. Replaces the old 14-row stub that recognised ~2 of ~40 real
+ * board labels (issue #77, Gate 2).
  */
 export function mapMondayToTrackerStatus(labelText: string | undefined): string | null {
-  const normalized = (labelText || '').toLowerCase().trim()
-  if (!normalized) return null
-
-  const mapping: Record<string, string> = {
-    'quote received': 'quote-stage',
-    'quote stage': 'quote-stage',
-    'quote accepted': 'quote-accepted-mockup',
-    'mockup': 'quote-accepted-mockup',
-    'need proof': 'need-proof',
-    'proof prep': 'need-proof',
-    'proof sent': 'proof-sent',
-    'awaiting proof': 'proof-sent',
-    'proof approved': 'proof-approved',
-    'in production': 'in-production',
-    'production': 'in-production',
-    'dispatched': 'dispatched',
-    'shipped': 'dispatched',
-    'delivered': 'dispatched',
-  }
-
-  const mapped = mapping[normalized]
-  if (mapped && STATUS_STEPS.some((s) => s.key === mapped)) {
-    return mapped
-  }
-
-  return null
+  const derived = deriveStatusValue(labelText ?? null)
+  return derived.isCustomerFacing ? derived.canonical : null
 }
