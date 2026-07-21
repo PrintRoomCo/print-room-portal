@@ -5,26 +5,16 @@
  * Supabase (service-role) client is injected rather than a module singleton so
  * the webhook route can pass its own admin client.
  *
- * De-dup semantics = per-transition idempotent (spec §C, decision 2): the email
- * type encodes the canonical stage AND the Monday event's trigger-time epoch,
- * which is stable across Monday's at-least-once re-delivery of the SAME event
- * (so a retry does not re-email) but changes on a genuine re-entry to a stage
- * (e.g. proof-sent → need-proof → proof-sent after a revision — which re-emails).
+ * De-dup semantics = idempotent on a caller-supplied `email_type` key, on
+ * `(monday_item_id, email_type)`. Milestone emails pass a STABLE key
+ * (`milestone-in-production` / `milestone-dispatched`, see
+ * `lib/email/milestone-email.ts`) so each milestone lands once ever — even
+ * across a hold/rework re-entry or Monday's at-least-once re-delivery.
  *
  * Shared table `tracker_email_log` — columns verified live 2026-07-20.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-/**
- * Build the de-dup key for a status-update email. `status_update:<key>:<epochMs>`.
- * `epochMs` is 0 when the trigger time is missing/unparseable — the (rare)
- * fallback still de-dups within a single delivery via the handler's fast-path.
- */
-export function statusEmailType(canonicalKey: string, triggerTime: string | null | undefined): string {
-  const epoch = triggerTime ? Date.parse(triggerTime) : NaN
-  return `status_update:${canonicalKey}:${Number.isNaN(epoch) ? 0 : epoch}`
-}
 
 export async function hasEmailBeenSent(
   admin: SupabaseClient,

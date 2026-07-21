@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { statusEmailType, hasEmailBeenSent, recordEmailSend } from '../tracker-email-log'
+import { hasEmailBeenSent, recordEmailSend } from '../tracker-email-log'
 
 /**
  * Minimal chainable Supabase stub. `select().eq()...maybeSingle()` resolves to
@@ -32,24 +32,6 @@ function makeAdmin(opts: {
   } as unknown as SupabaseClient
   return { admin, calls, builder }
 }
-
-describe('statusEmailType', () => {
-  it('encodes the canonical key + trigger-time epoch (stable across retries)', () => {
-    const t = statusEmailType('in-production', '2026-07-20T01:00:00.000Z')
-    expect(t).toBe(`status_update:in-production:${Date.parse('2026-07-20T01:00:00.000Z')}`)
-  })
-
-  it('re-entry to a stage with a NEW trigger time produces a DIFFERENT key', () => {
-    const a = statusEmailType('proof-sent', '2026-07-20T01:00:00.000Z')
-    const b = statusEmailType('proof-sent', '2026-07-21T09:00:00.000Z')
-    expect(a).not.toBe(b)
-  })
-
-  it('falls back to epoch 0 when trigger time is missing', () => {
-    expect(statusEmailType('dispatched', null)).toBe('status_update:dispatched:0')
-    expect(statusEmailType('dispatched', 'not-a-date')).toBe('status_update:dispatched:0')
-  })
-})
 
 describe('hasEmailBeenSent', () => {
   it('is true when a sent row exists for the item + type', async () => {
