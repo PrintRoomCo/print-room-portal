@@ -76,6 +76,18 @@ vi.mock('@/lib/monday/tracker-provisioning', () => ({
   provisionTrackerForCreateEvent: (...a: unknown[]) => provisionTrackerForCreateEvent(...(a as [])),
 }))
 
+const fetchCustomerTrackingUrl = vi.fn<(id: string) => Promise<string | null>>(
+  () => Promise.resolve('https://www.nzpost.co.nz/tools/tracking/item/AB123456789NZ')
+)
+vi.mock('@/lib/monday/tracking-link', () => ({
+  fetchCustomerTrackingUrl: (id: string) => fetchCustomerTrackingUrl(id),
+}))
+
+const isTrackerTestOrg = vi.fn(() => Promise.resolve(false))
+vi.mock('@/lib/orders/tracker-test-org', () => ({
+  isTrackerTestOrg: (...a: unknown[]) => isTrackerTestOrg(...(a as [])),
+}))
+
 import { POST } from '../route'
 
 declare const flushAfter: () => Promise<void>
@@ -131,6 +143,8 @@ beforeEach(() => {
   trackerRow.current = baseTracker()
   delete process.env.MONDAY_WEBHOOK_SECRET
   hasEmailBeenSent.mockResolvedValue(false)
+  fetchCustomerTrackingUrl.mockResolvedValue('https://www.nzpost.co.nz/tools/tracking/item/AB123456789NZ')
+  isTrackerTestOrg.mockResolvedValue(false)
 })
 
 describe('tracker-status route — customer-facing transition', () => {
@@ -234,14 +248,17 @@ describe('tracker-status route — email de-dup', () => {
     expect(supaUpdates).toHaveLength(1) // status still written; only the email is de-duped
   })
 
-  it('genuine re-entry with a NEW trigger time → re-emails', async () => {
-    // tracker at need-proof; Monday sends proof-sent with a fresh trigger time
-    trackerRow.current = baseTracker({ status: 'need-proof' })
-    hasEmailBeenSent.mockResolvedValue(false)
-    await post(statusEvent({ value: { label: { index: 3, text: 'Sent: Proof+Invoice/Quote' } }, triggerTime: '2026-07-22T09:00:00.000Z' }))
+  it('asserts the STABLE milestone de-dup key (once ever, not per trigger time)', async () => {
+    await post(statusEvent()) // Assign to Production -> in-production
     await flushAfter()
-    expect(sendTrackerStatusEmail).toHaveBeenCalledTimes(1)
-    expect(sendTrackerStatusEmail.mock.calls[0][0]).toMatchObject({ newStatus: 'proof-sent' })
+    expect(hasEmailBeenSent).toHaveBeenCalledWith(
+      expect.anything(),
+      { mondayItemId: '555', emailType: 'milestone-in-production' }
+    )
+    expect(recordEmailSend).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ emailType: 'milestone-in-production' })
+    )
   })
 })
 
@@ -282,5 +299,78 @@ describe('tracker-status route — provisioning + token routing', () => {
   it('routes an item-create event to create-provisioning', async () => {
     await post({ type: 'create_pulse', boardId: 1992701981, pulseId: 777, pulseName: 'ANFI-000201' })
     expect(provisionTrackerForCreateEvent).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('tracker-status route — milestone email gate', () => {
+  it('All Production Complete → in-production email', async () => {
+    trackerRow.current = baseTracker({ status: 'proof-approved' })
+    await post(statusEvent({ value: { label: { index: 9, text: 'All Production Complete' } } }))
+    await flushAfter()
+    expect(sendTrackerStatusEmail).toHaveBeenCalledTimes(1)
+    expect(sendTrackerStatusEmail.mock.calls[0][0]).toMatchObject({ newStatus: 'in-production' })
+  })
+
+  it('Shipped → dispatched email with tracking read from the Monday item', async () => {
+    trackerRow.current = baseTracker({ status: 'in-production' })
+    await post(statusEvent({ value: { label: { index: 22, text: 'Shipped' } } }))
+    await flushAfter()
+    expect(fetchCustomerTrackingUrl).toHaveBeenCalledWith('555')
+    expect(sendTrackerStatusEmail).toHaveBeenCalledTimes(1)
+    expect(sendTrackerStatusEmail.mock.calls[0][0]).toMatchObject({
+      newStatus: 'dispatched',
+      trackingUrl: 'https://www.nzpost.co.nz/tools/tracking/item/AB123456789NZ',
+      carrier: 'NZ Post',
+    })
+  })
+
+  it('Shipped with no Monday tracking → still sends dispatched (tracking to follow)', async () => {
+    trackerRow.current = baseTracker({ status: 'in-production', tracking_info: {} })
+    fetchCustomerTrackingUrl.mockResolvedValue(null)
+    await post(statusEvent({ value: { label: { index: 22, text: 'Shipped' } } }))
+    await flushAfter()
+    expect(sendTrackerStatusEmail).toHaveBeenCalledTimes(1)
+    const arg = sendTrackerStatusEmail.mock.calls[0][0] as { newStatus: string; trackingUrl?: string }
+    expect(arg.newStatus).toBe('dispatched')
+    expect(arg.trackingUrl).toBeUndefined()
+  })
+
+  it('Partially Shipped → advances the tracker but sends NO email', async () => {
+    trackerRow.current = baseTracker({ status: 'proof-approved' })
+    await post(statusEvent({ value: { label: { index: 30, text: 'Partially Shipped' } } }))
+    expect(supaUpdates).toHaveLength(1) // status still advances (canonical in-production)
+    expect(supaUpdates[0].set.status).toBe('in-production')
+    await flushAfter()
+    expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('Closed Job → advances to dispatched but sends NO email', async () => {
+    trackerRow.current = baseTracker({ status: 'in-production' })
+    await post(statusEvent({ value: { label: { index: 40, text: 'Closed Job' } } }))
+    expect(supaUpdates).toHaveLength(1)
+    expect(supaUpdates[0].set.status).toBe('dispatched')
+    await flushAfter()
+    expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('Proof Sent (Sent: Proof+Invoice/Quote) → advances but sends NO email', async () => {
+    trackerRow.current = baseTracker({ status: 'need-proof' })
+    await post(statusEvent({ value: { label: { index: 3, text: 'Sent: Proof+Invoice/Quote' } } }))
+    expect(supaUpdates).toHaveLength(1)
+    expect(supaUpdates[0].set.status).toBe('proof-sent')
+    await flushAfter()
+    expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe('tracker-status route — test-org suppression', () => {
+  it('a test org gets NO milestone email (status still advances)', async () => {
+    isTrackerTestOrg.mockResolvedValue(true)
+    trackerRow.current = baseTracker({ status: 'in-production' })
+    await post(statusEvent({ value: { label: { index: 22, text: 'Shipped' } } }))
+    expect(supaUpdates).toHaveLength(1) // advanced to dispatched
+    await flushAfter()
+    expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+    expect(recordEmailSend).not.toHaveBeenCalled()
   })
 })

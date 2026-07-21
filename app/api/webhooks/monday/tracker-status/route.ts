@@ -5,10 +5,12 @@ import { cacheTags } from '@/lib/cache/tags'
 import { mapMondayToCollectionStatus } from '@/lib/monday/status-mappings'
 import { deriveStatusValue } from '@/lib/monday/tracker-status-engine'
 import { sendTrackerStatusEmail } from '@/lib/email/tracker-notification'
+import { milestoneForLabel, milestoneEmailType } from '@/lib/email/milestone-email'
+import { fetchCustomerTrackingUrl } from '@/lib/monday/tracking-link'
+import { isTrackerTestOrg } from '@/lib/orders/tracker-test-org'
 import {
   hasEmailBeenSent,
   recordEmailSend,
-  statusEmailType,
 } from '@/lib/email/tracker-email-log'
 import { logWebhookEvent, markWebhookLog } from '@/lib/monday/webhook-log'
 import { mirrorStatusToQuote } from '@/lib/monday/quote-mirror'
@@ -508,22 +510,38 @@ async function handleTrackerStatusChange(
   // de-duped per transition on the Monday trigger time; the quote mirror is
   // inert unless ENABLE_QUOTE_STATUS_MIRROR is set.
   after(async () => {
-    if (tracker.customer_email) {
-      const emailType = statusEmailType(canonicalKey, event.triggerTime)
+    // Customer milestone email — gated on the RAW Monday label (not the coarse
+    // canonical status): only "in production" and "shipped" push. Every other
+    // customer-facing transition updates the tracker silently (pull-only).
+    const milestone = tracker.customer_email ? milestoneForLabel(displayLabel) : null
+    if (milestone) {
+      const emailType = milestoneEmailType(milestone)
       const already = await hasEmailBeenSent(supabase, { mondayItemId, emailType })
-      if (!already) {
-        const trackingInfo = (tracker.tracking_info as TrackingInfo | null) ?? null
-        const trackingUrl = trackingInfo?.url || null
-        const carrier = trackingUrl ? detectCarrierFromUrl(trackingUrl) : null
+      // Only pay for the is_test lookup when we are actually about to send.
+      const suppressed = already || (await isTrackerTestOrg(supabase, tracker.quote_id))
+      if (!suppressed) {
+        // Dispatched tracking is read from the Monday item (poller-independent);
+        // in-production carries no tracking. Precedence: customer link column →
+        // legacy tracking_info → none (email sends with "tracking to follow").
+        let trackingUrl: string | undefined
+        let trackingNumber: string | undefined
+        if (milestone === 'dispatched') {
+          const fromMonday = await fetchCustomerTrackingUrl(mondayItemId)
+          const legacy = (tracker.tracking_info as TrackingInfo | null)?.url ?? null
+          trackingUrl = fromMonday || legacy || undefined
+          trackingNumber = trackingUrl ? getTrackingNumber({ number: trackingUrl }) : undefined
+        }
+        const carrier = trackingUrl ? detectCarrierFromUrl(trackingUrl) ?? undefined : undefined
+
         const result = await sendTrackerStatusEmail({
-          contactEmail: tracker.customer_email,
+          contactEmail: tracker.customer_email as string,
           trackerToken: tracker.tracker_token,
           jobReference: tracker.job_reference,
           quoteNumber: tracker.quote_number || undefined,
-          newStatus: canonicalKey,
-          trackingNumber: getTrackingNumber(trackingInfo),
-          trackingUrl: trackingUrl || undefined,
-          carrier: carrier || undefined,
+          newStatus: milestone,
+          trackingNumber,
+          trackingUrl,
+          carrier,
         })
         await recordEmailSend(supabase, {
           mondayItemId,
