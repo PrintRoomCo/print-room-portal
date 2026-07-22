@@ -32,6 +32,7 @@ const fixture: OrderDealData = {
       colorName: 'Black',
       sizeLabel: 'M',
       designName: 'Logo Front',
+      location: 'MTF Avalon',
       quantity: 10,
     },
     {
@@ -41,6 +42,7 @@ const fixture: OrderDealData = {
       colorName: 'Navy',
       sizeLabel: 'L',
       designName: 'Crew Back',
+      location: null,
       quantity: 5,
     },
     {
@@ -50,6 +52,7 @@ const fixture: OrderDealData = {
       colorName: null,
       sizeLabel: 'OS',
       designName: 'No decoration',
+      location: null,
       quantity: 20,
     },
   ],
@@ -144,7 +147,7 @@ describe('pushOrderDeal — Production column mapping', () => {
 })
 
 describe('pushOrderDeal — subitem per line', () => {
-  it('calls create_subitem once per line with compact design-prefixed names', async () => {
+  it('calls create_subitem once per line with product-name-only titles', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
 
@@ -152,10 +155,35 @@ describe('pushOrderDeal — subitem per line', () => {
 
     const subitemCalls = mockedCall.mock.calls.slice(1)
     expect(subitemCalls).toHaveLength(3)
+    // Subitem titles are the product name only — the decoration prefix was
+    // dropped (2026-07-22 title fix); decoration lives in Job Specs + its own column.
     const names = subitemCalls.map((c) => (c[1] as { itemName: string }).itemName)
-    expect(names[0]).toBe('Logo Front: Basic Tee')
-    expect(names[1]).toBe('Crew Back: Heavy Hood')
-    expect(names[2]).toBe('No decoration: Cap')
+    expect(names[0]).toBe('Basic Tee')
+    expect(names[1]).toBe('Heavy Hood')
+    expect(names[2]).toBe('Cap')
+  })
+
+  it('subitem name is the product name only (no decoration prefix)', async () => {
+    mockedCall
+      .mockResolvedValueOnce({ create_item: { id: '900', name: 'Acme Co' } }) // parent
+      .mockResolvedValue({ create_subitem: { id: 'sub-1' } }) // subitems
+    await pushOrderDeal(fixture)
+
+    // First create_subitem call (calls[1]) — assert the item_name variable.
+    const subitemVars = mockedCall.mock.calls[1][1] as { itemName: string }
+    expect(subitemVars).toMatchObject({ itemName: 'Basic Tee' })
+    expect(subitemVars.itemName).not.toContain(':')
+  })
+
+  it('writes the Location and Decoration columns on the subitem', async () => {
+    mockedCall
+      .mockResolvedValueOnce({ create_item: { id: '900', name: 'Acme Co' } })
+      .mockResolvedValue({ create_subitem: { id: 'sub-1' } })
+    await pushOrderDeal(fixture) // fixture line 1: designName 'Logo Front', location 'MTF Avalon'
+
+    const cv = JSON.parse((mockedCall.mock.calls[1][1] as { columnValues: string }).columnValues)
+    expect(cv[PRODUCTION_SUBITEM_COLUMNS.location]).toBe('MTF Avalon')
+    expect(cv[PRODUCTION_SUBITEM_COLUMNS.decoration]).toBe('Logo Front')
   })
 
   it('maps product colour, size, and quantity to Production subitem columns', async () => {
@@ -218,6 +246,7 @@ describe('pushOrderDeal — size label normalization', () => {
         colorName: null,
         sizeLabel: c.sizeLabel,
         designName: 'D',
+        location: null,
         quantity: i + 1,
       })),
     })
@@ -250,6 +279,7 @@ describe('pushOrderDeal — size label normalization', () => {
           colorName: null,
           sizeLabel: '7XL',
           designName: 'D',
+          location: null,
           quantity: 3,
         },
       ],

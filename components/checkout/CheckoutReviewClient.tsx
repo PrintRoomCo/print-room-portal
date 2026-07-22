@@ -169,6 +169,9 @@ export function CheckoutReviewClient({
             size_label: line.sizeLabel ?? null,
             qty: line.qty,
             ship_to_store_id: allCustom ? null : reviewState.perLineShipTo[line.lineId] ?? null,
+            // Feature 1 — carry the chosen PDP location label so the server can
+            // snapshot it onto quote_items.line_location_label.
+            location_label: line.locationLabel ?? null,
             cart_line_id: line.lineId,
             decorations: line.decorations,
             claimed_unit_price: line.unitPrice,

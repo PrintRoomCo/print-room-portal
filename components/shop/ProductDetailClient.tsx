@@ -93,6 +93,10 @@ interface PricingResponse {
   bracket: { min_quantity: number; max_quantity: number | null } | null
 }
 
+/** Feature 1 — one selectable option for the required PDP location dropdown.
+ *  `value` is the org_line_dataset_values.id; `label` is the frozen snapshot. */
+type LocationOption = { value: string; label: string }
+
 interface Props {
   product: ProductData
   variants: VariantRow[]
@@ -161,6 +165,8 @@ interface Props {
    * Empty = show the full ladder.
    */
   volumeDisplayHiddenBands?: number[]
+  /** Feature 1 — org location dropdown options. Empty = no location dropdown. */
+  locationOptions?: LocationOption[]
 }
 
 export function ProductDetailClient({
@@ -181,6 +187,7 @@ export function ProductDetailClient({
   preOrderClosed = false,
   initialColorSwatchId = null,
   volumeDisplayHiddenBands = [],
+  locationOptions = [],
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -201,6 +208,13 @@ export function ProductDetailClient({
   // resolve their lone size here; multi-size products drive size via the qty grid
   // (per-size rows), so the single sizeId stays null there.
   const [sizeId, setSizeId] = useState<number | null>(sizes.length === 1 ? sizes[0].size_id : null)
+  // Feature 1 — required PDP location dropdown. requiresLocation hard-gates
+  // add-to-cart (mirrors the MOQ gate, no default); the chosen label rides the
+  // cart line (via lineSignature) through checkout onto the order + Monday.
+  const requiresLocation = locationOptions.length > 0
+  const [locationValueId, setLocationValueId] = useState<string | null>(null)
+  const selectedLocationLabel =
+    locationOptions.find((o) => o.value === locationValueId)?.label ?? null
   // Qty per variant_id. Survives colour-switches so the user can build a
   // multi-variant order (e.g. 50 of Black M + 30 of White L) in a single PDP
   // session without losing entries when they flip swatches. Cross-colour
@@ -957,6 +971,7 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
+            locationLabel: selectedLocationLabel,
             billingMode: billingModeForVariant(variant.variant_id),
             nature: product.fulfilment_type,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1008,6 +1023,7 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
+          locationLabel: selectedLocationLabel,
           billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
           nature: product.fulfilment_type,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1054,6 +1070,7 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
+      locationLabel: selectedLocationLabel,
       billingMode: billingModeForVariant(selectedVariant?.variant_id ?? null),
       nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1183,9 +1200,14 @@ export function ProductDetailClient({
     selectedVariantBackorderable,
   ])
 
+  // Feature 1 — a product with a location dataset cannot be added until a
+  // location is chosen (no default; mirrors the MOQ hard-gate).
+  const meetsLocation = !requiresLocation || locationValueId != null
+
   const canSubmitSelection =
     !isUnavailableToOrder &&
     canAddToCart &&
+    meetsLocation &&
     inventoryIntentShortfall == null &&
     !preOrderClosed &&
     pendingPricingDecorations.length === 0
@@ -1559,6 +1581,35 @@ export function ProductDetailClient({
                 )}
               </div>
             </div>
+
+            {requiresLocation && (
+              <div className="mt-4">
+                <label
+                  htmlFor="pdp-location"
+                  className="mb-1 block text-sm font-medium text-gray-900"
+                >
+                  Location <span className="text-red-600">*</span>
+                </label>
+                <select
+                  id="pdp-location"
+                  value={locationValueId ?? ''}
+                  onChange={(e) => setLocationValueId(e.target.value || null)}
+                  className="w-full rounded-2xl border border-black/15 px-4 py-2.5 text-sm"
+                >
+                  <option value="">Select a location…</option>
+                  {locationOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {locationValueId == null && (
+                  <p className="mt-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                    Choose a location to add this item to your cart.
+                  </p>
+                )}
+              </div>
+            )}
 
             <button
               type="button"

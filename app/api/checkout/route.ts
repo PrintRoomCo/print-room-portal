@@ -79,6 +79,25 @@ export async function POST(request: Request) {
     }
   }
 
+  // Feature 1 — location_label, when present, must be a string or null. The PDP
+  // dropdown hard-gate is the primary guarantee that it is a real dataset value;
+  // this light shape guard just stops a forged/malformed POST writing junk to the
+  // quote_items.line_location_label text column. Full dataset-membership
+  // validation is a fast-follow (this route does not yet batch-load catalogue
+  // items — it validates ship-to via the in-context store list, not the DB).
+  for (const l of body.lines) {
+    if (
+      l.location_label !== undefined &&
+      l.location_label !== null &&
+      typeof l.location_label !== 'string'
+    ) {
+      return NextResponse.json(
+        { error: 'location_label must be a string or null' },
+        { status: 400 },
+      )
+    }
+  }
+
   // Slice 4: only org admins on tenants that track stock may route to inventory.
   // Server enforces gating so a forged buyer/studio POST can't side-step the UI.
   let intent: 'customer' | 'inventory' = 'customer'

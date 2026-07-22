@@ -476,6 +476,21 @@ const loadProductDetailPageData = cache(async (
     { orgMoqExempt: context.moqExempt },
   )
 
+  // Feature 1 — resolve the assigned org location dataset's values into PDP
+  // dropdown options. Empty = no location dropdown for this product.
+  let locationOptions: Array<{ value: string; label: string }> = []
+  if (catItem.line_dataset_id) {
+    const { data: locationValues } = await admin
+      .from('org_line_dataset_values')
+      .select('id, label')
+      .eq('dataset_id', catItem.line_dataset_id)
+      .order('position', { ascending: true })
+    locationOptions = (locationValues ?? []).map((v) => ({
+      value: String(v.id),
+      label: String(v.label),
+    }))
+  }
+
   return {
     status: 'ok',
     data: {
@@ -532,6 +547,8 @@ const loadProductDetailPageData = cache(async (
       // Display-only: hide these bands from the Volume-pricing widget
       // (cart/checkout brackets are untouched, so price & MOQ unchanged).
       volumeDisplayHiddenBands: catItem.volume_display_hidden_bands ?? [],
+      // Feature 1 — org location dropdown options. Empty = no location dropdown.
+      locationOptions,
     },
   }
 })

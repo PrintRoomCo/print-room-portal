@@ -52,6 +52,13 @@ export interface CartLine {
   imageUrl: string | null
   shipToStoreId?: string | null
   /**
+   * Feature 1 — the required PDP "location" dropdown label chosen for this line
+   * (e.g. "MTF Avalon"). Splits the cart line (into lineSignature) but not the
+   * pricing pool (kept out of tierAggregationKey, like sizeId). Absent on legacy
+   * persisted lines and products without a location dataset.
+   */
+  locationLabel?: string | null
+  /**
    * Decorations selected on this line at add-time. Empty array = no decoration.
    * The customer multi-picks decorations on the PDP swatch picker; each entry
    * is an immutable snapshot of the decoration as resolved when the line was
@@ -193,8 +200,9 @@ export function lineSignature(
   fulfilmentType: CartLineFulfilmentType = 'stocked',
   catalogueItemId: string | null = null,
   sizeId: number | null = null,
+  locationLabel: string | null = null,
 ): string {
-  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
+  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
 }
 
 /**
