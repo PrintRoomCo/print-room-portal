@@ -13,10 +13,13 @@ export type PdpCatalogueItem = {
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
    *  widget (display only). Empty = show the full ladder. */
   volume_display_hidden_bands: number[]
+  /** Feature 1 — assigned org location dataset (nullable). NULL = no PDP location
+   *  dropdown for this product. Drives the required dropdown when set. */
+  line_dataset_id: string | null
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string
