@@ -68,6 +68,14 @@ export const PRODUCTION_SUBITEM_COLUMNS = {
   fallbackSku: 'text_mkqj56x0',
   fallbackGarment: 'text_mkqj1fhk',
   fallbackColor: 'text_mkrs49mc',
+  // "Location" — the org PDP location dropdown label chosen for this line
+  // (feature 1, e.g. "MTF Avalon"). Text column created 2026-07-22 on the
+  // Production subitems board 1992701983.
+  location: 'text_mm5gv8g3',
+  // "Decoration" — the line's decoration/design name, moved here off the
+  // subitem title (2026-07-22 title fix). Text column created 2026-07-22 on
+  // the Production subitems board 1992701983.
+  decoration: 'text_mm5gddqg',
   brand: 'color_mkrjvgbj',
   stockStatus: 'color_mks0tbch',
   formulaTotal: 'formula_mkqjvyvb',

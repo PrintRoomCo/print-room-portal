@@ -28,6 +28,7 @@ const fixture: OrderDealData = {
       colorName: 'Black',
       sizeLabel: 'M',
       designName: 'No decoration',
+      location: null,
       quantity: 5,
     },
   ],

@@ -1608,7 +1608,7 @@ export async function submitCustomerOrder(
       const { data: dealLines } = await admin
         .from('quote_items')
         .select(`
-          id, product_name, quantity, unit_price, decorations, size_label,
+          id, product_name, quantity, unit_price, decorations, size_label, line_location_label,
           product_variants ( product_color_swatches(label) )
         `)
         .eq('quote_id', quote_id)
@@ -1620,6 +1620,7 @@ export async function submitCustomerOrder(
         unit_price: number
         decorations: Array<{ name: string }> | null
         size_label: string | null
+        line_location_label: string | null
         product_variants: {
           product_color_swatches: { label: string | null } | { label: string | null }[] | null
         } | null
@@ -1634,6 +1635,7 @@ export async function submitCustomerOrder(
           colorName: swatch?.label ?? null,
           sizeLabel: row.size_label,
           designName,
+          location: row.line_location_label ?? null,
           quantity: row.quantity,
         }
       })

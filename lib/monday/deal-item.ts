@@ -400,6 +400,8 @@ export interface OrderLineForMonday {
    * decorations attached (resolved at the caller, not here).
    */
   designName: string
+  /** Feature 1 — chosen PDP location label for this line; null when none. */
+  location: string | null
   quantity: number
 }
 
@@ -595,6 +597,16 @@ function buildOrderSubitemColumnValues(
   if (Number.isFinite(line.quantity) && line.quantity > 0) {
     const sizeKey = normalizeSizeLabel(line.sizeLabel)
     columnValues[PRODUCTION_SUBITEM_COLUMNS.sizes[sizeKey]] = line.quantity
+  }
+
+  // Feature 1 — the chosen PDP location label, its own subitem column.
+  if (line.location?.trim()) {
+    columnValues[PRODUCTION_SUBITEM_COLUMNS.location] = line.location.trim()
+  }
+  // Decoration name, elevated to its own column off the subitem title
+  // (2026-07-22 title fix). Skip the "No decoration" sentinel.
+  if (line.designName?.trim() && line.designName !== 'No decoration') {
+    columnValues[PRODUCTION_SUBITEM_COLUMNS.decoration] = line.designName.trim()
   }
 
   return columnValues
