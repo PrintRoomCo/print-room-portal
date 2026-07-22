@@ -99,6 +99,8 @@ export interface CheckoutLineInput {
    * (mirrors the has_brackets gate on unit_price_drift).
    */
   claimed_billing_mode?: BillingMode | null
+  /** Feature 1 — chosen PDP location dropdown label; snapshotted to quote_items. */
+  location_label?: string | null
 }
 
 export interface CheckoutInput {
@@ -365,6 +367,25 @@ function pickOne<T>(v: T | T[] | null | undefined): T | null {
 // variant_id) don't collapse into one per-line map entry.
 function makeLineKey(productId: string, variantId: string | null, sizeId: number | null = null): string {
   return `${productId}::${variantId ?? ''}::${sizeId ?? ''}`
+}
+
+/**
+ * Build the post-RPC follow-up UPDATE for one order line's snapshot columns.
+ * The RPC creates quote_items without ship-to / decorations / location; we set
+ * them here (submit_b2b_order stays unchanged). Each field is only written when
+ * the input line actually carried it (undefined → column left untouched), so a
+ * legacy line never clobbers an existing value. `line_location_label` is the
+ * feature-1 frozen label snapshot (Task 2 column).
+ */
+export function buildLineSnapshotUpdate(
+  inLine: Pick<CheckoutLineInput, 'ship_to_store_id' | 'location_label'>,
+  validatedDecorations: CheckoutLineDecorationInput[],
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {}
+  if (inLine.ship_to_store_id !== undefined) update.ship_to_store_id = inLine.ship_to_store_id ?? null
+  if (inLine.location_label !== undefined) update.line_location_label = inLine.location_label ?? null
+  update.decorations = validatedDecorations
+  return update
 }
 
 /**
@@ -1358,8 +1379,9 @@ export async function submitCustomerOrder(
     admin,
   )
 
-  // 4. Apply per-line ship_to_store_id and the decorations snapshot. The RPC
-  //    creates quote_items without ship-to or decorations; we set both here.
+  // 4. Apply per-line ship_to_store_id, location label, and the decorations
+  //    snapshot. The RPC creates quote_items without any of these; we set them
+  //    here (submit_b2b_order unchanged) — see buildLineSnapshotUpdate.
   const { data: newLines } = await admin
     .from('quote_items')
     .select('id, product_id, variant_id, size_id, product_name')
@@ -1381,13 +1403,9 @@ export async function submitCustomerOrder(
       )
       if (!match) continue
       consumed.add(match.id)
-      const update: Record<string, unknown> = {}
-      if (inLine.ship_to_store_id !== undefined) {
-        update.ship_to_store_id = inLine.ship_to_store_id ?? null
-      }
       const validated =
         validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null, inLine.size_id ?? null)) ?? []
-      update.decorations = validated
+      const update = buildLineSnapshotUpdate(inLine, validated)
       if (Object.keys(update).length > 0) {
         // Collect and dispatch concurrently — one round-trip per line, but all
         // in flight at once instead of a serial await chain (N× faster tail on
