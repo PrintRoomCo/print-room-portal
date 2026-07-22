@@ -100,6 +100,12 @@ export function normalizePersisted(raw: unknown): CartState {
         typeof l.shipToStoreId === 'string' || l.shipToStoreId === null
           ? (l.shipToStoreId ?? null)
           : null,
+      // Feature 1 — the chosen PDP location label must survive the localStorage
+      // round-trip or two different-location lines silently re-merge after reload.
+      locationLabel:
+        typeof l.locationLabel === 'string' || l.locationLabel === null
+          ? (l.locationLabel ?? null)
+          : null,
       decorations: normalizeDecorations(l.decorations),
       fulfilmentType: normalizeFulfilmentType(l.fulfilmentType),
       // F1 — nature must survive the round-trip or the mixed-cart order-type

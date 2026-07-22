@@ -86,6 +86,28 @@ describe('lineSignature includes size', () => {
   })
 })
 
+describe('lineSignature includes location label', () => {
+  const noDeco: CartLineDecoration[] = []
+
+  it('different location labels keep lines distinct in the signature', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Newmarket')
+    expect(a).not.toBe(b)
+  })
+
+  it('same location label merges (identical signature)', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon')
+    expect(a).toBe(b)
+  })
+
+  it('omitting location reproduces the pre-location signature (legacy parity)', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10)
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, null)
+    expect(a).toBe(b)
+  })
+})
+
 describe('recomputeProductTierPrices', () => {
   // Canonical garment ladder used by every test below. Maps the price drop
   // pattern from the live engine: small qty = high amortization, qty 1000+ = cheap.
