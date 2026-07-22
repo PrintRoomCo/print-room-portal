@@ -604,7 +604,7 @@ export async function createOrderDealSubitem(
   parentItemId: string,
   line: OrderLineForMonday,
 ): Promise<{ subitemId: string }> {
-  const itemName = `${line.designName}: ${line.productName}`
+  const itemName = line.productName
   const columnValues = buildOrderSubitemColumnValues(line)
 
   const mutation = `

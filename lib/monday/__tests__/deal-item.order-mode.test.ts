@@ -144,7 +144,7 @@ describe('pushOrderDeal — Production column mapping', () => {
 })
 
 describe('pushOrderDeal — subitem per line', () => {
-  it('calls create_subitem once per line with compact design-prefixed names', async () => {
+  it('calls create_subitem once per line with product-name-only titles', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
 
@@ -152,10 +152,24 @@ describe('pushOrderDeal — subitem per line', () => {
 
     const subitemCalls = mockedCall.mock.calls.slice(1)
     expect(subitemCalls).toHaveLength(3)
+    // Subitem titles are the product name only — the decoration prefix was
+    // dropped (2026-07-22 title fix); decoration lives in Job Specs + its own column.
     const names = subitemCalls.map((c) => (c[1] as { itemName: string }).itemName)
-    expect(names[0]).toBe('Logo Front: Basic Tee')
-    expect(names[1]).toBe('Crew Back: Heavy Hood')
-    expect(names[2]).toBe('No decoration: Cap')
+    expect(names[0]).toBe('Basic Tee')
+    expect(names[1]).toBe('Heavy Hood')
+    expect(names[2]).toBe('Cap')
+  })
+
+  it('subitem name is the product name only (no decoration prefix)', async () => {
+    mockedCall
+      .mockResolvedValueOnce({ create_item: { id: '900', name: 'Acme Co' } }) // parent
+      .mockResolvedValue({ create_subitem: { id: 'sub-1' } }) // subitems
+    await pushOrderDeal(fixture)
+
+    // First create_subitem call (calls[1]) — assert the item_name variable.
+    const subitemVars = mockedCall.mock.calls[1][1] as { itemName: string }
+    expect(subitemVars).toMatchObject({ itemName: 'Basic Tee' })
+    expect(subitemVars.itemName).not.toContain(':')
   })
 
   it('maps product colour, size, and quantity to Production subitem columns', async () => {
