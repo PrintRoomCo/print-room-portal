@@ -1423,7 +1423,7 @@ git -C /Users/jamierogangeorge/Documents/print-room-staff-portal commit -m "feat
 
 These gate the 26 July launch but aren't code tasks:
 
-1. **Chase Chris's MTF location CSV today** — single point of failure under the no-fallback posture. It seeds the "MTF Branches" dataset (Task 6 UI).
+1. **MTF branch list — SOURCED 2026-07-23 (no longer a blocker).** Extracted from the live wholesale site's product-options dropdown (an app-injected JS `mw_product_option` select — invisible to `products.json`): 59 values = 58 branches + `MTF Generic Logo`, cleaned (collapsed double-spacing, trimmed, macrons preserved) to `print-room-staff-portal/data/mtf-catalogue/mtf-branches.csv`. This IS the "MTF Branches" dataset seed for Task 6. Chris now only **confirms scope/naming** (is `MTF Generic Logo` a valid pick? any branches added/removed? exact garment-facing spelling), rather than being the source of truth.
 2. **Confirm "location-as-column" with Chris** (vs literally in the Monday item name) — blocks Task 11 Step 1.
 3. **Create the two Monday subitem columns** (Location, Decoration) via the Monday MCP once (2) is confirmed — feeds Task 11 Step 2.
 4. **MTF onboarding** — org + ~60 stores + staff via the existing `bulk-members` importer (separate from this build).

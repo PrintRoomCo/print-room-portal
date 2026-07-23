@@ -70,7 +70,11 @@
 
 ### Critical-path dependencies & risks (not builds — chase in parallel)
 
-- **Chris's MTF location CSV** = single point of failure under no-fallback. **Get it today.**
+- **MTF location list = SOURCED 2026-07-23** (was the single point of failure). Extracted from the
+  live wholesale product-options dropdown (JS-injected `mw_product_option` select, invisible to
+  `products.json`): 58 branches + `MTF Generic Logo` = 59 values, cleaned →
+  `print-room-staff-portal/data/mtf-catalogue/mtf-branches.csv`. Chris now only confirms
+  scope/naming — no longer a blocker.
 - **MTF onboarding** (org + 60 stores + staff via the existing bulk-members import) — parallel ops
   track for go-live, separate from this build.
 - **New Monday "Location" column** — creatable via the Monday MCP when ready.
