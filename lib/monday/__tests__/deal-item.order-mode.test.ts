@@ -33,6 +33,7 @@ const fixture: OrderDealData = {
       sizeLabel: 'M',
       designName: 'Logo Front',
       location: 'MTF Avalon',
+      customName: 'Chris',
       quantity: 10,
     },
     {
@@ -43,6 +44,7 @@ const fixture: OrderDealData = {
       sizeLabel: 'L',
       designName: 'Crew Back',
       location: null,
+      customName: null,
       quantity: 5,
     },
     {
@@ -53,6 +55,7 @@ const fixture: OrderDealData = {
       sizeLabel: 'OS',
       designName: 'No decoration',
       location: null,
+      customName: null,
       quantity: 20,
     },
   ],
@@ -186,6 +189,19 @@ describe('pushOrderDeal — subitem per line', () => {
     expect(cv[PRODUCTION_SUBITEM_COLUMNS.decoration]).toBe('Logo Front')
   })
 
+  it('writes the Custom Name column when present, omits it when blank', async () => {
+    mockedCall
+      .mockResolvedValueOnce({ create_item: { id: '900', name: 'Acme Co' } })
+      .mockResolvedValue({ create_subitem: { id: 'sub-1' } })
+    await pushOrderDeal(fixture) // line 1: customName 'Chris'; lines 2/3: null
+
+    const cv1 = JSON.parse((mockedCall.mock.calls[1][1] as { columnValues: string }).columnValues)
+    expect(cv1[PRODUCTION_SUBITEM_COLUMNS.customName]).toBe('Chris')
+
+    const cv2 = JSON.parse((mockedCall.mock.calls[2][1] as { columnValues: string }).columnValues)
+    expect(PRODUCTION_SUBITEM_COLUMNS.customName in cv2).toBe(false)
+  })
+
   it('maps product colour, size, and quantity to Production subitem columns', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
@@ -247,6 +263,7 @@ describe('pushOrderDeal — size label normalization', () => {
         sizeLabel: c.sizeLabel,
         designName: 'D',
         location: null,
+        customName: null,
         quantity: i + 1,
       })),
     })
@@ -280,6 +297,7 @@ describe('pushOrderDeal — size label normalization', () => {
           sizeLabel: '7XL',
           designName: 'D',
           location: null,
+          customName: null,
           quantity: 3,
         },
       ],

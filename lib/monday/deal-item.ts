@@ -402,6 +402,8 @@ export interface OrderLineForMonday {
   designName: string
   /** Feature 1 — chosen PDP location label for this line; null when none. */
   location: string | null
+  /** Feature 2 — optional custom name for this line; null when none. */
+  customName: string | null
   quantity: number
 }
 
@@ -602,6 +604,10 @@ function buildOrderSubitemColumnValues(
   // Feature 1 — the chosen PDP location label, its own subitem column.
   if (line.location?.trim()) {
     columnValues[PRODUCTION_SUBITEM_COLUMNS.location] = line.location.trim()
+  }
+  // Feature 2 — the optional custom name, its own subitem column.
+  if (line.customName?.trim()) {
+    columnValues[PRODUCTION_SUBITEM_COLUMNS.customName] = line.customName.trim()
   }
   // Decoration name, elevated to its own column off the subitem title
   // (2026-07-22 title fix). Skip the "No decoration" sentinel.
