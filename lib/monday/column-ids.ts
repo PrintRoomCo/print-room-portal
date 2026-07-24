@@ -76,6 +76,10 @@ export const PRODUCTION_SUBITEM_COLUMNS = {
   // subitem title (2026-07-22 title fix). Text column created 2026-07-22 on
   // the Production subitems board 1992701983.
   decoration: 'text_mm5gddqg',
+  // "Custom Name" — the optional free-text per-line name (feature 2). Text column
+  // created 2026-07-24 on the Production subitems board 1992701983. Its own column,
+  // like Location; the subitem title stays product-name.
+  customName: 'text_mm5jva5x',
   brand: 'color_mkrjvgbj',
   stockStatus: 'color_mks0tbch',
   formulaTotal: 'formula_mkqjvyvb',
