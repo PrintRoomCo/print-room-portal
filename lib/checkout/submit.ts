@@ -101,6 +101,8 @@ export interface CheckoutLineInput {
   claimed_billing_mode?: BillingMode | null
   /** Feature 1 — chosen PDP location dropdown label; snapshotted to quote_items. */
   location_label?: string | null
+  /** Feature 2 — optional PDP custom name; snapshotted to quote_items.line_custom_name. */
+  custom_name?: string | null
 }
 
 export interface CheckoutInput {
@@ -378,12 +380,13 @@ function makeLineKey(productId: string, variantId: string | null, sizeId: number
  * feature-1 frozen label snapshot (Task 2 column).
  */
 export function buildLineSnapshotUpdate(
-  inLine: Pick<CheckoutLineInput, 'ship_to_store_id' | 'location_label'>,
+  inLine: Pick<CheckoutLineInput, 'ship_to_store_id' | 'location_label' | 'custom_name'>,
   validatedDecorations: CheckoutLineDecorationInput[],
 ): Record<string, unknown> {
   const update: Record<string, unknown> = {}
   if (inLine.ship_to_store_id !== undefined) update.ship_to_store_id = inLine.ship_to_store_id ?? null
   if (inLine.location_label !== undefined) update.line_location_label = inLine.location_label ?? null
+  if (inLine.custom_name !== undefined) update.line_custom_name = inLine.custom_name ?? null
   update.decorations = validatedDecorations
   return update
 }

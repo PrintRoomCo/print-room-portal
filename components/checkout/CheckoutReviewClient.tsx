@@ -172,6 +172,8 @@ export function CheckoutReviewClient({
             // Feature 1 — carry the chosen PDP location label so the server can
             // snapshot it onto quote_items.line_location_label.
             location_label: line.locationLabel ?? null,
+            // Feature 2 — snapshot the optional custom name onto quote_items.line_custom_name.
+            custom_name: line.customName ?? null,
             cart_line_id: line.lineId,
             decorations: line.decorations,
             claimed_unit_price: line.unitPrice,

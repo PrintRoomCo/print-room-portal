@@ -15,6 +15,7 @@ import {
 } from '@/lib/checkout/submit'
 import { cacheTags } from '@/lib/cache/tags'
 import { partitionCheckoutLines, type CheckoutOrderType } from '@/lib/checkout/partition'
+import { sanitiseCustomName } from '@/lib/cart/custom-name'
 
 interface CheckoutRequestBody {
   idempotency_key?: string
@@ -95,6 +96,25 @@ export async function POST(request: Request) {
         { error: 'location_label must be a string or null' },
         { status: 400 },
       )
+    }
+
+    // Feature 2 — custom_name shape guard + server-side sanitise (defence). The
+    // PDP maxLength + client sanitiser is the primary cap; the route cannot know
+    // the per-product cap (it does not batch-load catalogue items), so it clamps
+    // to the 30-char ceiling only. Mutate in place so both part.lines and
+    // pricing_pool_lines carry the sanitised value.
+    if (
+      l.custom_name !== undefined &&
+      l.custom_name !== null &&
+      typeof l.custom_name !== 'string'
+    ) {
+      return NextResponse.json(
+        { error: 'custom_name must be a string or null' },
+        { status: 400 },
+      )
+    }
+    if (typeof l.custom_name === 'string') {
+      l.custom_name = sanitiseCustomName(l.custom_name, null)
     }
   }
 
