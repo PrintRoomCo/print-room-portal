@@ -16,10 +16,13 @@ export type PdpCatalogueItem = {
   /** Feature 1 — assigned org location dataset (nullable). NULL = no PDP location
    *  dropdown for this product. Drives the required dropdown when set. */
   line_dataset_id: string | null
+  /** Feature 2 — per-product custom-name cap (nullable). NULL = no PDP custom-name
+   *  input for this product. A positive int enables it and caps the input length. */
+  custom_name_max_length: number | null
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, custom_name_max_length, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string

@@ -16,6 +16,7 @@ import {
   resolveDecorationsForPricing,
 } from '@/lib/shop/decoration-filter'
 import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
+import { sanitiseCustomName } from '@/lib/cart/custom-name'
 import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
@@ -167,6 +168,8 @@ interface Props {
   volumeDisplayHiddenBands?: number[]
   /** Feature 1 — org location dropdown options. Empty = no location dropdown. */
   locationOptions?: LocationOption[]
+  /** Feature 2 — per-product custom-name cap. null/absent = no custom-name input. */
+  customNameMaxLength?: number | null
 }
 
 export function ProductDetailClient({
@@ -188,6 +191,7 @@ export function ProductDetailClient({
   initialColorSwatchId = null,
   volumeDisplayHiddenBands = [],
   locationOptions = [],
+  customNameMaxLength = null,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -215,6 +219,13 @@ export function ProductDetailClient({
   const [locationValueId, setLocationValueId] = useState<string | null>(null)
   const selectedLocationLabel =
     locationOptions.find((o) => o.value === locationValueId)?.label ?? null
+  // Feature 2 — optional free-text custom name. No gate (unlike location): a
+  // blank input just means "no name" and the line merges normally. The sanitised
+  // value rides every cart line added (via lineSignature) onto the order + Monday.
+  const allowsCustomName =
+    typeof customNameMaxLength === 'number' && customNameMaxLength > 0
+  const [customNameInput, setCustomNameInput] = useState('')
+  const sanitisedCustomName = sanitiseCustomName(customNameInput, customNameMaxLength)
   // Qty per variant_id. Survives colour-switches so the user can build a
   // multi-variant order (e.g. 50 of Black M + 30 of White L) in a single PDP
   // session without losing entries when they flip swatches. Cross-colour
@@ -972,6 +983,7 @@ export function ProductDetailClient({
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
             locationLabel: selectedLocationLabel,
+            customName: sanitisedCustomName,
             billingMode: billingModeForVariant(variant.variant_id),
             nature: product.fulfilment_type,
             manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1024,6 +1036,7 @@ export function ProductDetailClient({
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
           locationLabel: selectedLocationLabel,
+          customName: sanitisedCustomName,
           billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
           nature: product.fulfilment_type,
           manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1071,6 +1084,7 @@ export function ProductDetailClient({
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       locationLabel: selectedLocationLabel,
+      customName: sanitisedCustomName,
       billingMode: billingModeForVariant(selectedVariant?.variant_id ?? null),
       nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
@@ -1608,6 +1622,29 @@ export function ProductDetailClient({
                     Choose a location to add this item to your cart.
                   </p>
                 )}
+              </div>
+            )}
+
+            {allowsCustomName && (
+              <div className="mt-4">
+                <label
+                  htmlFor="pdp-custom-name"
+                  className="mb-1 block text-sm font-medium text-gray-900"
+                >
+                  Custom name <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <input
+                  id="pdp-custom-name"
+                  type="text"
+                  maxLength={customNameMaxLength ?? undefined}
+                  value={customNameInput}
+                  onChange={(e) => setCustomNameInput(e.target.value)}
+                  placeholder="e.g. a name to print"
+                  className="w-full rounded-2xl border border-black/15 px-4 py-2.5 text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Up to {customNameMaxLength} characters. Leave blank for no name.
+                </p>
               </div>
             )}
 

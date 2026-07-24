@@ -549,6 +549,8 @@ const loadProductDetailPageData = cache(async (
       volumeDisplayHiddenBands: catItem.volume_display_hidden_bands ?? [],
       // Feature 1 — org location dropdown options. Empty = no location dropdown.
       locationOptions,
+      // Feature 2 — per-product custom-name cap. null = no custom-name input.
+      customNameMaxLength: catItem.custom_name_max_length ?? null,
     },
   }
 })
