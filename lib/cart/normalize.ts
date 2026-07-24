@@ -106,6 +106,12 @@ export function normalizePersisted(raw: unknown): CartState {
         typeof l.locationLabel === 'string' || l.locationLabel === null
           ? (l.locationLabel ?? null)
           : null,
+      // Feature 2 — the chosen custom name must survive the localStorage
+      // round-trip or two differently-named lines silently re-merge on reload.
+      customName:
+        typeof l.customName === 'string' || l.customName === null
+          ? (l.customName ?? null)
+          : null,
       decorations: normalizeDecorations(l.decorations),
       fulfilmentType: normalizeFulfilmentType(l.fulfilmentType),
       // F1 — nature must survive the round-trip or the mixed-cart order-type

@@ -172,6 +172,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           line.catalogueItemId ?? null,
           line.sizeId ?? null,
           line.locationLabel ?? null,
+          line.customName ?? null,
         )
         const existing = s.lines.find(
           (l) =>
@@ -184,6 +185,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               l.catalogueItemId ?? null,
               l.sizeId ?? null,
               l.locationLabel ?? null,
+              l.customName ?? null,
             ) ===
             incomingSig,
         )

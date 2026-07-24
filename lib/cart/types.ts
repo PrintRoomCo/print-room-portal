@@ -59,6 +59,13 @@ export interface CartLine {
    */
   locationLabel?: string | null
   /**
+   * Feature 2 — the optional free-text "custom name" typed on the PDP (e.g. a
+   * player/staff name). Splits the cart line (into lineSignature) but not the
+   * pricing pool (kept out of the aggregation key, like locationLabel/sizeId).
+   * Null/absent = no name (merges). Absent on legacy persisted lines.
+   */
+  customName?: string | null
+  /**
    * Decorations selected on this line at add-time. Empty array = no decoration.
    * The customer multi-picks decorations on the PDP swatch picker; each entry
    * is an immutable snapshot of the decoration as resolved when the line was
@@ -201,8 +208,9 @@ export function lineSignature(
   catalogueItemId: string | null = null,
   sizeId: number | null = null,
   locationLabel: string | null = null,
+  customName: string | null = null,
 ): string {
-  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}`
+  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}::${customName ?? ''}`
 }
 
 /**

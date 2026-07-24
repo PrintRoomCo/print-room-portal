@@ -108,6 +108,58 @@ describe('lineSignature includes location label', () => {
   })
 })
 
+describe('lineSignature includes custom name', () => {
+  const noDeco: CartLineDecoration[] = []
+
+  it('different custom names keep lines distinct', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon', 'Chris')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon', 'George')
+    expect(a).not.toBe(b)
+  })
+
+  it('same custom name merges (identical signature)', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon', 'Chris')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon', 'Chris')
+    expect(a).toBe(b)
+  })
+
+  it('custom name is case-sensitive in the signature', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, null, 'Chris')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, null, 'CHRIS')
+    expect(a).not.toBe(b)
+  })
+
+  it('omitting custom name reproduces the no-name signature (legacy parity)', () => {
+    const a = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon')
+    const b = lineSignature('p1', 'v1', 'Black / L', noDeco, 'stocked', null, 10, 'MTF Avalon', null)
+    expect(a).toBe(b)
+  })
+
+  it('lines differing only by custom name still pool for tier pricing', () => {
+    // Two same-product lines, different names, combined qty 20 → both priced at
+    // the 20-qty bracket (custom name must not fragment the pricing pool).
+    const bracket: CartLineBracket[] = [
+      { minQty: 1, maxQty: 9, unitPrice: 10 },
+      { minQty: 10, maxQty: null, unitPrice: 6 },
+    ]
+    const mk = (customName: string): CartLine => ({
+      lineId: `l-${customName}`,
+      productId: 'p1',
+      productName: 'Tee',
+      variantId: 'v1',
+      variantLabel: 'Black / L',
+      qty: 10,
+      unitPrice: 10,
+      imageUrl: null,
+      customName,
+      decorations: [],
+      brackets: bracket,
+    })
+    const priced = recomputeProductTierPrices([mk('Chris'), mk('George')])
+    expect(priced.every((l) => l.unitPrice === 6)).toBe(true)
+  })
+})
+
 describe('recomputeProductTierPrices', () => {
   // Canonical garment ladder used by every test below. Maps the price drop
   // pattern from the live engine: small qty = high amortization, qty 1000+ = cheap.
