@@ -263,6 +263,7 @@ describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', 
       customerEmail: 'buyer@acme.test',
       customerName: 'Acme Co',
       requiredBy: '2026-06-01',
+      orderType: 'purchase_order',
       shippingAddress: {},
     })
 

@@ -10,6 +10,7 @@ import { PortalTopBar } from './PortalTopBar'
 import { PortalTopBarProvider } from './PortalTopBarContext'
 import { CartDrawer } from '@/components/cart/CartDrawer'
 import { CartAddedToasts } from '@/components/cart/CartAddedToasts'
+import { QtyCapWarningToasts } from '@/components/cart/QtyCapWarningToasts'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -51,6 +52,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       <PortalTopBar />
       <CartDrawer />
       <CartAddedToasts />
+      <QtyCapWarningToasts />
       <Sidebar customer={access}>
         {children}
         <RoleChangeNotice />

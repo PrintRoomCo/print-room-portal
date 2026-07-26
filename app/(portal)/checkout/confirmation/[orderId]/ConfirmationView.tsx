@@ -50,6 +50,8 @@ interface ConfirmationViewProps {
   awaitingApproval: boolean
   mondaySynced: boolean
   isInventoryOrder: boolean
+  /** Feature #7 — stock-on-hand orders aren't tracked; hide the tracker CTA. */
+  isStockOnHandOrder?: boolean
   customerEmail: string
   shippingAddress: ConfirmationAddress | null
   fulfilmentLabel: string
@@ -374,12 +376,14 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             </div>
 
             <div className="mt-7 space-y-3">
-              <Link
-                href="/order-tracker"
-                className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
-              >
-                Track this order
-              </Link>
+              {!props.isStockOnHandOrder && (
+                <Link
+                  href="/order-tracker"
+                  className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+                >
+                  Track this order
+                </Link>
+              )}
               <Link
                 href="/catalogue"
                 className="flex w-full items-center justify-center rounded-full bg-gray-50 px-6 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2"

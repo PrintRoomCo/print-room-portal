@@ -35,6 +35,8 @@ export interface CreateJobTrackerShellArgs {
   customerEmail: string | null
   customerName: string | null
   requiredBy: string | null
+  /** Feature #7 — denormalised order classification for tracker visibility. */
+  orderType: 'stock_on_hand' | 'purchase_order'
   shippingAddress?: Record<string, unknown> | null
 }
 
@@ -250,6 +252,7 @@ export async function createJobTrackerShellForOrder(
     product_images: productImages,
     quote_data: quoteData,
     quote_data_source: 'submit-quote',
+    order_type: args.orderType,
     platform: 'b2b-portal',
     last_synced_at: nowIso,
   }

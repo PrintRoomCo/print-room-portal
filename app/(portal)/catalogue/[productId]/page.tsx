@@ -7,6 +7,7 @@ import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
 import { resolveCatalogueItemForPdp } from '@/lib/shop/resolve-catalogue-item'
 import { resolveStockPurchasePrices } from '@/lib/shop/stock-purchase-price'
+import { getEffectiveMaxQty } from '@/lib/shop/effective-max-qty'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { cleanDescription } from '@/lib/shop/clean-description'
@@ -30,6 +31,7 @@ interface ProductDetail {
   description: string | null
   image_url: string | null
   moq: number | null
+  max_order_qty: number | null
   lead_time_days: number | null
   sizing_type: string | null
   decoration_methods: string[] | null
@@ -98,7 +100,7 @@ const loadProductDetailPageData = cache(async (
 
   if (!catItem) return { status: 'not-found' }
 
-  const productSelect = 'id, name, description, image_url, moq, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
+  const productSelect = 'id, name, description, image_url, moq, max_order_qty, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
 
   const productQuery = admin
     .from('products')
@@ -443,6 +445,7 @@ const loadProductDetailPageData = cache(async (
     description: string | null
     sku_override: string | null
     moq_override: number | null
+    max_order_qty_override: number | null
     fulfilment_type_override: FulfilmentType | null
   } | null
   // Views staff hid from the customer PDP (b2b_catalogue_item_hidden_views),
@@ -474,6 +477,13 @@ const loadProductDetailPageData = cache(async (
     { moq: productRow.moq },
     catItemForked ? { moq_override: catItemForked.moq_override } : null,
     { orgMoqExempt: context.moqExempt },
+  )
+
+  // Feature #9 — soft per-order cap. Warn-only: threaded to the client for the
+  // add-time toast; never gates add-to-cart.
+  const effectiveMaxQty = getEffectiveMaxQty(
+    { max_order_qty: productRow.max_order_qty },
+    catItemForked ? { max_order_qty_override: catItemForked.max_order_qty_override } : null,
   )
 
   // Feature 1 — resolve the assigned org location dataset's values into PDP
@@ -543,6 +553,7 @@ const loadProductDetailPageData = cache(async (
       colourOptions,
       decorations,
       effectiveMoq,
+      effectiveMaxQty,
       preOrderClosed,
       // Display-only: hide these bands from the Volume-pricing widget
       // (cart/checkout brackets are untouched, so price & MOQ unchanged).

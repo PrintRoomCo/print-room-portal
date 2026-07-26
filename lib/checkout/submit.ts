@@ -1520,6 +1520,7 @@ export async function submitCustomerOrder(
       customerEmail: input.context.email ?? null,
       customerName: input.context.organizationName,
       requiredBy: input.required_by ?? null,
+      orderType,
       shippingAddress,
     })
     await recordAuditEvent(
@@ -1958,12 +1959,13 @@ export async function submitCustomerOrder(
         actorUserId: input.context.userId,
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
+        isStockOnHand: isStockOnHandOrder,
         customerEmail: input.context.email ?? null,
         shippingAddress,
-        // orderType intentionally NOT passed: Spec A orders.order_type is a
-        // stock/production axis ('stock_on_hand'|'purchase_order'), NOT a
-        // delivery/pickup discriminator — passing it would skip every order via
-        // the eligibility's non_delivery_type gate. `intent` is the real signal.
+        // orderType (delivery/pickup discriminator) intentionally NOT passed —
+        // the portal has no pickup concept. Starshipit dispatch is gated on the
+        // Spec A stock/production axis via isStockOnHand: a purchase-order (any
+        // made-to-order line) skips with reason 'not_stock_on_hand'.
       })
       if (ssResult.status === 'skipped') {
         await recordAuditEvent(

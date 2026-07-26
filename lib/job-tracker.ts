@@ -183,6 +183,8 @@ export interface JobTracker {
   job_reference: string | null
   monday_item_id: string | null
   quote_id: string | null
+  /** Feature #7 — denormalised copy of orders.order_type. NULL = legacy row. */
+  order_type?: 'stock_on_hand' | 'purchase_order' | null
   monday_project_name: string | null
   quote_number: string | null
   customer_email: string | null

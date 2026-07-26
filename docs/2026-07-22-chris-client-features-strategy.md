@@ -87,6 +87,31 @@
 
 ---
 
+## ✅ Phase 0 decisions locked — remaining-features program, 2026-07-25
+
+> Batch decision pass with Jon (AskUserQuestion, one pass). These are his calls, not
+> recommendations. Build order: 6 → 9 → 7 → 8 → 5 → 11 → verify 4/10.
+
+- **#6 tooltip:** **checkout + cart drawer** — thread `pickingFee` into the drawer's
+  `computeOrderBreakdown()` call as well; tooltip reads `PICKING_FEE_BANDS` directly.
+- **#9 qty cap:** **product + org override** — `products` max-qty column + `b2b_catalogue_items`
+  override, resolving exactly like `moq`/`moq_override`. **Warn-only** confirmed (dismissible
+  dialog PDP + cart aggregate; checkout never blocked; no server enforcement).
+- **#7 tracker hide:** **order-type gate for EVERYONE incl. org_admins** — stock_on_hand
+  trackers hidden at every customer-side entry point; staff fulfilment untouched.
+- **#8 Starshipit:** account consolidation onto "Print Room Dispatch" **settled**; eligibility =
+  **stock_on_hand only** (purchase_order stays manual). Build rule + tests now; env vars +
+  `STARSHIPIT_ENABLED` flip = Jon, HITL.
+- **#5 low-stock alerts:** recipients = **all org_admins** (fix the first-admin-only bug);
+  trigger = **event-driven** — alert the moment a stock write crosses
+  `stock_qty − committed_qty ≤ reorder_point`, re-arm only after recovery above threshold.
+  No cron.
+- **#11 proof image:** push to the **`proofPdf` column (`file_mkqjp7kh`)** on the production
+  board (file column → asset upload, not URL); **one proof per product** (exclusive flag).
+- **#4/#10:** **verify at program end** — evidence + drafted Chris questions after #11.
+
+---
+
 ## TL;DR — reframe from "12 builds" to five buckets
 
 The single most important finding: **most of these are not net-new builds.** Several are already

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+import { getEffectiveMaxQty } from '@/lib/shop/effective-max-qty'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { availabilityKey, type VariantAvailability } from '@/lib/shop/variant-availability'
@@ -29,7 +30,7 @@ export async function GET(
 
   const productPromise = admin
     .from('products')
-    .select('moq')
+    .select('moq, max_order_qty')
     .eq('id', productId)
     .maybeSingle()
 
@@ -39,30 +40,40 @@ export async function GET(
     grantedItemIdsPromise,
   ])
 
-  let effectiveMoq = getEffectiveMoq(
-    productRow as { moq: number | null } | null ?? { moq: null },
+  const productForCaps =
+    (productRow as { moq: number | null; max_order_qty?: number | null } | null) ?? {
+      moq: null,
+    }
+  let effectiveMoq = getEffectiveMoq(productForCaps, null, { orgMoqExempt: context.moqExempt })
+  let effectiveMaxQty = getEffectiveMaxQty(
+    { max_order_qty: productForCaps.max_order_qty ?? null },
     null,
-    { orgMoqExempt: context.moqExempt },
   )
   if (grantedItemIds.length > 0) {
     const { data: catItem } = await admin
       .from('b2b_catalogue_items')
-      .select('moq_override')
+      .select('moq_override, max_order_qty_override')
       .eq('source_product_id', productId)
       .eq('is_active', true)
       .in('id', grantedItemIds)
       .limit(1)
       .maybeSingle()
-    effectiveMoq = getEffectiveMoq(
-      productRow as { moq: number | null } | null ?? { moq: null },
-      catItem as { moq_override: number | null } | null,
-      { orgMoqExempt: context.moqExempt },
+    const catItemForCaps = catItem as {
+      moq_override: number | null
+      max_order_qty_override: number | null
+    } | null
+    effectiveMoq = getEffectiveMoq(productForCaps, catItemForCaps, {
+      orgMoqExempt: context.moqExempt,
+    })
+    effectiveMaxQty = getEffectiveMaxQty(
+      { max_order_qty: productForCaps.max_order_qty ?? null },
+      catItemForCaps,
     )
   }
 
   const variantIds = (variants ?? []).map((v) => v.id)
   if (!variantIds.length) {
-    return NextResponse.json({ availability: {}, effectiveMoq })
+    return NextResponse.json({ availability: {}, effectiveMoq, effectiveMaxQty })
   }
 
   const { data: rows } = await admin
@@ -80,5 +91,5 @@ export async function GET(
       allow_order_without_stock: r.allow_order_without_stock === true,
     }
   }
-  return NextResponse.json({ availability, effectiveMoq })
+  return NextResponse.json({ availability, effectiveMoq, effectiveMaxQty })
 }

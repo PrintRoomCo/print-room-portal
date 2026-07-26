@@ -4,7 +4,9 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
+import { estimateCartPickingFee, stockedGoodsValue } from '@/lib/pricing/order-picking-fee'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import { PickingFeeInfo } from '@/components/pricing/PickingFeeInfo'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCompany } from '@/contexts/CompanyContext'
@@ -47,9 +49,11 @@ export function CartDrawer() {
           decorationPerUnit: decorationPerUnit(line),
         })),
         gstRate: 0.15,
+        pickingFee: estimateCartPickingFee(cart.lines),
       }),
     [cart.lines],
   )
+  const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
   const canCheckout = cart.lines.length > 0 && !oversell && !moqShort
 
   function proceedToCheckout() {
@@ -100,6 +104,17 @@ export function CartDrawer() {
                   .filter((v): v is string => Boolean(v))}
                 compact
               />
+              {breakdown.pickingFee > 0 && (
+                <div className="mb-1 flex items-baseline justify-between">
+                  <span className="flex items-center gap-1.5 text-sm text-gray-500">
+                    Picking fee
+                    <PickingFeeInfo goodsBasis={stockedGoods} format={format} direction="up" />
+                  </span>
+                  <span className="text-sm tabular-nums text-gray-700">
+                    {format(breakdown.pickingFee)}
+                  </span>
+                </div>
+              )}
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-sm text-gray-500">Total</span>
                 <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">

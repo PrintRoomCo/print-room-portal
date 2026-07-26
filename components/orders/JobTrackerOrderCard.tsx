@@ -22,8 +22,8 @@ interface JobTrackerOrderCardProps {
   /** Open expanded on first render (used by the single-order detail page). */
   defaultExpanded?: boolean
   /**
-   * Hide the now-self-referential "Track Project" / "View Full Project Tracker"
-   * links. Set on the detail page, which IS the full tracker.
+   * Hide the now-self-referential "View status" links. Set on the detail
+   * page, which IS the full status view.
    */
   hideTrackerLink?: boolean
 }
@@ -99,7 +99,7 @@ export function JobTrackerOrderCard({
                       onClick={(e) => e.stopPropagation()}
                       className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >
-                      Track Project
+                      View status
                     </Link>
                   )}
                 </div>
@@ -271,7 +271,7 @@ export function JobTrackerOrderCard({
                 href={trackerUrl}
                 className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 transition-colors hover:bg-gray-200"
               >
-                View Full Project Tracker
+                View status
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>

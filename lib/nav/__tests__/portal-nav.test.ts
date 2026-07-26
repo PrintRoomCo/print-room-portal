@@ -42,11 +42,11 @@ describe('getNavigationItems — Inventory gating', () => {
   })
 })
 
-describe('getNavigationItems — Track my Project gating (Item 5)', () => {
-  it('shows Track my Project to an org_admin', () => {
+describe('getNavigationItems — Current orders gating (Item 5)', () => {
+  it('shows Current orders to an org_admin', () => {
     expect(hrefs(access({ isOrgAdmin: true }))).toContain('/tracking')
   })
-  it('hides Track my Project from a non-admin (staff)', () => {
+  it('hides Current orders from a non-admin (staff)', () => {
     expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/tracking')
   })
 })

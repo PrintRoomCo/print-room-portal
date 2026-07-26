@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCart } from '@/components/cart/useCart'
+import {
+  QTY_CAP_WARNING_EVENT,
+  qtyCapWarningFor,
+  type QtyCapWarningDetail,
+} from '@/lib/shop/qty-cap'
 import { AvailabilityBadge } from './AvailabilityBadge'
 import { showsPrepaidStockBadge } from '@/lib/shop/prepaid-tag'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
@@ -149,6 +154,13 @@ interface Props {
    */
   effectiveMoq: number
   /**
+   * Feature #9 — soft per-order cap:
+   * `b2b_catalogue_items.max_order_qty_override ?? products.max_order_qty ?? null`.
+   * WARN-ONLY: fires a dismissible toast when an add pushes the product's cart
+   * total past the cap. Never gates add-to-cart or checkout.
+   */
+  effectiveMaxQty?: number | null
+  /**
    * Pre-order: item is pre_order fulfilment type but there is no currently open
    * ordering period for this org. When true, the add-to-cart button is disabled
    * with a "Ordering opens with the next window" message.
@@ -187,6 +199,7 @@ export function ProductDetailClient({
   colourOptions = [],
   decorations,
   effectiveMoq,
+  effectiveMaxQty = null,
   preOrderClosed = false,
   initialColorSwatchId = null,
   volumeDisplayHiddenBands = [],
@@ -853,6 +866,23 @@ export function ProductDetailClient({
     // one_size: the lone product size carried onto the order line.
     const oneSizeSizeLabel = sizes.find((s) => s.size_id === sizeId)?.size_label ?? null
 
+    // Feature #9 (warn-only): existing cart qty for this product, captured
+    // BEFORE the adds so one add action fires at most one toast. Must never
+    // block the add — the cap is advisory.
+    const qtyInCartBeforeAdd = (cart.lines ?? [])
+      .filter((l) => l.productId === product.id)
+      .reduce((sum, l) => sum + l.qty, 0)
+    const warnIfOverCap = (addedQty: number) => {
+      if (addedQty <= 0) return
+      const warning = qtyCapWarningFor(qtyInCartBeforeAdd, addedQty, effectiveMaxQty)
+      if (!warning) return
+      window.dispatchEvent(
+        new CustomEvent<QtyCapWarningDetail>(QTY_CAP_WARNING_EVENT, {
+          detail: { productName: product.name, ...warning },
+        }),
+      )
+    }
+
     // Build a per-decoration qty-band ladder from `decorationPricesByQty` so
     // the cart can re-tier deco price on qty edit (same shape as the garment
     // brackets snapshot). Two-pass collapse: drop runs where the price
@@ -1010,6 +1040,7 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantQuantities({})
+        warnIfOverCap(added)
       }
       return
     }
@@ -1046,6 +1077,7 @@ export function ProductDetailClient({
       }
       if (added > 0) {
         setVariantlessQtyBySize({})
+        warnIfOverCap(added)
       }
       return
     }
@@ -1090,6 +1122,7 @@ export function ProductDetailClient({
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
     })
+    warnIfOverCap(qty)
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'

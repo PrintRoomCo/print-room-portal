@@ -4,7 +4,7 @@ import { OrderTrackerClient } from './OrderTrackerClient'
 import { getPortalOrderTrackerData, getPortalCompanyAccess } from '@/lib/portal-data'
 
 export const metadata: Metadata = {
-  title: 'Track my Project',
+  title: 'Current orders',
 }
 
 export default async function OrderTrackerPage() {

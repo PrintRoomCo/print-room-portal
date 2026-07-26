@@ -30,6 +30,8 @@ interface CartTableProps {
 
 type AvailabilityMap = Record<string, number | undefined>
 type MoqMap = Record<string, number | undefined>
+// Soft per-order cap per productId — advisory only, never gates checkout.
+type MaxQtyMap = Record<string, number | undefined>
 
 export function CartTable({
   lines,
@@ -43,6 +45,7 @@ export function CartTable({
   const { format } = useCurrency()
   const [availability, setAvailability] = useState<AvailabilityMap>({})
   const [moqByProduct, setMoqByProduct] = useState<MoqMap>({})
+  const [maxQtyByProduct, setMaxQtyByProduct] = useState<MaxQtyMap>({})
   const [loading, setLoading] = useState(false)
   const frontImageByLineId = useCartLineFrontImages(lines)
 
@@ -50,6 +53,7 @@ export function CartTable({
     if (lines.length === 0) {
       setAvailability({})
       setMoqByProduct({})
+      setMaxQtyByProduct({})
       onOversellChange?.(false)
       onMoqViolationChange?.(false)
       return
@@ -66,29 +70,43 @@ export function CartTable({
       productIds.map(async (id) => {
         try {
           const res = await fetch(`/api/shop/products/${id}/availability`)
-          const empty = { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
+          const empty = {
+            productId: id,
+            availability: {} as Record<string, number>,
+            effectiveMoq: undefined,
+            effectiveMaxQty: undefined,
+          }
           if (!res.ok) return empty
-          const { availability: a, effectiveMoq } = (await res.json()) as {
+          const { availability: a, effectiveMoq, effectiveMaxQty } = (await res.json()) as {
             availability: Record<string, VariantAvailability>
             effectiveMoq?: number
+            effectiveMaxQty?: number | null
           }
           const collapsed: Record<string, number> = {}
           for (const [k, v] of Object.entries(a ?? {})) collapsed[k] = v.available_qty
-          return { productId: id, availability: collapsed, effectiveMoq }
+          return { productId: id, availability: collapsed, effectiveMoq, effectiveMaxQty }
         } catch {
-          return { productId: id, availability: {} as Record<string, number>, effectiveMoq: undefined }
+          return {
+            productId: id,
+            availability: {} as Record<string, number>,
+            effectiveMoq: undefined,
+            effectiveMaxQty: undefined,
+          }
         }
       })
     ).then((results) => {
       if (cancelled) return
       const mergedAvail: AvailabilityMap = {}
       const mergedMoq: MoqMap = {}
+      const mergedMaxQty: MaxQtyMap = {}
       for (const r of results) {
         for (const k of Object.keys(r.availability)) mergedAvail[k] = r.availability[k]
         if (typeof r.effectiveMoq === 'number') mergedMoq[r.productId] = r.effectiveMoq
+        if (typeof r.effectiveMaxQty === 'number') mergedMaxQty[r.productId] = r.effectiveMaxQty
       }
       setAvailability(mergedAvail)
       setMoqByProduct(mergedMoq)
+      setMaxQtyByProduct(mergedMaxQty)
       setLoading(false)
     })
     return () => {
@@ -146,6 +164,9 @@ export function CartTable({
         const moq = moqByProduct[line.productId]
         const totalForProduct = qtyByProduct.get(line.productId) ?? line.qty
         const isMoqShort = moq !== undefined && moq > 1 && totalForProduct < moq
+        // Soft cap — advisory note only; must never feed the checkout gates.
+        const maxQty = maxQtyByProduct[line.productId]
+        const isOverMax = maxQty !== undefined && totalForProduct > maxQty
         const unitPrice = allInUnitPrice(line)
         const lineTotal = allInLineTotal(line)
         const imageUrl = cartLineDisplayImageUrl(line, {
@@ -223,7 +244,7 @@ export function CartTable({
             )}
 
             {/* Inline status messages */}
-            {(isOversell || isMoqShort) && (
+            {(isOversell || isMoqShort || isOverMax) && (
               <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
                 {isOversell && (
                   <p className="flex items-center gap-2 text-rose-700">
@@ -241,6 +262,12 @@ export function CartTable({
                   <p className="text-rose-700">
                     Below minimum order ({moq} units) — currently {totalForProduct}{' '}
                     across this product.
+                  </p>
+                )}
+                {isOverMax && maxQty !== undefined && (
+                  <p className="text-amber-700">
+                    Over the per-order limit ({maxQty} units) — currently {totalForProduct}{' '}
+                    across this product. You can still check out.
                   </p>
                 )}
               </div>

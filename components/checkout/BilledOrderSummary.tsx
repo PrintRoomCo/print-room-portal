@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { PickingFeeInfo } from '@/components/pricing/PickingFeeInfo'
 import type {
   BilledLine,
   BilledOrderShape,
@@ -151,7 +152,15 @@ function PartitionRows({
         </div>
       )}
       {partition.pickingFee > 0 && (
-        <Row label="Picking fee" value={partition.pickingFee} format={format} />
+        <div className="flex items-baseline justify-between">
+          <span className="flex items-center gap-1.5 text-gray-700">
+            Picking fee
+            <PickingFeeInfo goodsBasis={partition.goodsValueForBand} format={format} />
+          </span>
+          <span className="font-medium tabular-nums text-gray-900">
+            {format(partition.pickingFee)}
+          </span>
+        </div>
       )}
       <Row label={`GST (${Math.round(gstRate * 100)}%)`} value={partition.gst} muted format={format} />
     </>

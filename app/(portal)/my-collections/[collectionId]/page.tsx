@@ -912,7 +912,7 @@ function QuoteDetail({
                     href={trackerUrl}
                     className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
                   >
-                    Open tracker
+                    View status
                   </Link>
                 ) : (
                   <Link

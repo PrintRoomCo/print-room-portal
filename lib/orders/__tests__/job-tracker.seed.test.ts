@@ -61,6 +61,7 @@ describe('createJobTrackerShellForOrder — seed row', () => {
       customerEmail: 'jamie@theprint-room.co.nz',
       customerName: 'Jamie',
       requiredBy: null,
+      orderType: 'purchase_order',
     })
 
     const trackerInsert = inserts.find((i) => i.table === 'job_trackers')

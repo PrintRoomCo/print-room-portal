@@ -22,6 +22,7 @@ interface OrderRow {
   status: string | null
   total_price: number | null
   intent: string | null
+  order_type: string | null
   quotes: {
     id: string
     order_ref: string | null
@@ -116,7 +117,7 @@ export default async function ConfirmationPage({
   const { data } = await admin
     .from('orders')
     .select(
-      `id, status, total_price, intent,
+      `id, status, total_price, intent, order_type,
        quotes!inner (
          id, order_ref, monday_item_id, organization_id,
          subtotal, decoration_cost, tax, picking_fee, billed_total,
@@ -304,6 +305,7 @@ export default async function ConfirmationPage({
           awaitingApproval={awaitingApproval}
           mondaySynced={mondaySynced}
           isInventoryOrder={isInventoryOrder}
+          isStockOnHandOrder={order.order_type === 'stock_on_hand'}
           customerEmail={context.email}
           shippingAddress={shippingAddress}
           fulfilmentLabel={fulfilmentLabel}

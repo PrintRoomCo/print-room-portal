@@ -14,6 +14,8 @@ export interface PushOrderToStarshipitArgs {
   actorUserId: string | null
   intent: 'customer' | 'inventory'
   isTestOrg: boolean
+  /** Spec A stock/production axis — Starshipit dispatches stock orders only. */
+  isStockOnHand: boolean
   customerEmail: string | null
   shippingAddress: Record<string, unknown> | null
   /**
@@ -48,6 +50,7 @@ export async function pushOrderToStarshipit(
     enabled: isStarshipitEnabled(),
     intent: args.intent,
     isTestOrg: args.isTestOrg,
+    isStockOnHand: args.isStockOnHand,
     hasDeliveryAddress,
     orderType: args.orderType ?? null,
   })

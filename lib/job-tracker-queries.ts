@@ -3,6 +3,13 @@ import { resolveProductFrontImages } from '@/lib/product-images'
 import type { JobTracker } from '@/lib/job-tracker'
 import { syncJobTrackerItemsFromMonday } from '@/lib/monday/sync-job-tracker-items'
 
+/** Feature #7 — stock-on-hand orders are hidden from the customer tracker.
+ *  NULL/legacy order_type stays visible (safe default). Applies to ALL roles
+ *  incl. org_admin. */
+export function isCustomerVisibleTracker(t: { order_type?: string | null }): boolean {
+  return t.order_type !== 'stock_on_hand'
+}
+
 const STALE_SYNC_INTERVAL_MS = 60 * 60 * 1000
 const STALE_SYNC_CONCURRENCY = 10
 const STALE_SYNC_PER_CALL_TIMEOUT_MS = 2000
@@ -155,7 +162,7 @@ export async function getJobsForUser(
     }
 
     if (data && data.length > 0) {
-      const trackers = data as JobTracker[]
+      const trackers = (data as JobTracker[]).filter(isCustomerVisibleTracker)
       fireAndForgetItemsSync(trackers)
       return attachProductImages(trackers)
     }
@@ -189,7 +196,7 @@ export async function getJobsForCustomer(
       return []
     }
 
-    const trackers = (data || []) as JobTracker[]
+    const trackers = ((data || []) as JobTracker[]).filter(isCustomerVisibleTracker)
     fireAndForgetItemsSync(trackers)
     return attachProductImages(trackers)
   } catch (error) {
@@ -263,9 +270,11 @@ export async function getJobsForOrganization(
       if (!byId.has(row.id)) byId.set(row.id, row)
     }
 
-    const trackers = Array.from(byId.values()).sort((a, b) =>
-      String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
-    )
+    const trackers = Array.from(byId.values())
+      .filter(isCustomerVisibleTracker)
+      .sort((a, b) =>
+        String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
+      )
 
     fireAndForgetItemsSync(trackers)
     return attachProductImages(trackers)
@@ -343,6 +352,10 @@ export async function getJobTrackerForUserByToken(
 
     const tracker = data as JobTracker | null
     if (!tracker) return null
+
+    // Feature #7 — a stock-on-hand order is never trackable; treat as not-found
+    // (covers milestone-email deep links) BEFORE the authz check.
+    if (!isCustomerVisibleTracker(tracker)) return null
 
     const ownsByUser = tracker.user_id === userId
     const ownsByEmail =

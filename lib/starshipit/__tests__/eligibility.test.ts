@@ -5,6 +5,7 @@ const base: StarshipitEligibilityInput = {
   enabled: true,
   intent: 'customer',
   isTestOrg: false,
+  isStockOnHand: true,
   hasDeliveryAddress: true,
   orderType: null,
 }
@@ -25,6 +26,18 @@ describe('evaluateStarshipitEligibility', () => {
     expect(evaluateStarshipitEligibility({ ...base, intent: 'inventory' }))
       .toEqual({ eligible: false, reason: 'inventory_intent' })
   })
+  it('skips a purchase-order (made-to-order) order — Starshipit is stock-only', () => {
+    expect(evaluateStarshipitEligibility({ ...base, isStockOnHand: false }))
+      .toEqual({ eligible: false, reason: 'not_stock_on_hand' })
+  })
+  it('precedence: inventory_intent beats not_stock_on_hand', () => {
+    expect(evaluateStarshipitEligibility({ ...base, intent: 'inventory', isStockOnHand: false }))
+      .toEqual({ eligible: false, reason: 'inventory_intent' })
+  })
+  it('precedence: not_stock_on_hand beats no_address', () => {
+    expect(evaluateStarshipitEligibility({ ...base, isStockOnHand: false, hasDeliveryAddress: false }))
+      .toEqual({ eligible: false, reason: 'not_stock_on_hand' })
+  })
   it('skips non-delivery order types when a delivery/pickup discriminator is present', () => {
     expect(evaluateStarshipitEligibility({ ...base, orderType: 'pickup' }))
       .toEqual({ eligible: false, reason: 'non_delivery_type' })
@@ -33,9 +46,10 @@ describe('evaluateStarshipitEligibility', () => {
     expect(evaluateStarshipitEligibility({ ...base, hasDeliveryAddress: false }))
       .toEqual({ eligible: false, reason: 'no_address' })
   })
-  it('precedence: disabled > test_org > inventory_intent > non_delivery_type > no_address', () => {
+  it('precedence: disabled > test_org > inventory_intent > not_stock_on_hand > non_delivery_type > no_address', () => {
     expect(evaluateStarshipitEligibility({
-      enabled: true, isTestOrg: true, intent: 'inventory', hasDeliveryAddress: false, orderType: 'pickup',
+      enabled: true, isTestOrg: true, intent: 'inventory', isStockOnHand: false,
+      hasDeliveryAddress: false, orderType: 'pickup',
     })).toEqual({ eligible: false, reason: 'test_org' })
   })
 })

@@ -1,4 +1,6 @@
+import { allInUnitPrice, type CartLine } from '@/lib/cart/types'
 import { pickingFeeForGoods } from './picking-fee'
+import { round2 } from './pricingMath'
 
 /** Accept the common free-text/code forms used by saved and one-time addresses. */
 export function isNewZealandShipTo(country: string | null | undefined): boolean {
@@ -23,4 +25,29 @@ export function orderPickingFee(input: {
 }): number {
   if (!input.isStockOnHand || !isNewZealandShipTo(input.shipCountry)) return 0
   return pickingFeeForGoods(input.goodsSubtotal)
+}
+
+/**
+ * Goods value of the cart's STOCKED lines — the drawer-side picking-fee band
+ * basis. Mirrors order-billing-shape's goodsValueForBand: full all-in value,
+ * per-line rounding then a rounded sum; lines without a fulfilmentType submit
+ * as purchase orders, so they are excluded here too.
+ */
+export function stockedGoodsValue(lines: CartLine[]): number {
+  return round2(
+    lines
+      .filter((line) => line.fulfilmentType === 'stocked')
+      .reduce((total, line) => total + round2(line.qty * allInUnitPrice(line)), 0),
+  )
+}
+
+/**
+ * Drawer-side fee estimate. Assumes an NZ ship-to (the drawer cannot know the
+ * address yet; checkout recomputes with the real one). 0 when the cart has no
+ * stocked goods — the drawer then shows no fee row.
+ */
+export function estimateCartPickingFee(lines: CartLine[]): number {
+  const goods = stockedGoodsValue(lines)
+  if (goods <= 0) return 0
+  return pickingFeeForGoods(goods)
 }

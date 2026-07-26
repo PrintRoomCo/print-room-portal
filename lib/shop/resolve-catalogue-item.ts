@@ -8,6 +8,8 @@ export type PdpCatalogueItem = {
   description: string | null
   sku_override: string | null
   moq_override: number | null
+  /** Feature #9 — soft per-order cap override (nullable). NULL = inherit master. */
+  max_order_qty_override: number | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
   price_mode: 'computed' | 'manual_final' | null
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
@@ -22,7 +24,7 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, custom_name_max_length, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, custom_name_max_length, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string

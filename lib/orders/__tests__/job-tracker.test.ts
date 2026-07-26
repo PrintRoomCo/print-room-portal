@@ -166,6 +166,7 @@ describe('createJobTrackerShellForOrder', () => {
       customerEmail: 'BUYER@acme.test',
       customerName: 'Acme Co',
       requiredBy: '2026-06-01',
+      orderType: 'stock_on_hand',
       shippingAddress: {
         name: 'Sam Buyer',
         address: '12 Queen St',
@@ -196,6 +197,9 @@ describe('createJobTrackerShellForOrder', () => {
     expect(row.company_id).toBe('COMP-XYZ')
     expect(row.quote_data_source).toBe('submit-quote')
     expect(row.estimated_delivery_at).toBe('2026-06-01')
+    expect(row.order_type).toBe('stock_on_hand') // Feature #7 — denormalised
+
+
 
     const productImages = row.product_images as string[]
     expect(productImages).toEqual(['https://x/tee.jpg'])
@@ -257,6 +261,7 @@ describe('createJobTrackerShellForOrder', () => {
       customerEmail: 'buyer@acme.test',
       customerName: 'Acme Co',
       requiredBy: null,
+      orderType: 'purchase_order',
       shippingAddress: null,
     })
 
@@ -292,6 +297,7 @@ describe('createJobTrackerShellForOrder', () => {
         customerEmail: 'buyer@acme.test',
         customerName: 'Acme Co',
         requiredBy: null,
+        orderType: 'purchase_order',
         shippingAddress: null,
       }),
     ).rejects.toThrow(/simulated insert failure/)
