@@ -12,9 +12,21 @@
 export const cacheTags = {
   orderTracker: 'order-tracker',
   accountData: 'account-data',
+  // Per-user B2B access slice (role, tier, stores, tenant, inventory presence).
+  // Cross-request cached in getPortalCompanyAccess so repeat navigations skip
+  // the ~6-query resolution. Backstopped by a short revalidate window; in-portal
+  // mutations that change membership/stores should also revalidate this tag.
+  companyAccess: 'company-access',
+  // NZD exchange rate table — changes at most daily; safe to cache for an hour.
+  exchangeRates: 'exchange-rates',
 } as const
 
 export const cacheRevalidate = {
   orderTracker: 60,
   accountData: 60,
+  // Role/tier are security-relevant, so keep the backstop short. In-portal
+  // membership/store mutations revalidate the tag for immediate propagation;
+  // this window only covers changes made outside the portal (admin backend).
+  companyAccess: 60,
+  exchangeRates: 3600,
 } as const

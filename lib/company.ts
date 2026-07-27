@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getTierLabel } from '@/lib/pricing/tier-labels'
 import type { PricingMode } from '@/lib/pricing/types'
@@ -7,26 +8,29 @@ import type { B2BCustomerAccess } from '@/types/company'
  * Build B2BCustomerAccess from Supabase tables.
  * Replaces the Shopify Admin API-based customer-access.server.ts.
  *
- * Query chain:
- * 1. profiles → identity (name, email)
- * 2. user_organizations + organizations → company membership + role
- * 3. b2b_accounts → tier, payment terms
- * 4. price_tiers + b2b_catalogues → WS4 tier discount + pricing mode
- * 5. stores → company locations
- * 6. variant_inventory → tracked-inventory presence
+ * Resolution is issued in dependency "waves" rather than one query at a time:
+ *   Wave A: profile + org membership          (both keyed on userId)
+ *   Wave B: org + b2b account + stores + inv.  (all keyed on organization_id)
+ *   Wave C: price tier                          (needs b2bAccount.tier_level)
+ * Collapsing ~6 sequential round-trips into ~3 waves. Wrapped in React
+ * `cache()` so the layout and the page in a single render resolve access once
+ * instead of re-running the whole chain per call site.
  */
-export async function getCompanyAccess(
+export const getCompanyAccess = cache(async (
   userId: string,
   email?: string
-): Promise<B2BCustomerAccess | null> {
+): Promise<B2BCustomerAccess | null> => {
   const supabase = getSupabaseServer()
 
-  // 1. Get user profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
+  // Wave A — profile + membership resolve together (neither depends on the other).
+  const [{ data: profile }, { data: orgMembership }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', userId).single(),
+    supabase
+      .from('user_organizations')
+      .select('organization_id, role, default_store_id')
+      .eq('user_id', userId)
+      .single(),
+  ])
 
   if (!profile) {
     // Fallback: try to find by email via user_auth_sync
@@ -39,13 +43,6 @@ export async function getCompanyAccess(
   const fullName = profile.full_name || ''
   const [firstName = '', ...lastParts] = fullName.split(' ')
   const lastName = lastParts.join(' ')
-
-  // 2. Get organization membership
-  const { data: orgMembership } = await supabase
-    .from('user_organizations')
-    .select('organization_id, role, default_store_id')
-    .eq('user_id', userId)
-    .single()
 
   const leaversEnabled = Boolean(profile.leavers_enabled)
 
@@ -73,13 +70,27 @@ export async function getCompanyAccess(
     })
   }
 
-  // 3. Get organization details (soft-deleted orgs return null → no_org gate)
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('id', orgMembership.organization_id)
-    .is('deleted_at', null)
-    .maybeSingle()
+  // Wave B — org details, B2B account, stores and inventory presence all key
+  // on organization_id, so they issue together. (In the rare soft-deleted-org
+  // case the account/stores/inventory results are simply discarded below.)
+  const orgId = orgMembership.organization_id
+  const [
+    { data: org },
+    { data: b2bAccount },
+    { data: locations },
+    { count, error: inventoryError },
+  ] = await Promise.all([
+    supabase.from('organizations').select('*').eq('id', orgId).is('deleted_at', null).maybeSingle(),
+    supabase.from('b2b_accounts').select('*').eq('organization_id', orgId).maybeSingle(),
+    supabase.from('stores').select('id').eq('organization_id', orgId),
+    // Tolerant of `variant_inventory` not existing yet (Inventory sub-app
+    // migration may not have shipped) — PostgREST returns an error and we
+    // fall back to false below.
+    supabase
+      .from('variant_inventory')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId),
+  ])
 
   // Org was soft-deleted (or never existed) — treat as individual user, not a
   // phantom B2B session against a deleted company.
@@ -106,14 +117,7 @@ export async function getCompanyAccess(
     })
   }
 
-  // 4. Get B2B account details (tier, credit limit, etc.)
-  const { data: b2bAccount } = await supabase
-    .from('b2b_accounts')
-    .select('*')
-    .eq('organization_id', orgMembership.organization_id)
-    .maybeSingle()
-
-  // 4b. Tier discount + active catalogue presence (WS4)
+  // Wave C — tier discount depends on the account's tier_level from Wave B.
   const tierLevel = b2bAccount?.tier_level ?? null
   const tierLevelStr = tierLevel != null ? String(tierLevel) : null
 
@@ -129,29 +133,12 @@ export async function getCompanyAccess(
   const tierLabel = getTierLabel(tierLevel)
   const pricingMode: PricingMode = 'catalogue'
 
-  // 5. Get company locations (stores)
-  const { data: locations } = await supabase
-    .from('stores')
-    .select('id')
-    .eq('organization_id', orgMembership.organization_id)
-
   const locationIds = (locations || []).map((loc) => loc.id)
   const role = (orgMembership.role as 'org_admin' | 'staff') || 'org_admin'
   const tier = b2bAccount?.tier_level?.toString() || 'bronze'
 
-  // 6. Check if the organization has any tracked inventory.
-  //    Tolerant of `variant_inventory` not existing yet (Inventory sub-app
-  //    migration may not have shipped) — PostgREST returns an error and we
-  //    fall back to false.
-  let hasTrackedInventory = false
-  const { count, error: inventoryError } = await supabase
-    .from('variant_inventory')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', orgMembership.organization_id)
-
-  if (!inventoryError && typeof count === 'number' && count > 0) {
-    hasTrackedInventory = true
-  }
+  const hasTrackedInventory =
+    !inventoryError && typeof count === 'number' && count > 0
 
   return buildAccess({
     userId,
@@ -173,7 +160,7 @@ export async function getCompanyAccess(
     defaultStoreId: orgMembership.default_store_id ?? null,
     tenantType: (b2bAccount?.tenant_type as B2BCustomerAccess['tenantType']) ?? null,
   })
-}
+})
 
 interface AccessInput {
   userId: string

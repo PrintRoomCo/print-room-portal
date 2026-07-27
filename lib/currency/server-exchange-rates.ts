@@ -1,4 +1,6 @@
+import { unstable_cache } from 'next/cache';
 import { getSupabaseServer } from '@/lib/supabase';
+import { cacheTags, cacheRevalidate } from '@/lib/cache/tags';
 import type { SupportedCurrency, ExchangeRates } from './types';
 
 const FALLBACK_RATES: ExchangeRates = {
@@ -80,7 +82,21 @@ export async function getServerExchangeRate(
   }
 }
 
-export async function getServerExchangeRates(): Promise<ServerExchangeRatesResult> {
+/**
+ * Cross-request cached NZD rate table. Rates refresh at most daily, so serving
+ * them from cache for an hour removes a DB round-trip from every portal render
+ * (this runs in the portal layout). Falls back to hardcoded rates on failure.
+ */
+export const getServerExchangeRates = unstable_cache(
+  fetchServerExchangeRates,
+  ['server-exchange-rates'],
+  {
+    tags: [cacheTags.exchangeRates],
+    revalidate: cacheRevalidate.exchangeRates,
+  },
+);
+
+async function fetchServerExchangeRates(): Promise<ServerExchangeRatesResult> {
   try {
     const supabase = getSupabaseServer();
     const { data, error } = await supabase

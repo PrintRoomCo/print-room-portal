@@ -1,37 +1,18 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import type { CustomerInventoryRow } from '@/app/api/inventory/route'
+import { useMemo, useState } from 'react'
+import type { CustomerInventoryRow } from '@/lib/inventory/customer-rows'
 import type { AuditEntry } from '@/lib/inventory/audit'
 
-export function InventoryClient() {
-  const [rows, setRows] = useState<CustomerInventoryRow[]>([])
-  const [entries, setEntries] = useState<AuditEntry[]>([])
-  const [loading, setLoading] = useState(true)
+export function InventoryClient({
+  rows,
+  entries,
+}: {
+  rows: CustomerInventoryRow[]
+  entries: AuditEntry[]
+}) {
+  // Data is server-rendered by the page — no on-mount fetch, no loading state.
   const [variantFilter, setVariantFilter] = useState<string | null>(null)
-
-  useEffect(() => {
-    let stale = false
-    Promise.all([
-      fetch('/api/inventory').then((r) => (r.ok ? r.json() : { rows: [] })),
-      fetch('/api/inventory/audit').then((r) => (r.ok ? r.json() : { entries: [] })),
-    ])
-      .then(([stock, audit]) => {
-        if (stale) return
-        setRows(stock.rows ?? [])
-        setEntries(audit.entries ?? [])
-        setLoading(false)
-      })
-      .catch(() => {
-        if (stale) return
-        setRows([])
-        setEntries([])
-        setLoading(false)
-      })
-    return () => {
-      stale = true
-    }
-  }, [])
 
   const visibleEntries = useMemo(
     () => (variantFilter ? entries.filter((e) => e.variantId === variantFilter) : entries),
@@ -64,13 +45,7 @@ export function InventoryClient() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                       No tracked stock yet.
@@ -131,13 +106,7 @@ export function InventoryClient() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : visibleEntries.length === 0 ? (
+                {visibleEntries.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                       No movements recorded.

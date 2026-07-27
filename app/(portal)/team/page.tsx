@@ -1,21 +1,19 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
-import { getCompanyAccess } from '@/lib/company'
+import { getPortalUser, getPortalCompanyAccess } from '@/lib/portal-data'
 import { buildTeamMemberRow, type TeamProfile } from '@/lib/team/members'
 import { TeamClient } from './TeamClient'
 
 export const metadata: Metadata = { title: 'Team' }
 
 export default async function TeamPage() {
-  const authed = await getSupabaseServerComponent()
-  const {
-    data: { user },
-  } = await authed.auth.getUser()
+  // Reuse the layout's request-cached identity/access instead of re-issuing an
+  // auth round-trip and a second access resolution for this page.
+  const user = await getPortalUser()
   if (!user) redirect('/sign-in')
 
-  const access = await getCompanyAccess(user.id, user.email ?? undefined)
+  const access = await getPortalCompanyAccess()
   // canManageUsers is the F2 gate: only a company org_admin reaches this page.
   if (!access || !access.canManageUsers || !access.companyId) redirect('/account')
 

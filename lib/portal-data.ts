@@ -93,6 +93,23 @@ export const getPortalUser = cache(async (): Promise<User | null> => {
   return user ?? null
 })
 
+/**
+ * Cross-request cache for a user's B2B access slice. Keyed on userId/email and
+ * tagged so membership/store mutations can invalidate it; otherwise it survives
+ * for `cacheRevalidate.companyAccess` so repeat navigations skip the ~6-query
+ * resolution entirely. Service-role reads only (no cookies in the cached scope).
+ */
+const fetchCompanyAccessForUser = unstable_cache(
+  async (userId: string, email: string | null): Promise<B2BCustomerAccess | null> => {
+    return getCompanyAccess(userId, email ?? undefined)
+  },
+  ['portal-company-access'],
+  {
+    tags: [cacheTags.companyAccess],
+    revalidate: cacheRevalidate.companyAccess,
+  },
+)
+
 export const getPortalCompanyAccess = cache(async (): Promise<B2BCustomerAccess | null> => {
   const nowSec = Math.floor(Date.now() / 1000)
   const preview = await readPreviewSession(nowSec)
@@ -102,7 +119,7 @@ export const getPortalCompanyAccess = cache(async (): Promise<B2BCustomerAccess 
   }
   const user = await getPortalUser()
   if (!user) return null
-  return getCompanyAccess(user.id, user.email ?? undefined)
+  return fetchCompanyAccessForUser(user.id, user.email ?? null)
 })
 
 /**

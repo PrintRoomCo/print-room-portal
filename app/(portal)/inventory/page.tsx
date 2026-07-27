@@ -1,25 +1,33 @@
 import { redirect } from 'next/navigation'
-import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
-import { getCompanyAccess } from '@/lib/company'
+import { getPortalUser, getPortalCompanyAccess } from '@/lib/portal-data'
+import { getSupabaseServer } from '@/lib/supabase'
+import { getCustomerInventoryRows } from '@/lib/inventory/customer-rows'
+import { getInventoryAuditEntries } from '@/lib/inventory/audit-feed'
 import { InventoryClient } from './InventoryClient'
 
 const INVENTORY_TENANTS = ['franchise', 'studio_plus_inventory'] as const
 
 export default async function InventoryPage() {
-  const supabase = await getSupabaseServerComponent()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Reuse the layout's request-cached identity/access (no extra auth call).
+  const user = await getPortalUser()
   if (!user) redirect('/sign-in')
 
-  const access = await getCompanyAccess(user.id, user.email ?? undefined)
+  const access = await getPortalCompanyAccess()
   const tenant = access?.tenantType
   const allowed =
     !!access &&
     access.isOrgAdmin &&
     !!tenant &&
     (INVENTORY_TENANTS as ReadonlyArray<string>).includes(tenant)
-  if (!allowed) redirect('/catalogue')
+  if (!allowed || !access.companyId) redirect('/catalogue')
 
-  return <InventoryClient />
+  // Server-render both datasets (in parallel) so the page paints with data —
+  // no more blank shell -> client fetch -> spinner waterfall.
+  const admin = getSupabaseServer()
+  const [rows, audit] = await Promise.all([
+    getCustomerInventoryRows(admin, access.companyId),
+    getInventoryAuditEntries(admin, access.companyId),
+  ])
+
+  return <InventoryClient rows={rows} entries={audit.entries} />
 }

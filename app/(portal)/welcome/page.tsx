@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
-import { getCompanyAccess } from '@/lib/company'
+import { getPortalUser, getPortalCompanyAccess } from '@/lib/portal-data'
 import { TierBadge } from '@/components/pricing/TierBadge'
 import { WelcomeContinueButton } from '@/components/welcome/WelcomeContinueButton'
 
@@ -42,13 +41,10 @@ export default async function WelcomePage() {
     redirect('/shop')
   }
 
-  const supabase = await getSupabaseServerComponent()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getPortalUser()
   if (!user) redirect('/sign-in')
 
-  const access = await getCompanyAccess(user.id, user.email ?? undefined)
+  const access = await getPortalCompanyAccess()
   if (!access) redirect('/account')
 
   let accountManager: AccountManager = DEFAULT_ACCOUNT_MANAGER

@@ -71,6 +71,9 @@ export async function updateProfile(formData: FormData): Promise<ActionResult> {
     return { success: false, errors: ['Failed to update profile.'] }
   }
 
+  // Name feeds B2BCustomerAccess (firstName/lastName) — bust the per-user slice.
+  revalidateTag(cacheTags.companyAccess, { expire: 0 })
+
   return { success: true, message: 'Profile updated successfully!' }
 }
 
@@ -176,7 +179,9 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
   }
 
   // Store list lives in getPortalAccountData → bust the account-data cache.
+  // locationIds also feed company access → bust that per-user slice too.
   revalidateTag(cacheTags.accountData, { expire: 0 })
+  revalidateTag(cacheTags.companyAccess, { expire: 0 })
 
   return { success: true, message: `Store "${storeName}" has been created successfully!` }
 }
@@ -270,9 +275,9 @@ export async function updateOrgLogoAction(formData: FormData): Promise<ActionRes
     return { success: false, errors: ['Failed to save logo.'] }
   }
 
-  // No tag revalidation needed: the header reads the logo via
-  // getPortalCompanyAccess (request-memoised, not persistently cached) and
-  // /api/company-access (dynamic), so the client's post-save reload picks it up.
+  // logo_url feeds access.logoUrl, which getPortalCompanyAccess now serves from
+  // a persistent per-user cache — bust it so the new logo shows immediately.
+  revalidateTag(cacheTags.companyAccess, { expire: 0 })
   return { success: true, message: 'Logo updated successfully!' }
 }
 
@@ -306,6 +311,8 @@ export async function removeOrgLogoAction(): Promise<ActionResult> {
     return { success: false, errors: ['Failed to remove logo.'] }
   }
 
-  // See updateOrgLogoAction: the post-save reload refreshes the header.
+  // See updateOrgLogoAction: bust the per-user access cache so the cleared
+  // logo propagates immediately instead of lingering for the revalidate window.
+  revalidateTag(cacheTags.companyAccess, { expire: 0 })
   return { success: true, message: 'Logo removed.' }
 }
