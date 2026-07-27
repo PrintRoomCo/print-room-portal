@@ -65,6 +65,12 @@ export interface PastOrdersScope {
   canSeeAllOrgOrders: boolean
   /** The requester's auth email — staff scoping keys on quotes.customer_email. */
   userEmail: string | null
+  /**
+   * Location-manager's granted∪default branches; [] for plain staff & org_admin.
+   * When non-empty, a staff member also sees any order shipped to a managed branch
+   * (denormalised quotes.ship_to_store_id), OR'd with their own-email orders.
+   */
+  branchStoreIds: string[]
 }
 
 /**
@@ -83,7 +89,8 @@ export async function queryPastOrders(
   adminClient: SupabaseClient,
   scope: PastOrdersScope,
 ): Promise<PastOrderRow[]> {
-  if (!scope.canSeeAllOrgOrders && !scope.userEmail) return []
+  // Fail closed, but a manager with branches needs rows even without an email.
+  if (!scope.canSeeAllOrgOrders && !scope.userEmail && scope.branchStoreIds.length === 0) return []
 
   let query = adminClient
     .from('orders')
@@ -91,7 +98,15 @@ export async function queryPastOrders(
     .eq('quotes.organization_id', scope.organizationId)
 
   if (!scope.canSeeAllOrgOrders) {
-    query = query.eq('quotes.customer_email', scope.userEmail)
+    if (scope.branchStoreIds.length > 0) {
+      // Manager: own orders (by email) OR any order shipped to a granted branch.
+      const parts: string[] = []
+      if (scope.userEmail) parts.push(`customer_email.eq.${scope.userEmail}`)
+      parts.push(`ship_to_store_id.in.(${scope.branchStoreIds.join(',')})`)
+      query = query.or(parts.join(','), { referencedTable: 'quotes' })
+    } else {
+      query = query.eq('quotes.customer_email', scope.userEmail)
+    }
   }
 
   const { data, error } = await query.order('created_at', { ascending: false })
