@@ -19,13 +19,15 @@ export async function buildPreviewContext(
   if (!membership || membership.organization_id !== payload.org) return null
 
   // Mirror requireB2BCustomer's selects exactly (note: org select omits moq_exempt).
-  const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
+  const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }, { data: storeGrants }] =
+    await Promise.all([
     admin.from('organizations').select('id, name, customer_code, is_test').eq('id', membership.organization_id).single(),
     admin.from('b2b_accounts')
       .select('id, tier_level, payment_terms, default_deposit_percent, contract_notes, tenant_type, pricing_mode')
       .eq('organization_id', membership.organization_id).maybeSingle(),
     admin.from('stores').select('id').eq('organization_id', membership.organization_id),
     admin.from('profiles').select('email, full_name').eq('id', membership.user_id).maybeSingle(),
+    admin.from('b2b_member_store_grants').select('store_id').eq('membership_id', membership.id),
   ])
   if (!org) return null
 
@@ -50,6 +52,7 @@ export async function buildPreviewContext(
     defaultDepositPercent: b2b?.default_deposit_percent ?? null,
     storeIds: (stores ?? []).map((s) => s.id),
     defaultStoreId: membership.default_store_id ?? null,
+    branchStoreIds: (storeGrants ?? []).map((g) => (g as { store_id: string }).store_id),
     tenantType: (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type ?? null,
     allowsMultiStoreOrdering:
       (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',

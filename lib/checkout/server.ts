@@ -31,6 +31,13 @@ export interface B2BCustomerContext {
   /** Per-buyer default ship-to store, set by staff in the b2b-accounts members panel. Null = no default. */
   defaultStoreId: string | null
   /**
+   * Location-manager allow-list: the RAW b2b_member_store_grants store ids for this
+   * membership ([] for org_admin / plain staff). A staff member with ≥1 grant is a
+   * branch manager. Checkout resolves the orderable set via
+   * resolveBranchStoreIds(branchStoreIds, defaultStoreId); org_admins never consult it.
+   */
+  branchStoreIds: string[]
+  /**
    * Customer-shape discriminator from b2b_accounts.tenant_type.
    * Null when no b2b_account row. See lib/company.ts for the full Access shape.
    */
@@ -101,7 +108,8 @@ export async function requireB2BCustomer(
     .maybeSingle()
   if (!membership) return { kind: 'no_org' }
 
-  const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }] = await Promise.all([
+  const [{ data: org }, { data: b2b }, { data: stores }, { data: profile }, { data: storeGrants }] =
+    await Promise.all([
     admin.from('organizations')
       .select('id, name, customer_code, is_test')
       .eq('id', membership.organization_id).single(),
@@ -114,6 +122,11 @@ export async function requireB2BCustomer(
     admin.from('profiles')
       .select('email, full_name')
       .eq('id', user.id).maybeSingle(),
+    // Location-manager allow-list. Table ships with the held migration; before it
+    // is applied this query just returns null → branchStoreIds [] (feature dark).
+    admin.from('b2b_member_store_grants')
+      .select('store_id')
+      .eq('membership_id', membership.id),
   ])
   if (!org) return { kind: 'org_not_found' }
 
@@ -148,6 +161,7 @@ export async function requireB2BCustomer(
       defaultDepositPercent: b2b?.default_deposit_percent ?? null,
       storeIds: (stores ?? []).map((s) => s.id),
       defaultStoreId: membership.default_store_id ?? null,
+      branchStoreIds: (storeGrants ?? []).map((g) => (g as { store_id: string }).store_id),
       tenantType: (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type ?? null,
       allowsMultiStoreOrdering:
         (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',

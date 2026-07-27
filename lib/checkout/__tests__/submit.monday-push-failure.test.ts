@@ -180,6 +180,7 @@ function buildInput(): CheckoutInput {
       defaultDepositPercent: null,
       storeIds: [],
       defaultStoreId: null,
+      branchStoreIds: [],
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: true,

@@ -146,6 +146,7 @@ function buildInput(over: Partial<CheckoutInput> = {}): CheckoutInput {
       defaultDepositPercent: null,
       storeIds: [],
       defaultStoreId: null,
+      branchStoreIds: [],
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: false,

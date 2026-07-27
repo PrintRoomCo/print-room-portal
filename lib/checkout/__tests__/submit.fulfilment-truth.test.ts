@@ -200,6 +200,7 @@ function buildInput(
       defaultDepositPercent: null,
       storeIds: [],
       defaultStoreId: null,
+      branchStoreIds: [],
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: false, // MOQ ENFORCED — this suite tests the MOQ × fulfilment interaction

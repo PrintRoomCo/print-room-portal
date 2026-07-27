@@ -171,6 +171,7 @@ function buildInput(items: FixtureItem[], lineCount: number): CheckoutInput {
     defaultDepositPercent: null,
     storeIds: [],
     defaultStoreId: null,
+    branchStoreIds: [],
     tenantType: null,
     allowsMultiStoreOrdering: false,
     moqExempt: false,

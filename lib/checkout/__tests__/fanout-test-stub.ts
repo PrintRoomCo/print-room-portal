@@ -288,6 +288,7 @@ export function makeContext(orgId: string) {
     defaultDepositPercent: null,
     storeIds: [],
     defaultStoreId: null,
+    branchStoreIds: [],
     tenantType: null,
     allowsMultiStoreOrdering: false,
     moqExempt: true,

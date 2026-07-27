@@ -7,6 +7,8 @@ import { resolveOrderEmailRecipient } from './order-email-recipient'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
+import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
@@ -451,16 +453,27 @@ export async function submitCustomerOrder(
     throw new MixedShippingAddressError()
   }
 
-  // 0. Buyer-scope guard: a staff-role member is locked to their defaultStoreId
-  //    for saved stores, but may use the shared one-time address path.
+  // 0. Buyer-scope guard: plain staff (zero grants) are locked to their
+  //    defaultStoreId — resolveBranchStoreIds([], default) === [default], today's
+  //    single-branch lock. A manager (≥1 b2b_member_store_grants row) may pick any
+  //    granted branch, but the order stays one-destination (mixed_branch → error).
+  //    One-time shared address lines stay exempt via allOneTimeLines.
   if (input.context.role === 'staff') {
-    const expected = input.context.defaultStoreId
-    const mismatched = shipToStoreIds.filter((sid) => {
-      if (sid === null && allOneTimeLines && input.custom_shipping_address) return false
-      return sid !== expected
+    const allowedBranches = resolveBranchStoreIds(
+      input.context.branchStoreIds,
+      input.context.defaultStoreId,
+    )
+    const res = checkStaffBranchScope({
+      shipToStoreIds,
+      allowedBranches,
+      allOneTimeLines,
+      hasCustomShippingAddress: Boolean(input.custom_shipping_address),
     })
-    if (mismatched.length > 0) {
-      throw new BuyerScopeError(mismatched, expected)
+    if (!res.ok && res.kind === 'out_of_scope') {
+      throw new BuyerScopeError(res.mismatched, input.context.defaultStoreId)
+    }
+    if (!res.ok && res.kind === 'mixed_branch') {
+      throw new MixedShippingAddressError()
     }
   }
 
@@ -1417,6 +1430,30 @@ export async function submitCustomerOrder(
       }
     }
     await Promise.all(snapshotUpdates)
+  }
+
+  // 4a. Denormalise the order's single ship-to branch onto the quote header
+  //     (location-manager feature, Option A 2026-07-27). submit_b2b_order never
+  //     stamps quote_items.ship_to_store_id (set post-RPC in step 4 above), so the
+  //     header must be stamped here too. The buyer-scope guard (step 0) guarantees
+  //     the lines are single-branch, so the first non-null store id is the whole
+  //     order's branch; custom-address orders (all-null) stay NULL.
+  //
+  //     Best-effort + non-fatal: the quotes.ship_to_store_id column ships with the
+  //     held migration. Until it is applied this update no-ops with a swallowed
+  //     PostgREST error — the order must never fail because of a dark feature.
+  const orderShipToStoreId = shipToStoreIds.find((sid) => sid !== null) ?? null
+  if (orderShipToStoreId) {
+    const { error: shipStampError } = await admin
+      .from('quotes')
+      .update({ ship_to_store_id: orderShipToStoreId })
+      .eq('id', quote_id)
+    if (shipStampError) {
+      console.warn('[Checkout] quotes.ship_to_store_id stamp skipped (non-fatal)', {
+        quoteId: quote_id,
+        err: shipStampError.message,
+      })
+    }
   }
 
   // 4b. Pre-approved inventory write-through. When the customer ticked "Add
