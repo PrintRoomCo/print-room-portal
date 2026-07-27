@@ -20,11 +20,12 @@ vi.mock('@/lib/job-tracker-queries', () => ({
   getLatestJobTrackerByQuoteId: vi.fn(async () => null),
 }))
 
-// Another org member's quote: the session email does NOT match.
+// Another org member's quote: the session email does NOT match. Ships to store-B.
 const quoteRow = {
   id: 'quote-1',
   customer_email: 'ferrymead@anytimefitness.co.nz',
   organization_id: 'org-1',
+  ship_to_store_id: 'store-B',
   line_items: [],
 }
 
@@ -37,19 +38,33 @@ function quotesBuilder() {
   return b
 }
 
-function membershipBuilder(membership: { organization_id: string; role: string } | null) {
+type Membership = { organization_id: string; role: string; id?: string; default_store_id?: string | null }
+
+function membershipBuilder(membership: Membership | null) {
   const b: Record<string, unknown> = {
     select: vi.fn(() => b),
     eq: vi.fn(() => b),
-    maybeSingle: vi.fn(async () => ({ data: membership, error: null })),
+    maybeSingle: vi.fn(async () => ({
+      data: membership ? { id: 'uo-1', default_store_id: null, ...membership } : null,
+      error: null,
+    })),
   }
   return b
 }
 
-function setup(membership: { organization_id: string; role: string } | null) {
+function grantsBuilder(grants: string[]) {
+  const b: Record<string, unknown> = {
+    select: vi.fn(() => b),
+    eq: vi.fn(async () => ({ data: grants.map((store_id) => ({ store_id })), error: null })),
+  }
+  return b
+}
+
+function setup(membership: Membership | null, grants: string[] = []) {
   mocks.admin.from.mockImplementation((table: string) => {
     if (table === 'quotes') return quotesBuilder()
     if (table === 'user_organizations') return membershipBuilder(membership)
+    if (table === 'b2b_member_store_grants') return grantsBuilder(grants)
     throw new Error(`unexpected table ${table}`)
   })
 }
@@ -95,8 +110,20 @@ describe('GET /api/collections/[collectionId] — quote authorization', () => {
     expect((await get()).status).toBe(404)
   })
 
-  it('same-org staff who did not place the order is denied (404)', async () => {
-    setup({ organization_id: 'org-1', role: 'staff' })
+  it('same-org PLAIN staff (no grants) who did not place the order is denied (404)', async () => {
+    setup({ organization_id: 'org-1', role: 'staff' }, [])
+    expect((await get()).status).toBe(404)
+  })
+
+  it('branch MANAGER granted the order ship-to branch gets the quote (deep-link parity)', async () => {
+    setup({ organization_id: 'org-1', role: 'staff' }, ['store-B'])
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect((await res.json()).mode).toBe('quote')
+  })
+
+  it('branch manager granted a DIFFERENT branch (not the ship-to) is denied (404)', async () => {
+    setup({ organization_id: 'org-1', role: 'staff' }, ['store-OTHER'])
     expect((await get()).status).toBe(404)
   })
 })

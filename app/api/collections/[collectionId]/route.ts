@@ -4,6 +4,7 @@ import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getCollectionWithDesigns, getAvailableDesigns, getCollectionByQuoteId } from '@/lib/collections-detail'
 import { getLatestJobTrackerByQuoteId } from '@/lib/job-tracker-queries'
+import { getMemberBranchStoreIds } from '@/lib/orders/branch-grants'
 import {
   groupCatalogueFrontImageRows,
   pickCatalogueFrontImage,
@@ -82,25 +83,51 @@ async function withCatalogueFrontLineImages(
   }
 }
 
+interface QuoteAccessMembership {
+  id: string
+  organization_id: string | null
+  role: string | null
+  default_store_id: string | null
+}
+
 /**
- * Org-admin access mirrors the Orders list's scoping rule (queryPastOrders in
- * lib/orders/past-orders-query.ts): a quote belongs to the admin's org via
- * quotes.organization_id. Email is never a tenancy key at org level — two orgs
- * could share one, which would leak. An unauthorized requester falls through to
- * the collection branch and gets 404, so quote existence is not leaked.
+ * Whether `userId` may see `quote` — the SAME rule as the Orders list boundary
+ * (queryPastOrders in lib/orders/past-orders-query.ts), so list-shows ⟺
+ * detail-allows and deep links never 404 for a row the user can see:
+ *   - org_admin of the quote's org (org-wide), OR
+ *   - a branch manager (staff with ≥1 grant) whose granted branches include the
+ *     quote's denormalised ship_to_store_id.
+ * Email ownership is checked by the caller. Org id is the tenancy key — email is
+ * never a tenancy key (two orgs could share one). An unauthorized requester falls
+ * through to the collection branch and gets 404, so quote existence is not leaked.
  */
-async function isOrgAdminForOrganization(
+async function isOrgMemberAuthorizedForQuote(
   adminClient: SupabaseClient,
   userId: string,
-  organizationId: string | null,
+  quote: { organization_id?: string | null; ship_to_store_id?: string | null },
 ): Promise<boolean> {
+  const organizationId = quote.organization_id ?? null
   if (!organizationId) return false
-  const { data: membership } = await adminClient
+  const { data } = await adminClient
     .from('user_organizations')
-    .select('organization_id, role')
+    .select('id, organization_id, role, default_store_id')
     .eq('user_id', userId)
     .maybeSingle()
-  return membership?.role === 'org_admin' && membership.organization_id === organizationId
+  const membership = data as QuoteAccessMembership | null
+  if (!membership || membership.organization_id !== organizationId) return false
+  if (membership.role === 'org_admin') return true
+  // Branch manager: reuse the shared resolver — never reimplement membership inline.
+  if (membership.role === 'staff') {
+    const shipStore = quote.ship_to_store_id ?? null
+    if (!shipStore) return false
+    const branchStoreIds = await getMemberBranchStoreIds(
+      adminClient,
+      membership.id,
+      membership.default_store_id ?? null,
+    )
+    return branchStoreIds.includes(shipStore)
+  }
+  return false
 }
 
 export async function GET(
@@ -131,8 +158,7 @@ export async function GET(
   const ownsQuote = quote?.customer_email?.toLowerCase() === email
   const authorizedForQuote =
     !!quote &&
-    (ownsQuote ||
-      (await isOrgAdminForOrganization(adminClient, user.id, quote.organization_id ?? null)))
+    (ownsQuote || (await isOrgMemberAuthorizedForQuote(adminClient, user.id, quote)))
 
   if (quote && authorizedForQuote) {
     const [linkedCollection, tracker] = await Promise.all([
