@@ -1,27 +1,22 @@
 import { NextResponse } from 'next/server'
-import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
-import { getCompanyAccess } from '@/lib/company'
-import { readPreviewSession } from '@/lib/preview/cookie'
-import { buildPreviewAccess } from '@/lib/preview/context'
+import { getPortalUser, getPortalCompanyAccess } from '@/lib/portal-data'
 
 /**
  * GET /api/company-access
  * Returns the B2BCustomerAccess for the authenticated user.
- * Called by CompanyContext on the client side.
+ * Called by CompanyContext on the client side (fallback path — the provider is
+ * seeded with server-rendered initialAccess and only fetches on a user/owner
+ * mismatch). Delegates to getPortalCompanyAccess so it shares the same preview
+ * handling and per-user cache as the server layout.
  */
 export async function GET() {
-  const nowSec = Math.floor(Date.now() / 1000)
-  const preview = await readPreviewSession(nowSec)
-  if (preview) {
-    const previewAccess = await buildPreviewAccess(preview)
-    if (previewAccess) return NextResponse.json(previewAccess)
-  }
+  const access = await getPortalCompanyAccess()
+  if (access) return NextResponse.json(access)
 
-  const supabase = await getSupabaseServerComponent()
-  const { data: { user } } = await supabase.auth.getUser()
+  // Preserve the original status split: unauthenticated -> 401, authenticated
+  // but no B2B access -> 404. getPortalUser is request-cached (already resolved
+  // inside getPortalCompanyAccess), so this is free.
+  const user = await getPortalUser()
   if (!user) return NextResponse.json(null, { status: 401 })
-
-  const access = await getCompanyAccess(user.id, user.email ?? undefined)
-  if (!access) return NextResponse.json(null, { status: 404 })
-  return NextResponse.json(access)
+  return NextResponse.json(null, { status: 404 })
 }

@@ -59,6 +59,9 @@ type CatalogueSwatchRow = {
   catalogue_item_id: string
   sort_order: number | null
   color_swatch_id: string | null
+  // Included so the lead-colour pick can be derived from this same result set
+  // instead of a second query against b2b_catalogue_item_colors.
+  is_default: boolean | null
   product_color_swatches:
     | CatalogueSwatchEmbed
     | CatalogueSwatchEmbed[]
@@ -305,7 +308,7 @@ export default async function CataloguePage({
       ? admin
           .from('b2b_catalogue_item_colors')
           .select(
-            'catalogue_item_id, sort_order, color_swatch_id, product_color_swatches(hex, label, position, image_url)',
+            'catalogue_item_id, sort_order, color_swatch_id, is_default, product_color_swatches(hex, label, position, image_url)',
           )
           .in('catalogue_item_id', scopedItemIds)
           .order('sort_order', { ascending: true, nullsFirst: false })
@@ -341,16 +344,11 @@ export default async function CataloguePage({
   }
 
   // Lead colour per item: is_default colour wins, then smallest sort_order (nulls
-  // last), else null. Mirrors the staff-side rule exactly.
-  type LeadColourRow = { catalogue_item_id: string; color_swatch_id: string | null; is_default: boolean | null; sort_order: number | null }
-  const { data: leadColourRows } = scopedItemIds.length > 0
-    ? await admin
-        .from('b2b_catalogue_item_colors')
-        .select('catalogue_item_id, color_swatch_id, is_default, sort_order')
-        .in('catalogue_item_id', scopedItemIds)
-    : { data: [] as LeadColourRow[] }
+  // last), else null. Mirrors the staff-side rule exactly. Derived from the
+  // swatchRows fetched above (they now carry is_default) rather than a second
+  // query against the same b2b_catalogue_item_colors rows.
   const coloursByCatItem = new Map<string, Array<{ color_swatch_id: string | null; is_default: boolean | null; sort_order: number | null }>>()
-  for (const r of (leadColourRows ?? []) as LeadColourRow[]) {
+  for (const r of (swatchRows ?? []) as CatalogueSwatchRow[]) {
     const list = coloursByCatItem.get(r.catalogue_item_id) ?? []
     list.push({ color_swatch_id: r.color_swatch_id, is_default: r.is_default, sort_order: r.sort_order })
     coloursByCatItem.set(r.catalogue_item_id, list)
