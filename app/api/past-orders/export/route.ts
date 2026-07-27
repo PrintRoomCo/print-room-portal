@@ -7,6 +7,7 @@ import {
   queryPastOrders,
   type PortalPastOrder,
 } from '@/lib/orders/past-orders-query'
+import { getMemberBranchStoreIds } from '@/lib/orders/branch-grants'
 import { filterPastOrders } from '@/lib/orders/past-orders-filter'
 import {
   buildLineItemsCsv,
@@ -33,17 +34,22 @@ export async function GET(request: Request) {
   // this scoping is the security boundary).
   const { data: membership } = await adminClient
     .from('user_organizations')
-    .select('organization_id, role')
+    .select('id, organization_id, role, default_store_id')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership?.organization_id) {
     return NextResponse.json({ error: 'No organisation membership' }, { status: 403 })
   }
 
+  const branchStoreIds =
+    membership.role === 'org_admin'
+      ? []
+      : await getMemberBranchStoreIds(adminClient, membership.id, membership.default_store_id ?? null)
   const rows = await queryPastOrders(adminClient, {
     organizationId: membership.organization_id,
     canSeeAllOrgOrders: membership.role === 'org_admin',
     userEmail: user.email ?? null,
+    branchStoreIds,
   })
 
   const orders = filterPastOrders(rows.map(mapPastOrderRow), {

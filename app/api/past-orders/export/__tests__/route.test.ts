@@ -41,7 +41,9 @@ function membershipBuilder(role: string | null) {
     select: vi.fn(() => b),
     eq: vi.fn(() => b),
     maybeSingle: vi.fn(async () =>
-      role ? { data: { organization_id: 'org-1', role }, error: null } : { data: null, error: null },
+      role
+        ? { data: { id: 'uo-1', organization_id: 'org-1', role, default_store_id: null }, error: null }
+        : { data: null, error: null },
     ),
   }
   return b
@@ -87,6 +89,13 @@ function storesBuilder() {
   }
   return b
 }
+function grantsBuilder() {
+  const b: Record<string, unknown> = {
+    select: vi.fn(() => b),
+    eq: vi.fn(async () => ({ data: [], error: null })),
+  }
+  return b
+}
 
 function setup(role: string | null) {
   eqCalls.length = 0
@@ -95,6 +104,7 @@ function setup(role: string | null) {
     if (table === 'orders') return ordersBuilder()
     if (table === 'quote_items') return itemsBuilder()
     if (table === 'stores') return storesBuilder()
+    if (table === 'b2b_member_store_grants') return grantsBuilder()
     throw new Error(`unexpected table ${table}`)
   })
 }

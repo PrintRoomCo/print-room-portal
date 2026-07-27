@@ -16,6 +16,7 @@ import {
   type PortalPastOrder,
   type PastOrderTracking,
 } from '@/lib/orders/past-orders-query'
+import { getMemberBranchStoreIds } from '@/lib/orders/branch-grants'
 import type { B2BCustomerAccess } from '@/types/company'
 import { cacheTags, cacheRevalidate } from '@/lib/cache/tags'
 import { readPreviewSession } from '@/lib/preview/cookie'
@@ -327,7 +328,7 @@ const fetchPastOrdersForUser = unstable_cache(
     const adminClient = getSupabaseServer()
     const { data: membership } = await adminClient
       .from('user_organizations')
-      .select('organization_id, role')
+      .select('id, organization_id, role, default_store_id')
       .eq('user_id', userId)
       .maybeSingle()
 
@@ -346,10 +347,19 @@ const fetchPastOrdersForUser = unstable_cache(
       // including awaiting-period-close pre-orders. Scoping (org_admin
       // org-wide, staff own-by-email) lives in queryPastOrders — shared with
       // the CSV export route so the two can never drift.
+      const branchStoreIds =
+        membership.role === 'org_admin'
+          ? []
+          : await getMemberBranchStoreIds(
+              adminClient,
+              membership.id,
+              membership.default_store_id ?? null,
+            )
       const rows = await queryPastOrders(adminClient, {
         organizationId: membership.organization_id,
         canSeeAllOrgOrders: membership.role === 'org_admin',
         userEmail: email,
+        branchStoreIds,
       })
 
       orders = await overlayTrackingInfo(adminClient, rows.map(mapPastOrderRow))
