@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TeamMemberRow } from '@/lib/team/members'
 import {
@@ -241,32 +241,139 @@ export function TeamClient({
         ) : (
           <ul className="mt-4 divide-y divide-gray-100">
             {initialMembers.map((m) => (
-              <li key={m.user_id} className="flex items-center justify-between py-3 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-gray-900">{m.email}</p>
-                  <p className="truncate text-gray-500">{m.full_name ?? '—'}</p>
+              <li key={m.user_id} className="py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900">{m.email}</p>
+                    <p className="truncate text-gray-500">{m.full_name ?? '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                      {m.role === 'org_admin' ? 'Org admin' : 'Staff'}
+                    </span>
+                    <span
+                      className={
+                        m.status === 'active'
+                          ? 'rounded-full bg-green-100 px-2.5 py-1 text-xs text-green-700'
+                          : m.invited_at
+                            ? 'rounded-full bg-amber-100 px-2.5 py-1 text-xs text-amber-800'
+                            : 'rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600'
+                      }
+                    >
+                      {m.status === 'active' ? 'Active' : m.invited_at ? 'Invited' : 'Not emailed yet'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
-                    {m.role === 'org_admin' ? 'Org admin' : 'Staff'}
-                  </span>
-                  <span
-                    className={
-                      m.status === 'active'
-                        ? 'rounded-full bg-green-100 px-2.5 py-1 text-xs text-green-700'
-                        : m.invited_at
-                          ? 'rounded-full bg-amber-100 px-2.5 py-1 text-xs text-amber-800'
-                          : 'rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600'
-                    }
-                  >
-                    {m.status === 'active' ? 'Active' : m.invited_at ? 'Invited' : 'Not emailed yet'}
-                  </span>
-                </div>
+                {/* Location-manager: grant ≥1 branch to make this staff member a
+                    branch manager. Org_admins never get grants (they see everything). */}
+                {m.role === 'staff' && <MemberBranchGrants membershipId={m.membership_id} />}
               </li>
             ))}
           </ul>
         )}
       </section>
+    </div>
+  )
+}
+
+interface BranchGrant {
+  id: string
+  name: string
+  granted: boolean
+}
+
+/**
+ * Org_admin control (the whole /team page is org_admin-gated) to manage which
+ * branches a STAFF member manages. Loads and replace-set saves via the mirror
+ * route app/api/team/members/[membershipId]/store-grants. Zero granted branches
+ * = plain staff (feature off for that member).
+ */
+export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
+  const [stores, setStores] = useState<BranchGrant[] | null>(null)
+  const [original, setOriginal] = useState<BranchGrant[] | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/team/members/${membershipId}/store-grants`)
+      .then(async (r) => {
+        const body = (await r.json().catch(() => ({}))) as { stores?: BranchGrant[]; error?: string }
+        if (!r.ok) throw new Error(body.error ?? `Load failed (${r.status})`)
+        if (cancelled) return
+        const rows = (body.stores ?? []).map((s) => ({ ...s }))
+        setStores(rows)
+        setOriginal(rows.map((s) => ({ ...s })))
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [membershipId])
+
+  const dirty =
+    !!stores && !!original && stores.some((s, i) => s.granted !== original[i]?.granted)
+
+  function toggle(id: string, next: boolean) {
+    setStores((prev) => (prev ? prev.map((s) => (s.id === id ? { ...s, granted: next } : s)) : prev))
+  }
+
+  async function save() {
+    if (!stores) return
+    setSaving(true)
+    setError(null)
+    try {
+      const r = await fetch(`/api/team/members/${membershipId}/store-grants`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeIds: stores.filter((s) => s.granted).map((s) => s.id) }),
+      })
+      const body = (await r.json().catch(() => ({}))) as { stores?: BranchGrant[]; error?: string }
+      if (!r.ok) throw new Error(body.error ?? `Save failed (${r.status})`)
+      const rows = (body.stores ?? []).map((s) => ({ ...s }))
+      setStores(rows)
+      setOriginal(rows.map((s) => ({ ...s })))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (error) return <p className="mt-2 text-xs text-red-700">{error}</p>
+  if (!stores) return <p className="mt-2 text-xs text-gray-500">Loading branches…</p>
+  if (stores.length === 0)
+    return <p className="mt-2 text-xs text-gray-500">No branches to assign.</p>
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 p-3">
+      <p className="text-xs font-medium tracking-wide text-gray-500">
+        Branches this member manages
+      </p>
+      <ul className="mt-2 space-y-1">
+        {stores.map((s) => (
+          <li key={s.id}>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={s.granted}
+                onChange={(e) => toggle(s.id, e.target.checked)}
+              />
+              {s.name}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={save}
+        disabled={!dirty || saving}
+        className="btn-secondary mt-2 disabled:opacity-50"
+      >
+        {saving ? 'Saving…' : 'Save branches'}
+      </button>
     </div>
   )
 }

@@ -3,6 +3,8 @@
 // from auth.users by the shared-DB trigger, so no Auth-admin call is needed.
 
 export interface TeamMemberRow {
+  /** user_organizations.id — the membership row id (keys the store-grants route). */
+  membership_id: string
   user_id: string
   email: string
   full_name: string | null
@@ -13,6 +15,7 @@ export interface TeamMemberRow {
 }
 
 export interface TeamMembership {
+  id: string
   user_id: string
   role: string
   default_store_id: string | null
@@ -38,6 +41,7 @@ export function buildTeamMemberRow(
 ): TeamMemberRow {
   const lastSignIn = profile?.last_sign_in_at ?? null
   return {
+    membership_id: membership.id,
     user_id: membership.user_id,
     email: blankToNull(profile?.email) ?? '(unknown)',
     full_name: blankToNull(profile?.full_name),

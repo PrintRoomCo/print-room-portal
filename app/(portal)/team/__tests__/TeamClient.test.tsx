@@ -7,6 +7,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 
 function member(over: Partial<TeamMemberRow> = {}): TeamMemberRow {
   return {
+    membership_id: 'uo1',
     user_id: 'u1',
     email: 'a@b.co',
     full_name: null,

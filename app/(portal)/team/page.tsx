@@ -25,7 +25,7 @@ export default async function TeamPage() {
   const [{ data: memberships }, { data: stores }] = await Promise.all([
     admin
       .from('user_organizations')
-      .select('user_id, role, default_store_id, invited_at')
+      .select('id, user_id, role, default_store_id, invited_at')
       .eq('organization_id', orgId)
       .order('created_at', { ascending: true }),
     admin.from('stores').select('id, name').eq('organization_id', orgId).order('name'),

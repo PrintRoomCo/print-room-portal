@@ -4,6 +4,9 @@
 export const AUDIT_ACTIONS = {
   // MIRROR staff src/lib/audit/actions.ts so member.* events group cross-repo.
   MEMBER_INVITE: 'member.invite',
+  // MIRROR staff B2B_MEMBER_STORE_GRANTS_CHANGE — same string so the grant-change
+  // audit groups cross-repo whether written by staff or the customer team screen.
+  B2B_MEMBER_STORE_GRANTS_CHANGE: 'b2b_member_store_grants.change',
 
   ORDER_SUBMIT: 'order.submit',
   ORDER_TYPE_STAMP_FAILED: 'order.order_type_stamp_failed',
