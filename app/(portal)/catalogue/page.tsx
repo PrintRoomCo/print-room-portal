@@ -19,6 +19,10 @@ import {
 } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
+import {
+  resolveCatalogueDecorationPrices,
+  type CatalogueDecorationRow,
+} from '@/lib/shop/catalogue-decoration-prices'
 
 export const metadata: Metadata = {
   title: 'Catalogue',
@@ -426,56 +430,17 @@ export default async function CataloguePage({
   //     PDP/cart use for manual items.
   //   * computed → sum of default per-placement decorations
   //     (effective_decoration_unit_price × tier) — the existing rate-sheet path.
-  const decoLowByItem = new Map<string, number>()
-  const decoHighByItem = new Map<string, number>()
-
-  // Per-placement decorations — computed items only. Manual items are summed
-  // from their combined figure below, so skip their per-placement rows here
-  // (otherwise the card would bill the rate sheet, not the typed combined).
-  await Promise.all(((decorationRows ?? []) as Array<{
-    catalogue_item_id: string
-    org_decoration_id: string | null
-    org_decorations:
-      | { unit_price: number | string | null }
-      | { unit_price: number | string | null }[]
-      | null
-  }>).map(async (r) => {
-    if (!r.org_decoration_id) return
-    if (priceModeByItemId.get(r.catalogue_item_id) === 'manual_final') return
-    const orgDec = Array.isArray(r.org_decorations) ? r.org_decorations[0] : r.org_decorations
-    const fallback = orgDec?.unit_price != null ? Number(orgDec.unit_price) : null
-    const resolve = async (qty: number): Promise<number> => {
-      const { data, error } = await admin.rpc('effective_decoration_unit_price', {
-        p_org_decoration_id: r.org_decoration_id,
-        p_qty: qty,
-      })
-      const base = !error && data != null ? Number(data) : fallback
-      if (base == null || !Number.isFinite(base) || base <= 0) return 0
-      return Number((base * tierMultiplier).toFixed(2))
-    }
-    const [low, high] = await Promise.all([resolve(floorQty), resolve(ENTRY_QTY)])
-    if (low > 0) decoLowByItem.set(r.catalogue_item_id, (decoLowByItem.get(r.catalogue_item_id) ?? 0) + low)
-    if (high > 0) decoHighByItem.set(r.catalogue_item_id, (decoHighByItem.get(r.catalogue_item_id) ?? 0) + high)
-  }))
-
-  // Manual combined decoration — manual_final items only. One figure per band,
-  // no tier multiplier (the typed price IS the customer price).
   const manualScopedItemIds = catItemRows
     .filter((r) => r.price_mode === 'manual_final' && productIds.includes(r.source_product_id))
     .map((r) => r.id)
-  await Promise.all(manualScopedItemIds.map(async (itemId) => {
-    const resolve = async (qty: number): Promise<number> => {
-      const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
-        p_catalogue_item_id: itemId,
-        p_qty: qty,
-      })
-      const v = !error && data != null ? Number(data) : 0
-      return Number.isFinite(v) && v > 0 ? v : 0
-    }
-    const [low, high] = await Promise.all([resolve(floorQty), resolve(ENTRY_QTY)])
-    if (low > 0) decoLowByItem.set(itemId, low)
-    if (high > 0) decoHighByItem.set(itemId, high)
-  }))
+  const { decoLowByItem, decoHighByItem } = await resolveCatalogueDecorationPrices(admin, {
+    decorationRows: (decorationRows ?? []) as CatalogueDecorationRow[],
+    manualScopedItemIds,
+    priceModeByItemId,
+    floorQty,
+    entryQty: ENTRY_QTY,
+    tierMultiplier,
+  })
 
   const products = rows.map((p) => {
     const lowPrice =
