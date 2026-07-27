@@ -31,6 +31,9 @@ export default async function CheckoutReviewPage() {
       paymentTerms={context.paymentTerms}
       defaultDepositPercent={context.defaultDepositPercent}
       isTest={context.isTest}
+      role={context.role}
+      branchStoreIds={context.branchStoreIds}
+      defaultStoreId={context.defaultStoreId}
     />
   )
 }

@@ -26,8 +26,10 @@ import {
   allLinesUseCustomAddress,
   clearCheckoutReviewState,
   readCheckoutReviewState,
+  writeCheckoutReviewState,
   type CheckoutReviewState,
 } from './checkoutReviewState'
+import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -36,6 +38,12 @@ interface CheckoutReviewClientProps {
   defaultDepositPercent: number | null
   /** organizations.is_test — when true, hide the deposit/payment-terms block (demo org). */
   isTest: boolean
+  /** Buyer role — a branch manager is a 'staff' member with ≥1 grant. */
+  role?: 'org_admin' | 'staff'
+  /** Location-manager allow-list (raw grants). ≥1 ⇒ show the order-level branch picker. */
+  branchStoreIds?: string[]
+  /** The member's home store — always an allowed branch (union at read). */
+  defaultStoreId?: string | null
 }
 
 interface CheckoutResponse {
@@ -49,6 +57,9 @@ export function CheckoutReviewClient({
   paymentTerms,
   defaultDepositPercent,
   isTest,
+  role,
+  branchStoreIds = [],
+  defaultStoreId = null,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -120,6 +131,33 @@ export function CheckoutReviewClient({
 
   const allCustom =
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
+
+  // Location-manager: a staff member with ≥1 grant may order for any branch they
+  // manage. The order stays ONE destination (submit guard enforces it), so the
+  // picker is order-level and applies the chosen branch to every line.
+  const isManager = role === 'staff' && branchStoreIds.length > 0
+  const managerBranchOptions = useMemo(() => {
+    if (!isManager) return []
+    return resolveBranchStoreIds(branchStoreIds, defaultStoreId).map((id) => ({
+      id,
+      label: storeById.get(id)?.name ?? 'Store',
+    }))
+  }, [isManager, branchStoreIds, defaultStoreId, storeById])
+  const selectedBranchId =
+    (reviewState && cart.lines[0]
+      ? reviewState.perLineShipTo[cart.lines[0].lineId] ?? null
+      : null) ?? defaultStoreId
+
+  function setOrderBranch(storeId: string) {
+    setReviewState((prev) => {
+      if (!prev) return prev
+      const perLineShipTo: Record<string, string | null> = { ...prev.perLineShipTo }
+      for (const line of cart.lines) perLineShipTo[line.lineId] = storeId
+      const next = { ...prev, perLineShipTo }
+      writeCheckoutReviewState(next)
+      return next
+    })
+  }
 
   async function confirmOrder() {
     if (inFlightRef.current) return // re-entry guard: one submit in flight at a time
@@ -567,18 +605,41 @@ export function CheckoutReviewClient({
               </dd>
             </div>
           ) : (
-            cart.lines.map((line) => {
-              const storeId = reviewState.perLineShipTo[line.lineId]
-              const store = storeId ? storeById.get(storeId) : null
-              return (
-                <div key={line.lineId} className="flex justify-between gap-4">
-                  <dt className="text-gray-500">{line.productName}</dt>
-                  <dd className="text-right text-gray-900">
-                    {store ? `${store.name ?? 'Store'}${store.city ? ` - ${store.city}` : ''}` : 'Not selected'}
+            <>
+              {isManager && (
+                <div className="flex items-center justify-between gap-4">
+                  <dt className="text-gray-500">
+                    <label htmlFor="ordering-for-branch">Ordering for branch</label>
+                  </dt>
+                  <dd className="text-right">
+                    <select
+                      id="ordering-for-branch"
+                      value={selectedBranchId ?? ''}
+                      onChange={(e) => setOrderBranch(e.target.value)}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-black/40"
+                    >
+                      {managerBranchOptions.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </dd>
                 </div>
-              )
-            })
+              )}
+              {cart.lines.map((line) => {
+                const storeId = reviewState.perLineShipTo[line.lineId]
+                const store = storeId ? storeById.get(storeId) : null
+                return (
+                  <div key={line.lineId} className="flex justify-between gap-4">
+                    <dt className="text-gray-500">{line.productName}</dt>
+                    <dd className="text-right text-gray-900">
+                      {store ? `${store.name ?? 'Store'}${store.city ? ` - ${store.city}` : ''}` : 'Not selected'}
+                    </dd>
+                  </div>
+                )
+              })}
+            </>
           )}
           <div className="flex justify-between gap-4">
             <dt className="text-gray-500">Required by</dt>
