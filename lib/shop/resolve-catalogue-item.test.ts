@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveCatalogueItemForPdp } from './resolve-catalogue-item'
+import { effectiveImageLayout } from './image-layout'
 
 type Row = Record<string, unknown>
 
@@ -150,5 +151,60 @@ describe('resolveCatalogueItemForPdp', () => {
       { getGrantedItemIds: async () => [] }, // not granted → no fallback row
     )
     expect(result).toBeNull()
+  })
+
+  it('threads the item override so the PDP can override or inherit the master layout', async () => {
+    const standardOverrideAdmin = makeStub({
+      b2b_catalogue_items: [
+        {
+          id: HOOD_ITEM,
+          source_product_id: HOOD_PRODUCT,
+          name: 'Hood',
+          image_layout_override: 'standard_views',
+        },
+      ],
+    })
+    const inheritedAdmin = makeStub({
+      b2b_catalogue_items: [
+        {
+          id: HOOD_ITEM,
+          source_product_id: HOOD_PRODUCT,
+          name: 'Hood',
+          image_layout_override: null,
+        },
+      ],
+    })
+    const params = {
+      productId: HOOD_PRODUCT,
+      organizationId: ORG,
+      membershipId: 'm1',
+      isPreview: false,
+      previewItemId: null,
+    }
+    const deps = { getGrantedItemIds: async () => [HOOD_ITEM] }
+
+    const overridden = await resolveCatalogueItemForPdp(
+      standardOverrideAdmin,
+      params,
+      deps,
+    )
+    const inherited = await resolveCatalogueItemForPdp(
+      inheritedAdmin,
+      params,
+      deps,
+    )
+
+    expect(
+      effectiveImageLayout(
+        'merchandised_gallery',
+        overridden?.image_layout_override,
+      ),
+    ).toBe('standard_views')
+    expect(
+      effectiveImageLayout(
+        'merchandised_gallery',
+        inherited?.image_layout_override,
+      ),
+    ).toBe('merchandised_gallery')
   })
 })

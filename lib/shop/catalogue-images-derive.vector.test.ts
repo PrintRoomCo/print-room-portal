@@ -15,6 +15,7 @@ describe('deriveCardImageUrl — shared vector', () => {
     ]
     expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv })).toBe('AC_FRONT')
   })
+
   it('B: only per-colour fronts (lead wins) — returns LEAD_FRONT', () => {
     const images = [
       { color_swatch_id: 'lead', view: 'front', source: 'staff_upload', position: 0, image_url: 'LEAD_FRONT' },
@@ -22,15 +23,18 @@ describe('deriveCardImageUrl — shared vector', () => {
     ]
     expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv })).toBe('LEAD_FRONT')
   })
+
   it('C: snapshot excluded — returns MASTER', () => {
     const images = [
       { color_swatch_id: null, view: 'front', source: 'designer_snapshot', position: 0, image_url: 'SNAP' },
     ]
     expect(deriveCardImageUrl({ images, leadColorSwatchId: null, masterImageUrl: 'MASTER', normalizeView: nv })).toBe('MASTER')
   })
+
   it('D: master only — returns MASTER', () => {
     expect(deriveCardImageUrl({ images: [], leadColorSwatchId: null, masterImageUrl: 'MASTER', normalizeView: nv })).toBe('MASTER')
   })
+
   it('E: first all-colours by position when no front — returns AC_LEFT1', () => {
     const images = [
       { color_swatch_id: null, view: 'back', source: 'staff_upload', position: 2, image_url: 'AC_BACK2' },

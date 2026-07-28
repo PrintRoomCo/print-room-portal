@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ProductImageGallery, type GalleryImage } from '../ProductImageGallery'
@@ -133,5 +133,75 @@ describe('ProductImageGallery keyboard navigation', () => {
       'src',
       '/fallback.png',
     )
+  })
+
+  it('keeps same-view images in Merchandised order and resets to the first image on colour change', async () => {
+    const galleryImages: GalleryImage[] = [
+      {
+        id: 'red-second',
+        url: '/red-second.png',
+        view: 'front',
+        position: 0,
+        gallery_position: 2,
+        color_swatch_id: 'red',
+        scope: 'catalogue',
+      },
+      {
+        id: 'neutral-first',
+        url: '/neutral-first.png',
+        view: 'front',
+        position: 5,
+        gallery_position: 0,
+        color_swatch_id: null,
+        scope: 'master',
+      },
+      {
+        id: 'blue-first',
+        url: '/blue-first.png',
+        view: 'front',
+        position: 1,
+        gallery_position: 1,
+        color_swatch_id: 'blue',
+        scope: 'catalogue',
+      },
+    ]
+    const { rerender } = render(
+      <ProductImageGallery
+        images={galleryImages}
+        fallbackUrl={null}
+        productName="Merch tee"
+        selectedColorSwatchId="red"
+        imageLayout="merchandised_gallery"
+      />,
+    )
+
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    expect(
+      screen.getByRole('button', { name: 'Enlarge Merch tee' })
+        .querySelector('img'),
+    ).toHaveAttribute('src', '/neutral-first.png')
+
+    await userEvent.click(screen.getAllByRole('tab')[1])
+    expect(
+      screen.getByRole('button', { name: 'Enlarge Merch tee' })
+        .querySelector('img'),
+    ).toHaveAttribute('src', '/red-second.png')
+
+    rerender(
+      <ProductImageGallery
+        images={galleryImages}
+        fallbackUrl={null}
+        productName="Merch tee"
+        selectedColorSwatchId="blue"
+        imageLayout="merchandised_gallery"
+      />,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Enlarge Merch tee' })
+          .querySelector('img'),
+      ).toHaveAttribute('src', '/neutral-first.png')
+    })
   })
 })

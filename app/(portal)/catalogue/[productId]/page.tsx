@@ -23,6 +23,10 @@ import {
   getPeriodBracketsForItem,
 } from '@/lib/pricing/period-brackets'
 import { getPreOrderDemandForItem } from '@/lib/pricing/preorder-demand'
+import {
+  effectiveImageLayout,
+  type ImageLayout,
+} from '@/lib/shop/image-layout'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -45,6 +49,7 @@ interface ProductDetail {
   garment_family: string | null
   default_sizes: string[] | null
   fulfilment_type: FulfilmentType | null
+  image_layout: ImageLayout
   brands: { name: string } | { name: string }[] | null
   categories: { name: string } | { name: string }[] | null
 }
@@ -96,7 +101,7 @@ const loadProductDetailPageData = cache(async (
 
   if (!catItem) return { status: 'not-found' }
 
-  const productSelect = 'id, name, description, image_url, moq, max_order_qty, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
+  const productSelect = 'id, name, description, image_url, moq, max_order_qty, lead_time_days, sizing_type, decoration_methods, decoration_price, is_active, sku, safety_standard, specs, supports_labels, garment_family, default_sizes, fulfilment_type, image_layout, brands!products_brand_id_fkey(name), categories!products_category_id_fkey(name)'
 
   const productQuery = admin
     .from('products')
@@ -195,6 +200,7 @@ const loadProductDetailPageData = cache(async (
     { data: catalogueColorRows },
     { data: catalogueImageRows },
     { data: hiddenViewRows },
+    { data: galleryOrderRows },
     decorations,
     manualDecorationSeed,
   ] = await Promise.all([
@@ -230,6 +236,9 @@ const loadProductDetailPageData = cache(async (
     admin.from('b2b_catalogue_item_hidden_views')
       .select('color_swatch_id, view')
       .eq('catalogue_item_id', catItem.id),
+    admin.from('b2b_catalogue_item_gallery_order')
+      .select('product_image_id, catalogue_item_image_id, position')
+      .eq('catalogue_item_id', catItem.id),
     loadCatalogueItemDecorations(admin, catItem.id),
     manualDecorationSeedQuery,
   ])
@@ -238,6 +247,10 @@ const loadProductDetailPageData = cache(async (
   // Preview force-show: a still-draft (is_active=false) product must render
   // when the staff preview launched straight to this item's PDP.
   if (!productRow || (!productRow.is_active && !context.isPreview)) return { status: 'not-found' }
+  const imageLayout = effectiveImageLayout(
+    productRow.image_layout,
+    catItem.image_layout_override,
+  )
 
   // Spec 3a — per-variant billing class (variant_inventory.billing_mode), keyed
   // by the product's variants for this org. Replaces the item-level read: the
@@ -322,6 +335,23 @@ const loadProductDetailPageData = cache(async (
     }
   }
 
+  const galleryPosition = new Map<string, number>()
+  for (const row of (galleryOrderRows ?? []) as Array<{
+    product_image_id: string | null
+    catalogue_item_image_id: string | null
+    position: number
+  }>) {
+    if (row.product_image_id) {
+      galleryPosition.set(`master:${row.product_image_id}`, row.position)
+    }
+    if (row.catalogue_item_image_id) {
+      galleryPosition.set(
+        `catalogue:${row.catalogue_item_image_id}`,
+        row.position,
+      )
+    }
+  }
+
   const catalogueImages = ((catalogueImageRows ?? []) as Array<{
     id: string
     image_url: string | null
@@ -334,6 +364,7 @@ const loadProductDetailPageData = cache(async (
     .filter((r) => r.image_url)
     .map((r) => ({
       id: `catalogue:${r.id}`,
+      source_id: r.id,
       url: r.image_url as string,
       view: normalizeCatalogueImageView(r.view, r.image_url),
       alt: r.alt_text,
@@ -341,6 +372,8 @@ const loadProductDetailPageData = cache(async (
       color_swatch_id: r.color_swatch_id,
       scope: 'catalogue' as const,
       source: r.source,
+      gallery_position:
+        galleryPosition.get(`catalogue:${r.id}`) ?? null,
     }))
 
   const masterImages = ((imageRows ?? []) as Array<{
@@ -354,12 +387,14 @@ const loadProductDetailPageData = cache(async (
     .filter((r) => r.file_url)
     .map((r) => ({
       id: `master:${r.id}`,
+      source_id: r.id,
       url: r.file_url as string,
       view: normalizeCatalogueImageView(r.view, r.file_url),
       alt: r.alt_text,
       position: r.position,
       color_swatch_id: r.color_swatch_id,
       scope: 'master' as const,
+      gallery_position: galleryPosition.get(`master:${r.id}`) ?? null,
     }))
   // Each colour's own swatch photo, as a per-colour master image. The gallery
   // resolver ranks this priority 4 — below catalogue decoration images (p1–p3)
@@ -375,6 +410,7 @@ const loadProductDetailPageData = cache(async (
       position: 0,
       color_swatch_id: o.id,
       scope: 'master' as const,
+      synthetic: true,
     }))
   const images = [...catalogueImages, ...masterImages, ...swatchImages]
 
@@ -465,6 +501,7 @@ const loadProductDetailPageData = cache(async (
     colourOptions[0]?.id ?? null,
     productRow.image_url,
     hiddenViewSetForColour(hiddenViewRowsClean, colourOptions[0]?.id ?? null),
+    imageLayout,
   )
 
   const displayProduct = {
@@ -551,6 +588,7 @@ const loadProductDetailPageData = cache(async (
       customerRole: context.role,
       orderingPermission: context.orderingPermission,
       images,
+      imageLayout,
       hiddenViewRows: hiddenViewRowsClean,
       colourOptions,
       decorations,

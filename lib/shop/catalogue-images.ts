@@ -3,6 +3,8 @@ import type { ImageLayout } from './image-layout'
 
 export interface CatalogueAwareGalleryImage {
   id: string
+  /** Raw persisted id, retained when `id` is scope-prefixed for union safety. */
+  source_id?: string
   url: string
   view: string | null
   alt?: string | null
@@ -22,6 +24,7 @@ export interface CatalogueItemImageRow {
   position: number | null
   image_url: string | null
   color_swatch_id: string | null
+  gallery_position?: number | null
 }
 
 export interface CardFallbackImage {
@@ -183,6 +186,62 @@ export function pickCatalogueCardThumbnail(args: {
   return args.explicitCardImageUrl ??
     pickCataloguePdpMockupThumbnail(args.rows, args.leadColorSwatchId) ??
     pickCatalogueItemThumbnail(args.fallbackUrl, args.rows, args.leadColorSwatchId)
+}
+
+/**
+ * One mode-aware grid-card resolver for both collapsed products and exploded
+ * colour tiles. The Standard branches delegate to the pre-existing resolvers
+ * unchanged; Merchandised mode uses the same persisted union-order derive for
+ * both card shapes.
+ */
+export function pickCatalogueGridThumbnail(args: {
+  kind: 'collapsed' | 'colour'
+  layout: ImageLayout
+  fallbackUrl: string | null
+  rows: CatalogueItemImageRow[]
+  masterImages?: CardFallbackImage[]
+  selectedColorSwatchId: string | null
+  explicitCardImageUrl?: string | null
+  swatchImageUrl?: string | null
+}): string | null {
+  if (args.layout === 'standard_views') {
+    if (args.kind === 'colour') {
+      return pickCatalogueColourThumbnail({
+        fallbackUrl: args.fallbackUrl,
+        rows: args.rows,
+        selectedColorSwatchId: args.selectedColorSwatchId,
+        swatchImageUrl: args.swatchImageUrl,
+      })
+    }
+    return pickCatalogueCardThumbnail({
+      fallbackUrl: args.fallbackUrl,
+      rows: args.rows,
+      leadColorSwatchId: args.selectedColorSwatchId,
+      explicitCardImageUrl: args.explicitCardImageUrl,
+    })
+  }
+
+  if (args.explicitCardImageUrl) return args.explicitCardImageUrl
+
+  return deriveCardImageUrl({
+    images: [
+      ...args.rows.map((row, index) => ({
+        id: row.id ?? `${row.catalogue_item_id}:${index}`,
+        color_swatch_id: row.color_swatch_id,
+        view: row.view,
+        source: row.source,
+        position: row.position,
+        gallery_position: row.gallery_position ?? null,
+        scope: 'catalogue' as const,
+        image_url: row.image_url,
+      })),
+      ...(args.masterImages ?? []),
+    ],
+    leadColorSwatchId: args.selectedColorSwatchId,
+    masterImageUrl: args.fallbackUrl,
+    normalizeView: (view) => normalizeCatalogueImageView(view),
+    layout: 'merchandised_gallery',
+  })
 }
 
 export function pickCatalogueColourThumbnail(args: {

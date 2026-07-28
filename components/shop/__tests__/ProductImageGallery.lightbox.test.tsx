@@ -49,4 +49,103 @@ describe('ProductImageGallery lightbox', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Enlarge Test product' })).toBeInTheDocument()
   })
+
+  it('opens the lightbox at the first Merchandised image and preserves union order', async () => {
+    const user = userEvent.setup()
+    render(
+      <ProductImageGallery
+        images={[
+          {
+            id: 'second',
+            url: '/second.png',
+            view: 'front',
+            position: 0,
+            gallery_position: 1,
+          },
+          {
+            id: 'first',
+            url: '/first.png',
+            view: 'front',
+            position: 9,
+            gallery_position: 0,
+          },
+        ]}
+        fallbackUrl={null}
+        productName="Merch product"
+        selectedColorSwatchId={null}
+        imageLayout="merchandised_gallery"
+      />,
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: 'Enlarge Merch product' }),
+    )
+    expect(screen.getByRole('dialog').querySelector('img')).toHaveAttribute(
+      'src',
+      '/first.png',
+    )
+    await user.click(screen.getByRole('button', { name: 'Next image' }))
+    expect(screen.getByRole('dialog').querySelector('img')).toHaveAttribute(
+      'src',
+      '/second.png',
+    )
+  })
+
+  it('matches live overlays against the raw master image id and never overlays a snapshot', () => {
+    const { container, rerender } = render(
+      <ProductImageGallery
+        images={[
+          {
+            id: 'master:image-1',
+            source_id: 'image-1',
+            url: '/master.png',
+            view: 'front',
+            scope: 'master',
+          },
+        ]}
+        fallbackUrl={null}
+        productName="Overlay product"
+        selectedColorSwatchId={null}
+        overlays={[
+          {
+            linkId: 'link-1',
+            imageId: 'image-1',
+            rect: { x: 0, y: 0, w: 1, h: 1 },
+            placement: { x: 0, y: 0, w: 0.5, h: 0.5, rotation_deg: 0 },
+            artworkUrl: '/artwork.png',
+          },
+        ]}
+      />,
+    )
+    expect(container.querySelector('img[src="/artwork.png"]')).toBeInTheDocument()
+
+    rerender(
+      <ProductImageGallery
+        images={[
+          {
+            id: 'catalogue:snapshot-1',
+            source_id: 'snapshot-1',
+            url: '/snapshot.png',
+            view: null,
+            scope: 'catalogue',
+            source: 'designer_snapshot',
+          },
+        ]}
+        fallbackUrl={null}
+        productName="Overlay product"
+        selectedColorSwatchId={null}
+        imageLayout="merchandised_gallery"
+        overlays={[
+          {
+            linkId: 'link-1',
+            imageId: 'snapshot-1',
+            rect: { x: 0, y: 0, w: 1, h: 1 },
+            placement: { x: 0, y: 0, w: 0.5, h: 0.5, rotation_deg: 0 },
+            artworkUrl: '/artwork.png',
+          },
+        ]}
+      />,
+    )
+    expect(container.querySelector('img[src="/artwork.png"]')).not.toBeInTheDocument()
+  })
 })

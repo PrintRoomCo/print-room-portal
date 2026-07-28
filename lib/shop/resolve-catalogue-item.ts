@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getGrantedCatalogueItemIds } from './member-access'
+import type { ImageLayout } from './image-layout'
 
 /** The catalogue-item shape the PDP loader needs to render a skin. */
 export type PdpCatalogueItem = {
@@ -21,10 +22,12 @@ export type PdpCatalogueItem = {
   /** Feature 2 — per-product custom-name cap (nullable). NULL = no PDP custom-name
    *  input for this product. A positive int enables it and caps the input length. */
   custom_name_max_length: number | null
+  /** Nullable item-level override; NULL inherits products.image_layout. */
+  image_layout_override: ImageLayout | null
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, custom_name_max_length, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(organization_id, is_active)'
 
 export interface ResolveCatalogueItemParams {
   productId: string
