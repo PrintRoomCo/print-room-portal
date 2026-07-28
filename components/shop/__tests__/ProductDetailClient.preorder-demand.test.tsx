@@ -75,9 +75,6 @@ describe('PDP — pre-order demand counts', () => {
     expect(
       screen.queryByRole('status', { name: /pre-order demand so far/i }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByLabelText('Order quantity savings available'),
-    ).toHaveTextContent('Order Quantity Savings')
   })
 
   it('names the product and shows this franchise total saving', () => {
@@ -95,8 +92,6 @@ describe('PDP — pre-order demand counts', () => {
     const heading = screen.getByRole('heading', {
       name: 'Recycled Weekender Duffel',
     })
-    const savingPill = screen.getByLabelText('Order quantity savings available')
-    expect(savingPill).toHaveTextContent('Order Quantity Savings')
-    expect(heading.parentElement).toContainElement(savingPill)
+    expect(heading.parentElement).not.toHaveTextContent('Order Quantity Savings')
   })
 })
