@@ -85,8 +85,60 @@ export interface PortalOrderTrackerData {
   preOrders: PreOrderTrackerItem[]
 }
 
+// Reconstruct the minimal User shape the portal consumes (only .id and .email
+// are read anywhere) from a verified JWT payload. sub -> id, email -> email;
+// the remaining User fields are filled from claims when present. created_at is
+// not carried in the JWT — no caller reads it, so an empty string is safe.
+// Returns null for a payload with no usable subject.
+export function userFromClaims(claims: Record<string, unknown> | null | undefined): User | null {
+  const sub = claims?.sub
+  if (typeof sub !== 'string' || sub.length === 0) return null
+  const aud = claims!.aud
+  return {
+    id: sub,
+    aud: typeof aud === 'string' ? aud : Array.isArray(aud) ? String(aud[0] ?? '') : '',
+    email: typeof claims!.email === 'string' ? (claims!.email as string) : undefined,
+    phone: typeof claims!.phone === 'string' ? (claims!.phone as string) : undefined,
+    role: typeof claims!.role === 'string' ? (claims!.role as string) : undefined,
+    app_metadata: (claims!.app_metadata as User['app_metadata']) ?? {},
+    user_metadata: (claims!.user_metadata as User['user_metadata']) ?? {},
+    created_at: '',
+  } as User
+}
+
+// Structural type for the optional getClaims() method (auth-js ≥ 2.10x). Guarded
+// at the call site so an older SDK / test double lacking it degrades to getUser.
+type ClaimsCapableAuth = {
+  getClaims?: () => Promise<{
+    data: { claims?: Record<string, unknown> } | null
+    error: unknown
+  }>
+}
+
 export const getPortalUser = cache(async (): Promise<User | null> => {
   const supabase = await getSupabaseServerComponent()
+
+  // getClaims() verifies the access token LOCALLY when it is signed with an
+  // asymmetric key (ES256, after the JWT signing-key rotation) — no network
+  // round-trip. For a legacy HS256 session it internally falls back to a
+  // getUser() network verify, so this is correct during and after the key
+  // transition. Anything unexpected (method absent on an older SDK, thrown
+  // error, missing/invalid claims, transient JWKS fetch failure) falls through
+  // to the authoritative getUser() rather than treating the request as
+  // logged-out.
+  const auth = supabase.auth as unknown as ClaimsCapableAuth
+  if (typeof auth.getClaims === 'function') {
+    try {
+      const { data, error } = await auth.getClaims()
+      if (!error) {
+        const user = userFromClaims(data?.claims)
+        if (user) return user
+      }
+    } catch {
+      // fall through to getUser()
+    }
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
