@@ -11,6 +11,7 @@ import { AvailabilityBadge } from './AvailabilityBadge'
 import { showsPrepaidStockBadge } from '@/lib/shop/prepaid-tag'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
+import type { PreOrderDemand } from '@/lib/pricing/preorder-demand'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
@@ -182,6 +183,12 @@ interface Props {
   locationOptions?: LocationOption[]
   /** Feature 2 — per-product custom-name cap. null/absent = no custom-name input. */
   customNameMaxLength?: number | null
+  /**
+   * Pre-order franchise demand for this product in the current open window
+   * (whole network). null/absent => not a pre-order franchise item, or no open
+   * window => the block is not rendered.
+   */
+  preOrderDemand?: PreOrderDemand | null
 }
 
 export function ProductDetailClient({
@@ -205,6 +212,7 @@ export function ProductDetailClient({
   volumeDisplayHiddenBands = [],
   locationOptions = [],
   customNameMaxLength = null,
+  preOrderDemand = null,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
@@ -1343,6 +1351,24 @@ export function ProductDetailClient({
             </div>
           ) : (
           <>
+          {preOrderDemand && (
+            <section
+              role="status"
+              aria-label="Pre-order demand so far"
+              className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900"
+            >
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-blue-700">
+                This pre-order run so far
+              </p>
+              <p className="mt-1 tabular-nums">
+                <span className="font-semibold">{preOrderDemand.unitsOrdered}</span>{' '}
+                {preOrderDemand.unitsOrdered === 1 ? 'unit' : 'units'} ordered across{' '}
+                <span className="font-semibold">{preOrderDemand.orderCount}</span>{' '}
+                {preOrderDemand.orderCount === 1 ? 'order' : 'orders'} — every
+                location&apos;s order counts.
+              </p>
+            </section>
+          )}
           {displayVolumeBrackets.length > 0 && (!isInventoryMode || !selectedColourPrepaid) && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
