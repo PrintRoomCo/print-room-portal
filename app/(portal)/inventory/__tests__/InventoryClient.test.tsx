@@ -9,6 +9,7 @@ import type { AuditEntry } from '@/lib/inventory/audit'
 const rows: CustomerInventoryRow[] = [
   {
     variant_id: 'v1',
+    size_id: 1,
     product_id: 'p1',
     product_name: 'Basic Tee',
     colour_name: 'Bone',

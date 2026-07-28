@@ -50,11 +50,11 @@ interface QuoteItemRow {
   unit_price: number | null
   decorations: unknown
   ship_to_store_id: string | null
+  size_label: string | null
   product_variants:
     | {
         color_swatch_id: string | null
         product_color_swatches: { label: string | null } | { label: string | null }[] | null
-        sizes: { label: string | null } | { label: string | null }[] | null
       }
     | null
 }
@@ -174,11 +174,10 @@ export default async function ConfirmationPage({
   const { data: rawLines, error: linesError } = await admin
     .from('quote_items')
     .select(
-      `id, product_id, product_name, catalogue_item_id, quantity, unit_price, decorations, ship_to_store_id,
+      `id, product_id, product_name, catalogue_item_id, quantity, unit_price, decorations, ship_to_store_id, size_label,
        product_variants (
          color_swatch_id,
-         product_color_swatches (label),
-         sizes (label)
+         product_color_swatches (label)
        )`,
     )
     .eq('quote_id', order.quotes.id)
@@ -256,9 +255,8 @@ export default async function ConfirmationPage({
   const lines: ConfirmationLine[] = lineRows.map((row) => {
     const variant = row.product_variants
     const swatch = pickOne(variant?.product_color_swatches ?? null)
-    const size = pickOne(variant?.sizes ?? null)
     const variantLabel =
-      [swatch?.label, size?.label].filter(Boolean).join(' / ') || null
+      [swatch?.label, row.size_label].filter(Boolean).join(' / ') || null
     const productImage =
       row.product_id ? productImageById.get(row.product_id) ?? null : null
     const catalogueFrontImage =

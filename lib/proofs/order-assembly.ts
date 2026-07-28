@@ -55,6 +55,8 @@ export interface OrderProofLineRow {
   variant_id: string | null
   decorations?: unknown
   customizations?: unknown
+  // SKUCOLLAPSE: size lives on the quote line, not the (colourway-grain) variant.
+  size_label?: string | null
   product_variants?: unknown
 }
 
@@ -247,12 +249,11 @@ export async function loadOrderProofAssembly(
         variant_id,
         decorations,
         customizations,
+        size_label,
         product_variants (
           id,
           color_swatch_id,
-          size_id,
-          product_color_swatches (id, label, hex),
-          sizes (id, label, order_index)
+          product_color_swatches (id, label, hex)
         )
       `)
       .eq('quote_id', quote.id),
@@ -316,7 +317,7 @@ export function buildProofDocumentFromOrderRows(
   if (input.lines.length === 0) checklist.push('The order has no quote_items rows.')
 
   for (const line of input.lines) {
-    const variant = summarizeVariant(line.product_variants)
+    const variant = summarizeVariant(line.product_variants, line.size_label ?? null)
     const snapshots = decorationSnapshotsFromLine(line)
     if (snapshots.length === 0) {
       checklist.push(`${line.product_name || line.id} has no selected artwork/decorations.`)
@@ -696,15 +697,14 @@ function decorationSnapshotsFromLine(line: OrderProofLineRow): DecorationSnapsho
     .filter((item): item is DecorationSnapshot => Boolean(item))
 }
 
-function summarizeVariant(value: unknown): VariantSummary {
+function summarizeVariant(value: unknown, sizeLabel: string | null): VariantSummary {
   const variant = asObject(pickOne(value))
   const swatch = asObject(pickOne(variant.product_color_swatches))
-  const size = asObject(pickOne(variant.sizes))
   return {
     colorSwatchId: toStringValue(variant.color_swatch_id || swatch.id) || null,
     colorLabel: toStringValue(swatch.label),
     colorHex: toStringValue(swatch.hex) || null,
-    sizeLabel: toStringValue(size.label, 'One Size'),
+    sizeLabel: toStringValue(sizeLabel, 'One Size'),
   }
 }
 

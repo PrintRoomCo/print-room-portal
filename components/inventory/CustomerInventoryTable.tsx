@@ -48,7 +48,7 @@ export function CustomerInventoryTable({ rows }: CustomerInventoryTableProps) {
         <tbody>
           {rows.map((row) => (
             <tr
-              key={row.variant_id}
+              key={`${row.variant_id}::${row.size_id ?? ''}`}
               className="border-t border-gray-100 hover:bg-gray-50 transition-colors"
             >
               <td className="px-4 py-3">

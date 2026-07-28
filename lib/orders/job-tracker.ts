@@ -53,13 +53,13 @@ interface QuoteItemRow {
   quantity: number | null
   unit_price: number | null
   decorations: unknown
+  size_label: string | null
   product_variants:
     | {
         product_color_swatches:
           | { label: string | null; hex: string | null }
           | { label: string | null; hex: string | null }[]
           | null
-        sizes: { label: string | null } | { label: string | null }[] | null
       }
     | null
 }
@@ -111,10 +111,9 @@ export async function createJobTrackerShellForOrder(
     admin
       .from('quote_items')
       .select(
-        `id, product_id, product_name, quantity, unit_price, decorations,
+        `id, product_id, product_name, quantity, unit_price, decorations, size_label,
          product_variants (
-           product_color_swatches (label, hex),
-           sizes (label)
+           product_color_swatches (label, hex)
          )`,
       )
       .eq('quote_id', args.quoteId),
@@ -163,7 +162,7 @@ export async function createJobTrackerShellForOrder(
 
   const items: QuoteDataItem[] = itemRows.map((row) => {
     const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
-    const size = pickOne(row.product_variants?.sizes ?? null)
+    const sizeLabel = (row.size_label as string | null) ?? null
     const quantity = Number(row.quantity ?? 0)
     return {
       productId: row.product_id ?? undefined,
@@ -173,7 +172,7 @@ export async function createJobTrackerShellForOrder(
       // so ProjectLineItem renders the size:qty chip. Absent for variantless
       // lines — the card falls back to total quantity.
       sizes:
-        size?.label && quantity > 0 ? { [size.label]: quantity } : undefined,
+        sizeLabel && quantity > 0 ? { [sizeLabel]: quantity } : undefined,
       subtotal: quantity * Number(row.unit_price ?? 0),
       customizations: {
         colors: swatch?.label

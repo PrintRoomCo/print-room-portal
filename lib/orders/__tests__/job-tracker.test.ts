@@ -132,9 +132,9 @@ function baseSelects(): SelectMatcher[] {
             decorations: [
               { name: 'Front logo', artworkUrl: 'https://x/front.png', method: 'screen' },
             ],
+            size_label: 'M',
             product_variants: {
               product_color_swatches: { label: 'Navy', hex: '#0b1c2c' },
-              sizes: { label: 'M' },
             },
           },
         ],

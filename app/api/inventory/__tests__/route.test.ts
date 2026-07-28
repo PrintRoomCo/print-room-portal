@@ -46,8 +46,10 @@ describe('GET /api/inventory', () => {
     vi.mocked(getSupabaseServer).mockReturnValue(
       makeAdmin({
         user_organizations: { data: { organization_id: 'org-1' }, error: null },
+        // SKUCOLLAPSE: variant_availability is per-(variant, size); the size label
+        // resolves from the `sizes` table, not a product_variants embed.
         variant_availability: {
-          data: [{ variant_id: 'v1', stock_qty: 25, committed_qty: 5, available_qty: 20 }],
+          data: [{ variant_id: 'v1', size_id: 3, stock_qty: 25, committed_qty: 5, available_qty: 20 }],
           error: null,
         },
         product_variants: {
@@ -59,12 +61,12 @@ describe('GET /api/inventory', () => {
               // product_color_swatches has `label`/`hex` — NOT `name`. The old route
               // selected `name` and 400'd; this asserts colour resolves from `label`.
               product_color_swatches: { label: 'Bone', hex: '#D1CDCA' },
-              sizes: { label: 'XS' },
               products: { name: 'Staple Tee' },
             },
           ],
           error: null,
         },
+        sizes: { data: [{ id: 3, label: 'XS' }], error: null },
       }) as never,
     )
 
@@ -74,6 +76,7 @@ describe('GET /api/inventory', () => {
     expect(json.rows).toHaveLength(1)
     expect(json.rows[0]).toMatchObject({
       variant_id: 'v1',
+      size_id: 3,
       product_id: 'p1',
       product_name: 'Staple Tee',
       colour_name: 'Bone',

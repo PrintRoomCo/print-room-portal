@@ -2,6 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface CustomerInventoryRow {
   variant_id: string
+  // SKUCOLLAPSE: rows are per-(colourway variant, size) — size_id disambiguates
+  // the sibling stock rows now that product_variants is colourway-grain.
+  size_id: number | null
   product_id: string
   product_name: string
   colour_name: string | null
@@ -38,7 +41,7 @@ export async function getCustomerInventoryRows(
   //    base table below and joined in JS — same pattern as the reorder route.
   const { data: stockRows, error: stockError } = await adminClient
     .from('variant_availability')
-    .select('variant_id, stock_qty, committed_qty, available_qty')
+    .select('variant_id, size_id, stock_qty, committed_qty, available_qty')
     .eq('organization_id', organizationId)
 
   if (stockError) {
@@ -48,6 +51,7 @@ export async function getCustomerInventoryRows(
 
   const stock = (stockRows ?? []) as Array<{
     variant_id: string
+    size_id: number | null
     stock_qty: number
     committed_qty: number
     available_qty: number
@@ -58,7 +62,9 @@ export async function getCustomerInventoryRows(
   )
   if (variantIds.length === 0) return []
 
-  // 2. Variant descriptors from the base table — real FKs, so the embeds resolve.
+  // 2. Variant descriptors from the base table — colourway-grain, so no size
+  //    embed. Size labels are resolved separately (the size axis lives on
+  //    variant_inventory / variant_availability, not product_variants).
   const { data: variantRows, error: variantError } = await adminClient
     .from('product_variants')
     .select(
@@ -67,7 +73,6 @@ export async function getCustomerInventoryRows(
       product_id,
       updated_at,
       product_color_swatches ( label, hex ),
-      sizes ( label ),
       products ( name )
     `,
     )
@@ -86,18 +91,30 @@ export async function getCustomerInventoryRows(
     descriptorById.set(v.id, v)
   }
 
+  // 3. Resolve size labels for the stamped sizes.
+  const sizeIds = Array.from(
+    new Set(stock.map((s) => s.size_id).filter((id): id is number => id != null)),
+  )
+  const sizeLabelById = new Map<number, string | null>()
+  if (sizeIds.length > 0) {
+    const { data: sizeRows } = await adminClient.from('sizes').select('id, label').in('id', sizeIds)
+    for (const s of (sizeRows ?? []) as Array<{ id: number; label: string | null }>) {
+      sizeLabelById.set(s.id, s.label)
+    }
+  }
+
   return stock.map((s) => {
     const v = descriptorById.get(s.variant_id)
     const swatch = pickOne(v?.product_color_swatches) as { label?: string; hex?: string } | null
-    const size = pickOne(v?.sizes) as { label?: string } | null
     const product = pickOne(v?.products) as { name?: string } | null
     return {
       variant_id: s.variant_id,
+      size_id: s.size_id ?? null,
       product_id: v?.product_id ?? '',
       product_name: product?.name ?? 'Product',
       colour_name: swatch?.label ?? null,
       colour_hex: swatch?.hex ?? null,
-      size_label: size?.label ?? null,
+      size_label: s.size_id == null ? null : sizeLabelById.get(s.size_id) ?? null,
       available_qty: s.available_qty ?? (s.stock_qty ?? 0) - (s.committed_qty ?? 0),
       stock_qty: s.stock_qty ?? 0,
       committed_qty: s.committed_qty ?? 0,

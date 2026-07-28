@@ -51,9 +51,9 @@ export async function POST(request: Request) {
     .from('quote_items')
     .select(
       `product_id, variant_id, product_name, quantity, decorations,
-       ship_to_store_id, catalogue_item_id,
+       ship_to_store_id, catalogue_item_id, size_label,
        qty_from_stock, qty_to_make,
-       product_variants ( color_swatch_id, product_color_swatches(label), sizes(label) )`,
+       product_variants ( color_swatch_id, product_color_swatches(label) )`,
     )
     .eq('quote_id', quoteId)
   if (itemsErr) return NextResponse.json({ error: itemsErr.message }, { status: 500 })
@@ -119,7 +119,6 @@ export async function POST(request: Request) {
   const rows: QuoteItemRebuildRow[] = raw.map((r) => {
     const pv = pickOne(r.product_variants as unknown)
     const swatch = pv ? pickOne((pv as Record<string, unknown>).product_color_swatches) : null
-    const size = pv ? pickOne((pv as Record<string, unknown>).sizes) : null
     const productId = typeof r.product_id === 'string' ? r.product_id : null
     const catalogueItemId = (r.catalogue_item_id as string | null) ?? null
     const selectedSwatchId =
@@ -143,7 +142,7 @@ export async function POST(request: Request) {
       qty_from_stock: Number(r.qty_from_stock ?? 0),
       qty_to_make: Number(r.qty_to_make ?? 0),
       colour_label: (swatch as { label?: string } | null)?.label ?? null,
-      size_label: (size as { label?: string } | null)?.label ?? null,
+      size_label: (r.size_label as string | null) ?? null,
       image_url: catalogueFrontImage ?? (productId ? imageByProductId.get(productId) ?? null : null),
     }
   })
