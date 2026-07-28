@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServer } from '@/lib/supabase'
-import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
+import { getPortalUser } from '@/lib/portal-data'
 import { readPreviewSession } from '@/lib/preview/cookie'
 import { buildPreviewContext } from '@/lib/preview/context'
 import { effectivePermission, type MemberPermission } from '@/lib/shop/fulfilment-mode'
@@ -95,8 +95,11 @@ export async function requireB2BCustomer(
     // Stale/invalid target — fall through to normal auth.
   }
 
-  const authed = await getSupabaseServerComponent()
-  const { data: { user } } = await authed.auth.getUser()
+  // Reuse the React cache()-wrapped getPortalUser so this getUser() network hop
+  // dedupes with the portal layout's own getPortalUser()/getPortalCompanyAccess()
+  // call — one auth round-trip per request instead of two. (getUser is a network
+  // verify here: HS256 JWTs can't be checked locally.)
+  const user = await getPortalUser()
   if (!user) return { kind: 'unauthenticated' }
 
   const admin = getSupabaseServer()
