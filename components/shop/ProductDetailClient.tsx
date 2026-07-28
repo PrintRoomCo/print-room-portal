@@ -1343,7 +1343,7 @@ export function ProductDetailClient({
             </div>
           ) : (
           <>
-          {displayVolumeBrackets.length > 0 && !isInventoryMode && (
+          {displayVolumeBrackets.length > 0 && (!isInventoryMode || !selectedColourPrepaid) && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                 Volume Pricing
