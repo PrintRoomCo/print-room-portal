@@ -887,6 +887,15 @@ export function ProductDetailClient({
       ),
     [brackets, decorationPerUnitAtBracket, volumeDisplayHiddenBands],
   )
+  const showOrderQuantitySavingsPill =
+    (!isInventoryMode || !selectedColourPrepaid) &&
+    displayVolumeBrackets.length > 1 &&
+    displayVolumeBrackets
+      .slice(1)
+      .some(
+        (bracket) =>
+          bracket.unit_price < displayVolumeBrackets[0].unit_price,
+      )
 
   function handleAddToCart() {
     if (!pricing || pricing.status !== 'ok') return
@@ -1321,12 +1330,12 @@ export function ProductDetailClient({
                 <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(32px,4vw,56px)] text-gray-900">
                   {product.name}
                 </h1>
-                {preOrderSavings && preOrderSavings.franchiseSavings > 0 && (
+                {showOrderQuantitySavingsPill && (
                   <span
-                    aria-label="Potential pre-order saving"
+                    aria-label="Order quantity savings available"
                     className="inline-flex items-center rounded-full bg-[rgb(var(--accent-mint))] px-3 py-1 text-xs font-medium text-[rgb(var(--accent-mint-ink))]"
                   >
-                    Save {format(preOrderSavings.franchiseSavings)}
+                    Order Quantity Savings
                   </span>
                 )}
                 {showAvailability && (
