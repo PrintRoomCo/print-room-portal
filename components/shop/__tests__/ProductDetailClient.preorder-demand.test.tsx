@@ -88,5 +88,12 @@ describe('PDP — pre-order demand counts', () => {
     expect(block).toHaveTextContent('$95.04')
     expect(block).toHaveTextContent('$1.98 per unit')
     expect(block).not.toHaveTextContent('$0.00')
+    const heading = screen.getByRole('heading', {
+      name: 'Recycled Weekender Duffel',
+    })
+    const savingPill = screen.getByText('Save $95.04', {
+      selector: '[aria-label="Potential network saving"]',
+    })
+    expect(heading.parentElement).toContainElement(savingPill)
   })
 })

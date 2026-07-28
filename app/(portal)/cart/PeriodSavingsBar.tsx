@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface SummaryItem {
@@ -32,6 +32,8 @@ export function PeriodSavingsBar({
   compact?: boolean
 }) {
   const { format } = useCurrency()
+  const detailsId = useId()
+  const [expanded, setExpanded] = useState(false)
   const [result, setResult] = useState<{
     requestUrl: string
     summary: Summary | null
@@ -107,34 +109,56 @@ export function PeriodSavingsBar({
       role="status"
       aria-label="Pre-order savings"
     >
-      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-black/60">
-        Network price progress
-      </p>
-      <ul className="mt-1.5 divide-y divide-black/10">
-        {targets.map(({ cartItem, progress }) => (
-          <li
-            key={cartItem.catalogueItemId}
-            className="py-2 first:pt-0 last:pb-0"
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--accent-mint))]"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="text-sm font-medium">Network Price Progress</span>
+        <span className="flex shrink-0 items-center gap-2 text-black/60">
+          <span>
+            {targets.length} {targets.length === 1 ? 'product' : 'products'}
+          </span>
+          <svg
+            aria-hidden="true"
+            className={`h-4 w-4 transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              expanded ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="1.75"
           >
-            <p>
-              <span className="font-medium">
-                {progress.unitsToNextBreak} more units of {cartItem.productName}
-              </span>{' '}
-              by {closes} unlocks {format(progress.nextUnitPrice!)} each.
-            </p>
-            <p className="mt-1 text-black/70">
-              Your franchise&apos;s {cartItem.qty}-unit order will save{' '}
-              <span className="font-semibold text-black">
-                {format(progress.franchiseSavings!)}
-              </span>{' '}
-              at that tier ({format(progress.perUnitSavings!)} per unit).
-              {progress.aggQty != null
-                ? ` Network total after checkout: ${progress.aggQty + cartItem.qty}.`
-                : ''}
-            </p>
-          </li>
-        ))}
-      </ul>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      {expanded && (
+        <ul id={detailsId} className="mt-4 space-y-4">
+          {targets.map(({ cartItem, progress }) => (
+            <li key={cartItem.catalogueItemId}>
+              <p>
+                <span className="font-medium">
+                  {progress.unitsToNextBreak} more units of {cartItem.productName}
+                </span>{' '}
+                by {closes} unlocks {format(progress.nextUnitPrice!)} each.
+              </p>
+              <p className="mt-1 text-black/70">
+                Your franchise&apos;s {cartItem.qty}-unit order will save{' '}
+                <span className="font-semibold text-black">
+                  {format(progress.franchiseSavings!)}
+                </span>{' '}
+                at that tier ({format(progress.perUnitSavings!)} per unit).
+                {progress.aggQty != null
+                  ? ` Network total after checkout: ${progress.aggQty + cartItem.qty}.`
+                  : ''}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

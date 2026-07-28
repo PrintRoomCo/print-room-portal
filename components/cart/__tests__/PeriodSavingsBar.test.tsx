@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
 
@@ -47,10 +47,25 @@ describe('PeriodSavingsBar', () => {
     const notice = await screen.findByRole('status', {
       name: /pre-order savings/i,
     })
+    const toggle = screen.getByRole('button', {
+      name: /network price progress/i,
+    })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(notice).not.toHaveTextContent(
+      '52 more units of Recycled Weekender Duffel',
+    )
+
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(notice).toHaveTextContent('52 more units of Recycled Weekender Duffel')
     expect(notice).toHaveTextContent('$95.04')
     expect(notice).toHaveTextContent('$1.98 per unit')
     expect(notice).not.toHaveTextContent('$0.00')
+    expect(notice).not.toHaveTextContent('—')
+    expect(
+      notice.querySelector('[class*="divide-y"], [class*="border-t"]'),
+    ).toBeNull()
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('item=duffel-item%3A48'),

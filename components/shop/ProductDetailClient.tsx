@@ -1321,6 +1321,14 @@ export function ProductDetailClient({
                 <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(32px,4vw,56px)] text-gray-900">
                   {product.name}
                 </h1>
+                {preOrderSavings && preOrderSavings.franchiseSavings > 0 && (
+                  <span
+                    aria-label="Potential network saving"
+                    className="inline-flex items-center rounded-full bg-[rgb(var(--accent-mint))] px-3 py-1 text-xs font-medium text-[rgb(var(--accent-mint-ink))]"
+                  >
+                    Save {format(preOrderSavings.franchiseSavings)}
+                  </span>
+                )}
                 {showAvailability && (
                   <AvailabilityBadge
                     availableQty={multiSize ? colourTotalAvailable : availableQty}
