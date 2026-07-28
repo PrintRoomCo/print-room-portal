@@ -11,33 +11,47 @@ vi.mock('next/navigation', () => ({
 }))
 
 const product = {
-  id: 'tee', name: 'Basic Tee', description: null, image_url: null,
-  moq: 1, lead_time_days: 14, sizing_type: 'multi_size',
+  id: 'duffel', name: 'Recycled Weekender Duffel', description: null, image_url: null,
+  moq: 48, lead_time_days: 14, sizing_type: 'one_size',
   decoration_methods: null, decoration_price: null, sku: null, safety_standard: null,
   specs: null, supports_labels: null, garment_family: null, default_sizes: null,
-  brand_name: null, category_name: null, catalogueItemId: 'i-tee',
+  brand_name: null, category_name: null, catalogueItemId: 'duffel-item',
+  // The PDP normalises the pre_order nature onto its made-to-order control path;
+  // preOrderDemand is the explicit surface gate exercised by this test.
   fulfilment_type: 'made_to_order' as const,
 }
 const variants = [{
-  variant_id: 'tee-navy', color_swatch_id: 'navy', color_label: 'Navy', color_hex: '#003',
+  variant_id: 'duffel-black', color_swatch_id: 'black', color_label: 'Black', color_hex: '#000',
   color_position: 0, size_id: null, size_label: null, size_order: 0,
 }]
 
-function renderPdp(preOrderDemand: { unitsOrdered: number; orderCount: number } | null) {
+function renderPdp(
+  preOrderDemand: {
+    unitsOrdered: number
+    orderCount: number
+    closesAt: string
+  } | null,
+) {
   return render(
     <ProductDetailClient
       product={product}
       variants={variants as never}
-      sizes={[]}
-      brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 2.34 }]}
+      sizes={[{ size_id: 1, size_label: 'One Size', size_order: 0 }]}
+      brackets={[
+        { min_quantity: 1, max_quantity: 23, unit_price: 32.12 },
+        { min_quantity: 24, max_quantity: 49, unit_price: 32.12 },
+        { min_quantity: 50, max_quantity: 99, unit_price: 32.12 },
+        { min_quantity: 100, max_quantity: 249, unit_price: 30.14 },
+        { min_quantity: 250, max_quantity: null, unit_price: 19.15 },
+      ]}
       availability={{} as never}
       organizationId="o1"
       customerRole="org_admin"
       orderingPermission="both"
       images={[]}
-      colourOptions={[{ id: 'navy', label: 'Navy', hex: '#003', imageUrl: null } as never]}
+      colourOptions={[{ id: 'black', label: 'Black', hex: '#000', imageUrl: null } as never]}
       decorations={[]}
-      effectiveMoq={1}
+      effectiveMoq={48}
       preOrderDemand={preOrderDemand}
     />,
   )
@@ -45,7 +59,11 @@ function renderPdp(preOrderDemand: { unitsOrdered: number; orderCount: number } 
 
 describe('PDP — pre-order demand counts', () => {
   it('shows units + orders when demand is provided', () => {
-    renderPdp({ unitsOrdered: 124, orderCount: 38 })
+    renderPdp({
+      unitsOrdered: 124,
+      orderCount: 38,
+      closesAt: '2026-08-21T12:00:00.000Z',
+    })
     const block = screen.getByRole('status', { name: /pre-order demand so far/i })
     expect(block).toHaveTextContent(/124/)
     expect(block).toHaveTextContent(/38/)
@@ -57,5 +75,18 @@ describe('PDP — pre-order demand counts', () => {
     expect(
       screen.queryByRole('status', { name: /pre-order demand so far/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('names the product and shows this franchise total saving', () => {
+    renderPdp({
+      unitsOrdered: 0,
+      orderCount: 0,
+      closesAt: '2026-08-21T12:00:00.000Z',
+    })
+    const block = screen.getByRole('status', { name: /pre-order demand so far/i })
+    expect(block).toHaveTextContent('52 more units of Recycled Weekender Duffel')
+    expect(block).toHaveTextContent('$95.04')
+    expect(block).toHaveTextContent('$1.98 per unit')
+    expect(block).not.toHaveTextContent('$0.00')
   })
 })

@@ -12,6 +12,7 @@ import { showsPrepaidStockBadge } from '@/lib/shop/prepaid-tag'
 import { VariantPicker, type ColourOption, type VariantRow } from './VariantPicker'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import type { PreOrderDemand } from '@/lib/pricing/preorder-demand'
+import { calculatePeriodSavingsOpportunity } from '@/lib/pricing/period-savings'
 import { PriceBreakdown } from '@/components/pricing/PriceBreakdown'
 import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './ProductImageGallery'
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
@@ -553,6 +554,26 @@ export function ProductDetailClient({
         ? variantlessTotalQty
         : singleQty
   const setQty = setSingleQty
+  const preOrderSavings = useMemo(
+    () =>
+      preOrderDemand
+        ? calculatePeriodSavingsOpportunity({
+            networkQty: preOrderDemand.unitsOrdered,
+            franchiseQty: qty,
+            bands: brackets.map((bracket) => ({
+              minQuantity: bracket.min_quantity,
+              unitPrice: bracket.unit_price,
+            })),
+          })
+        : null,
+    [brackets, preOrderDemand, qty],
+  )
+  const preOrderCloses = preOrderDemand
+    ? new Date(preOrderDemand.closesAt).toLocaleDateString('en-NZ', {
+        day: 'numeric',
+        month: 'long',
+      })
+    : null
 
   useEffect(() => {
     setSingleQty((q) => Math.max(defaultMinQty, q))
@@ -1355,18 +1376,46 @@ export function ProductDetailClient({
             <section
               role="status"
               aria-label="Pre-order demand so far"
-              className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900"
+              className="rounded-[24px] bg-[rgb(var(--accent-mint))] p-5 text-sm leading-6 text-black md:p-6"
             >
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-blue-700">
-                This pre-order run so far
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-black/60">
+                Network pre-order
               </p>
-              <p className="mt-1 tabular-nums">
+              <p className="mt-1 font-dm-sans text-base font-medium">
+                {product.name}
+              </p>
+              <p className="mt-1 tabular-nums text-black/70">
                 <span className="font-semibold">{preOrderDemand.unitsOrdered}</span>{' '}
                 {preOrderDemand.unitsOrdered === 1 ? 'unit' : 'units'} ordered across{' '}
                 <span className="font-semibold">{preOrderDemand.orderCount}</span>{' '}
-                {preOrderDemand.orderCount === 1 ? 'order' : 'orders'} — every
-                location&apos;s order counts.
+                {preOrderDemand.orderCount === 1 ? 'order' : 'orders'} so far.
               </p>
+              {preOrderSavings ? (
+                <div className="mt-4 border-t border-black/10 pt-4">
+                  <p>
+                    <span className="font-medium">
+                      {preOrderSavings.unitsToNextSaving} more units of {product.name}
+                    </span>{' '}
+                    by {preOrderCloses} unlocks {format(preOrderSavings.nextUnitPrice)} each.
+                  </p>
+                  <p className="mt-1 text-black/70">
+                    Your franchise&apos;s {qty}-unit order will save{' '}
+                    <span className="font-semibold text-black">
+                      {format(preOrderSavings.franchiseSavings)}
+                    </span>{' '}
+                    at that tier ({format(preOrderSavings.perUnitSavings)} per unit).
+                  </p>
+                </div>
+              ) : qty <= 0 ? (
+                <p className="mt-4 border-t border-black/10 pt-4 text-black/70">
+                  Choose quantities below to see this franchise&apos;s saving at the
+                  next price tier.
+                </p>
+              ) : (
+                <p className="mt-4 border-t border-black/10 pt-4 font-medium">
+                  This order is already at the lowest available network price.
+                </p>
+              )}
             </section>
           )}
           {displayVolumeBrackets.length > 0 && (!isInventoryMode || !selectedColourPrepaid) && (

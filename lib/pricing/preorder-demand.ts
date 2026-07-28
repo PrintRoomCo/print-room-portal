@@ -7,12 +7,15 @@ export interface PreOrderDemand {
   unitsOrdered: number
   /** Distinct non-cancelled orders containing the item this period. */
   orderCount: number
+  /** Deadline for the current open ordering period. */
+  closesAt: string
 }
 
 type PeriodProgressRow = {
   catalogue_item_id: string
   agg_qty: number | null
   order_count: number | null
+  closes_at: string | null
 }
 
 /**
@@ -32,6 +35,10 @@ export async function getPreOrderDemandForItem(
   const row = (data as PeriodProgressRow[]).find(
     (r) => r.catalogue_item_id === catalogueItemId,
   )
-  if (!row) return null
-  return { unitsOrdered: row.agg_qty ?? 0, orderCount: row.order_count ?? 0 }
+  if (!row?.closes_at) return null
+  return {
+    unitsOrdered: row.agg_qty ?? 0,
+    orderCount: row.order_count ?? 0,
+    closesAt: row.closes_at,
+  }
 }
