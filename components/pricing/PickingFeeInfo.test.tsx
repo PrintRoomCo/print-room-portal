@@ -6,18 +6,34 @@ import { PickingFeeInfo } from './PickingFeeInfo'
 const format = (n: number) => `$${n.toFixed(2)}`
 
 describe('PickingFeeInfo', () => {
-  it('is closed until the info button is clicked', async () => {
+  it('is closed until the info affordance is hovered', async () => {
     render(<PickingFeeInfo goodsBasis={150} format={format} />)
     expect(screen.queryByRole('dialog')).toBeNull()
-    await userEvent.click(
+    await userEvent.hover(
       screen.getByRole('button', { name: 'How the picking fee is calculated' }),
     )
     expect(screen.getByRole('dialog', { name: 'Picking fee bands' })).toBeInTheDocument()
   })
 
+  it('closes when the pointer leaves', async () => {
+    render(<PickingFeeInfo goodsBasis={150} format={format} />)
+    const button = screen.getByRole('button', { name: 'How the picking fee is calculated' })
+    await userEvent.hover(button)
+    expect(screen.getByRole('dialog', { name: 'Picking fee bands' })).toBeInTheDocument()
+    await userEvent.unhover(button)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens on keyboard focus', async () => {
+    render(<PickingFeeInfo goodsBasis={150} format={format} />)
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'How the picking fee is calculated' })).toHaveFocus()
+    expect(screen.getByRole('dialog', { name: 'Picking fee bands' })).toBeInTheDocument()
+  })
+
   it('lists every band and highlights only the active one', async () => {
     render(<PickingFeeInfo goodsBasis={150} format={format} />)
-    await userEvent.click(
+    await userEvent.hover(
       screen.getByRole('button', { name: 'How the picking fee is calculated' }),
     )
     const rows = screen.getAllByRole('listitem')
@@ -31,7 +47,7 @@ describe('PickingFeeInfo', () => {
 
   it('closes on Escape', async () => {
     render(<PickingFeeInfo goodsBasis={0} format={format} />)
-    await userEvent.click(
+    await userEvent.hover(
       screen.getByRole('button', { name: 'How the picking fee is calculated' }),
     )
     await userEvent.keyboard('{Escape}')
@@ -40,7 +56,7 @@ describe('PickingFeeInfo', () => {
 
   it('shows the NZ / stock-on-hand caveat', async () => {
     render(<PickingFeeInfo goodsBasis={0} format={format} />)
-    await userEvent.click(
+    await userEvent.hover(
       screen.getByRole('button', { name: 'How the picking fee is calculated' }),
     )
     expect(

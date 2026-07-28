@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { activeBandIndex, pickingFeeBandRows } from '@/lib/pricing/picking-fee-display'
 
 interface PickingFeeInfoProps {
@@ -13,33 +13,30 @@ interface PickingFeeInfoProps {
 
 export function PickingFeeInfo({ goodsBasis, format, direction = 'down' }: PickingFeeInfoProps) {
   const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     if (!open) return
-    function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
+    return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
 
   const active = activeBandIndex(goodsBasis)
 
   return (
-    <span ref={rootRef} className="relative inline-flex">
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
       <button
         type="button"
         aria-label="How the picking fee is calculated"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
         className="flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] font-medium leading-none text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300"
       >
         i
