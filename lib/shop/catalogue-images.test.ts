@@ -62,6 +62,50 @@ describe('resolveGalleryImagesForColour', () => {
     expect(resolveGalleryImagesForColour(baseImages, 'blue')).toEqual(baseImages)
   })
 
+  it('keeps view-less catalogue media off the Standard-views gallery', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'catalogue-untagged-blue',
+          url: '/catalogue-lifestyle-blue.png',
+          view: null,
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.id)).not.toContain(
+      'catalogue-untagged-blue',
+    )
+  })
+
+  it('continues to prefer an ordinary recognised catalogue view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'catalogue-front-blue',
+          url: '/catalogue-front-blue.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.id)).toEqual([
+      'catalogue-front-blue',
+    ])
+  })
+
   it('drops a staff-hidden master view (e.g. back) for the selected colour', () => {
     const resolved = resolveGalleryImagesForColour(
       baseImages,

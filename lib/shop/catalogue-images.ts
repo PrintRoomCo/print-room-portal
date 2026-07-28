@@ -201,6 +201,14 @@ export function resolveGalleryImagesForColour(
   >()
 
   for (const image of images) {
+    if (
+      (image.scope ?? 'master') === 'catalogue'
+      && !(image.view ?? '').trim()
+      && normalizeCatalogueImageView(image.view, image.url) == null
+    ) {
+      continue
+    }
+
     const priority = imagePriority(image, selectedColorSwatchId)
     if (priority == null) continue
 
