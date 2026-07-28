@@ -99,9 +99,17 @@ export function CartDrawer() {
           {cart.lines.length > 0 && (
             <div className="sticky bottom-0 border-t border-gray-200/70 bg-white px-5 py-4">
               <PeriodSavingsBar
-                cartCatalogueItemIds={cart.lines
-                  .map((l) => l.catalogueItemId)
-                  .filter((v): v is string => Boolean(v))}
+                cartItems={cart.lines.flatMap((line) =>
+                  line.catalogueItemId
+                    ? [
+                        {
+                          catalogueItemId: line.catalogueItemId,
+                          productName: line.productName,
+                          qty: line.qty,
+                        },
+                      ]
+                    : [],
+                )}
                 compact
               />
               {breakdown.pickingFee > 0 && (
