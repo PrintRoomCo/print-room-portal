@@ -12,6 +12,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *
  * Extracted from the catalogue page so the pricing is unit-testable and the
  * RPC fan-out can be optimised behind a stable, characterised interface.
+ *
+ * Round-trips: each unique (id, band) price is fetched via ONE batched
+ * set-returning RPC per source (effective_decoration_unit_prices_bulk /
+ * catalogue_item_decoration_prices_bulk — see db/perf-debt/D1_*). When those
+ * functions are absent (pre-migration) or error, we transparently fall back to
+ * the per-(id, band) scalar RPCs — byte-identical prices either way; the batch
+ * only collapses N network round-trips into one.
  */
 
 export interface CatalogueDecorationRow {
@@ -41,6 +48,97 @@ export interface CatalogueDecorationPriceInput {
 export interface CatalogueDecorationPrices {
   decoLowByItem: Map<string, number>
   decoHighByItem: Map<string, number>
+}
+
+const key = (id: string, qty: number) => `${id}|${qty}`
+
+/**
+ * Raw effective_decoration_unit_price for every (org_decoration_id, qty) pair.
+ * Value is Number(scalar) or null (not-found / unpriced / transport error) —
+ * the caller maps null to the decoration's static fallback, exactly as the
+ * per-call path did. One batched RPC; falls back to per-pair scalar calls.
+ */
+async function resolveEffectiveRaw(
+  admin: SupabaseClient,
+  ids: string[],
+  qtys: number[],
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>()
+  if (ids.length === 0) return out
+  const items = ids.flatMap((id) => qtys.map((qty) => ({ org_decoration_id: id, qty })))
+
+  const { data, error } = await admin.rpc('effective_decoration_unit_prices_bulk', {
+    p_items: items,
+  })
+  if (!error && Array.isArray(data)) {
+    for (const row of data as Array<{
+      org_decoration_id: string
+      qty: number
+      unit_price: number | string | null
+    }>) {
+      out.set(key(row.org_decoration_id, row.qty), row.unit_price != null ? Number(row.unit_price) : null)
+    }
+    // Defensive: a pair with no returned row resolves to null (→ fallback).
+    for (const id of ids) for (const qty of qtys) if (!out.has(key(id, qty))) out.set(key(id, qty), null)
+    return out
+  }
+
+  // Batched RPC unavailable (pre-migration) or errored → per-pair scalar path.
+  await Promise.all(
+    items.map(async ({ org_decoration_id, qty }) => {
+      const { data: d, error: e } = await admin.rpc('effective_decoration_unit_price', {
+        p_org_decoration_id: org_decoration_id,
+        p_qty: qty,
+      })
+      out.set(key(org_decoration_id, qty), !e && d != null ? Number(d) : null)
+    }),
+  )
+  return out
+}
+
+/**
+ * Cleaned catalogue_item_decoration_price for every (catalogue_item_id, qty)
+ * pair: a usable positive figure, else 0 (no static fallback — mirrors the old
+ * resolveManual `>0` guard). One batched RPC; falls back to per-pair scalar.
+ */
+async function resolveManualRaw(
+  admin: SupabaseClient,
+  itemIds: string[],
+  qtys: number[],
+): Promise<Map<string, number>> {
+  const clean = (raw: number | string | null | undefined): number => {
+    const v = raw != null ? Number(raw) : 0
+    return Number.isFinite(v) && v > 0 ? v : 0
+  }
+  const out = new Map<string, number>()
+  if (itemIds.length === 0) return out
+  const items = itemIds.flatMap((id) => qtys.map((qty) => ({ catalogue_item_id: id, qty })))
+
+  const { data, error } = await admin.rpc('catalogue_item_decoration_prices_bulk', {
+    p_items: items,
+  })
+  if (!error && Array.isArray(data)) {
+    for (const row of data as Array<{
+      catalogue_item_id: string
+      qty: number
+      unit_price: number | string | null
+    }>) {
+      out.set(key(row.catalogue_item_id, row.qty), clean(row.unit_price))
+    }
+    for (const id of itemIds) for (const qty of qtys) if (!out.has(key(id, qty))) out.set(key(id, qty), 0)
+    return out
+  }
+
+  await Promise.all(
+    items.map(async ({ catalogue_item_id, qty }) => {
+      const { data: d, error: e } = await admin.rpc('catalogue_item_decoration_price', {
+        p_catalogue_item_id: catalogue_item_id,
+        p_qty: qty,
+      })
+      out.set(key(catalogue_item_id, qty), clean(!e ? d : null))
+    }),
+  )
+  return out
 }
 
 export async function resolveCatalogueDecorationPrices(
@@ -80,49 +178,36 @@ export async function resolveCatalogueDecorationPrices(
     fallbackById.set(id, orgDec?.unit_price != null ? Number(orgDec.unit_price) : null)
   }
 
-  const resolveComputed = async (
-    orgDecorationId: string,
-    qty: number,
-    fallback: number | null,
-  ): Promise<number> => {
-    const { data, error } = await admin.rpc('effective_decoration_unit_price', {
-      p_org_decoration_id: orgDecorationId,
-      p_qty: qty,
-    })
-    const base = !error && data != null ? Number(data) : fallback
+  // Two bands (dedup when the low/high quantities coincide).
+  const bands = floorQty === entryQty ? [floorQty] : [floorQty, entryQty]
+
+  // One batched round-trip per source, concurrently.
+  const [effectiveByKey, manualByKey] = await Promise.all([
+    resolveEffectiveRaw(admin, Array.from(fallbackById.keys()), bands),
+    resolveManualRaw(admin, manualScopedItemIds, bands),
+  ])
+
+  // Computed: base = scalar price, else the decoration's static fallback; then
+  // guard (>0, finite) and apply the tier multiplier. Identical to the old
+  // resolveComputed, just reading the pre-fetched value instead of awaiting.
+  const computeBand = (id: string, qty: number): number => {
+    const raw = effectiveByKey.get(key(id, qty)) ?? null
+    const base = raw != null ? raw : fallbackById.get(id) ?? null
     if (base == null || !Number.isFinite(base) || base <= 0) return 0
     return Number((base * tierMultiplier).toFixed(2))
   }
-
-  const resolveManual = async (itemId: string, qty: number): Promise<number> => {
-    const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
-      p_catalogue_item_id: itemId,
-      p_qty: qty,
-    })
-    const v = !error && data != null ? Number(data) : 0
-    return Number.isFinite(v) && v > 0 ? v : 0
+  const computedPriceById = new Map<string, { low: number; high: number }>()
+  for (const id of fallbackById.keys()) {
+    computedPriceById.set(id, { low: computeBand(id, floorQty), high: computeBand(id, entryQty) })
   }
 
-  const computedPriceById = new Map<string, { low: number; high: number }>()
   const manualPriceById = new Map<string, { low: number; high: number }>()
-
-  // One concurrent wave: unique computed decorations + manual items together.
-  await Promise.all([
-    ...Array.from(fallbackById.entries()).map(async ([id, fallback]) => {
-      const [low, high] = await Promise.all([
-        resolveComputed(id, floorQty, fallback),
-        resolveComputed(id, entryQty, fallback),
-      ])
-      computedPriceById.set(id, { low, high })
-    }),
-    ...manualScopedItemIds.map(async (itemId) => {
-      const [low, high] = await Promise.all([
-        resolveManual(itemId, floorQty),
-        resolveManual(itemId, entryQty),
-      ])
-      manualPriceById.set(itemId, { low, high })
-    }),
-  ])
+  for (const itemId of manualScopedItemIds) {
+    manualPriceById.set(itemId, {
+      low: manualByKey.get(key(itemId, floorQty)) ?? 0,
+      high: manualByKey.get(key(itemId, entryQty)) ?? 0,
+    })
+  }
 
   // Computed: sum per placement row (duplicate rows add twice, as before).
   for (const r of computedRows) {
