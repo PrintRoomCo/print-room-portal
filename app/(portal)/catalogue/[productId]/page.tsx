@@ -22,6 +22,7 @@ import {
   getPreOrderItemIds,
   getPeriodBracketsForItem,
 } from '@/lib/pricing/period-brackets'
+import { getPreOrderDemandForItem } from '@/lib/pricing/preorder-demand'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -409,6 +410,13 @@ const loadProductDetailPageData = cache(async (
     }
   }
 
+  // Pre-order franchise demand (whole-network, current open window). Gated to
+  // franchise tenants; fail-soft (helper returns null on any miss/error).
+  const preOrderDemand =
+    context.tenantType === 'franchise' && isPreOrderItem && openPeriod && catalogueItemId
+      ? await getPreOrderDemandForItem(admin, context.organizationId, catalogueItemId)
+      : null
+
   // Spec 3a follow-up — for PREPAID variants, surface the per-unit price of
   // the band the stock was originally purchased at (informational: a prepaid
   // draw is $0 at checkout). Linked intake → original quote-item price;
@@ -556,6 +564,9 @@ const loadProductDetailPageData = cache(async (
       locationOptions,
       // Feature 2 — per-product custom-name cap. null = no custom-name input.
       customNameMaxLength: catItem.custom_name_max_length ?? null,
+      // Pre-order franchise: whole-network demand for this product in the open
+      // window. null => not shown (non-franchise, non-pre-order, or no window).
+      preOrderDemand,
     },
   }
 })
