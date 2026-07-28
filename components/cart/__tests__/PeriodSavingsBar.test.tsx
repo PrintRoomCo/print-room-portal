@@ -48,7 +48,7 @@ describe('PeriodSavingsBar', () => {
       name: /pre-order savings/i,
     })
     const toggle = screen.getByRole('button', {
-      name: /network price progress/i,
+      name: /order quantity savings/i,
     })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(notice).not.toHaveTextContent(

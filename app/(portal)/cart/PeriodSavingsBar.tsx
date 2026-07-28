@@ -116,7 +116,7 @@ export function PeriodSavingsBar({
         aria-controls={detailsId}
         onClick={() => setExpanded((current) => !current)}
       >
-        <span className="text-sm font-medium">Network Price Progress</span>
+        <span className="text-sm font-medium">Order Quantity Savings</span>
         <span className="flex shrink-0 items-center gap-2 text-black/60">
           <span>
             {targets.length} {targets.length === 1 ? 'product' : 'products'}

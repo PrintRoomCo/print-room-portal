@@ -1323,7 +1323,7 @@ export function ProductDetailClient({
                 </h1>
                 {preOrderSavings && preOrderSavings.franchiseSavings > 0 && (
                   <span
-                    aria-label="Potential network saving"
+                    aria-label="Potential pre-order saving"
                     className="inline-flex items-center rounded-full bg-[rgb(var(--accent-mint))] px-3 py-1 text-xs font-medium text-[rgb(var(--accent-mint-ink))]"
                   >
                     Save {format(preOrderSavings.franchiseSavings)}

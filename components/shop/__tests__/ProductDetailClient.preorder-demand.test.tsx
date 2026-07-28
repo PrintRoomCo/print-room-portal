@@ -92,7 +92,7 @@ describe('PDP — pre-order demand counts', () => {
       name: 'Recycled Weekender Duffel',
     })
     const savingPill = screen.getByText('Save $95.04', {
-      selector: '[aria-label="Potential network saving"]',
+      selector: '[aria-label="Potential pre-order saving"]',
     })
     expect(heading.parentElement).toContainElement(savingPill)
   })
