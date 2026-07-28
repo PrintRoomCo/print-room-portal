@@ -17,7 +17,7 @@ import {
   pickCatalogueColourThumbnail,
   type CatalogueItemImageRow,
 } from '@/lib/shop/catalogue-images'
-import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
+import { getGrantedCatalogueItems } from '@/lib/shop/member-access'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import {
   resolveCatalogueDecorationPrices,
@@ -119,24 +119,24 @@ export default async function CataloguePage({
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
 
+  // Hoisted: floorQty is catalogue-global and tierMultiplier keys only on
+  // organizationId, so neither depends on the resolved product set. Start their
+  // round-trips now so they overlap the granted-items / products waves instead
+  // of adding a serial hop right before pricing.
+  const floorQtyPromise = loadCatalogueFloorQty(admin)
+  const tierMultiplierPromise = loadTierMultiplier(admin, context.organizationId)
+
   const limit = 24
   const offset = (filters.page - 1) * limit
 
-  const grantedItemIds = await getGrantedCatalogueItemIds(
+  // Full member-visible catalogue item rows resolved in ONE pass. Previously the
+  // grid resolved the ids here and then re-queried b2b_catalogue_items for the
+  // very same rows' columns — a redundant remote round-trip on the hot path.
+  const catItemRows = (await getGrantedCatalogueItems(
     admin,
     context.membershipId,
     context.organizationId,
-  )
-  const { data: catItems } = grantedItemIds.length === 0
-    ? { data: [] as Array<{ id: string; source_product_id: string }> }
-    : await admin
-        .from('b2b_catalogue_items')
-        .select('id, source_product_id, fulfilment_type_override, card_image_id, price_mode, b2b_catalogues!inner(organization_id, is_active)')
-        .eq('b2b_catalogues.organization_id', context.organizationId)
-        .eq('b2b_catalogues.is_active', true)
-        .eq('is_active', true)
-        .in('id', grantedItemIds)
-  const catItemRows = (catItems ?? []) as Array<{
+  )) as unknown as Array<{
     id: string
     source_product_id: string
     fulfilment_type_override: FulfilmentType | null
@@ -234,10 +234,9 @@ export default async function CataloguePage({
   const pageCount = Math.max(1, Math.ceil(totalProducts / limit))
 
   const productIds = rows.map((r) => r.id)
-  const [floorQty, tierMultiplier] = await Promise.all([
-    loadCatalogueFloorQty(admin),
-    loadTierMultiplier(admin, context.organizationId),
-  ])
+  // Already in flight since just after auth (see hoist above) — this await only
+  // joins their results back into the render.
+  const [floorQty, tierMultiplier] = await Promise.all([floorQtyPromise, tierMultiplierPromise])
   // Two price points per card: floor qty = cheapest volume price (low end of
   // the range), ENTRY_QTY = most expensive realistic order (high end).
   const qtyByProduct: Record<string, number> = Object.fromEntries(
