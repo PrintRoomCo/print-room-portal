@@ -143,7 +143,7 @@ export function PeriodSavingsBar({
                 <span className="font-medium">
                   {progress.unitsToNextBreak} more units of {cartItem.productName}
                 </span>{' '}
-                by {closes} unlocks {format(progress.nextUnitPrice!)} each.
+                by {closes} unlocks {format(progress.nextUnitPrice!)} per unit.
               </p>
               <p className="mt-1 text-black/70">
                 Your franchise&apos;s {cartItem.qty}-unit order will save{' '}
@@ -152,7 +152,7 @@ export function PeriodSavingsBar({
                 </span>{' '}
                 at that tier ({format(progress.perUnitSavings!)} per unit).
                 {progress.aggQty != null
-                  ? ` Network total after checkout: ${progress.aggQty + cartItem.qty}.`
+                  ? ` Current Order Quantity for Franchise: ${progress.aggQty + cartItem.qty}.`
                   : ''}
               </p>
             </li>

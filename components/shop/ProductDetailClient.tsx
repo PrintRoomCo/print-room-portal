@@ -1404,7 +1404,7 @@ export function ProductDetailClient({
                     <span className="font-medium">
                       {preOrderSavings.unitsToNextSaving} more units of {product.name}
                     </span>{' '}
-                    by {preOrderCloses} unlocks {format(preOrderSavings.nextUnitPrice)} each.
+                    by {preOrderCloses} unlocks {format(preOrderSavings.nextUnitPrice)} per unit.
                   </p>
                   <p className="mt-1 text-black/70">
                     Your franchise&apos;s {qty}-unit order will save{' '}

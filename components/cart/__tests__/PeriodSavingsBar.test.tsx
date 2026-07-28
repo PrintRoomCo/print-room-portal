@@ -59,8 +59,13 @@ describe('PeriodSavingsBar', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(notice).toHaveTextContent('52 more units of Recycled Weekender Duffel')
+    expect(notice).toHaveTextContent('$30.14 per unit')
     expect(notice).toHaveTextContent('$95.04')
     expect(notice).toHaveTextContent('$1.98 per unit')
+    expect(notice).toHaveTextContent(
+      'Current Order Quantity for Franchise: 48.',
+    )
+    expect(notice).not.toHaveTextContent('Network total')
     expect(notice).not.toHaveTextContent('$0.00')
     expect(notice).not.toHaveTextContent('—')
     expect(

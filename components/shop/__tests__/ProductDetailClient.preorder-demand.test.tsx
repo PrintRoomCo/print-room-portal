@@ -85,6 +85,7 @@ describe('PDP — pre-order demand counts', () => {
     })
     const block = screen.getByRole('status', { name: /pre-order demand so far/i })
     expect(block).toHaveTextContent('52 more units of Recycled Weekender Duffel')
+    expect(block).toHaveTextContent('$30.14 per unit')
     expect(block).toHaveTextContent('$95.04')
     expect(block).toHaveTextContent('$1.98 per unit')
     expect(block).not.toHaveTextContent('$0.00')
