@@ -23,6 +23,7 @@ const fixture: OrderDealData = {
   lines: [
     {
       quoteItemId: 'qi-1',
+      productId: 'product-basic-tee',
       productName: 'Basic Tee',
       variantLabel: 'Black / M',
       colorName: 'Black',

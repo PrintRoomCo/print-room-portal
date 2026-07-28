@@ -1649,13 +1649,14 @@ export async function submitCustomerOrder(
       const { data: dealLines } = await admin
         .from('quote_items')
         .select(`
-          id, product_name, quantity, unit_price, decorations, size_label, line_location_label, line_custom_name,
+          id, product_id, product_name, quantity, unit_price, decorations, size_label, line_location_label, line_custom_name,
           product_variants ( product_color_swatches(label) )
         `)
         .eq('quote_id', quote_id)
 
       const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
         id: string
+        product_id: string
         product_name: string
         quantity: number
         unit_price: number
@@ -1672,6 +1673,7 @@ export async function submitCustomerOrder(
         const designName = row.decorations?.[0]?.name ?? 'No decoration'
         return {
           quoteItemId: row.id,
+          productId: row.product_id,
           productName: row.product_name,
           variantLabel,
           colorName: swatch?.label ?? null,

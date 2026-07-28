@@ -1,7 +1,8 @@
 import { getSupabaseServer } from '@/lib/supabase'
 
 /**
- * Resolve a Monday subitem to a quote_items row and call ship_quote_line RPC.
+ * Resolve a Monday subitem to its quote_items rows and call ship_quote_line for
+ * each one. Product subitems can represent multiple size rows.
  *
  * Matching strategy:
  *   1. Primary: quote_items.monday_subitem_id = subitemId.
@@ -22,13 +23,13 @@ export async function shipMondaySubitem(
     .from('quote_items')
     .select('id')
     .eq('monday_subitem_id', subitemId)
-    .maybeSingle()
 
-  let quoteItemId: string | null = bySubitem?.id ?? null
-  let matched: 'subitem_id' | 'name' | null = bySubitem ? 'subitem_id' : null
+  let quoteItemIds = (bySubitem ?? []).map((row) => row.id)
+  let matched: 'subitem_id' | 'name' | null =
+    quoteItemIds.length > 0 ? 'subitem_id' : null
 
   // Name-match fallback (temporary until Replit push writes monday_subitem_id).
-  if (!quoteItemId && subitemName) {
+  if (quoteItemIds.length === 0 && subitemName) {
     const { data: byName } = await supabase
       .from('quote_items')
       .select('id')
@@ -36,12 +37,12 @@ export async function shipMondaySubitem(
       .limit(1)
       .maybeSingle()
     if (byName) {
-      quoteItemId = byName.id
+      quoteItemIds = [byName.id]
       matched = 'name'
     }
   }
 
-  if (!quoteItemId) {
+  if (quoteItemIds.length === 0) {
     await supabase.from('job_tracker_webhook_logs').insert({
       monday_item_id: subitemId,
       status: 'orphan_ship_event',
@@ -51,17 +52,19 @@ export async function shipMondaySubitem(
     return { ok: false, reason: 'orphan' }
   }
 
-  const { error } = await supabase.rpc('ship_quote_line', {
-    p_quote_item_id: quoteItemId,
-  })
-  if (error) {
-    await supabase.from('job_tracker_webhook_logs').insert({
-      monday_item_id: subitemId,
-      status: 'ship_rpc_error',
-      payload: payload as never,
-      error: error.message,
+  for (const quoteItemId of quoteItemIds) {
+    const { error } = await supabase.rpc('ship_quote_line', {
+      p_quote_item_id: quoteItemId,
     })
-    return { ok: false, reason: 'orphan' }
+    if (error) {
+      await supabase.from('job_tracker_webhook_logs').insert({
+        monday_item_id: subitemId,
+        status: 'ship_rpc_error',
+        payload: payload as never,
+        error: error.message,
+      })
+      return { ok: false, reason: 'orphan' }
+    }
   }
 
   return { ok: true, matched: matched! }

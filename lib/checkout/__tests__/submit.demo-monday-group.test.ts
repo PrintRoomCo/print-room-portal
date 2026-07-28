@@ -292,6 +292,10 @@ describe('submitCustomerOrder — demo Monday group routing', () => {
     await flushAfter()
     expect(pushOrderDeal).toHaveBeenCalledOnce()
     expect(vi.mocked(pushOrderDeal).mock.calls[0][1]).toEqual({ demo: true })
+    expect(vi.mocked(pushOrderDeal).mock.calls[0][0].lines[0]).toMatchObject({
+      quoteItemId: 'qi-1',
+      productId: PRODUCT_ID,
+    })
   })
 
   it('passes { demo: false } when the org row has is_test false', async () => {

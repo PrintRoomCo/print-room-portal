@@ -3,8 +3,9 @@
  *
  * Both modes write to the Production board (PRODUCTION_BOARD_ID, override
  * MONDAY_PRODUCTION_BOARD_ID) "Pre-production" group via getProductionBoardId():
- *  - 'order'   — new /checkout orders. One sub-item per cart line; Intent tagged
- *    "Order". Columns mapped to the Production schema (PRODUCTION_COLUMNS).
+ *  - 'order'   — new /checkout orders. One sub-item per product configuration,
+ *    with all size quantities on that sub-item; Intent tagged "Order". Columns
+ *    mapped to the Production schema (PRODUCTION_COLUMNS).
  *  - 'reorder' — repeat of a completed job. No sub-items; the full breakdown is
  *    packed into the Job Specs long-text. Intent tagged "Reorder" and the item
  *    name ends "- Reorder" so it reads apart from orders in the shared group.
@@ -391,6 +392,8 @@ function resolveOrderGroupId(demo: boolean | undefined): string {
 export interface OrderLineForMonday {
   /** quote_items.id — used as key in returned subitemIds map. */
   quoteItemId: string
+  /** products.id — stable identity used to group size rows for one product. */
+  productId: string
   productName: string
   variantLabel: string
   colorName: string | null
@@ -586,8 +589,13 @@ function normalizeSizeLabel(
 }
 
 function buildOrderSubitemColumnValues(
-  line: OrderLineForMonday,
+  lines: readonly OrderLineForMonday[],
 ): Record<string, unknown> {
+  const line = lines[0]
+  if (!line) {
+    throw new Error('Cannot build a Monday subitem without an order line')
+  }
+
   const columnValues: Record<string, unknown> = {
     [PRODUCTION_SUBITEM_COLUMNS.fallbackGarment]: line.productName,
   }
@@ -596,9 +604,12 @@ function buildOrderSubitemColumnValues(
     columnValues[PRODUCTION_SUBITEM_COLUMNS.fallbackColor] = line.colorName.trim()
   }
 
-  if (Number.isFinite(line.quantity) && line.quantity > 0) {
-    const sizeKey = normalizeSizeLabel(line.sizeLabel)
-    columnValues[PRODUCTION_SUBITEM_COLUMNS.sizes[sizeKey]] = line.quantity
+  for (const sizeLine of lines) {
+    if (!Number.isFinite(sizeLine.quantity) || sizeLine.quantity <= 0) continue
+    const sizeKey = normalizeSizeLabel(sizeLine.sizeLabel)
+    const columnId = PRODUCTION_SUBITEM_COLUMNS.sizes[sizeKey]
+    const existingQty = Number(columnValues[columnId] ?? 0)
+    columnValues[columnId] = existingQty + sizeLine.quantity
   }
 
   // Feature 1 — the chosen PDP location label, its own subitem column.
@@ -618,12 +629,46 @@ function buildOrderSubitemColumnValues(
   return columnValues
 }
 
+function orderSubitemGroupKey(line: OrderLineForMonday): string {
+  // Size is deliberately absent: size rows belonging to the same product
+  // configuration must land on one Production subitem. Keep other subitem-level
+  // values in the key because Monday has only one Colour, Decoration, Location,
+  // and Custom Name cell per subitem; merging differing values would lose data.
+  return JSON.stringify([
+    line.productId,
+    line.colorName?.trim() ?? '',
+    line.designName?.trim() ?? '',
+    line.location?.trim() ?? '',
+    line.customName?.trim() ?? '',
+  ])
+}
+
+function groupOrderLinesForSubitems(
+  lines: readonly OrderLineForMonday[],
+): OrderLineForMonday[][] {
+  const groups = new Map<string, OrderLineForMonday[]>()
+  for (const line of lines) {
+    const key = orderSubitemGroupKey(line)
+    const group = groups.get(key)
+    if (group) {
+      group.push(line)
+    } else {
+      groups.set(key, [line])
+    }
+  }
+  return Array.from(groups.values())
+}
+
 export async function createOrderDealSubitem(
   parentItemId: string,
-  line: OrderLineForMonday,
+  lines: readonly OrderLineForMonday[],
 ): Promise<{ subitemId: string }> {
+  const line = lines[0]
+  if (!line) {
+    throw new Error('Cannot create a Monday subitem without an order line')
+  }
   const itemName = line.productName
-  const columnValues = buildOrderSubitemColumnValues(line)
+  const columnValues = buildOrderSubitemColumnValues(lines)
 
   const mutation = `
     mutation CreateOrderSubitem($parentItemId: ID!, $itemName: String!, $columnValues: JSON) {
@@ -647,14 +692,16 @@ export async function pushOrderDeal(
 ): Promise<{ itemId: string; subitemIds: Record<string, string> }> {
   const { itemId } = await createOrderDealItem(data, opts)
   const subitemIds: Record<string, string> = {}
-  for (const line of data.lines) {
+  for (const lines of groupOrderLinesForSubitems(data.lines)) {
     try {
-      const { subitemId } = await createOrderDealSubitem(itemId, line)
-      subitemIds[line.quoteItemId] = subitemId
+      const { subitemId } = await createOrderDealSubitem(itemId, lines)
+      for (const line of lines) {
+        subitemIds[line.quoteItemId] = subitemId
+      }
     } catch (err) {
       console.error('[Monday Order] Subitem create failed:', {
         itemId,
-        quoteItemId: line.quoteItemId,
+        quoteItemIds: lines.map((line) => line.quoteItemId),
         err: err instanceof Error ? err.message : String(err),
       })
       // Subitem failure is non-fatal — item exists, AM can add subitems manually.

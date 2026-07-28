@@ -27,6 +27,7 @@ const fixture: OrderDealData = {
   lines: [
     {
       quoteItemId: 'qi-1',
+      productId: 'product-basic-tee',
       productName: 'Basic Tee',
       variantLabel: 'Black / M',
       colorName: 'Black',
@@ -38,6 +39,7 @@ const fixture: OrderDealData = {
     },
     {
       quoteItemId: 'qi-2',
+      productId: 'product-heavy-hood',
       productName: 'Heavy Hood',
       variantLabel: 'Navy / L',
       colorName: 'Navy',
@@ -49,6 +51,7 @@ const fixture: OrderDealData = {
     },
     {
       quoteItemId: 'qi-3',
+      productId: 'product-cap',
       productName: 'Cap',
       variantLabel: 'OS',
       colorName: null,
@@ -149,8 +152,57 @@ describe('pushOrderDeal — Production column mapping', () => {
   })
 })
 
-describe('pushOrderDeal — subitem per line', () => {
-  it('calls create_subitem once per line with product-name-only titles', async () => {
+describe('pushOrderDeal — subitem per product configuration', () => {
+  it('combines size lines for the same product into one subitem', async () => {
+    mockedCall
+      .mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
+      .mockResolvedValue({ create_subitem: { id: 'sub-1' } })
+
+    const result = await pushOrderDeal({
+      ...fixture,
+      lines: [
+        {
+          quoteItemId: 'qi-small',
+          productId: 'product-basic-tee',
+          productName: 'Basic Tee',
+          variantLabel: 'Black / S',
+          colorName: 'Black',
+          sizeLabel: 'S',
+          designName: 'Logo Front',
+          location: 'MTF Avalon',
+          customName: null,
+          quantity: 10,
+        },
+        {
+          quoteItemId: 'qi-medium',
+          productId: 'product-basic-tee',
+          productName: 'Basic Tee',
+          variantLabel: 'Black / M',
+          colorName: 'Black',
+          sizeLabel: 'M',
+          designName: 'Logo Front',
+          location: 'MTF Avalon',
+          customName: null,
+          quantity: 10,
+        },
+      ],
+    })
+
+    const subitemCalls = mockedCall.mock.calls.slice(1)
+    expect(subitemCalls).toHaveLength(1)
+
+    const cv = JSON.parse(
+      (subitemCalls[0][1] as { columnValues: string }).columnValues,
+    )
+    expect(cv[PRODUCTION_SUBITEM_COLUMNS.sizes.S]).toBe(10)
+    expect(cv[PRODUCTION_SUBITEM_COLUMNS.sizes.M]).toBe(10)
+    expect(result.subitemIds).toEqual({
+      'qi-small': 'sub-1',
+      'qi-medium': 'sub-1',
+    })
+  })
+
+  it('calls create_subitem once per product configuration with product-name-only titles', async () => {
     mockedCall.mockResolvedValueOnce({ create_item: { id: 'item-1', name: 'x' } })
     mockedCall.mockResolvedValue({ create_subitem: { id: 'sub' } })
 
@@ -257,6 +309,7 @@ describe('pushOrderDeal — size label normalization', () => {
       ...fixture,
       lines: CASES.map((c, i) => ({
         quoteItemId: `qi-${i}`,
+        productId: `product-${i}`,
         productName: 'Tee',
         variantLabel: c.sizeLabel,
         colorName: null,
@@ -291,6 +344,7 @@ describe('pushOrderDeal — size label normalization', () => {
       lines: [
         {
           quoteItemId: 'qi-1',
+          productId: 'product-hi-vis',
           productName: 'Hi-Vis',
           variantLabel: '7XL',
           colorName: null,
