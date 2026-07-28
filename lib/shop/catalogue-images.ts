@@ -1,4 +1,5 @@
 import { normalizeCatalogueImageView } from './catalogue-image-view'
+import type { ImageLayout } from './image-layout'
 
 export interface CatalogueAwareGalleryImage {
   id: string
@@ -6,9 +7,11 @@ export interface CatalogueAwareGalleryImage {
   view: string | null
   alt?: string | null
   position?: number | null
+  gallery_position?: number | null
   color_swatch_id?: string | null
   scope?: 'catalogue' | 'master'
   source?: 'designer_snapshot' | 'staff_upload' | 'staff_pick' | null
+  synthetic?: boolean
 }
 
 export interface CatalogueItemImageRow {
@@ -22,10 +25,13 @@ export interface CatalogueItemImageRow {
 }
 
 export interface CardFallbackImage {
+  id?: string
   color_swatch_id: string | null
   view: string | null
   source: string | null
   position: number | null
+  gallery_position?: number | null
+  scope?: 'catalogue' | 'master'
   image_url: string | null
 }
 
@@ -48,8 +54,31 @@ export function deriveCardImageUrl(args: {
   leadColorSwatchId: string | null
   masterImageUrl: string | null
   normalizeView: (view: string | null) => string | null
+  layout?: ImageLayout
 }): string | null {
-  const { images, leadColorSwatchId, masterImageUrl, normalizeView } = args
+  const {
+    images,
+    leadColorSwatchId,
+    masterImageUrl,
+    normalizeView,
+    layout = 'standard_views',
+  } = args
+  if (layout === 'merchandised_gallery') {
+    return images
+      .filter(
+        (image) =>
+          image.image_url
+          && (
+            image.color_swatch_id == null
+            || image.color_swatch_id === leadColorSwatchId
+          ),
+      )
+      .slice()
+      .sort(compareMerchandisedCardImages)[0]?.image_url
+      ?? masterImageUrl
+      ?? null
+  }
+
   const isFront = (v: string | null) => normalizeView(v) === 'front'
   const eligible = images.filter((i) => i.image_url && i.source !== 'designer_snapshot')
   const allColours = sortByPosition(eligible.filter((i) => i.color_swatch_id == null))
@@ -63,6 +92,35 @@ export function deriveCardImageUrl(args: {
   }
   if (allColours[0]?.image_url) return allColours[0].image_url
   return masterImageUrl ?? null
+}
+
+function compareMerchandisedCardImages(
+  a: CardFallbackImage,
+  b: CardFallbackImage,
+): number {
+  const aExplicit = a.gallery_position != null
+  const bExplicit = b.gallery_position != null
+  if (aExplicit !== bExplicit) return aExplicit ? -1 : 1
+  if (
+    aExplicit
+    && bExplicit
+    && a.gallery_position !== b.gallery_position
+  ) {
+    return (a.gallery_position as number) - (b.gallery_position as number)
+  }
+  const native =
+    (a.position ?? Number.MAX_SAFE_INTEGER)
+    - (b.position ?? Number.MAX_SAFE_INTEGER)
+  if (native !== 0) return native
+  const scope =
+    (a.scope === 'catalogue' ? 1 : 0)
+    - (b.scope === 'catalogue' ? 1 : 0)
+  if (scope !== 0) return scope
+  return (a.id ?? '').localeCompare(
+    b.id ?? '',
+    undefined,
+    { numeric: true, sensitivity: 'base' },
+  )
 }
 
 export function pickCatalogueItemThumbnail(
@@ -194,7 +252,16 @@ export function resolveGalleryImagesForColour(
   images: CatalogueAwareGalleryImage[],
   selectedColorSwatchId: string | null,
   hiddenViews?: Set<string>,
+  layout: ImageLayout = 'standard_views',
 ): CatalogueAwareGalleryImage[] {
+  if (layout === 'merchandised_gallery') {
+    return resolveMerchandisedGalleryImages(
+      images,
+      selectedColorSwatchId,
+      hiddenViews,
+    )
+  }
+
   const chosenByView = new Map<
     string,
     { image: CatalogueAwareGalleryImage; priority: number }
@@ -242,8 +309,16 @@ export function pickPreferredGalleryImage(
   images: CatalogueAwareGalleryImage[],
   selectedColorSwatchId: string | null,
   hiddenViews?: Set<string>,
+  layout: ImageLayout = 'standard_views',
 ): CatalogueAwareGalleryImage | null {
-  const ordered = resolveGalleryImagesForColour(images, selectedColorSwatchId, hiddenViews)
+  const ordered = resolveGalleryImagesForColour(
+    images,
+    selectedColorSwatchId,
+    hiddenViews,
+    layout,
+  )
+  if (layout === 'merchandised_gallery') return ordered[0] ?? null
+
   if (selectedColorSwatchId) {
     return (
       ordered.find(
@@ -268,8 +343,82 @@ export function pickPreferredGalleryImageUrl(
   selectedColorSwatchId: string | null,
   fallbackUrl: string | null,
   hiddenViews?: Set<string>,
+  layout: ImageLayout = 'standard_views',
 ): string | null {
-  return pickPreferredGalleryImage(images, selectedColorSwatchId, hiddenViews)?.url ?? fallbackUrl
+  return pickPreferredGalleryImage(
+    images,
+    selectedColorSwatchId,
+    hiddenViews,
+    layout,
+  )?.url ?? fallbackUrl
+}
+
+function resolveMerchandisedGalleryImages(
+  images: CatalogueAwareGalleryImage[],
+  selectedColorSwatchId: string | null,
+  hiddenViews?: Set<string>,
+): CatalogueAwareGalleryImage[] {
+  const eligible = images.filter((image) => {
+    const imageColour = image.color_swatch_id ?? null
+    if (
+      imageColour !== null
+      && (
+        selectedColorSwatchId === null
+        || imageColour !== selectedColorSwatchId
+      )
+    ) {
+      return false
+    }
+
+    const hiddenKey = image.view
+      ? (
+          normalizeCatalogueImageView(image.view, image.url)
+          ?? image.view.toLowerCase()
+        )
+      : null
+    return !hiddenKey || !hiddenViews?.has(hiddenKey)
+  })
+
+  const persisted = eligible.filter(
+    (image) => !image.synthetic && !image.id.startsWith('swatch:'),
+  )
+  const kept = persisted.length > 0
+    ? persisted
+    : eligible.filter(
+        (image) =>
+          image.synthetic === true
+          || image.id.startsWith('swatch:'),
+      )
+
+  return kept.slice().sort(compareMerchandisedImages)
+}
+
+function compareMerchandisedImages(
+  a: CatalogueAwareGalleryImage,
+  b: CatalogueAwareGalleryImage,
+): number {
+  const aExplicit = a.gallery_position != null
+  const bExplicit = b.gallery_position != null
+  if (aExplicit !== bExplicit) return aExplicit ? -1 : 1
+  if (
+    aExplicit
+    && bExplicit
+    && a.gallery_position !== b.gallery_position
+  ) {
+    return (a.gallery_position as number) - (b.gallery_position as number)
+  }
+
+  const positionDelta =
+    (a.position ?? Number.MAX_SAFE_INTEGER)
+    - (b.position ?? Number.MAX_SAFE_INTEGER)
+  if (positionDelta !== 0) return positionDelta
+
+  const scopeDelta =
+    (a.scope === 'catalogue' ? 1 : 0)
+    - (b.scope === 'catalogue' ? 1 : 0)
+  if (scopeDelta !== 0) return scopeDelta
+
+  return naturalCompare(a.id, b.id)
 }
 
 const PRIMARY_VIEWS = new Set([

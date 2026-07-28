@@ -38,4 +38,20 @@ describe('deriveCardImageUrl — shared vector', () => {
     ]
     expect(deriveCardImageUrl({ images, leadColorSwatchId: null, masterImageUrl: 'MASTER', normalizeView: nv })).toBe('AC_LEFT1')
   })
+
+  it('F: Merchandised uses first union-order image, including a snapshot', () => {
+    const images = [
+      { id: 'master-second', scope: 'master' as const, color_swatch_id: 'lead', view: 'front', source: 'staff_upload', position: 0, gallery_position: 1, image_url: 'MASTER_SECOND' },
+      { id: 'catalogue-first', scope: 'catalogue' as const, color_swatch_id: 'lead', view: null, source: 'designer_snapshot', position: 9, gallery_position: 0, image_url: 'CATALOGUE_FIRST' },
+    ]
+    expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv, layout: 'merchandised_gallery' })).toBe('CATALOGUE_FIRST')
+  })
+
+  it('G: Merchandised excludes another colour and keeps neutral media', () => {
+    const images = [
+      { id: 'other-first', scope: 'catalogue' as const, color_swatch_id: 'other', view: null, source: 'staff_upload', position: 0, gallery_position: 0, image_url: 'OTHER' },
+      { id: 'neutral-second', scope: 'master' as const, color_swatch_id: null, view: null, source: 'staff_upload', position: 1, gallery_position: 1, image_url: 'NEUTRAL' },
+    ]
+    expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv, layout: 'merchandised_gallery' })).toBe('NEUTRAL')
+  })
 })
