@@ -7,6 +7,7 @@ import {
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
 } from '@/lib/shop/catalogue-images'
+import { ImageLightbox } from './ImageLightbox'
 
 export type GalleryImage = CatalogueAwareGalleryImage
 
@@ -135,9 +136,21 @@ export function ProductImageGallery({
       next.add(key)
       return next
     })
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const activeItem = useMemo(
     () => galleryItems.find((item) => item.key === activeKey) ?? galleryItems[0] ?? null,
     [activeKey, galleryItems],
+  )
+  const lightboxImages = useMemo(
+    () =>
+      galleryItems
+        .filter((item) => !failedKeys.has(item.key))
+        .map((item) => ({ url: item.url, alt: item.alt, label: item.label })),
+    [galleryItems, failedKeys],
+  )
+  const lightboxIndex = Math.max(
+    0,
+    lightboxImages.findIndex((image) => image.url === activeItem?.url),
   )
   const prevColorRef = useRef(selectedColorSwatchId)
 
@@ -208,16 +221,23 @@ export function ProductImageGallery({
         {failedKeys.has(activeItem.key) ? (
           <div className="flex h-full items-center justify-center text-gray-300">No image</div>
         ) : (
-          <Image
-            key={activeItem.key}
-            src={activeItem.url}
-            alt={activeItem.alt}
-            fill
-            sizes="(min-width:1024px) 40vw, 100vw"
-            className="object-contain p-6"
-            priority
-            onError={() => markFailed(activeItem.key)}
-          />
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            aria-label={`Enlarge ${activeItem.alt}`}
+            className="absolute inset-0 h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-pr-blue"
+          >
+            <Image
+              key={activeItem.key}
+              src={activeItem.url}
+              alt={activeItem.alt}
+              fill
+              sizes="(min-width:1024px) 40vw, 100vw"
+              className="object-contain p-6"
+              priority
+              onError={() => markFailed(activeItem.key)}
+            />
+          </button>
         )}
         {activeOverlays.map((o) => {
           const left = (o.rect.x + o.placement.x * o.rect.w) * 100
@@ -246,6 +266,13 @@ export function ProductImageGallery({
           )
         })}
       </div>
+      {lightboxOpen && lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
       {galleryItems.length > 1 && (
         <div
           className="flex flex-wrap gap-2"

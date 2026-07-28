@@ -301,7 +301,10 @@ export function ImageLightbox({
       <button
         type="button"
         aria-label="Close"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
         className={`absolute right-4 top-4 h-10 w-10 ${CONTROL}`}
       >
         <span aria-hidden className="text-xl leading-none">×</span>
@@ -742,7 +745,10 @@ export function ImageLightbox({
       <button
         type="button"
         aria-label="Close"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
         className={`absolute right-4 top-4 h-10 w-10 ${CONTROL}`}
       >
         <X className="h-5 w-5" aria-hidden />
