@@ -13,11 +13,16 @@ import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { effectiveFulfilment, matchesMode, memberCanReorder, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
-  pickCatalogueCardThumbnail,
-  pickCatalogueColourThumbnail,
+  hiddenViewSetForColour,
+  pickCatalogueGridThumbnail,
+  type CardFallbackImage,
   type CatalogueItemImageRow,
 } from '@/lib/shop/catalogue-images'
 import { getGrantedCatalogueItems } from '@/lib/shop/member-access'
+import {
+  effectiveImageLayout,
+  type ImageLayout,
+} from '@/lib/shop/image-layout'
 import { stripTrailingSku } from '@/lib/shop/strip-trailing-sku'
 import {
   resolveCatalogueDecorationPrices,
@@ -50,6 +55,7 @@ interface ProductRow {
   garment_family: string | null
   moq: number | null
   created_at: string | null
+  image_layout: ImageLayout
 }
 
 type CatalogueSwatchEmbed = {
@@ -142,6 +148,7 @@ export default async function CataloguePage({
     fulfilment_type_override: FulfilmentType | null
     card_image_id: string | null
     price_mode: 'computed' | 'manual_final' | null
+    image_layout_override: ImageLayout | null
   }>
   const priceModeByItemId = new Map(catItemRows.map((r) => [r.id, r.price_mode]))
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
@@ -213,7 +220,7 @@ export default async function CataloguePage({
 
   let q = admin
     .from('products')
-    .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at', { count: 'exact' })
+    .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at, image_layout', { count: 'exact' })
     .eq('is_active', true)
     .in('id', modeScopedProductIds)
 
@@ -253,10 +260,34 @@ export default async function CataloguePage({
       .filter((r) => productIds.includes(r.source_product_id))
       .map((r) => [r.source_product_id, r.id]),
   )
+  const itemByProductId = new Map(
+    catItemRows
+      .filter((r) => productIds.includes(r.source_product_id))
+      .map((r) => [r.source_product_id, r]),
+  )
+  const imageLayoutByProductId = new Map(
+    rows.map((row) => [
+      row.id,
+      effectiveImageLayout(
+        row.image_layout,
+        itemByProductId.get(row.id)?.image_layout_override ?? null,
+      ),
+    ]),
+  )
+  const merchandisedProductIds = productIds.filter(
+    (productId) =>
+      imageLayoutByProductId.get(productId) === 'merchandised_gallery',
+  )
+  const merchandisedItemIds = merchandisedProductIds
+    .map((productId) => itemIdByProductId.get(productId))
+    .filter((itemId): itemId is string => Boolean(itemId))
   const [
     { prices: pricesLow },
     { prices: pricesHigh },
     { data: catalogueImageRows },
+    { data: masterImageRows },
+    { data: galleryOrderRows },
+    { data: hiddenViewRows },
     { data: decorationRows },
     { data: stockRows },
     { data: swatchRows },
@@ -271,6 +302,48 @@ export default async function CataloguePage({
           .eq('is_published', true)
           .order('position', { ascending: true })
       : Promise.resolve({ data: [] as CatalogueItemImageRow[] }),
+    merchandisedProductIds.length > 0
+      ? admin
+          .from('product_images')
+          .select('id, product_id, file_url, view, position, color_swatch_id')
+          .in('product_id', merchandisedProductIds)
+      : Promise.resolve({
+          data: [] as Array<{
+            id: string
+            product_id: string
+            file_url: string | null
+            view: string | null
+            position: number | null
+            color_swatch_id: string | null
+          }>,
+        }),
+    merchandisedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_gallery_order')
+          .select(
+            'catalogue_item_id, product_image_id, catalogue_item_image_id, position',
+          )
+          .in('catalogue_item_id', merchandisedItemIds)
+      : Promise.resolve({
+          data: [] as Array<{
+            catalogue_item_id: string
+            product_image_id: string | null
+            catalogue_item_image_id: string | null
+            position: number
+          }>,
+        }),
+    merchandisedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_hidden_views')
+          .select('catalogue_item_id, color_swatch_id, view')
+          .in('catalogue_item_id', merchandisedItemIds)
+      : Promise.resolve({
+          data: [] as Array<{
+            catalogue_item_id: string
+            color_swatch_id: string | null
+            view: string | null
+          }>,
+        }),
     scopedItemIds.length > 0
       ? admin
           .from('b2b_catalogue_item_decorations')
@@ -321,13 +394,87 @@ export default async function CataloguePage({
   ])
 
   const productImageById = new Map(rows.map((row) => [row.id, row.image_url]))
+  const hiddenViewsByItem = new Map<
+    string,
+    Array<{ color_swatch_id: string | null; view: string | null }>
+  >()
+  for (const row of (hiddenViewRows ?? []) as Array<{
+    catalogue_item_id: string
+    color_swatch_id: string | null
+    view: string | null
+  }>) {
+    const list = hiddenViewsByItem.get(row.catalogue_item_id) ?? []
+    list.push({
+      color_swatch_id: row.color_swatch_id,
+      view: row.view,
+    })
+    hiddenViewsByItem.set(row.catalogue_item_id, list)
+  }
+  const galleryPositionByItem = new Map<string, Map<string, number>>()
+  for (const row of (galleryOrderRows ?? []) as Array<{
+    catalogue_item_id: string
+    product_image_id: string | null
+    catalogue_item_image_id: string | null
+    position: number
+  }>) {
+    const positions =
+      galleryPositionByItem.get(row.catalogue_item_id) ??
+      new Map<string, number>()
+    if (row.product_image_id) {
+      positions.set(`master:${row.product_image_id}`, row.position)
+    }
+    if (row.catalogue_item_image_id) {
+      positions.set(`catalogue:${row.catalogue_item_image_id}`, row.position)
+    }
+    galleryPositionByItem.set(row.catalogue_item_id, positions)
+  }
   const imagesByProduct = new Map<string, CatalogueItemImageRow[]>()
   for (const row of (catalogueImageRows ?? []) as CatalogueItemImageRow[]) {
     const productId = productIdByItemId.get(row.catalogue_item_id)
     if (!productId) continue
     const list = imagesByProduct.get(productId) ?? []
-    list.push(row)
+    list.push({
+      ...row,
+      gallery_position: row.id
+        ? (
+            galleryPositionByItem
+              .get(row.catalogue_item_id)
+              ?.get(`catalogue:${row.id}`)
+            ?? null
+          )
+        : null,
+    })
     imagesByProduct.set(productId, list)
+  }
+  const masterImagesByProduct = new Map<string, CardFallbackImage[]>()
+  for (const row of (masterImageRows ?? []) as Array<{
+    id: string
+    product_id: string
+    file_url: string | null
+    view: string | null
+    position: number | null
+    color_swatch_id: string | null
+  }>) {
+    const itemId = itemIdByProductId.get(row.product_id)
+    const list = masterImagesByProduct.get(row.product_id) ?? []
+    list.push({
+      id: row.id,
+      color_swatch_id: row.color_swatch_id,
+      view: row.view,
+      source: null,
+      position: row.position,
+      gallery_position: itemId
+        ? (
+            galleryPositionByItem
+              .get(itemId)
+              ?.get(`master:${row.id}`)
+            ?? null
+          )
+        : null,
+      scope: 'master',
+      image_url: row.file_url,
+    })
+    masterImagesByProduct.set(row.product_id, list)
   }
 
   // Explicit card picks: bypass is_published so a staff_pick image that is
@@ -412,11 +559,27 @@ export default async function CataloguePage({
       swatchId: r.color_swatch_id,
       label: swatch.label,
       hex: swatch.hex,
-      imageUrl: pickCatalogueColourThumbnail({
+      imageUrl: pickCatalogueGridThumbnail({
+        kind: 'colour',
+        layout:
+          imageLayoutByProductId.get(productId) ?? 'standard_views',
         fallbackUrl: productImageById.get(productId) ?? null,
         rows: imagesByProduct.get(productId) ?? [],
         selectedColorSwatchId: r.color_swatch_id,
         swatchImageUrl: swatch.image_url,
+        masterImages: masterImagesByProduct.get(productId) ?? [],
+        explicitCardImageUrl: itemByProductId.get(productId)?.card_image_id
+          ? (
+              cardImageIdToUrl.get(
+                itemByProductId.get(productId)?.card_image_id as string,
+              )
+              ?? null
+            )
+          : null,
+        hiddenViews: hiddenViewSetForColour(
+          hiddenViewsByItem.get(r.catalogue_item_id) ?? [],
+          r.color_swatch_id,
+        ),
       }),
     })
     coloursByProductForGrid.set(productId, list)
@@ -468,11 +631,20 @@ export default async function CataloguePage({
       id: p.id,
       name: stripTrailingSku(p.name, p.sku),
       sku: p.sku,
-      image_url: pickCatalogueCardThumbnail({
+      image_url: pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: imageLayoutByProductId.get(p.id) ?? 'standard_views',
         fallbackUrl: p.image_url,
         rows: imagesByProduct.get(p.id) ?? [],
-        leadColorSwatchId,
+        selectedColorSwatchId: leadColorSwatchId,
         explicitCardImageUrl: pickedUrl,
+        masterImages: masterImagesByProduct.get(p.id) ?? [],
+        hiddenViews: catItemId
+          ? hiddenViewSetForColour(
+              hiddenViewsByItem.get(catItemId) ?? [],
+              leadColorSwatchId,
+            )
+          : undefined,
       }),
       type: p.garment_family,
       price_low: priceLow,

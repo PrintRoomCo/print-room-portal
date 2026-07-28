@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   pickCatalogueColourThumbnail,
+  pickCatalogueGridThumbnail,
   pickCatalogueCardThumbnail,
   pickCatalogueItemThumbnail,
   pickPreferredGalleryImageUrl,
@@ -9,6 +10,7 @@ import {
   type CatalogueAwareGalleryImage,
   type CatalogueItemImageRow,
 } from './catalogue-images'
+import { effectiveImageLayout } from './image-layout'
 
 const baseImages: CatalogueAwareGalleryImage[] = [
   {
@@ -60,6 +62,70 @@ describe('hiddenViewSetForColour', () => {
 describe('resolveGalleryImagesForColour', () => {
   it('keeps master fallback images when no catalogue images exist', () => {
     expect(resolveGalleryImagesForColour(baseImages, 'blue')).toEqual(baseImages)
+  })
+
+  it('keeps view-less catalogue media off the Standard-views gallery', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'catalogue-untagged-blue',
+          url: '/catalogue-lifestyle-blue.png',
+          view: null,
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.id)).not.toContain(
+      'catalogue-untagged-blue',
+    )
+  })
+
+  it('keeps a persisted view-less row hidden when its filename implies a view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        {
+          id: 'catalogue-untagged-rear',
+          url: '/catalogue-product-rear.png',
+          view: 'back',
+          persisted_view: null,
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved).toEqual([])
+  })
+
+  it('continues to prefer an ordinary recognised catalogue view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        ...baseImages,
+        {
+          id: 'catalogue-front-blue',
+          url: '/catalogue-front-blue.png',
+          view: 'front',
+          position: 99,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved.map((image) => image.id)).toEqual([
+      'catalogue-front-blue',
+    ])
   })
 
   it('drops a staff-hidden master view (e.g. back) for the selected colour', () => {
@@ -804,5 +870,176 @@ describe('pickCatalogueColourThumbnail', () => {
         ],
       }),
     ).toBe('/product.png')
+  })
+})
+
+describe('pickCatalogueGridThumbnail — Merchandised cards', () => {
+  const catalogueRows: CatalogueItemImageRow[] = [
+    {
+      id: 'catalogue-first',
+      catalogue_item_id: 'item-1',
+      view: null,
+      source: 'designer_snapshot',
+      position: 8,
+      gallery_position: 0,
+      image_url: '/catalogue-first.png',
+      color_swatch_id: 'lead',
+    },
+  ]
+  const masterRows = [
+    {
+      id: 'master-first',
+      scope: 'master' as const,
+      view: 'front',
+      source: null,
+      position: 0,
+      gallery_position: 0,
+      image_url: '/master-first.png',
+      color_swatch_id: null,
+    },
+  ]
+
+  it('keeps an explicit card image as the absolute override', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: 'merchandised_gallery',
+        fallbackUrl: '/fallback.png',
+        rows: catalogueRows,
+        masterImages: masterRows,
+        selectedColorSwatchId: 'lead',
+        explicitCardImageUrl: '/explicit.png',
+      }),
+    ).toBe('/explicit.png')
+  })
+
+  it('uses inherited Merchandised mode', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: effectiveImageLayout('merchandised_gallery', null),
+        fallbackUrl: '/fallback.png',
+        rows: catalogueRows,
+        masterImages: masterRows.map((image) => ({
+          ...image,
+          gallery_position: 1,
+        })),
+        selectedColorSwatchId: 'lead',
+      }),
+    ).toBe('/catalogue-first.png')
+  })
+
+  it('uses the old Standard resolver when the item overrides a Merchandised master', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: effectiveImageLayout(
+          'merchandised_gallery',
+          'standard_views',
+        ),
+        fallbackUrl: '/fallback.png',
+        rows: [
+          {
+            ...catalogueRows[0],
+            id: 'back-first',
+            view: 'back',
+            source: 'staff_upload',
+            position: 0,
+            image_url: '/back.png',
+          },
+          {
+            ...catalogueRows[0],
+            id: 'front-second',
+            view: 'front',
+            source: 'staff_upload',
+            position: 1,
+            gallery_position: 1,
+            image_url: '/front.png',
+            color_swatch_id: null,
+          },
+        ],
+        selectedColorSwatchId: 'lead',
+      }),
+    ).toBe('/front.png')
+  })
+
+  it('chooses the first ordered master image', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: 'merchandised_gallery',
+        fallbackUrl: '/fallback.png',
+        rows: catalogueRows.map((row) => ({
+          ...row,
+          gallery_position: 1,
+        })),
+        masterImages: masterRows,
+        selectedColorSwatchId: 'lead',
+      }),
+    ).toBe('/master-first.png')
+  })
+
+  it('chooses the first catalogue image for collapsed and colour tiles', () => {
+    for (const kind of ['collapsed', 'colour'] as const) {
+      expect(
+        pickCatalogueGridThumbnail({
+          kind,
+          layout: 'merchandised_gallery',
+          fallbackUrl: '/fallback.png',
+          rows: catalogueRows,
+          masterImages: masterRows.map((image) => ({
+            ...image,
+            gallery_position: 1,
+          })),
+          selectedColorSwatchId: 'lead',
+        }),
+      ).toBe('/catalogue-first.png')
+    }
+  })
+
+  it('falls back when no persisted image is eligible for the selected colour', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: 'merchandised_gallery',
+        fallbackUrl: '/fallback.png',
+        rows: catalogueRows.map((row) => ({
+          ...row,
+          color_swatch_id: 'other',
+        })),
+        masterImages: masterRows.map((image) => ({
+          ...image,
+          color_swatch_id: 'other',
+        })),
+        selectedColorSwatchId: 'lead',
+      }),
+    ).toBe('/fallback.png')
+  })
+
+  it('skips hidden views when choosing an automatic Merchandised card image', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: 'merchandised_gallery',
+        fallbackUrl: '/fallback.png',
+        rows: [
+          {
+            ...catalogueRows[0],
+            view: 'front',
+            image_url: '/hidden-front.png',
+          },
+        ],
+        masterImages: [
+          {
+            ...masterRows[0],
+            view: 'back',
+            gallery_position: 1,
+            image_url: '/visible-back.png',
+          },
+        ],
+        selectedColorSwatchId: 'lead',
+        hiddenViews: new Set(['front']),
+      }),
+    ).toBe('/visible-back.png')
   })
 })

@@ -38,6 +38,7 @@ import {
   type MemberPermission,
 } from '@/lib/shop/fulfilment-mode'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
+import type { ImageLayout } from '@/lib/shop/image-layout'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 type CustomerRole = 'org_admin' | 'staff'
@@ -128,6 +129,8 @@ interface Props {
    */
   orderingPermission: MemberPermission
   images: GalleryImage[]
+  /** Effective item layout, resolved once by the server. */
+  imageLayout?: ImageLayout
   /**
    * Views staff hid from the customer PDP (b2b_catalogue_item_hidden_views),
    * scoped per (catalogue item, colour). Dropped from the gallery and cart
@@ -201,6 +204,7 @@ export function ProductDetailClient({
   customerRole,
   orderingPermission,
   images,
+  imageLayout = 'standard_views',
   hiddenViewRows = [],
   billingModeByVariant = {},
   stockPurchasePriceByVariant = {},
@@ -1008,6 +1012,7 @@ export function ProductDetailClient({
         swatchId,
         product.image_url,
         hiddenViewSetForColour(hiddenViewRows, swatchId),
+        imageLayout,
       )
     const cartLineBrackets: CartLineBracket[] = brackets.map((b) => ({
       minQty: b.min_quantity,
@@ -1310,6 +1315,7 @@ export function ProductDetailClient({
                 overlays={galleryOverlays}
                 decorationImages={galleryDecorationImages}
                 hiddenViews={hiddenViews}
+                imageLayout={imageLayout}
               />
             </div>
           </div>

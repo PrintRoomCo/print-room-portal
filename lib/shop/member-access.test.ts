@@ -99,6 +99,7 @@ describe('getGrantedCatalogueItems (full rows)', () => {
           fulfilment_type_override: 'stock',
           card_image_id: 'img1',
           price_mode: 'manual_final',
+          image_layout_override: 'merchandised_gallery',
         },
         {
           id: 'i2',
@@ -107,6 +108,7 @@ describe('getGrantedCatalogueItems (full rows)', () => {
           fulfilment_type_override: null,
           card_image_id: null,
           price_mode: 'computed',
+          image_layout_override: null,
         },
       ],
     })
@@ -119,6 +121,7 @@ describe('getGrantedCatalogueItems (full rows)', () => {
         fulfilment_type_override: 'stock',
         card_image_id: 'img1',
         price_mode: 'manual_final',
+        image_layout_override: 'merchandised_gallery',
       },
       {
         id: 'i2',
@@ -127,6 +130,7 @@ describe('getGrantedCatalogueItems (full rows)', () => {
         fulfilment_type_override: null,
         card_image_id: null,
         price_mode: 'computed',
+        image_layout_override: null,
       },
     ])
   })

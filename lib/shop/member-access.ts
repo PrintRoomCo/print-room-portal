@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ImageLayout } from './image-layout'
 
 /**
  * A member-visible catalogue item, with the columns the catalogue grid needs.
@@ -12,6 +13,7 @@ export interface GrantedCatalogueItemRow {
   fulfilment_type_override: string | null
   card_image_id: string | null
   price_mode: 'computed' | 'manual_final' | null
+  image_layout_override: ImageLayout | null
 }
 
 // The column list the grid consumes. Selected in BOTH resolution paths so a
@@ -19,7 +21,7 @@ export interface GrantedCatalogueItemRow {
 // pick up these fields (that second round-trip was the catalogue page's hot
 // path — see getGrantedCatalogueItems callers).
 const GRID_ITEM_COLUMNS =
-  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode'
+  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode, image_layout_override'
 
 /**
  * Resolve the full b2b_catalogue_items rows a member can see (not just ids).
@@ -147,6 +149,7 @@ function normaliseRow(row: Partial<GrantedCatalogueItemRow> & { id: string }): G
     fulfilment_type_override: row.fulfilment_type_override ?? null,
     card_image_id: row.card_image_id ?? null,
     price_mode: row.price_mode ?? null,
+    image_layout_override: row.image_layout_override ?? null,
   }
 }
 

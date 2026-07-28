@@ -7,6 +7,7 @@ import {
   resolveGalleryImagesForColour,
   type CatalogueAwareGalleryImage,
 } from '@/lib/shop/catalogue-images'
+import type { ImageLayout } from '@/lib/shop/image-layout'
 import { ImageLightbox } from './ImageLightbox'
 
 export type GalleryImage = CatalogueAwareGalleryImage
@@ -40,6 +41,7 @@ interface Props {
   /** Canonical views staff hid from the customer PDP for the selected colour.
    *  Dropped from the gallery entirely (master photos included). */
   hiddenViews?: Set<string>
+  imageLayout?: ImageLayout
 }
 
 type GalleryItem =
@@ -74,10 +76,17 @@ export function ProductImageGallery({
   overlays = [],
   decorationImages = [],
   hiddenViews,
+  imageLayout = 'standard_views',
 }: Props) {
   const ordered = useMemo(
-    () => resolveGalleryImagesForColour(images, selectedColorSwatchId, hiddenViews),
-    [images, selectedColorSwatchId, hiddenViews],
+    () =>
+      resolveGalleryImagesForColour(
+        images,
+        selectedColorSwatchId,
+        hiddenViews,
+        imageLayout,
+      ),
+    [images, selectedColorSwatchId, hiddenViews, imageLayout],
   )
   const galleryItems = useMemo<GalleryItem[]>(
     () => [
@@ -118,13 +127,21 @@ export function ProductImageGallery({
       selectedColorSwatchId,
       fallbackUrl,
       hiddenViews,
+      imageLayout,
     )
     return (
       galleryItems.find((item) => item.url === preferredUrl)?.key ??
       galleryItems[0]?.key ??
       null
     )
-  }, [fallbackUrl, galleryItems, images, selectedColorSwatchId, hiddenViews])
+  }, [
+    fallbackUrl,
+    galleryItems,
+    images,
+    selectedColorSwatchId,
+    hiddenViews,
+    imageLayout,
+  ])
   const [activeKey, setActiveKey] = useState<string | null>(() => preferredKey)
   // A gallery image can point at a now-deleted upstream (e.g. a discontinued
   // garment pruned from the old BigCommerce store). Degrade a dead URL to the
@@ -172,7 +189,9 @@ export function ProductImageGallery({
   const activeOverlays = useMemo(
     () =>
       activeImage && activeImage.source !== 'designer_snapshot'
-        ? overlays.filter((o) => o.imageId === activeImage.id)
+        ? overlays.filter(
+            (o) => o.imageId === (activeImage.source_id ?? activeImage.id),
+          )
         : [],
     [overlays, activeImage],
   )
