@@ -5,6 +5,8 @@ export interface CatalogueAwareGalleryImage {
   id: string
   /** Raw persisted id, retained when `id` is scope-prefixed for union safety. */
   source_id?: string
+  /** Raw database view before filename inference; null means untagged. */
+  persisted_view?: string | null
   url: string
   view: string | null
   alt?: string | null
@@ -203,6 +205,7 @@ export function pickCatalogueGridThumbnail(args: {
   selectedColorSwatchId: string | null
   explicitCardImageUrl?: string | null
   swatchImageUrl?: string | null
+  hiddenViews?: Set<string>
 }): string | null {
   if (args.layout === 'standard_views') {
     if (args.kind === 'colour') {
@@ -223,8 +226,7 @@ export function pickCatalogueGridThumbnail(args: {
 
   if (args.explicitCardImageUrl) return args.explicitCardImageUrl
 
-  return deriveCardImageUrl({
-    images: [
+  const images = [
       ...args.rows.map((row, index) => ({
         id: row.id ?? `${row.catalogue_item_id}:${index}`,
         color_swatch_id: row.color_swatch_id,
@@ -236,7 +238,19 @@ export function pickCatalogueGridThumbnail(args: {
         image_url: row.image_url,
       })),
       ...(args.masterImages ?? []),
-    ],
+    ]
+  const eligible = args.hiddenViews
+    ? images.filter((image) => {
+        if (!image.view) return true
+        const view =
+          normalizeCatalogueImageView(image.view, image.image_url)
+          ?? image.view.toLowerCase()
+        return !args.hiddenViews?.has(view)
+      })
+    : images
+
+  return deriveCardImageUrl({
+    images: eligible,
     leadColorSwatchId: args.selectedColorSwatchId,
     masterImageUrl: args.fallbackUrl,
     normalizeView: (view) => normalizeCatalogueImageView(view),
@@ -327,10 +341,13 @@ export function resolveGalleryImagesForColour(
   >()
 
   for (const image of images) {
+    const persistedView =
+      image.persisted_view === undefined
+        ? image.view
+        : image.persisted_view
     if (
       (image.scope ?? 'master') === 'catalogue'
-      && !(image.view ?? '').trim()
-      && normalizeCatalogueImageView(image.view, image.url) == null
+      && !(persistedView ?? '').trim()
     ) {
       continue
     }
@@ -429,10 +446,14 @@ function resolveMerchandisedGalleryImages(
       return false
     }
 
-    const hiddenKey = image.view
+    const viewForVisibility =
+      image.persisted_view === undefined
+        ? image.view
+        : image.persisted_view
+    const hiddenKey = viewForVisibility
       ? (
-          normalizeCatalogueImageView(image.view, image.url)
-          ?? image.view.toLowerCase()
+          normalizeCatalogueImageView(viewForVisibility, image.url)
+          ?? viewForVisibility.toLowerCase()
         )
       : null
     return !hiddenKey || !hiddenViews?.has(hiddenKey)

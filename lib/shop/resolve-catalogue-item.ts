@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getGrantedCatalogueItemIds } from './member-access'
-import type { ImageLayout } from './image-layout'
+import {
+  effectiveImageLayout,
+  type ImageLayout,
+} from './image-layout'
 
 /** The catalogue-item shape the PDP loader needs to render a skin. */
 export type PdpCatalogueItem = {
@@ -42,6 +45,38 @@ export interface ResolveCatalogueItemParams {
 export interface ResolveCatalogueItemDeps {
   /** Injectable for tests; defaults to the real member-access resolver. */
   getGrantedItemIds?: typeof getGrantedCatalogueItemIds
+}
+
+export interface PdpGalleryOrderRow {
+  product_image_id: string | null
+  catalogue_item_image_id: string | null
+  position: number
+}
+
+export function resolvePdpImageContext(
+  productLayout: ImageLayout | null | undefined,
+  itemOverride: ImageLayout | null | undefined,
+  orderRows: PdpGalleryOrderRow[],
+): {
+  imageLayout: ImageLayout
+  galleryPosition: Map<string, number>
+} {
+  const galleryPosition = new Map<string, number>()
+  for (const row of orderRows) {
+    if (row.product_image_id) {
+      galleryPosition.set(`master:${row.product_image_id}`, row.position)
+    }
+    if (row.catalogue_item_image_id) {
+      galleryPosition.set(
+        `catalogue:${row.catalogue_item_image_id}`,
+        row.position,
+      )
+    }
+  }
+  return {
+    imageLayout: effectiveImageLayout(productLayout, itemOverride),
+    galleryPosition,
+  }
 }
 
 /**

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveCatalogueItemForPdp } from './resolve-catalogue-item'
-import { effectiveImageLayout } from './image-layout'
+import {
+  resolveCatalogueItemForPdp,
+  resolvePdpImageContext,
+} from './resolve-catalogue-item'
 
 type Row = Record<string, unknown>
 
@@ -194,17 +196,34 @@ describe('resolveCatalogueItemForPdp', () => {
       deps,
     )
 
-    expect(
-      effectiveImageLayout(
+    const overriddenContext = resolvePdpImageContext(
         'merchandised_gallery',
         overridden?.image_layout_override,
-      ),
-    ).toBe('standard_views')
-    expect(
-      effectiveImageLayout(
+        [
+          {
+            product_image_id: 'master-1',
+            catalogue_item_image_id: null,
+            position: 1,
+          },
+        ],
+      )
+    const inheritedContext = resolvePdpImageContext(
         'merchandised_gallery',
         inherited?.image_layout_override,
-      ),
-    ).toBe('merchandised_gallery')
+        [
+          {
+            product_image_id: null,
+            catalogue_item_image_id: 'catalogue-1',
+            position: 0,
+          },
+        ],
+      )
+
+    expect(overriddenContext.imageLayout).toBe('standard_views')
+    expect(overriddenContext.galleryPosition.get('master:master-1')).toBe(1)
+    expect(inheritedContext.imageLayout).toBe('merchandised_gallery')
+    expect(
+      inheritedContext.galleryPosition.get('catalogue:catalogue-1'),
+    ).toBe(0)
   })
 })

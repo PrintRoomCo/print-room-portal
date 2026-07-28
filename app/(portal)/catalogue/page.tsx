@@ -13,6 +13,7 @@ import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
 import { effectiveFulfilment, matchesMode, memberCanReorder, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
+  hiddenViewSetForColour,
   pickCatalogueGridThumbnail,
   type CardFallbackImage,
   type CatalogueItemImageRow,
@@ -286,6 +287,7 @@ export default async function CataloguePage({
     { data: catalogueImageRows },
     { data: masterImageRows },
     { data: galleryOrderRows },
+    { data: hiddenViewRows },
     { data: decorationRows },
     { data: stockRows },
     { data: swatchRows },
@@ -328,6 +330,18 @@ export default async function CataloguePage({
             product_image_id: string | null
             catalogue_item_image_id: string | null
             position: number
+          }>,
+        }),
+    merchandisedItemIds.length > 0
+      ? admin
+          .from('b2b_catalogue_item_hidden_views')
+          .select('catalogue_item_id, color_swatch_id, view')
+          .in('catalogue_item_id', merchandisedItemIds)
+      : Promise.resolve({
+          data: [] as Array<{
+            catalogue_item_id: string
+            color_swatch_id: string | null
+            view: string | null
           }>,
         }),
     scopedItemIds.length > 0
@@ -380,6 +394,22 @@ export default async function CataloguePage({
   ])
 
   const productImageById = new Map(rows.map((row) => [row.id, row.image_url]))
+  const hiddenViewsByItem = new Map<
+    string,
+    Array<{ color_swatch_id: string | null; view: string | null }>
+  >()
+  for (const row of (hiddenViewRows ?? []) as Array<{
+    catalogue_item_id: string
+    color_swatch_id: string | null
+    view: string | null
+  }>) {
+    const list = hiddenViewsByItem.get(row.catalogue_item_id) ?? []
+    list.push({
+      color_swatch_id: row.color_swatch_id,
+      view: row.view,
+    })
+    hiddenViewsByItem.set(row.catalogue_item_id, list)
+  }
   const galleryPositionByItem = new Map<string, Map<string, number>>()
   for (const row of (galleryOrderRows ?? []) as Array<{
     catalogue_item_id: string
@@ -546,6 +576,10 @@ export default async function CataloguePage({
               ?? null
             )
           : null,
+        hiddenViews: hiddenViewSetForColour(
+          hiddenViewsByItem.get(r.catalogue_item_id) ?? [],
+          r.color_swatch_id,
+        ),
       }),
     })
     coloursByProductForGrid.set(productId, list)
@@ -605,6 +639,12 @@ export default async function CataloguePage({
         selectedColorSwatchId: leadColorSwatchId,
         explicitCardImageUrl: pickedUrl,
         masterImages: masterImagesByProduct.get(p.id) ?? [],
+        hiddenViews: catItemId
+          ? hiddenViewSetForColour(
+              hiddenViewsByItem.get(catItemId) ?? [],
+              leadColorSwatchId,
+            )
+          : undefined,
       }),
       type: p.garment_family,
       price_low: priceLow,

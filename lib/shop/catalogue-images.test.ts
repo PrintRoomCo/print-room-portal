@@ -86,6 +86,26 @@ describe('resolveGalleryImagesForColour', () => {
     )
   })
 
+  it('keeps a persisted view-less row hidden when its filename implies a view', () => {
+    const resolved = resolveGalleryImagesForColour(
+      [
+        {
+          id: 'catalogue-untagged-rear',
+          url: '/catalogue-product-rear.png',
+          view: 'back',
+          persisted_view: null,
+          position: 0,
+          color_swatch_id: 'blue',
+          scope: 'catalogue',
+          source: 'staff_upload',
+        },
+      ],
+      'blue',
+    )
+
+    expect(resolved).toEqual([])
+  })
+
   it('continues to prefer an ordinary recognised catalogue view', () => {
     const resolved = resolveGalleryImagesForColour(
       [
@@ -994,5 +1014,32 @@ describe('pickCatalogueGridThumbnail — Merchandised cards', () => {
         selectedColorSwatchId: 'lead',
       }),
     ).toBe('/fallback.png')
+  })
+
+  it('skips hidden views when choosing an automatic Merchandised card image', () => {
+    expect(
+      pickCatalogueGridThumbnail({
+        kind: 'collapsed',
+        layout: 'merchandised_gallery',
+        fallbackUrl: '/fallback.png',
+        rows: [
+          {
+            ...catalogueRows[0],
+            view: 'front',
+            image_url: '/hidden-front.png',
+          },
+        ],
+        masterImages: [
+          {
+            ...masterRows[0],
+            view: 'back',
+            gallery_position: 1,
+            image_url: '/visible-back.png',
+          },
+        ],
+        selectedColorSwatchId: 'lead',
+        hiddenViews: new Set(['front']),
+      }),
+    ).toBe('/visible-back.png')
   })
 })

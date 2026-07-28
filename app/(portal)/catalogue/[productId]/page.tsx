@@ -5,7 +5,10 @@ import { requireB2BCustomerCached, type AuthFailure } from '@/lib/checkout/serve
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { ProductDetailClient } from '@/components/shop/ProductDetailClient'
 import { loadCatalogueItemDecorations } from '@/lib/shop/decorations'
-import { resolveCatalogueItemForPdp } from '@/lib/shop/resolve-catalogue-item'
+import {
+  resolveCatalogueItemForPdp,
+  resolvePdpImageContext,
+} from '@/lib/shop/resolve-catalogue-item'
 import { resolveStockPurchasePrices } from '@/lib/shop/stock-purchase-price'
 import { getEffectiveMaxQty } from '@/lib/shop/effective-max-qty'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
@@ -23,10 +26,7 @@ import {
   getPeriodBracketsForItem,
 } from '@/lib/pricing/period-brackets'
 import { getPreOrderDemandForItem } from '@/lib/pricing/preorder-demand'
-import {
-  effectiveImageLayout,
-  type ImageLayout,
-} from '@/lib/shop/image-layout'
+import type { ImageLayout } from '@/lib/shop/image-layout'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -247,9 +247,14 @@ const loadProductDetailPageData = cache(async (
   // Preview force-show: a still-draft (is_active=false) product must render
   // when the staff preview launched straight to this item's PDP.
   if (!productRow || (!productRow.is_active && !context.isPreview)) return { status: 'not-found' }
-  const imageLayout = effectiveImageLayout(
+  const { imageLayout, galleryPosition } = resolvePdpImageContext(
     productRow.image_layout,
     catItem.image_layout_override,
+    (galleryOrderRows ?? []) as Array<{
+      product_image_id: string | null
+      catalogue_item_image_id: string | null
+      position: number
+    }>,
   )
 
   // Spec 3a — per-variant billing class (variant_inventory.billing_mode), keyed
@@ -335,23 +340,6 @@ const loadProductDetailPageData = cache(async (
     }
   }
 
-  const galleryPosition = new Map<string, number>()
-  for (const row of (galleryOrderRows ?? []) as Array<{
-    product_image_id: string | null
-    catalogue_item_image_id: string | null
-    position: number
-  }>) {
-    if (row.product_image_id) {
-      galleryPosition.set(`master:${row.product_image_id}`, row.position)
-    }
-    if (row.catalogue_item_image_id) {
-      galleryPosition.set(
-        `catalogue:${row.catalogue_item_image_id}`,
-        row.position,
-      )
-    }
-  }
-
   const catalogueImages = ((catalogueImageRows ?? []) as Array<{
     id: string
     image_url: string | null
@@ -367,6 +355,7 @@ const loadProductDetailPageData = cache(async (
       source_id: r.id,
       url: r.image_url as string,
       view: normalizeCatalogueImageView(r.view, r.image_url),
+      persisted_view: r.view,
       alt: r.alt_text,
       position: r.position,
       color_swatch_id: r.color_swatch_id,
