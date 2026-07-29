@@ -573,6 +573,10 @@ const loadProductDetailPageData = cache(async (
       billingModeByVariant,
       // Spec 3a follow-up — variant_id → original-purchase unit price (prepaid only).
       stockPurchasePriceByVariant,
+      // Explicit ex-GST stock sell price (Stock-on-hand). null = not set →
+      // existing single-price display, never the volume ladder. numeric → number.
+      stockUnitPrice:
+        catItem.stock_unit_price == null ? null : Number(catItem.stock_unit_price),
       organizationId: context.organizationId,
       customerRole: context.role,
       orderingPermission: context.orderingPermission,

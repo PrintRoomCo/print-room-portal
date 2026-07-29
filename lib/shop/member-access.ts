@@ -21,7 +21,7 @@ export interface GrantedCatalogueItemRow {
 // pick up these fields (that second round-trip was the catalogue page's hot
 // path — see getGrantedCatalogueItems callers).
 const GRID_ITEM_COLUMNS =
-  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode, image_layout_override'
+  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode, stock_unit_price, image_layout_override'
 
 /**
  * Resolve the full b2b_catalogue_items rows a member can see (not just ids).
