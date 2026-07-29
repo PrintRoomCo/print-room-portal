@@ -1374,7 +1374,7 @@ export function ProductDetailClient({
                 )}
               </div>
               {product.description && (
-                <p className="mt-5 max-w-prose text-base leading-relaxed text-gray-600">
+                <p className="mt-5 max-w-prose whitespace-pre-line text-base leading-relaxed text-gray-600">
                   {product.description}
                 </p>
               )}

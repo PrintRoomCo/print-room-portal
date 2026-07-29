@@ -126,4 +126,63 @@ describe('ProductDetailClient PDP layout', () => {
     expect(screen.queryByText('TotalColors')).not.toBeInTheDocument()
     expect(screen.queryByText('Safety standard')).not.toBeInTheDocument()
   })
+
+  // The reported bug: author line breaks vanished on the PDP. cleanDescription now
+  // preserves `\n`; the description <p> must carry whitespace-pre-line so those
+  // newlines render as visible line breaks (not collapsed to spaces).
+  it('renders the description with preserved line breaks', () => {
+    const { container } = render(
+      <ProductDetailClient
+        product={{
+          id: 'p1',
+          name: 'Staple Tee',
+          description: 'AS Colour Staple Tee\nA premium tee.\n\n- Classic fit\n- Premium cotton',
+          image_url: null,
+          moq: 1,
+          lead_time_days: 7,
+          sizing_type: 'multi_size_with_variants',
+          decoration_methods: null,
+          decoration_price: null,
+          sku: '5001',
+          safety_standard: null,
+          specs: null,
+          supports_labels: null,
+          garment_family: 'tee',
+          default_sizes: ['S'],
+          fulfilment_type: 'mixed',
+          brand_name: 'AS Colour',
+          category_name: 'T-Shirt',
+          catalogueItemId: 'i1',
+        }}
+        variants={[
+          {
+            variant_id: 'red-s',
+            color_swatch_id: 'red',
+            color_label: 'Red',
+            color_hex: '#f00',
+            color_position: 0,
+            size_id: 1,
+            size_label: 'S',
+            size_order: 0,
+          },
+        ]}
+        sizes={[{ size_id: 1, size_label: 'S', size_order: 0 }]}
+        brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
+        availability={{ 'red-s::1': { available_qty: 115, allow_order_without_stock: false } }}
+        organizationId="o1"
+        customerRole="org_admin"
+        orderingPermission="both"
+        images={[]}
+        colourOptions={[]}
+        decorations={[]}
+        effectiveMoq={1}
+      />,
+    )
+
+    const desc = container.querySelector('p.whitespace-pre-line')
+    expect(desc).not.toBeNull()
+    expect(desc?.textContent).toBe(
+      'AS Colour Staple Tee\nA premium tee.\n\n- Classic fit\n- Premium cotton',
+    )
+  })
 })
