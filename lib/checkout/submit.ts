@@ -338,6 +338,47 @@ export class BuyerScopeError extends Error {
   }
 }
 
+export interface RegionQuotaDetails {
+  store_id: string
+  catalogue_item_id: string
+  region_quota: number
+  already_ordered: number
+  requested: number
+  remaining: number
+}
+
+export class RegionQuotaError extends Error {
+  details: RegionQuotaDetails
+  constructor(details: RegionQuotaDetails) {
+    super('REGION_QUOTA_EXCEEDED')
+    this.name = 'RegionQuotaError'
+    this.details = details
+  }
+}
+
+/** Maps a Supabase RPC error to RegionQuotaError, or null if it isn't one. */
+export function parseRegionQuotaError(
+  error: { message?: string | null; details?: string | null } | null,
+): RegionQuotaError | null {
+  if (!error || error.message !== 'REGION_QUOTA_EXCEEDED') return null
+  try {
+    const d = JSON.parse(error.details ?? '{}') as Partial<RegionQuotaDetails>
+    return new RegionQuotaError({
+      store_id: String(d.store_id ?? ''),
+      catalogue_item_id: String(d.catalogue_item_id ?? ''),
+      region_quota: Number(d.region_quota ?? 0),
+      already_ordered: Number(d.already_ordered ?? 0),
+      requested: Number(d.requested ?? 0),
+      remaining: Number(d.remaining ?? 0),
+    })
+  } catch {
+    return new RegionQuotaError({
+      store_id: '', catalogue_item_id: '', region_quota: 0,
+      already_ordered: 0, requested: 0, remaining: 0,
+    })
+  }
+}
+
 export class MixedShippingAddressError extends Error {
   constructor() {
     super('mixed_shipping_address')
@@ -1293,6 +1334,9 @@ export async function submitCustomerOrder(
         size_id: l.size_id ?? null,
         size_label: l.size_label ?? null,
         catalogue_item_id: lineCatalogueItemId,
+        // DOC region-quota: the RPC reads this per line to enforce the per-store
+        // cap. `repriced` spreads `...l`, so ship_to_store_id survives repricing.
+        ship_to_store_id: l.ship_to_store_id ?? null,
       }
     }),
     p_intent: input.intent ?? 'customer',
@@ -1314,6 +1358,8 @@ export async function submitCustomerOrder(
         requested: parsed.requested,
       })
     }
+    const rq = parseRegionQuotaError(error)
+    if (rq) throw rq
     throw new Error(error.message)
   }
 

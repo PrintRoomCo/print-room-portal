@@ -259,6 +259,7 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
         size_id: null,
         size_label: null,
         catalogue_item_id: CAT_ITEM_ID,
+        ship_to_store_id: null,
       },
     ])
   })
