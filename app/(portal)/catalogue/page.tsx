@@ -148,9 +148,18 @@ export default async function CataloguePage({
     fulfilment_type_override: FulfilmentType | null
     card_image_id: string | null
     price_mode: 'computed' | 'manual_final' | null
+    stock_unit_price: number | string | null
     image_layout_override: ImageLayout | null
   }>
   const priceModeByItemId = new Map(catItemRows.map((r) => [r.id, r.price_mode]))
+  // Explicit ex-GST stock sell price per item (Stock-on-hand). When set, the
+  // card shows this single price instead of the computed range (matches PDP).
+  const stockUnitPriceByItemId = new Map(
+    catItemRows.map((r) => [
+      r.id,
+      r.stock_unit_price == null ? null : Number(r.stock_unit_price),
+    ]),
+  )
   const productIdByItemId = new Map(catItemRows.map((r) => [r.id, r.source_product_id]))
 
   // Inventory tenants: union curated catalogue with any product they track
@@ -650,6 +659,7 @@ export default async function CataloguePage({
       price_low: priceLow,
       price_high: priceHigh,
       price_status: priceHigh > 0 ? ('ok' as const) : ('missing' as const),
+      stock_unit_price: catItemId ? (stockUnitPriceByItemId.get(catItemId) ?? null) : null,
       has_stock: lowPrice.hasStock,
       total_stock: stockTotal,
       colours: coloursByProductForGrid.get(p.id) ?? [],

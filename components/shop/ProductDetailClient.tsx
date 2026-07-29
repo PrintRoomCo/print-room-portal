@@ -150,6 +150,13 @@ interface Props {
    * at checkout. Only populated for prepaid variants.
    */
   stockPurchasePriceByVariant?: Record<string, number>
+  /**
+   * Explicit ex-GST stock sell price (b2b_catalogue_items.stock_unit_price).
+   * null = not set. When set on a Stock-on-hand item it becomes THE per-unit
+   * garment price — shown as one price (no volume ladder) and used for the cart
+   * claim + checkout charge; the server bills prepaid draws $0 regardless.
+   */
+  stockUnitPrice?: number | null
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
@@ -208,6 +215,7 @@ export function ProductDetailClient({
   hiddenViewRows = [],
   billingModeByVariant = {},
   stockPurchasePriceByVariant = {},
+  stockUnitPrice = null,
   colourOptions = [],
   decorations,
   effectiveMoq,
@@ -610,6 +618,20 @@ export function ProductDetailClient({
       setPricingLoading(false)
       return
     }
+    // Stock-on-hand with an explicit price shows/charges ONE flat price, never
+    // the volume ladder. Short-circuit the /api/shop/pricing fetch so the cart's
+    // claimed_unit_price is the explicit price — matching the server's canonical
+    // (submit.ts garmentUnitPriceForLine), so the checkout drift guard passes.
+    if (isInventoryMode && stockUnitPrice != null) {
+      setPricing({
+        unit_price: stockUnitPrice,
+        total: Number((stockUnitPrice * qty).toFixed(2)),
+        status: 'ok',
+        bracket: null,
+      })
+      setPricingLoading(false)
+      return
+    }
     const controller = new AbortController()
     let cancelled = false
     setPricingLoading(true)
@@ -638,7 +660,7 @@ export function ProductDetailClient({
       controller.abort()
       if (priceTimer.current) clearTimeout(priceTimer.current)
     }
-  }, [qty, product.id])
+  }, [qty, product.id, isInventoryMode, stockUnitPrice])
 
   useEffect(() => {
     // The pricing API only needs the linkId (it re-resolves the decoration
@@ -1014,11 +1036,16 @@ export function ProductDetailClient({
         hiddenViewSetForColour(hiddenViewRows, swatchId),
         imageLayout,
       )
-    const cartLineBrackets: CartLineBracket[] = brackets.map((b) => ({
-      minQty: b.min_quantity,
-      maxQty: b.max_quantity,
-      unitPrice: b.unit_price,
-    }))
+    // Stock-on-hand with an explicit price: one flat band so the cart keeps the
+    // single price on qty edits (and the claimed price stays the explicit one).
+    const cartLineBrackets: CartLineBracket[] =
+      isInventoryMode && stockUnitPrice != null
+        ? [{ minQty: 1, maxQty: null, unitPrice: stockUnitPrice }]
+        : brackets.map((b) => ({
+            minQty: b.min_quantity,
+            maxQty: b.max_quantity,
+            unitPrice: b.unit_price,
+          }))
 
     // Mode 1: multi-size with variants — one cart line per touched (colourway,
     // size) cell. The variant is the colourway; size is an explicit line attribute.
@@ -1424,7 +1451,9 @@ export function ProductDetailClient({
               )}
             </section>
           )}
-          {displayVolumeBrackets.length > 0 && (!isInventoryMode || !selectedColourPrepaid) && (
+          {/* Volume ladder is a purchase-order concern only — never shown for the
+              Stock-on-hand ordering type (supersedes commit 243737a for stock). */}
+          {displayVolumeBrackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                 Volume Pricing
@@ -1443,11 +1472,29 @@ export function ProductDetailClient({
             </section>
           )}
 
+          {/* Explicit stock price (Stock-on-hand shows ONE price, not the ladder).
+              THE price for both prepaid and pay-at-checkout colours when set;
+              supersedes the original-purchase-price panel below. */}
+          {isInventoryMode && stockUnitPrice != null && (
+            <section data-testid="stock-unit-price" className="rounded-[24px] bg-white p-6">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                Price
+              </p>
+              <p className="mt-4 text-sm text-gray-700 tabular-nums">
+                <span className="font-medium text-gray-900">{format(stockUnitPrice)}</span>{' '}
+                <span className="text-gray-500">
+                  per unit{selectedColourPrepaid ? ' — pre-paid' : ''}
+                </span>
+              </p>
+            </section>
+          )}
+
           {/* Prepaid stock (Spec 3a follow-up): where Volume Pricing surfaces
               for purchase orders, a stock draw surfaces the per-unit price of
               the band the stock was ORIGINALLY purchased at. Informational —
-              the draw itself is billed $0 (goods already paid). */}
-          {isInventoryMode && selectedColourPrepaid && selectedColourStockPrice != null && (
+              the draw itself is billed $0 (goods already paid). Only when there
+              is no explicit stock price (that supersedes it). */}
+          {isInventoryMode && stockUnitPrice == null && selectedColourPrepaid && selectedColourStockPrice != null && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                 Prepaid Stock

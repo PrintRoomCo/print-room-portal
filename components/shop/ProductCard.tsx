@@ -22,6 +22,12 @@ interface ProductCardData {
   price_low: number
   price_high: number
   price_status: 'ok' | 'missing'
+  /**
+   * Explicit ex-GST stock sell price (Stock-on-hand). When set, the card shows
+   * this single price instead of the computed range, so the card and the PDP
+   * agree ("one price to show").
+   */
+  stock_unit_price?: number | null
   has_stock: boolean
   /** Stock total across every tracked variant. Currently unused on card — */
   /** kept on the data shape so the page query can stay consistent. */
@@ -65,7 +71,9 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.name}
           </dd>
           <dd className="whitespace-nowrap font-medium tracking-wider text-gray-900">
-            {product.price_status === 'missing' ? (
+            {product.stock_unit_price != null ? (
+              <Money nzd={product.stock_unit_price} />
+            ) : product.price_status === 'missing' ? (
               'On request'
             ) : product.price_high > product.price_low ? (
               <>

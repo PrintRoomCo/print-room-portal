@@ -226,6 +226,30 @@ export function billedOrderTotal(lines: BilledTotalLine[], pickFee: number): num
   return round2(billedGoods + pickFee)
 }
 
+/**
+ * The garment unit price the checkout charges + drift-checks for a line.
+ *
+ * A stock DRAW (fulfilment_type === 'stocked') on a catalogue item with an
+ * explicit stock_unit_price uses that flat price — Stock-on-hand shows/charges
+ * ONE price, not the volume ladder. Every other line (made_to_order, or a
+ * stocked line whose item has no explicit price) uses the ladder-derived
+ * canonical price. Applied per line (not in the shared ladder helper) so a
+ * 'mixed' item's made-to-order lines stay on the ladder. This must feed BOTH
+ * the billed price and the drift canonical, or the two disagree and checkout
+ * either mischarges or throws UnitPriceDriftError against the honest cart.
+ */
+export function garmentUnitPriceForLine(
+  line: Pick<CheckoutLineInput, 'fulfilment_type' | 'catalogueItemId'>,
+  ladderUnitPrice: number,
+  stockUnitPriceByItem: Map<string, number>,
+): number {
+  if (line.fulfilment_type === 'stocked' && line.catalogueItemId) {
+    const explicit = stockUnitPriceByItem.get(line.catalogueItemId)
+    if (explicit != null) return explicit
+  }
+  return ladderUnitPrice
+}
+
 export function buildBillingModeDrift(
   lines: Array<
     Pick<
@@ -751,10 +775,39 @@ export async function submitCustomerOrder(
     }),
   )
 
+  // Explicit stock sell prices for the cart's stocked catalogue items. A stock
+  // draw on an item with stock_unit_price set charges that flat price (not the
+  // ladder) — matching the PDP's claimed price so the drift guard below passes.
+  const stockDrawItemIds = Array.from(
+    new Set(
+      input.lines
+        .filter((l) => l.fulfilment_type === 'stocked' && l.catalogueItemId)
+        .map((l) => l.catalogueItemId as string),
+    ),
+  )
+  const stockUnitPriceByItem = new Map<string, number>()
+  if (stockDrawItemIds.length > 0) {
+    const { data: stockPriceRows } = await admin
+      .from('b2b_catalogue_items')
+      .select('id, stock_unit_price')
+      .in('id', stockDrawItemIds)
+    for (const r of (stockPriceRows ?? []) as Array<{
+      id: string
+      stock_unit_price: number | string | null
+    }>) {
+      if (r.stock_unit_price != null) {
+        stockUnitPriceByItem.set(r.id, Number(r.stock_unit_price))
+      }
+    }
+  }
+
   const repriced = input.lines.map(l => ({
     ...l,
-    unit_price:
+    unit_price: garmentUnitPriceForLine(
+      l,
       garmentPriceByKey.get(garmentPriceAggregationKey(l)) ?? 0,
+      stockUnitPriceByItem,
+    ),
   }))
 
   // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
@@ -769,8 +822,11 @@ export async function submitCustomerOrder(
   for (const line of input.lines) {
     if (!line.has_brackets) continue
     if (typeof line.claimed_unit_price !== 'number') continue
-    const canonical =
-      garmentPriceByKey.get(garmentPriceAggregationKey(line)) ?? 0
+    const canonical = garmentUnitPriceForLine(
+      line,
+      garmentPriceByKey.get(garmentPriceAggregationKey(line)) ?? 0,
+      stockUnitPriceByItem,
+    )
     if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
       unitPriceDrift.push({
         cartLineId: line.cart_line_id ?? null,

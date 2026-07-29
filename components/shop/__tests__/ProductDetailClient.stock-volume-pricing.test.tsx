@@ -24,12 +24,13 @@ const brackets = [
   { min_quantity: 100, max_quantity: null, unit_price: 10.4 },
 ]
 
-// One variant, selected by default. billingMode + stock price + hidden bands
-// are the only knobs the tests vary.
+// One variant, selected by default. billingMode, explicit stock price, prepaid
+// original-purchase price and hidden bands are the only knobs the tests vary.
 function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order'
   billingMode?: 'invoice_on_dispatch' | 'prepaid'
   stockPrice?: number
+  stockUnitPrice?: number | null
   hiddenBands?: number[]
 }) {
   return render(
@@ -52,35 +53,55 @@ function renderPDP(opts: {
       effectiveMoq={1}
       billingModeByVariant={opts.billingMode ? { v1: opts.billingMode } : {}}
       stockPurchasePriceByVariant={opts.stockPrice != null ? { v1: opts.stockPrice } : {}}
+      stockUnitPrice={opts.stockUnitPrice ?? null}
       volumeDisplayHiddenBands={opts.hiddenBands ?? []}
     />,
   )
 }
 
-describe('PDP volume pricing on stock-on-hand (invoice-on-dispatch)', () => {
-  it('invoice-on-dispatch stock shows the volume ladder', () => {
+describe('PDP pricing on stock-on-hand (volume ladder never shown for stock)', () => {
+  it('invoice-on-dispatch stock with NO explicit price shows no volume ladder', () => {
     renderPDP({ fulfilment_type: 'stocked', billingMode: 'invoice_on_dispatch' })
-    expect(screen.getByText('Volume Pricing')).toBeInTheDocument()
-    expect(screen.getByText(/@ \$12.5$/)).toBeInTheDocument()
-    expect(screen.getByText(/@ \$10.4$/)).toBeInTheDocument()
+    expect(screen.queryByText('Volume Pricing')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stock-unit-price')).not.toBeInTheDocument()
   })
 
-  it('prepaid stock shows the flat panel, not the ladder', () => {
+  it('an explicit stock price shows ONE price (no ladder) for a pay-at-checkout colour', () => {
+    renderPDP({ fulfilment_type: 'stocked', billingMode: 'invoice_on_dispatch', stockUnitPrice: 15 })
+    expect(screen.queryByText('Volume Pricing')).not.toBeInTheDocument()
+    const panel = screen.getByTestId('stock-unit-price')
+    expect(panel).toHaveTextContent('$15')
+    expect(panel).toHaveTextContent(/per unit/)
+  })
+
+  it('an explicit stock price shows for a prepaid colour too and supersedes the original-purchase panel', () => {
+    renderPDP({
+      fulfilment_type: 'stocked', billingMode: 'prepaid', stockPrice: 9.8, stockUnitPrice: 15,
+    })
+    expect(screen.getByTestId('stock-unit-price')).toHaveTextContent('$15')
+    expect(screen.queryByText('Volume Pricing')).not.toBeInTheDocument()
+    expect(screen.queryByText('Prepaid Stock')).not.toBeInTheDocument()
+    expect(screen.queryByText(/original purchase price/i)).not.toBeInTheDocument()
+  })
+
+  it('prepaid stock with no explicit price still shows the original-purchase panel, not the ladder', () => {
     renderPDP({ fulfilment_type: 'stocked', billingMode: 'prepaid', stockPrice: 9.8 })
     expect(screen.getByText('Prepaid Stock')).toBeInTheDocument()
     expect(screen.getByText(/original purchase price/i)).toBeInTheDocument()
     expect(screen.queryByText('Volume Pricing')).not.toBeInTheDocument()
   })
 
-  it('respects hidden display bands in stock mode', () => {
-    renderPDP({ fulfilment_type: 'stocked', billingMode: 'invoice_on_dispatch', hiddenBands: [50] })
+  it('purchase-order (made_to_order) mode still shows the ladder (unchanged)', () => {
+    renderPDP({ fulfilment_type: 'made_to_order' })
+    expect(screen.getByText('Volume Pricing')).toBeInTheDocument()
+    expect(screen.getByText(/@ \$12.5$/)).toBeInTheDocument()
+    expect(screen.getByText(/@ \$10.4$/)).toBeInTheDocument()
+  })
+
+  it('purchase-order mode respects hidden display bands', () => {
+    renderPDP({ fulfilment_type: 'made_to_order', hiddenBands: [50] })
     expect(screen.getByText('Volume Pricing')).toBeInTheDocument()
     expect(screen.queryByText(/@ \$11.2$/)).not.toBeInTheDocument() // 50-band hidden
     expect(screen.getByText(/@ \$12.5$/)).toBeInTheDocument()
-  })
-
-  it('purchase-order mode still shows the ladder (unchanged)', () => {
-    renderPDP({ fulfilment_type: 'made_to_order' })
-    expect(screen.getByText('Volume Pricing')).toBeInTheDocument()
   })
 })
