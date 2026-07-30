@@ -1486,8 +1486,10 @@ export function ProductDetailClient({
 
           {/* Explicit stock price (Stock-on-hand shows ONE price, not the ladder).
               THE price for both prepaid and pay-at-checkout colours when set;
-              supersedes the original-purchase-price panel below. */}
-          {isInventoryMode && stockUnitPrice != null && (
+              supersedes the original-purchase-price panel below. One-size
+              products fold this price into the Available|Qty card below instead
+              (a single card for a single variant), so skip the standalone panel. */}
+          {isInventoryMode && stockUnitPrice != null && sizingMode !== 'one_size' && (
             <section data-testid="stock-unit-price" className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                 Price
@@ -1506,7 +1508,7 @@ export function ProductDetailClient({
               the band the stock was ORIGINALLY purchased at. Informational —
               the draw itself is billed $0 (goods already paid). Only when there
               is no explicit stock price (that supersedes it). */}
-          {isInventoryMode && stockUnitPrice == null && selectedColourPrepaid && selectedColourStockPrice != null && (
+          {isInventoryMode && stockUnitPrice == null && selectedColourPrepaid && selectedColourStockPrice != null && sizingMode !== 'one_size' && (
             <section className="rounded-[24px] bg-white p-6">
               <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                 Prepaid Stock
@@ -1630,14 +1632,48 @@ export function ProductDetailClient({
             </section>
           )}
 
-          {/* One-size / single-variant inventory table — mirrors the multi-size
+          {/* One-size / single-variant inventory card — mirrors the multi-size
               grid above so a one-size product (e.g. a visor) shows its Available
               stock alongside an inline Qty input, just like the hoodie, instead
-              of a bare quantity field. Only in inventory mode (there's stock to
-              show); the standalone Quantity input below carries production-only
-              one-size items where no Available column applies. */}
+              of a bare quantity field. For a single variant the price, available
+              stock and quantity all live in ONE card: the standalone Price /
+              Prepaid Stock panels above are suppressed for one_size and their
+              content is folded in here as a header row. Only in inventory mode
+              (there's stock to show); the standalone Quantity input below
+              carries production-only one-size items where no Available column
+              applies. */}
           {sizingMode === 'one_size' && showAvailability && (
             <section className="overflow-hidden rounded-[24px] bg-white">
+              {stockUnitPrice != null ? (
+                <div
+                  data-testid="stock-unit-price"
+                  className="border-b border-gray-100 px-5 py-5"
+                >
+                  <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                    Price
+                  </p>
+                  <p className="mt-2 text-sm text-gray-700 tabular-nums">
+                    <span className="font-medium text-gray-900">{format(stockUnitPrice)}</span>{' '}
+                    <span className="text-gray-500">
+                      per unit, excl. GST{selectedColourPrepaid ? ' — pre-paid' : ''}
+                    </span>
+                  </p>
+                </div>
+              ) : selectedColourPrepaid && selectedColourStockPrice != null ? (
+                <div className="border-b border-gray-100 px-5 py-5">
+                  <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                    Prepaid Stock
+                  </p>
+                  <p className="mt-2 text-sm text-gray-700 tabular-nums">
+                    <span className="font-medium text-gray-900">
+                      {format(selectedColourStockPrice)}
+                    </span>{' '}
+                    <span className="text-gray-500">
+                      per unit, excl. GST — original purchase price
+                    </span>
+                  </p>
+                </div>
+              ) : null}
               <table className="w-full text-sm">
                 <thead className="text-left text-[11px] tracking-[0.08em] text-gray-500">
                   <tr>

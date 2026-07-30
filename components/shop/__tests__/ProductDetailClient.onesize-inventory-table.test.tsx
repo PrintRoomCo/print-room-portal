@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProductDetailClient } from '../ProductDetailClient'
 
@@ -47,7 +47,7 @@ const availability = {
   'visor-black::': { available_qty: 6, allow_order_without_stock: false },
 } as never
 
-function renderPDP() {
+function renderPDP(opts: { stockUnitPrice?: number | null } = {}) {
   return render(
     <ProductDetailClient
       product={product}
@@ -64,6 +64,7 @@ function renderPDP() {
       colourOptions={[]}
       decorations={[]}
       effectiveMoq={1}
+      stockUnitPrice={opts.stockUnitPrice ?? null}
     />,
   )
 }
@@ -85,5 +86,22 @@ describe('PDP one-size inventory table (visor parity with the hoodie)', () => {
     expect(screen.getByText('6')).toBeInTheDocument()
     // …and the quantity input lives in that table (not a bare field below).
     expect(screen.getByLabelText('Quantity')).toBeInTheDocument()
+  })
+
+  it('folds the stock price INTO the inventory card — one card for a single variant', () => {
+    // For one_size the standalone "Price" panel is merged into the Available|Qty
+    // card, so a single-variant product shows price + available + qty in ONE card
+    // instead of two stacked ones.
+    renderPDP({ stockUnitPrice: 19.8 })
+    const pricePanel = screen.getByTestId('stock-unit-price')
+    expect(pricePanel).toHaveTextContent('$19.8')
+    expect(pricePanel).toHaveTextContent(/per unit, excl\. GST/i)
+    // The price and the inventory table share the SAME <section> (merged card).
+    const card = pricePanel.closest('section')
+    expect(card).not.toBeNull()
+    expect(
+      within(card!).getByRole('columnheader', { name: 'Available' }),
+    ).toBeInTheDocument()
+    expect(within(card!).getByLabelText('Quantity')).toBeInTheDocument()
   })
 })
