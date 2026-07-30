@@ -27,10 +27,11 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
   const [preOrders, setPreOrders] = useState<PreOrderTrackerItem[]>(initialData.preOrders ?? [])
   const [dataLoading, setDataLoading] = useState(false)
   const [search, setSearch] = useState('')
-  // Anna feedback (Monday 2809669100): this page is now titled "Past orders", so
-  // it defaults to the Past (completed) view — landing here no longer surfaces
-  // in-progress jobs like "Preparing proof". Users toggle to Active for those.
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('completed')
+  // This page is titled "Current Orders", so it defaults to the Active
+  // (in-progress) view — landing here surfaces live jobs like "Preparing proof".
+  // Users toggle to Past for completed orders. (Renamed 2026-07-31 from "Past
+  // orders"/completed-default per Jon; flip this back to 'completed' to revert.)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -118,7 +119,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] motion-safe:animate-portal-enter md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans text-[clamp(40px,5vw,72px)] font-medium leading-[1.05] tracking-[-0.02em] text-gray-900">
-            Past orders
+            Current Orders
           </h1>
         </header>
 

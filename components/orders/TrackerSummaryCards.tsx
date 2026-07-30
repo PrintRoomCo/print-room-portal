@@ -17,7 +17,7 @@ export function TrackerSummaryCards({ trackers, isCompanyWide }: TrackerSummaryC
         // Guard null: Monday-synced trackers can exist with no status yet, and
         // an org-wide list pulls them in via the member user_id arm. Mirrors the
         // null guard in isTrackerCompleted — without it this crashed the whole
-        // org-admin "Past orders" page.
+        // org-admin "Current Orders" page.
         const normalized = (t.status ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
         return normalized === 'proof-sent'
       }).length

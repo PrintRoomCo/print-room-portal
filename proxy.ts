@@ -31,9 +31,10 @@ export async function proxy(request: NextRequest) {
     '/inventory',
     '/my-collections',
     '/order-tracker',
-    '/past-orders',
-    '/projects', // legacy alias; redirected to /past-orders via next.config.mjs
-    '/tracking', // redirects to /past-orders; kept protected for the hop
+    '/current-orders',
+    '/past-orders', // legacy alias; redirects to /current-orders, kept protected for the hop
+    '/projects', // legacy alias; redirected to /current-orders via next.config.mjs
+    '/tracking', // redirects to /current-orders; kept protected for the hop
     '/proofs',
     '/quote-requests',
     '/shop',
@@ -83,6 +84,7 @@ export const config = {
     '/checkout/:path*',
     '/inventory/:path*',
     '/order-tracker/:path*',
+    '/current-orders/:path*',
     '/past-orders/:path*',
     '/projects/:path*',
     '/tracking/:path*',

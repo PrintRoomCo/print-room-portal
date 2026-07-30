@@ -1,13 +1,8 @@
-import type { Metadata } from 'next'
-import OrderTrackerPage from '../order-tracker/page'
+import { redirect } from 'next/navigation'
 
-export const metadata: Metadata = {
-  title: 'Past orders',
+// 2026-07-31: the order tracker's canonical home moved from /past-orders to
+// /current-orders (renamed "Current Orders"). /past-orders shipped only briefly,
+// so this stub keeps that URL — and any still-open nav tab — alive.
+export default function PastOrdersRedirect() {
+  redirect('/current-orders')
 }
-
-// Canonical customer route for the order tracker (Anna portal feedback: the URL
-// + page title read "Past orders"). The page body, the admin-only guard and the
-// data fetching all live in ../order-tracker, which stays as the internal
-// implementation because already-sent tracker emails deep-link to
-// /order-tracker/[token]. Old /tracking bookmarks redirect here.
-export default OrderTrackerPage

@@ -59,7 +59,7 @@ describe('Sidebar', () => {
 
     expect(rows).toEqual([
       'Catalogue',
-      'Past orders',
+      'Current Orders',
       'Order history',
       'Inventory',
       'Team',

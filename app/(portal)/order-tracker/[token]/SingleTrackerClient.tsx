@@ -20,9 +20,9 @@ export function SingleTrackerClient({ tracker }: SingleTrackerClientProps) {
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] motion-safe:animate-portal-enter md:px-6 md:pt-[120px]">
         <header className="mb-8 md:mb-10">
           <Link
-            href="/past-orders"
+            href="/current-orders"
             className="inline-flex rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
-            aria-label="Back to past orders"
+            aria-label="Back to current orders"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

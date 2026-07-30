@@ -21,10 +21,10 @@ export function ProofNotReady() {
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Link
-            href="/past-orders"
+            href="/current-orders"
             className="rounded-full bg-pr-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-pr-blue/90"
           >
-            Back to past orders
+            Back to current orders
           </Link>
           <Link
             href="/shop"
