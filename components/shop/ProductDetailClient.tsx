@@ -1624,6 +1624,55 @@ export function ProductDetailClient({
             </section>
           )}
 
+          {/* One-size / single-variant inventory table — mirrors the multi-size
+              grid above so a one-size product (e.g. a visor) shows its Available
+              stock alongside an inline Qty input, just like the hoodie, instead
+              of a bare quantity field. Only in inventory mode (there's stock to
+              show); the standalone Quantity input below carries production-only
+              one-size items where no Available column applies. */}
+          {sizingMode === 'one_size' && showAvailability && (
+            <section className="overflow-hidden rounded-[24px] bg-white">
+              <table className="w-full text-sm">
+                <thead className="text-left text-[11px] tracking-[0.08em] text-gray-500">
+                  <tr>
+                    <th className="px-5 pt-5 pb-2 font-medium">Available</th>
+                    <th className="px-5 pt-5 pb-2 text-right font-medium">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-gray-100">
+                    <td className="px-5 py-3 text-xs text-gray-600">
+                      {!tracksThisVariant || (isOutOfStock && selectedVariantBackorderable) ? (
+                        <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
+                          Available to order
+                        </span>
+                      ) : (
+                        `${availableQty ?? 0}`
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <input
+                        id="qty"
+                        type="number"
+                        min={defaultMinQty}
+                        step={1}
+                        value={qty}
+                        onChange={(e) => setQty(Number(e.target.value))}
+                        aria-label="Quantity"
+                        className="w-24 rounded-full bg-gray-50 px-3 py-1.5 text-right text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              {isOutOfStock && (
+                <p className="px-5 pb-4 text-xs text-amber-700">
+                  Out of stock — {qty} will be made.
+                </p>
+              )}
+            </section>
+          )}
+
           {sizingMode === 'multi_size_variantless' && variantlessSizes.length > 0 && (
             <VariantlessSizeGrid
               sizes={variantlessSizes}
@@ -1695,7 +1744,10 @@ export function ProductDetailClient({
           {/* Price + add-to-cart panel — sticky bottom card on desktop scroll */}
           <section className="rounded-[24px] bg-white p-6 md:p-7">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-              {sizingMode === 'one_size' && (
+              {/* Production-only one-size items keep the inline Quantity field;
+                  when there's stock to show, the Available|Qty table above owns
+                  the quantity input instead (mirrors the multi-size hoodie). */}
+              {sizingMode === 'one_size' && !showAvailability && (
                 <div>
                   <label
                     htmlFor="qty"
