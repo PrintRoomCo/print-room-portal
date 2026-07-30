@@ -1645,10 +1645,7 @@ export function ProductDetailClient({
           {sizingMode === 'one_size' && showAvailability && (
             <section className="overflow-hidden rounded-[24px] bg-white">
               {stockUnitPrice != null ? (
-                <div
-                  data-testid="stock-unit-price"
-                  className="border-b border-gray-100 px-5 py-5"
-                >
+                <div data-testid="stock-unit-price" className="px-5 pt-5">
                   <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                     Price
                   </p>
@@ -1660,7 +1657,7 @@ export function ProductDetailClient({
                   </p>
                 </div>
               ) : selectedColourPrepaid && selectedColourStockPrice != null ? (
-                <div className="border-b border-gray-100 px-5 py-5">
+                <div className="px-5 pt-5">
                   <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
                     Prepaid Stock
                   </p>
@@ -1682,7 +1679,7 @@ export function ProductDetailClient({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-t border-gray-100">
+                  <tr>
                     <td className="px-5 py-3 text-xs text-gray-600">
                       {!tracksThisVariant || (isOutOfStock && selectedVariantBackorderable) ? (
                         <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
