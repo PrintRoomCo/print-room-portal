@@ -1,4 +1,4 @@
-// Portal-local member-row builder for the /team page (org_admin self-serve).
+// Portal-local member-row builder for the /users page (org_admin self-serve).
 // Pure + DB-free so it is unit-testable. profiles.last_sign_in_at is mirrored
 // from auth.users by the shared-DB trigger, so no Auth-admin call is needed.
 

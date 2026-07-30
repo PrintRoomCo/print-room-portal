@@ -10,10 +10,13 @@ import {
   type TenantType,
 } from '@/lib/team/ordering-permission'
 
+// Customer-facing wording for the three ordering permissions. Chris asked for
+// language consistent with the rest of the portal (Monday 2809639903): stock
+// draws are "from stock on hand", reorders are raised "with purchase order".
 const PERMISSION_LABELS: Record<MemberOrderingPermission, string> = {
-  stock_only: 'Stock only',
-  reorder_only: 'Reorder only',
-  both: 'Both',
+  stock_only: 'Order from stock on hand',
+  reorder_only: 'Order with purchase order',
+  both: 'Order from stock on hand and purchase order',
 }
 
 interface StoreOption {
@@ -128,7 +131,7 @@ export function TeamClient({
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold text-gray-900">Team</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Users</h1>
         <p className="mt-1 text-sm text-gray-500">
           Invite staff members to {organizationName}. Staff see only their own orders and
           ship to their default store.
@@ -283,7 +286,7 @@ interface BranchGrant {
 }
 
 /**
- * Org_admin control (the whole /team page is org_admin-gated) to manage which
+ * Org_admin control (the whole /users page is org_admin-gated) to manage which
  * branches a STAFF member manages. Loads and replace-set saves via the mirror
  * route app/api/team/members/[membershipId]/store-grants. Zero granted branches
  * = plain staff (feature off for that member).

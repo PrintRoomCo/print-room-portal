@@ -61,14 +61,14 @@ describe('Orders → Order history rename (Item 10)', () => {
   })
 })
 
-describe('getNavigationItems — Team gating (canManageUsers)', () => {
-  it('shows Team to a company org_admin who can manage users', () => {
-    expect(hrefs(access({ canManageUsers: true }))).toContain('/team')
+describe('getNavigationItems — Users gating (canManageUsers)', () => {
+  it('shows Users to a company org_admin who can manage users', () => {
+    expect(hrefs(access({ canManageUsers: true }))).toContain('/users')
   })
-  it('hides Team from a member who cannot manage users', () => {
-    expect(hrefs(access({ canManageUsers: false }))).not.toContain('/team')
+  it('hides Users from a member who cannot manage users', () => {
+    expect(hrefs(access({ canManageUsers: false }))).not.toContain('/users')
   })
-  it('hides Team from an individual with no company', () => {
-    expect(hrefs(access({ isCompanyUser: false, canManageUsers: true }))).not.toContain('/team')
+  it('hides Users from an individual with no company', () => {
+    expect(hrefs(access({ isCompanyUser: false, canManageUsers: true }))).not.toContain('/users')
   })
 })

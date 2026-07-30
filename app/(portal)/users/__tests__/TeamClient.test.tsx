@@ -88,7 +88,24 @@ describe('TeamClient', () => {
         stores={[{ id: 's1', name: 'HQ' }]}
       />,
     )
-    expect(screen.queryByRole('option', { name: /stock only/i })).toBeNull()
-    expect(screen.getByRole('option', { name: /reorder only/i })).toBeTruthy()
+    // Studio keeps no stock, so only the reorder (purchase-order) option shows.
+    expect(screen.queryByRole('option', { name: 'Order from stock on hand' })).toBeNull()
+    expect(screen.getByRole('option', { name: 'Order with purchase order' })).toBeTruthy()
+  })
+
+  it('uses the customer-facing ordering-permission wording (franchise → all three)', () => {
+    render(
+      <TeamClient
+        organizationName="Acme"
+        tenantType="franchise"
+        initialMembers={[]}
+        stores={[{ id: 's1', name: 'HQ' }]}
+      />,
+    )
+    expect(screen.getByRole('option', { name: 'Order from stock on hand' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Order with purchase order' })).toBeTruthy()
+    expect(
+      screen.getByRole('option', { name: 'Order from stock on hand and purchase order' }),
+    ).toBeTruthy()
   })
 })

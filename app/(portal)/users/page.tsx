@@ -5,7 +5,7 @@ import { getPortalUser, getPortalCompanyAccess } from '@/lib/portal-data'
 import { buildTeamMemberRow, type TeamProfile } from '@/lib/team/members'
 import { TeamClient } from './TeamClient'
 
-export const metadata: Metadata = { title: 'Team' }
+export const metadata: Metadata = { title: 'Users' }
 
 export default async function TeamPage() {
   // Reuse the layout's request-cached identity/access instead of re-issuing an

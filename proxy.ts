@@ -38,6 +38,7 @@ export async function proxy(request: NextRequest) {
     '/proofs',
     '/quote-requests',
     '/shop',
+    '/users',
     '/welcome',
   ]
   const isPortalRoute = portalRoutes.some((route) => path.startsWith(route))
@@ -91,6 +92,7 @@ export const config = {
     '/proofs/:path*',
     '/quote-requests/:path*',
     '/shop/:path*',
+    '/users/:path*',
     '/welcome',
     '/my-collections/:path*',
     '/sign-in',

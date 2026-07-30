@@ -92,8 +92,8 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiredTenantTypes: null,
   },
   {
-    name: 'Team',
-    href: '/team',
+    name: 'Users',
+    href: '/users',
     iconKey: 'team',
     requiresCompany: true,
     requiresLeavers: false,

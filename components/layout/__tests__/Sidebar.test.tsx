@@ -62,7 +62,7 @@ describe('Sidebar', () => {
       'Current Orders',
       'Order history',
       'Inventory',
-      'Team',
+      'Users',
     ])
   })
 })
