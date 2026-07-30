@@ -5,13 +5,15 @@ import { AccountMenu } from '../AccountMenu'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
+  refresh: vi.fn(),
   signOut: vi.fn(),
   useAuth: vi.fn(),
   useCompany: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mocks.push }),
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace, refresh: mocks.refresh }),
 }))
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -24,6 +26,8 @@ vi.mock('@/contexts/CompanyContext', () => ({
 
 beforeEach(() => {
   mocks.push.mockClear()
+  mocks.replace.mockClear()
+  mocks.refresh.mockClear()
   mocks.signOut.mockReset().mockResolvedValue(undefined)
   mocks.useAuth.mockReset()
   mocks.useCompany.mockReset().mockReturnValue({
@@ -63,7 +67,7 @@ describe('AccountMenu', () => {
     expect(trigger).toHaveFocus()
   })
 
-  it('keeps the optimistic sign-out navigation', async () => {
+  it('clears the session before navigating to /sign-in on sign out', async () => {
     const user = userEvent.setup()
     mocks.useAuth.mockReturnValue({ user: { id: 'user-1' }, signOut: mocks.signOut })
 
@@ -72,8 +76,15 @@ describe('AccountMenu', () => {
     await user.click(screen.getByRole('button', { name: /jamie sedgewick/i }))
     await user.click(await screen.findByRole('menuitem', { name: /sign out/i }))
 
-    expect(mocks.push).toHaveBeenCalledWith('/sign-in')
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/sign-in'))
     expect(mocks.signOut).toHaveBeenCalledTimes(1)
+    // Cookie must be cleared before the proxy sees the /sign-in request,
+    // otherwise it bounces the still-authed user back to /account.
+    expect(mocks.signOut.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.replace.mock.invocationCallOrder[0],
+    )
+    // Old optimistic push('/sign-in') must not run — it caused the blank /account bounce.
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 
   it('falls back to Account when the member name is missing', () => {

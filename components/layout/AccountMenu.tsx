@@ -60,11 +60,17 @@ export function AccountMenu() {
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => {
-              // Optimistic: close + route immediately; auth listener clears state
-              // once signOut resolves on the background.
+              // Clear the session BEFORE navigating. The proxy runs getUser() on
+              // the /sign-in request and, while the auth cookie is still present,
+              // bounces "already signed in" users back to /account — leaving a
+              // blank page. Awaiting signOut clears the cookie first; then route
+              // (replace so Back doesn't return to a protected page).
               setOpen(false)
-              router.push('/sign-in')
-              void signOut()
+              void (async () => {
+                await signOut()
+                router.replace('/sign-in')
+                router.refresh()
+              })()
             }}
             className="block w-full cursor-pointer px-4 py-3 text-left text-sm text-gray-700 transition-colors duration-100 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
           >
