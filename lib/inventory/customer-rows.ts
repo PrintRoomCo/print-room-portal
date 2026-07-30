@@ -7,6 +7,11 @@ export interface CustomerInventoryRow {
   size_id: number | null
   product_id: string
   product_name: string
+  /** The org's design/catalogue-item name for this blank when exactly one active
+   *  design maps to it (b2b_catalogue_items.name — the same field as the PDP
+   *  title). NULL when the blank has 0 or >1 active designs, since stock is
+   *  blank-grain and therefore pooled; the UI falls back to product_name. */
+  design_name: string | null
   colour_name: string | null
   colour_hex: string | null
   size_label: string | null
@@ -20,6 +25,19 @@ export interface CustomerInventoryRow {
 function pickOne<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null
   return Array.isArray(v) ? v[0] ?? null : v
+}
+
+/**
+ * Resolve the single design name to show for a stocked blank. Stock is
+ * blank+colourway grain (no design dimension), so a design name is only
+ * unambiguous when the org has exactly one active design skinning that blank.
+ * 0 or >1 distinct names → null (the UI falls back to the blank/garment name).
+ */
+export function pickDesignName(names: Array<string | null | undefined>): string | null {
+  const uniq = Array.from(
+    new Set(names.filter((n): n is string => !!n && n.trim() !== '').map((n) => n.trim())),
+  )
+  return uniq.length === 1 ? uniq[0] : null
 }
 
 /**
@@ -91,6 +109,44 @@ export async function getCustomerInventoryRows(
     descriptorById.set(v.id, v)
   }
 
+  // 2b. Resolve the org's active design (catalogue-item) name per source product.
+  //     variant_inventory has no design dimension, but in practice each stocked
+  //     blank maps to exactly one active design for the org, so we surface the
+  //     design name (b2b_catalogue_items.name — same field the PDP title uses) to
+  //     disambiguate two designs on one blank. Same org-scoped join the PDP
+  //     resolver uses; org_admin-only page, so no member-grant filtering needed.
+  const productIds = Array.from(
+    new Set(
+      (variantRows ?? [])
+        .map((v: { product_id?: string | null }) => v.product_id)
+        .filter((id): id is string => !!id),
+    ),
+  )
+  const designNameByProductId = new Map<string, string | null>()
+  if (productIds.length > 0) {
+    const { data: catItemRows } = await adminClient
+      .from('b2b_catalogue_items')
+      .select('source_product_id, name, b2b_catalogues!inner(organization_id, is_active)')
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', organizationId)
+      .eq('b2b_catalogues.is_active', true)
+      .in('source_product_id', productIds)
+
+    const namesByProduct = new Map<string, string[]>()
+    for (const ci of (catItemRows ?? []) as Array<{
+      source_product_id: string | null
+      name: string | null
+    }>) {
+      if (!ci.source_product_id) continue
+      const list = namesByProduct.get(ci.source_product_id) ?? []
+      list.push(ci.name ?? '')
+      namesByProduct.set(ci.source_product_id, list)
+    }
+    for (const [pid, names] of namesByProduct) {
+      designNameByProductId.set(pid, pickDesignName(names))
+    }
+  }
+
   // 3. Resolve size labels for the stamped sizes.
   const sizeIds = Array.from(
     new Set(stock.map((s) => s.size_id).filter((id): id is number => id != null)),
@@ -112,6 +168,7 @@ export async function getCustomerInventoryRows(
       size_id: s.size_id ?? null,
       product_id: v?.product_id ?? '',
       product_name: product?.name ?? 'Product',
+      design_name: designNameByProductId.get(v?.product_id ?? '') ?? null,
       colour_name: swatch?.label ?? null,
       colour_hex: swatch?.hex ?? null,
       size_label: s.size_id == null ? null : sizeLabelById.get(s.size_id) ?? null,
