@@ -34,7 +34,7 @@ export default async function ProofsPage() {
           <PortalEmptyState
             title="No proofs ready yet"
             body="Your account manager will send proofs here once they're ready for your approval. Each one will appear with a mockup and a link to review and approve."
-            actionHref="/order-tracker"
+            actionHref="/past-orders"
             actionLabel="View your orders"
           />
         ) : (

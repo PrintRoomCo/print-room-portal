@@ -59,4 +59,17 @@ describe('JobTrackerOrderCard', () => {
     expect(screen.getByText('Auckland 1010')).toBeInTheDocument()
     expect(screen.getByText('NZ')).toBeInTheDocument()
   })
+
+  it('shows a fulfilment badge instead of the production bar for a stock order', () => {
+    render(
+      <JobTrackerOrderCard
+        tracker={tracker({ order_type: 'stock_on_hand', status: 'need-proof' })}
+        defaultExpanded
+      />,
+    )
+    // Stock order → simple Unfulfilled badge, and the production step label for
+    // this status ("Proof Prep") must not appear.
+    expect(screen.getByText('Unfulfilled')).toBeInTheDocument()
+    expect(screen.queryByText('Proof Prep')).toBeNull()
+  })
 })

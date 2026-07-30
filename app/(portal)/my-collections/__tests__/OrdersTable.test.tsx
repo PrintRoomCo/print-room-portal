@@ -56,4 +56,26 @@ describe('OrdersTable', () => {
     render(<OrdersTable orders={[cheap]} />)
     expect(screen.getByRole('link', { name: 'REF-1' }).getAttribute('href')).toBe('/my-collections/q1')
   })
+
+  it('shows a fulfilment badge — not the production status — for stock orders', () => {
+    const unshipped = order({
+      orderId: 'o3', quoteId: 'q3', orderRef: 'REF-3',
+      orderType: 'stock_on_hand', status: 'awaiting-proof-review', trackerStatus: 'need-proof',
+    })
+    const shipped = order({
+      orderId: 'o4', quoteId: 'q4', orderRef: 'REF-4',
+      orderType: 'stock_on_hand', status: 'awaiting-proof-review', trackerStatus: 'dispatched',
+    })
+    render(<OrdersTable orders={[unshipped, shipped]} />)
+    expect(screen.getByText('Unfulfilled')).toBeDefined()
+    expect(screen.getByText('Fulfilled')).toBeDefined()
+    // The irrelevant production label must never surface for a stock order.
+    expect(screen.queryByText('Preparing proof')).toBeNull()
+  })
+
+  it('keeps the production status label for non-stock (purchase) orders', () => {
+    render(<OrdersTable orders={[order({ orderType: 'purchase_order', status: 'in-production' })]} />)
+    expect(screen.getByText('In production')).toBeDefined()
+    expect(screen.queryByText('Unfulfilled')).toBeNull()
+  })
 })

@@ -14,7 +14,7 @@ function builder(result: unknown) {
   const b: Record<string, unknown> = {
     select: vi.fn(() => b),
     eq: vi.fn(() => b),
-    in: vi.fn(async () => result),
+    in: vi.fn(() => b),
     order: vi.fn(async () => result),
     maybeSingle: vi.fn(async () => result),
   }
@@ -58,7 +58,7 @@ describe('getPortalPastOrdersData (Item 10)', () => {
         })
       if (table === 'job_trackers')
         return builder({
-          data: [{ quote_id: 'quote-1', tracking_info: { carrier: 'NZ Post', trackingNumber: '1234567890', url: 'https://track/1234567890' } }],
+          data: [{ quote_id: 'quote-1', status: 'dispatched', tracking_info: { carrier: 'NZ Post', trackingNumber: '1234567890', url: 'https://track/1234567890' } }],
           error: null,
         })
       return builder({ data: null, error: null })
@@ -78,6 +78,7 @@ describe('getPortalPastOrdersData (Item 10)', () => {
         totalAmount: 115,
         currency: 'NZD',
         tracking: { carrier: 'NZ Post', trackingNumber: '1234567890', url: 'https://track/1234567890' },
+        trackerStatus: 'dispatched', // overlaid from the latest job_tracker; feeds the stock fulfilment badge
       }),
     ])
   })

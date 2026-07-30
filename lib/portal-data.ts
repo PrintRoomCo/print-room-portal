@@ -364,30 +364,41 @@ async function overlayTrackingInfo(
   const quoteIds = orders.map((o) => o.quoteId).filter(Boolean) as string[]
   if (quoteIds.length === 0) return orders
 
+  // Ordered so the FIRST row kept per quote_id is the LATEST tracker — both the
+  // carrier tracking_info and the status (which feeds the stock fulfilment badge)
+  // must reflect the most recent tracker, not a DB-arbitrary one.
   const { data: trackerRows } = await adminClient
     .from('job_trackers')
-    .select('quote_id, tracking_info')
+    .select('quote_id, tracking_info, status')
     .in('quote_id', quoteIds)
+    .order('created_at', { ascending: false })
 
-  const byQuoteId = new Map<string, TrackingInfo | null>()
+  const byQuoteId = new Map<string, { tracking_info: TrackingInfo | null; status: string | null }>()
   for (const row of (trackerRows ?? []) as Array<{
     quote_id: string | null
     tracking_info: TrackingInfo | null
+    status: string | null
   }>) {
     if (!row.quote_id || byQuoteId.has(row.quote_id)) continue
-    byQuoteId.set(row.quote_id, row.tracking_info)
+    byQuoteId.set(row.quote_id, { tracking_info: row.tracking_info, status: row.status })
   }
 
   return orders.map((order) => {
-    const info = order.quoteId ? byQuoteId.get(order.quoteId) : null
-    if (!info) return order
+    const entry = order.quoteId ? byQuoteId.get(order.quoteId) : null
+    if (!entry) return order
+    const info = entry.tracking_info
     return {
       ...order,
-      tracking: {
-        carrier: info.carrier ?? null,
-        trackingNumber: getTrackingNumber(info) ?? null,
-        url: info.url ?? null,
-      },
+      trackerStatus: entry.status,
+      ...(info
+        ? {
+            tracking: {
+              carrier: info.carrier ?? null,
+              trackingNumber: getTrackingNumber(info) ?? null,
+              url: info.url ?? null,
+            },
+          }
+        : {}),
     }
   })
 }

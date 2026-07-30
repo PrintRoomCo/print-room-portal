@@ -20,6 +20,8 @@ import type { JobTracker } from '@/lib/job-tracker'
 import { getPortalTrackerPath } from '@/lib/job-tracker'
 import { isGenericCustomDecorationName } from '@/lib/cart/types'
 import { getOrderReference } from '@/lib/orders/order-reference'
+import { isStockOrder } from '@/lib/orders/fulfilment-status'
+import { FulfilmentStatusBadge } from '@/components/orders/FulfilmentStatusBadge'
 
 interface Quote {
   id: string
@@ -731,7 +733,14 @@ function QuoteDetail({
             {heading}
           </h1>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <QuoteStatusChip status={quote.status} />
+            {/* Stock orders (Anna feedback, Monday 2809663385) show a simple
+                Unfulfilled/Fulfilled badge instead of the quote-lifecycle chip —
+                derived from the tracker, the reliable "did it ship" signal. */}
+            {isStockOrder(tracker?.order_type) ? (
+              <FulfilmentStatusBadge trackerStatus={tracker?.status} />
+            ) : (
+              <QuoteStatusChip status={quote.status} />
+            )}
             <p className="text-sm text-gray-600">
               {new Date(quote.created_at).toLocaleDateString('en-NZ', {
                 day: 'numeric',
@@ -926,10 +935,10 @@ function QuoteDetail({
                   </Link>
                 ) : (
                   <Link
-                    href="/order-tracker"
+                    href="/past-orders"
                     className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
                   >
-                    View order tracker
+                    View past orders
                   </Link>
                 )}
                 <Link

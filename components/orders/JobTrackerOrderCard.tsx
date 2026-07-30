@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ProductionProgressBar } from '@/components/orders/ProductionProgressBar'
 import { ProjectLineItem } from '@/components/orders/ProjectLineItem'
 import { ReorderButton } from '@/components/orders/ReorderButton'
+import { FulfilmentStatusBadge } from '@/components/orders/FulfilmentStatusBadge'
+import { isStockOrder } from '@/lib/orders/fulfilment-status'
 import type { JobTracker } from '@/lib/job-tracker'
 import {
   STATUS_STEPS,
@@ -41,6 +43,11 @@ export function JobTrackerOrderCard({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 
   const completed = isTrackerCompleted(tracker.status)
+  // Stock-on-hand orders (Anna feedback, Monday 2809663385): no production journey,
+  // so the 7-step bar/timeline is replaced by a simple Unfulfilled/Fulfilled badge
+  // and the "View status" links are suppressed. `completed` still drives Reorder vs
+  // active, keyed off the SAME isTrackerCompleted the list filter uses — no drift.
+  const stock = isStockOrder(tracker.order_type)
   const quoteData = tracker.quote_data ?? null
   const items = quoteData?.items ?? []
   const subtotal = quoteData?.summary?.total ?? quoteData?.summary?.subtotal ?? quoteData?.subtotal ?? 0
@@ -102,8 +109,9 @@ export function JobTrackerOrderCard({
                   )}
                   {/* Anna feedback (Monday 2809673375): a completed order shows the
                       Reorder button above instead of "View status". Active orders
-                      keep the link into the live tracker. */}
-                  {!hideTrackerLink && !completed && (
+                      keep the link into the live tracker. Stock orders have no
+                      production status to view, so the link is suppressed for them. */}
+                  {!hideTrackerLink && !completed && !stock && (
                     <Link
                       href={trackerUrl}
                       onClick={(e) => e.stopPropagation()}
@@ -142,13 +150,21 @@ export function JobTrackerOrderCard({
               </span>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress — stock orders show a fulfilment badge; produced orders
+                the 7-step production bar. */}
             <div className="mt-4 pt-4 border-t border-gray-100">
-              <ProductionProgressBar
-                currentStatus={tracker.status}
-                estimatedDelivery={tracker.estimated_delivery_at}
-                compact
-              />
+              {stock ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-500">Status</span>
+                  <FulfilmentStatusBadge trackerStatus={tracker.status} />
+                </div>
+              ) : (
+                <ProductionProgressBar
+                  currentStatus={tracker.status}
+                  estimatedDelivery={tracker.estimated_delivery_at}
+                  compact
+                />
+              )}
             </div>
       </div>
 
@@ -269,13 +285,14 @@ export function JobTrackerOrderCard({
             </div>
           )}
 
-          {/* Status Timeline */}
-          {tracker.status_history && tracker.status_history.length > 0 && (
+          {/* Status Timeline — produced orders only; stock orders show the
+              fulfilment badge in the always-visible summary above. */}
+          {!stock && tracker.status_history && tracker.status_history.length > 0 && (
             <StatusTimeline history={tracker.status_history} currentStatus={tracker.status} />
           )}
 
-          {/* Full Tracker Link — hidden on completed orders (Reorder replaces it). */}
-          {!hideTrackerLink && !completed && (
+          {/* Full Tracker Link — hidden on completed and stock orders. */}
+          {!hideTrackerLink && !completed && !stock && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <Link
                 href={trackerUrl}

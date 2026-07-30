@@ -378,7 +378,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             <div className="mt-7 space-y-3">
               {!props.isStockOnHandOrder && (
                 <Link
-                  href="/order-tracker"
+                  href="/past-orders"
                   className="flex w-full items-center justify-center rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
                 >
                   Track this order

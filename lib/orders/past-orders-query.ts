@@ -27,6 +27,13 @@ export interface PortalPastOrder {
   billed: number
   createdAt: string
   tracking: PastOrderTracking | null
+  /**
+   * Latest job_trackers.status for this order's quote, overlaid in
+   * lib/portal-data.ts. Feeds the Unfulfilled/Fulfilled badge for stock orders
+   * (the reliable "did it ship" mover — orders.status rarely leaves its initial
+   * state). Undefined when no tracker exists for the quote.
+   */
+  trackerStatus?: string | null
 }
 
 export interface PastOrderRow {

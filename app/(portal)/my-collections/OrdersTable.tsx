@@ -5,6 +5,8 @@ import Link from 'next/link'
 import type { PortalPastOrder } from '@/lib/portal-data'
 import { orderStatusLabel, type OrderStatus } from '@/lib/orders/status-labels'
 import { orderTypeLabel } from '@/lib/orders/order-type'
+import { isStockOrder } from '@/lib/orders/fulfilment-status'
+import { FulfilmentStatusBadge } from '@/components/orders/FulfilmentStatusBadge'
 import {
   sortPastOrders,
   type PastOrderSort,
@@ -91,9 +93,18 @@ export function OrdersTable({ orders }: { orders: PortalPastOrder[] }) {
                 <td className="px-4 py-3 text-gray-600">{order.customerEmail ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-600">{orderTypeLabel(order.orderType)}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
-                    {orderStatusLabel(order.status as OrderStatus)}
-                  </span>
+                  {/* Stock orders (Anna feedback, Monday 2809663385): the production
+                      status vocabulary is irrelevant — show a simple fulfilment badge. */}
+                  {isStockOrder(order.orderType) ? (
+                    <FulfilmentStatusBadge
+                      orderStatus={order.status}
+                      trackerStatus={order.trackerStatus}
+                    />
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
+                      {orderStatusLabel(order.status as OrderStatus)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {formatCurrency(order.subtotal, order.currency)}

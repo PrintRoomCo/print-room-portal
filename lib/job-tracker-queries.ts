@@ -3,12 +3,12 @@ import { resolveProductFrontImages } from '@/lib/product-images'
 import type { JobTracker } from '@/lib/job-tracker'
 import { syncJobTrackerItemsFromMonday } from '@/lib/monday/sync-job-tracker-items'
 
-/** Feature #7 — stock-on-hand orders are hidden from the customer tracker.
- *  NULL/legacy order_type stays visible (safe default). Applies to ALL roles
- *  incl. org_admin. */
-export function isCustomerVisibleTracker(t: { order_type?: string | null }): boolean {
-  return t.order_type !== 'stock_on_hand'
-}
+// Sprint 3 (Anna feedback, Monday 2809663385) reversed Feature #7: stock-on-hand
+// orders are no longer HIDDEN from the customer tracker — they now appear with a
+// simplified Unfulfilled/Fulfilled badge instead of the 7-step production timeline
+// (see lib/orders/fulfilment-status.ts and the `isStockOrder` branch in
+// JobTrackerOrderCard / OrdersTable). No visibility filter is applied to trackers
+// anymore; the render layer branches on order_type.
 
 const STALE_SYNC_INTERVAL_MS = 60 * 60 * 1000
 const STALE_SYNC_CONCURRENCY = 10
@@ -162,7 +162,7 @@ export async function getJobsForUser(
     }
 
     if (data && data.length > 0) {
-      const trackers = (data as JobTracker[]).filter(isCustomerVisibleTracker)
+      const trackers = data as JobTracker[]
       fireAndForgetItemsSync(trackers)
       return attachProductImages(trackers)
     }
@@ -196,7 +196,7 @@ export async function getJobsForCustomer(
       return []
     }
 
-    const trackers = ((data || []) as JobTracker[]).filter(isCustomerVisibleTracker)
+    const trackers = (data || []) as JobTracker[]
     fireAndForgetItemsSync(trackers)
     return attachProductImages(trackers)
   } catch (error) {
@@ -270,11 +270,9 @@ export async function getJobsForOrganization(
       if (!byId.has(row.id)) byId.set(row.id, row)
     }
 
-    const trackers = Array.from(byId.values())
-      .filter(isCustomerVisibleTracker)
-      .sort((a, b) =>
-        String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
-      )
+    const trackers = Array.from(byId.values()).sort((a, b) =>
+      String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
+    )
 
     fireAndForgetItemsSync(trackers)
     return attachProductImages(trackers)
@@ -353,10 +351,9 @@ export async function getJobTrackerForUserByToken(
     const tracker = data as JobTracker | null
     if (!tracker) return null
 
-    // Feature #7 — a stock-on-hand order is never trackable; treat as not-found
-    // (covers milestone-email deep links) BEFORE the authz check.
-    if (!isCustomerVisibleTracker(tracker)) return null
-
+    // Sprint 3 reversed Feature #7: a stock-on-hand tracker is no longer treated
+    // as not-found here — its deep link resolves to the simplified fulfilment card.
+    // Authorization below is unchanged, so a token guess still can't leak an order.
     const ownsByUser = tracker.user_id === userId
     const ownsByEmail =
       !!email &&
