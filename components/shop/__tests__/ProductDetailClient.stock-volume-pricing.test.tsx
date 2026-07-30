@@ -105,3 +105,33 @@ describe('PDP pricing on stock-on-hand (volume ladder never shown for stock)', (
     expect(screen.getByText(/@ \$12.5$/)).toBeInTheDocument()
   })
 })
+
+// Chris 2026-07-30: unlabelled ladder prices were read as GST-inclusive and
+// reconciled against ×1.15. Every PDP price surface must say excl. GST.
+describe('PDP price surfaces are labelled excl. GST', () => {
+  it('volume ladder carries an excl. GST note', () => {
+    renderPDP({ fulfilment_type: 'made_to_order' })
+    expect(screen.getByText('Volume Pricing')).toBeInTheDocument()
+    expect(screen.getByText(/excl\. GST/i)).toBeInTheDocument()
+  })
+
+  it('explicit stock price panel says excl. GST', () => {
+    renderPDP({ fulfilment_type: 'stocked', billingMode: 'invoice_on_dispatch', stockUnitPrice: 15 })
+    expect(screen.getByTestId('stock-unit-price')).toHaveTextContent(/excl\. GST/i)
+  })
+
+  it('explicit stock price panel keeps the pre-paid suffix alongside excl. GST', () => {
+    renderPDP({
+      fulfilment_type: 'stocked', billingMode: 'prepaid', stockPrice: 9.8, stockUnitPrice: 15,
+    })
+    const panel = screen.getByTestId('stock-unit-price')
+    expect(panel).toHaveTextContent(/excl\. GST/i)
+    expect(panel).toHaveTextContent(/pre-paid/i)
+  })
+
+  it('prepaid original-purchase panel says excl. GST', () => {
+    renderPDP({ fulfilment_type: 'stocked', billingMode: 'prepaid', stockPrice: 9.8 })
+    expect(screen.getByText('Prepaid Stock')).toBeInTheDocument()
+    expect(screen.getByText(/excl\. GST.*original purchase price/i)).toBeInTheDocument()
+  })
+})

@@ -1455,8 +1455,14 @@ export function ProductDetailClient({
               Stock-on-hand ordering type (supersedes commit 243737a for stock). */}
           {displayVolumeBrackets.length > 0 && !isInventoryMode && (
             <section className="rounded-[24px] bg-white p-6">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-gray-500">
-                Volume Pricing
+              {/* Both pieces in their own span: prices before checkout are
+                  ex-GST everywhere, and an unlabelled ladder was read as
+                  GST-inclusive (Chris, 2026-07-30). */}
+              <p className="flex items-baseline justify-between text-[11px] font-medium tracking-[0.12em] text-gray-500">
+                <span>Volume Pricing</span>
+                <span className="font-normal tracking-normal text-gray-400">
+                  Per unit, excl. GST
+                </span>
               </p>
               <ul className="mt-4 grid grid-cols-2 gap-y-2 text-sm text-gray-700 md:grid-cols-3">
                 {displayVolumeBrackets.map((b, i) => (
@@ -1483,7 +1489,7 @@ export function ProductDetailClient({
               <p className="mt-4 text-sm text-gray-700 tabular-nums">
                 <span className="font-medium text-gray-900">{format(stockUnitPrice)}</span>{' '}
                 <span className="text-gray-500">
-                  per unit{selectedColourPrepaid ? ' — pre-paid' : ''}
+                  per unit, excl. GST{selectedColourPrepaid ? ' — pre-paid' : ''}
                 </span>
               </p>
             </section>
@@ -1503,7 +1509,9 @@ export function ProductDetailClient({
                 <span className="font-medium text-gray-900">
                   {format(selectedColourStockPrice)}
                 </span>{' '}
-                <span className="text-gray-500">per unit — original purchase price</span>
+                <span className="text-gray-500">
+                  per unit, excl. GST — original purchase price
+                </span>
               </p>
             </section>
           )}

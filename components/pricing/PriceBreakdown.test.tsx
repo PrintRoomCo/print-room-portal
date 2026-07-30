@@ -71,10 +71,18 @@ describe('PriceBreakdown', () => {
     expect(screen.queryByText(/\$215\.00/)).toBeNull()
   })
 
-  it('pdp variant renders a Per unit row from lines[0].unitEffective', () => {
+  it('pdp variant renders an all-in Per unit row (garment + decoration, matching the volume ladder)', () => {
     render(<PriceBreakdown breakdown={obPdp} variant="pdp" />)
     expect(screen.getByText(/Per unit/i)).toBeDefined()
-    expect(screen.getByText(/\$21\.50/)).toBeDefined()
+    // 21.50 garment + 1.50 decoration — NOT the garment-only 21.50, which
+    // contradicted the Volume Pricing widget (garment + print) on the same page.
+    expect(screen.getByText(/\$23\.00/)).toBeDefined()
+    expect(screen.queryByText(/\$21\.50/)).toBeNull()
+  })
+
+  it('labels the Per unit row excl. GST', () => {
+    render(<PriceBreakdown breakdown={obPdp} variant="pdp" />)
+    expect(screen.getByText(/Per unit \(excl\. GST\)/i)).toBeDefined()
   })
 
   it('does not render a Per unit row for cart-totals', () => {
@@ -85,8 +93,8 @@ describe('PriceBreakdown', () => {
   it('formats the Per unit value with a custom format prop', () => {
     const format = (n: number) => `A$${(n * 0.9).toFixed(2)}`
     render(<PriceBreakdown breakdown={obPdp} variant="pdp" format={format} />)
-    // 21.50 * 0.9 = 19.35
-    expect(screen.getByText(/A\$19\.35/)).toBeDefined()
+    // (21.50 + 1.50) * 0.9 = 20.70
+    expect(screen.getByText(/A\$20\.70/)).toBeDefined()
   })
 
   it('renders a Picking fee row when pickingFee > 0', () => {

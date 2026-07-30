@@ -33,8 +33,14 @@ export function PriceBreakdown({ breakdown, variant, format }: PriceBreakdownPro
     <div className="space-y-1.5 text-sm">
       {showPerUnit && (
         <Row
-          label="Per unit"
-          value={breakdown.lines[0].unitEffective}
+          // All-in (garment + decoration) so it matches the Volume Pricing
+          // ladder on the same page — a garment-only figure here read as a
+          // contradictory second per-unit price (Chris, 2026-07-30). Labelled
+          // excl. GST because GST only appears as its own line at checkout.
+          label="Per unit (excl. GST)"
+          value={
+            breakdown.lines[0].unitEffective + breakdown.lines[0].decorationPerUnit
+          }
           muted
           format={fmt}
         />
