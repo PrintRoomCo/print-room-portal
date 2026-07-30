@@ -62,18 +62,6 @@ export function FilterRail({ filters, facets, basePath, showModeFilter = true }:
           />
         </Section>
 
-        <Section label="Garment family">
-          <FilterAutoSubmitSelect
-            name="garment_family"
-            defaultValue={filters.garmentFamily ?? ''}
-            ariaLabel="Filter by garment family"
-            options={[
-              { value: '', label: 'All families' },
-              ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
-            ]}
-          />
-        </Section>
-
         {showModeFilter && (
           <Section label="Ordering mode">
             <FilterAutoSubmitSelect

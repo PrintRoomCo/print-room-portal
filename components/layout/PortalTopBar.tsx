@@ -190,16 +190,6 @@ function FilterRow({
         />
 
         <FilterAutoSubmitSelect
-          name="garment_family"
-          defaultValue={filters.garmentFamily ?? ''}
-          ariaLabel="Filter by garment family"
-          options={[
-            { value: '', label: 'All families' },
-            ...facets.garmentFamilies.map((g) => ({ value: g, label: g })),
-          ]}
-        />
-
-        <FilterAutoSubmitSelect
           name="sort"
           defaultValue={filters.sort}
           ariaLabel="Sort"
