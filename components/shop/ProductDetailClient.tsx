@@ -1317,6 +1317,12 @@ export function ProductDetailClient({
     canAddToCart &&
     meetsLocation &&
     inventoryIntentShortfall == null &&
+    // A viewer who can't reorder may only take a genuine stock draw; an
+    // un-drawable cell (backorderable / made-to-order / over-stock) is blocked
+    // up front to mirror submit_b2b_order, not left to fail late at checkout.
+    // (Re-added after a merge dropped it from this expression — the memo and its
+    // warning message survived, but the button gate did not; see TEST-000080.)
+    !selectionBlockedByPermission &&
     !preOrderClosed &&
     pendingPricingDecorations.length === 0
 
