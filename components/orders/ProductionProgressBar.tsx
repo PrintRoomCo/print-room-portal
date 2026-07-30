@@ -1,6 +1,7 @@
 'use client'
 
-import { STATUS_STEPS, getStatusStepIndex } from '@/lib/job-tracker'
+import { STATUS_STEPS } from '@/lib/job-tracker'
+import { resolveStatusStepIndex } from '@/lib/job-tracker-status-display'
 
 interface ProductionProgressBarProps {
   currentStatus: string | null | undefined
@@ -13,7 +14,7 @@ export function ProductionProgressBar({
   estimatedDelivery,
   compact = false,
 }: ProductionProgressBarProps) {
-  const currentStepIndex = getStatusStepIndex(currentStatus)
+  const currentStepIndex = resolveStatusStepIndex(currentStatus)
 
   if (compact) {
     const totalSteps = STATUS_STEPS.length

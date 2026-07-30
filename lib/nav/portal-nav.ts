@@ -43,8 +43,8 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiredTenantTypes: null,
   },
   {
-    name: 'Current orders',
-    href: '/tracking',
+    name: 'Past orders',
+    href: '/past-orders',
     iconKey: 'tracking',
     requiresCompany: false,
     requiresLeavers: false,
@@ -52,7 +52,7 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiredTenantTypes: null,
   },
   {
-    name: 'Past orders',
+    name: 'Order history',
     href: '/my-collections',
     iconKey: 'orders',
     requiresCompany: false,

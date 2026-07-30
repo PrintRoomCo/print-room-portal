@@ -19,9 +19,11 @@ import type { CollectionWithDesigns, DesignSubmission } from '@/lib/collections'
 import type { JobTracker } from '@/lib/job-tracker'
 import { getPortalTrackerPath } from '@/lib/job-tracker'
 import { isGenericCustomDecorationName } from '@/lib/cart/types'
+import { getOrderReference } from '@/lib/orders/order-reference'
 
 interface Quote {
   id: string
+  order_ref: string | null
   reference: string | null
   quote_number: string | null
   status: string
@@ -697,8 +699,16 @@ function QuoteDetail({
     : []) as ProofFile[]
   const trackerUrl = tracker?.tracker_token ? getPortalTrackerPath(tracker.tracker_token) : null
   const currency = quote.currency || 'NZD'
+  // Anna feedback (Monday 2809678055): show the SAME human reference the past-
+  // orders list shows (e.g. "DEMO-000104"), not a sliced UUID ("Order 906C969D").
+  // The list reads order_ref; this page previously read only quote.reference,
+  // which is null for portal-checkout orders.
   const heading =
-    quote.reference || `Order ${quote.id.slice(0, 8).toUpperCase()}`
+    getOrderReference({
+      orderRef: quote.order_ref,
+      quoteNumber: quote.quote_number,
+      reference: quote.reference,
+    }) || `Order ${quote.id.slice(0, 8).toUpperCase()}`
   const customerLine =
     quote.customer_company || quote.customer_name || quote.customer_email
 

@@ -23,14 +23,15 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      // 2026-05-08 sidebar rename — keep /projects bookmarks alive for one cycle.
-      { source: '/projects', destination: '/tracking', permanent: true },
-      { source: '/projects/:path*', destination: '/tracking/:path*', permanent: true },
+      // 2026-05-08 sidebar rename — keep /projects bookmarks alive. Retargeted
+      // 2026-07-30 to /past-orders (the order tracker's renamed home).
+      { source: '/projects', destination: '/past-orders', permanent: true },
+      { source: '/projects/:path*', destination: '/past-orders', permanent: true },
       // 2026-05-13 MF-6 quote retirement — old /quote-requests bookmarks now
-      // surface as orders in /tracking. Per-id deep links collapse to the
+      // surface as orders in /past-orders. Per-id deep links collapse to the
       // index since the /quote-requests/[id] page no longer exists.
-      { source: '/quote-requests', destination: '/tracking', permanent: true },
-      { source: '/quote-requests/:path*', destination: '/tracking', permanent: true },
+      { source: '/quote-requests', destination: '/past-orders', permanent: true },
+      { source: '/quote-requests/:path*', destination: '/past-orders', permanent: true },
       // 2026-05-14 catalogue merge — /shop folded into /catalogue.
       // PDPs deep-link from /shop/[id] preserved via per-id redirect.
       { source: '/shop', destination: '/catalogue', permanent: true },

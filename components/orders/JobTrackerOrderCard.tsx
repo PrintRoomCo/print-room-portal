@@ -14,6 +14,10 @@ import {
   getTrackingNumber,
   isTrackerCompleted,
 } from '@/lib/job-tracker'
+import {
+  resolveStatusStepIndex,
+  resolveStatusStepLabel,
+} from '@/lib/job-tracker-status-display'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 
 interface JobTrackerOrderCardProps {
@@ -55,7 +59,10 @@ export function JobTrackerOrderCard({
         <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h3 className="font-semibold text-black">
-                  Project {tracker.quote_number || `#${tracker.monday_item_id || tracker.tracker_token}`}
+                  Project{' '}
+                  {tracker.quote_number ||
+                    tracker.job_reference ||
+                    (tracker.monday_item_id ? `#${tracker.monday_item_id}` : 'Order')}
                 </h3>
                 {tracker.monday_project_name && (
                   <p className="text-sm text-gray-600 truncate">{tracker.monday_project_name}</p>
@@ -93,7 +100,10 @@ export function JobTrackerOrderCard({
                       View Order
                     </Link>
                   )}
-                  {!hideTrackerLink && (
+                  {/* Anna feedback (Monday 2809673375): a completed order shows the
+                      Reorder button above instead of "View status". Active orders
+                      keep the link into the live tracker. */}
+                  {!hideTrackerLink && !completed && (
                     <Link
                       href={trackerUrl}
                       onClick={(e) => e.stopPropagation()}
@@ -261,11 +271,11 @@ export function JobTrackerOrderCard({
 
           {/* Status Timeline */}
           {tracker.status_history && tracker.status_history.length > 0 && (
-            <StatusTimeline history={tracker.status_history} />
+            <StatusTimeline history={tracker.status_history} currentStatus={tracker.status} />
           )}
 
-          {/* Full Tracker Link */}
-          {!hideTrackerLink && (
+          {/* Full Tracker Link — hidden on completed orders (Reorder replaces it). */}
+          {!hideTrackerLink && !completed && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <Link
                 href={trackerUrl}
@@ -286,8 +296,10 @@ export function JobTrackerOrderCard({
 
 function StatusTimeline({
   history,
+  currentStatus,
 }: {
   history: Array<{ id: string; status: string; status_key?: string; changed_at: string }>
+  currentStatus: string
 }) {
   const historyByKey = new Map<string, { changed_at: string }>()
   ;[...history]
@@ -297,19 +309,19 @@ function StatusTimeline({
       if (!historyByKey.has(key)) historyByKey.set(key, entry)
     })
 
-  let currentStepIndex = -1
-  STATUS_STEPS.forEach((step, idx) => {
-    if (historyByKey.has(step.key)) currentStepIndex = idx
-  })
+  // Anna feedback (Monday 2809669100): the "current" step must come from the
+  // tracker's live status — the SAME source the collapsed card's progress bar
+  // uses — not from the furthest step ever recorded in history. Scanning history
+  // for the max-reached step made this detail timeline disagree with the overview
+  // whenever an order regressed (e.g. proof-approved → back to need-proof).
+  const currentStepIndex = resolveStatusStepIndex(currentStatus)
 
   const currentEntry =
     currentStepIndex >= 0
       ? historyByKey.get(STATUS_STEPS[currentStepIndex].key)
       : null
   const currentLabel =
-    currentStepIndex >= 0
-      ? getStatusLabel(STATUS_STEPS[currentStepIndex].key)
-      : 'Not started'
+    currentStepIndex >= 0 ? resolveStatusStepLabel(currentStatus) : 'Not started'
 
   return (
     <div className="mt-6">

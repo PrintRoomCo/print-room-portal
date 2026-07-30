@@ -42,19 +42,22 @@ describe('getNavigationItems — Inventory gating', () => {
   })
 })
 
-describe('getNavigationItems — Current orders gating (Item 5)', () => {
-  it('shows Current orders to an org_admin', () => {
-    expect(hrefs(access({ isOrgAdmin: true }))).toContain('/tracking')
+describe('getNavigationItems — Past orders gating (Item 5)', () => {
+  it('shows Past orders (the order tracker) to an org_admin', () => {
+    expect(hrefs(access({ isOrgAdmin: true }))).toContain('/past-orders')
   })
-  it('hides Current orders from a non-admin (staff)', () => {
-    expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/tracking')
+  it('hides Past orders from a non-admin (staff)', () => {
+    expect(hrefs(access({ isOrgAdmin: false }))).not.toContain('/past-orders')
+  })
+  it('no longer exposes the old /tracking href', () => {
+    expect(hrefs(access({ isOrgAdmin: true }))).not.toContain('/tracking')
   })
 })
 
-describe('Orders → Past orders rename (Item 10)', () => {
-  it('labels the /my-collections item "Past orders"', () => {
+describe('Orders → Order history rename (Item 10)', () => {
+  it('labels the /my-collections item "Order history" (frees "Past orders" for the tracker)', () => {
     const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/my-collections')
-    expect(item?.name).toBe('Past orders')
+    expect(item?.name).toBe('Order history')
   })
 })
 

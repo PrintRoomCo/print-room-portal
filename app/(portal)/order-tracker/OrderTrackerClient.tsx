@@ -27,7 +27,10 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
   const [preOrders, setPreOrders] = useState<PreOrderTrackerItem[]>(initialData.preOrders ?? [])
   const [dataLoading, setDataLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
+  // Anna feedback (Monday 2809669100): this page is now titled "Past orders", so
+  // it defaults to the Past (completed) view — landing here no longer surfaces
+  // in-progress jobs like "Preparing proof". Users toggle to Active for those.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('completed')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -115,7 +118,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] motion-safe:animate-portal-enter md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans text-[clamp(40px,5vw,72px)] font-medium leading-[1.05] tracking-[-0.02em] text-gray-900">
-            Current orders
+            Past orders
           </h1>
         </header>
 
@@ -164,7 +167,7 @@ export function OrderTrackerClient({ initialData }: OrderTrackerClientProps) {
                 active={statusFilter === 'completed'}
                 onClick={() => setStatusFilter('completed')}
               >
-                Completed
+                Past
               </FilterChip>
             </div>
             <input

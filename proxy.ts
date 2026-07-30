@@ -31,8 +31,9 @@ export async function proxy(request: NextRequest) {
     '/inventory',
     '/my-collections',
     '/order-tracker',
-    '/projects', // legacy alias; redirected to /tracking via next.config.ts
-    '/tracking',
+    '/past-orders',
+    '/projects', // legacy alias; redirected to /past-orders via next.config.mjs
+    '/tracking', // redirects to /past-orders; kept protected for the hop
     '/proofs',
     '/quote-requests',
     '/shop',
@@ -82,6 +83,7 @@ export const config = {
     '/checkout/:path*',
     '/inventory/:path*',
     '/order-tracker/:path*',
+    '/past-orders/:path*',
     '/projects/:path*',
     '/tracking/:path*',
     '/proofs/:path*',
