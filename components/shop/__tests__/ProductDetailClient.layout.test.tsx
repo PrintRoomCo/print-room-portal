@@ -49,7 +49,7 @@ const decoration: DecorationOption = {
 }
 
 describe('ProductDetailClient PDP layout', () => {
-  it('keeps decoration artwork in the gallery and limits product facts to sku, brand, and category', () => {
+  it('keeps decoration artwork in the gallery and limits product facts to sku and brand (category omitted)', () => {
     render(
       <ProductDetailClient
         product={{
@@ -119,8 +119,10 @@ describe('ProductDetailClient PDP layout', () => {
     expect(screen.getByText('5001')).toBeInTheDocument()
     expect(screen.getByText('Brand')).toBeInTheDocument()
     expect(screen.getByText('AS Colour')).toBeInTheDocument()
-    expect(screen.getByText('Category')).toBeInTheDocument()
-    expect(screen.getByText('T-Shirt')).toBeInTheDocument()
+    // Category is intentionally omitted from the customer PDP (Anna feedback),
+    // even though category_name is still supplied in the product data.
+    expect(screen.queryByText('Category')).not.toBeInTheDocument()
+    expect(screen.queryByText('T-Shirt')).not.toBeInTheDocument()
     expect(screen.queryByText('Garment family')).not.toBeInTheDocument()
     expect(screen.queryByText('ProductType')).not.toBeInTheDocument()
     expect(screen.queryByText('TotalColors')).not.toBeInTheDocument()

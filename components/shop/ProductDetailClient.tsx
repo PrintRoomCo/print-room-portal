@@ -506,6 +506,15 @@ export function ProductDetailClient({
   // Are there qtys queued under colours other than the currently-displayed one?
   const otherColoursTotalQty = multiSizeTotalQty - currentColourTotalQty
 
+  // Display name of the currently-selected colour, resolved the same way the
+  // swatch picker resolves it (catalogue colour option first, then the variant's
+  // own color_label). Drives the grid's per-colour subtotal label so it reads
+  // "Total Navy" rather than the generic "Total This Colour" (Anna feedback).
+  const selectedColourLabel = useMemo<string | null>(() => {
+    const opt = colourOptions.find((c) => c.id === colorSwatchId)
+    return opt?.label ?? variantsForSelectedColour[0]?.color_label ?? null
+  }, [colourOptions, colorSwatchId, variantsForSelectedColour])
+
   // Resolved per-variant lines for every variant the user has touched in this
   // session, across all colours. Drives the order-summary panel between the
   // size grid and the price block.
@@ -1608,7 +1617,7 @@ export function ProductDetailClient({
                 <tfoot>
                   <tr className="border-t border-gray-200">
                     <td className="px-5 py-3 text-[11px] font-medium tracking-[0.08em] text-gray-500" colSpan={showAvailability ? 2 : 1}>
-                      Total This Colour
+                      {selectedColourLabel ? `Total ${selectedColourLabel}` : 'Total This Colour'}
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900 tabular-nums">
                       {currentColourTotalQty}
@@ -1995,7 +2004,8 @@ function ProductDetailsCondensed({ product }: { product: ProductData }) {
 
   if (product.sku) rows.push({ label: 'SKU', value: product.sku })
   if (product.brand_name) rows.push({ label: 'Brand', value: product.brand_name })
-  if (product.category_name) rows.push({ label: 'Category', value: product.category_name })
+  // Category intentionally omitted from the customer PDP (Anna portal feedback):
+  // the title already carries the design name; brand + SKU are enough context.
 
   if (rows.length === 0) return null
 

@@ -112,10 +112,13 @@ export function VariantPicker({
     <div className="space-y-4">
       {colors.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center justify-between">
+          {/* Colour name sits immediately beside the "Colour" label (not pushed
+              to the far right) so it's easy to associate with the swatches
+              below — Anna portal feedback. */}
+          <div className="mb-2 flex items-center gap-2">
             <label className="text-sm font-medium text-gray-900">Colour</label>
             {selectedColor?.label && (
-              <span className="text-sm text-gray-600">{selectedColor.label}</span>
+              <span className="text-sm text-gray-600">— {selectedColor.label}</span>
             )}
           </div>
           <ToggleGroup.Root
