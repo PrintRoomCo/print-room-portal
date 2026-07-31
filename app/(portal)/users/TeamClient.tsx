@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TeamMemberRow } from '@/lib/team/members'
 import {
@@ -296,6 +296,10 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
   const [original, setOriginal] = useState<BranchGrant[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Collapsed by default so the members list stays short — orgs with many
+  // branches (e.g. Anytime Fitness ~65) otherwise render a huge list per member.
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -350,33 +354,83 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
   if (stores.length === 0)
     return <p className="mt-2 text-xs text-gray-500">No branches to assign.</p>
 
+  const grantedCount = stores.filter((s) => s.granted).length
+  const needle = filter.trim().toLowerCase()
+  const visible = needle
+    ? stores.filter((s) => s.name.toLowerCase().includes(needle))
+    : stores
+
   return (
-    <div className="mt-3 rounded-xl border border-gray-100 p-3">
-      <p className="text-xs font-medium tracking-wide text-gray-500">
-        Branches this member manages
-      </p>
-      <ul className="mt-2 space-y-1">
-        {stores.map((s) => (
-          <li key={s.id}>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={s.granted}
-                onChange={(e) => toggle(s.id, e.target.checked)}
-              />
-              {s.name}
-            </label>
-          </li>
-        ))}
-      </ul>
+    <div className="mt-3 rounded-xl border border-gray-100">
       <button
         type="button"
-        onClick={save}
-        disabled={!dirty || saving}
-        className="btn-secondary mt-2 disabled:opacity-50"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
       >
-        {saving ? 'Saving…' : 'Save branches'}
+        <span className="text-xs font-medium tracking-wide text-gray-500">
+          Branches this member manages
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            {grantedCount > 0 ? `${grantedCount} selected` : 'None'}
+          </span>
+          <svg
+            className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+              open ? 'rotate-180' : ''
+            }`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
       </button>
+
+      {open && (
+        <div className="border-t border-gray-100 p-3">
+          {stores.length > 8 && (
+            <input
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter branches…"
+              className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
+            />
+          )}
+          <ul className="max-h-64 space-y-1 overflow-y-auto pr-1">
+            {visible.length === 0 ? (
+              <li className="text-xs text-gray-500">No branches match “{filter}”.</li>
+            ) : (
+              visible.map((s) => (
+                <li key={s.id}>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={s.granted}
+                      onChange={(e) => toggle(s.id, e.target.checked)}
+                    />
+                    {s.name}
+                  </label>
+                </li>
+              ))
+            )}
+          </ul>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!dirty || saving}
+            className="btn-secondary mt-2 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save branches'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
