@@ -242,10 +242,13 @@ export function TeamClient({
         {initialMembers.length === 0 ? (
           <p className="mt-4 text-sm text-gray-500">No members yet.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-gray-100">
+          <div className="mt-4 space-y-3">
             {initialMembers.map((m) => (
-              <li key={m.user_id} className="py-3 text-sm">
-                <div className="flex items-center justify-between">
+              <div
+                key={m.user_id}
+                className="rounded-2xl border border-gray-100 p-4 text-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-gray-900">{m.email}</p>
                     <p className="truncate text-gray-500">{m.full_name ?? '—'}</p>
@@ -270,9 +273,9 @@ export function TeamClient({
                 {/* Location-manager: grant ≥1 branch to make this staff member a
                     branch manager. Org_admins never get grants (they see everything). */}
                 {m.role === 'staff' && <MemberBranchGrants membershipId={m.membership_id} />}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </div>
@@ -296,10 +299,11 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
   const [original, setOriginal] = useState<BranchGrant[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Collapsed by default so the members list stays short — orgs with many
-  // branches (e.g. Anytime Fitness ~65) otherwise render a huge list per member.
+  // Combobox: granted branches show as chips; the input searches the rest.
+  // Orgs can have ~65 branches, so a checkbox-per-branch list is unusable.
+  const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState('')
+  const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -319,6 +323,16 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
       cancelled = true
     }
   }, [membershipId])
+
+  // Close the search dropdown when clicking anywhere outside this control.
+  useEffect(() => {
+    if (!open) return
+    function onDocMouseDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => document.removeEventListener('mousedown', onDocMouseDown)
+  }, [open])
 
   const dirty =
     !!stores && !!original && stores.some((s, i) => s.granted !== original[i]?.granted)
@@ -354,83 +368,116 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
   if (stores.length === 0)
     return <p className="mt-2 text-xs text-gray-500">No branches to assign.</p>
 
-  const grantedCount = stores.filter((s) => s.granted).length
-  const needle = filter.trim().toLowerCase()
-  const visible = needle
-    ? stores.filter((s) => s.name.toLowerCase().includes(needle))
-    : stores
+  const granted = stores.filter((s) => s.granted)
+  const needle = query.trim().toLowerCase()
+  const matches = stores.filter(
+    (s) => !s.granted && (!needle || s.name.toLowerCase().includes(needle)),
+  )
 
   return (
-    <div className="mt-3 rounded-xl border border-gray-100">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-      >
-        <span className="text-xs font-medium tracking-wide text-gray-500">
+    <div className="mt-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium tracking-wide text-gray-500">
           Branches this member manages
+        </p>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+          {granted.length > 0 ? `${granted.length} selected` : 'None'}
         </span>
-        <span className="flex items-center gap-2">
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-            {grantedCount > 0 ? `${grantedCount} selected` : 'None'}
-          </span>
-          <svg
-            className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
-              open ? 'rotate-180' : ''
-            }`}
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </span>
-      </button>
+      </div>
 
-      {open && (
-        <div className="border-t border-gray-100 p-3">
-          {stores.length > 8 && (
-            <input
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter branches…"
-              className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
-            />
-          )}
-          <ul className="max-h-64 space-y-1 overflow-y-auto pr-1">
-            {visible.length === 0 ? (
-              <li className="text-xs text-gray-500">No branches match “{filter}”.</li>
+      {/* Selected branches as removable mint chips */}
+      {granted.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {granted.map((s) => (
+            <span
+              key={s.id}
+              className="inline-flex items-center rounded-full bg-[rgb(var(--accent-mint))] text-black transition-colors"
+            >
+              <button
+                type="button"
+                onClick={() => toggle(s.id, false)}
+                aria-label={`Remove ${s.name}`}
+                title="Remove branch"
+                className="inline-flex items-center gap-1.5 rounded-full py-1 pl-3 pr-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30"
+              >
+                <span className="text-[12px] font-medium">{s.name}</span>
+                <svg
+                  className="h-3.5 w-3.5 text-black/60"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6l8 8M14 6l-8 8" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search + add combobox */}
+      <div ref={boxRef} className="relative mt-2">
+        <input
+          type="search"
+          value={query}
+          aria-label="Add a branch this member manages"
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          placeholder="Add a branch…"
+          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+        />
+        {open && (
+          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+
+            {matches.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-gray-500">
+                {needle ? `No branches match “${query}”.` : 'All branches added.'}
+              </li>
             ) : (
-              visible.map((s) => (
+              matches.map((s) => (
                 <li key={s.id}>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={s.granted}
-                      onChange={(e) => toggle(s.id, e.target.checked)}
-                    />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggle(s.id, true)
+                      setQuery('')
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg
+                      className="h-3.5 w-3.5 shrink-0 text-gray-400"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M10 5v10M5 10h10" />
+                    </svg>
                     {s.name}
-                  </label>
+                  </button>
                 </li>
               ))
             )}
           </ul>
-          <button
-            type="button"
-            onClick={save}
-            disabled={!dirty || saving}
-            className="btn-secondary mt-2 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save branches'}
-          </button>
-        </div>
-      )}
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={!dirty || saving}
+        className="btn-secondary mt-2 disabled:opacity-50"
+      >
+        {saving ? 'Saving…' : 'Save branches'}
+      </button>
     </div>
   )
 }
