@@ -607,8 +607,9 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
       </div>
       )}
 
-      {/* Locations */}
-      {access.isCompanyUser && (
+      {/* Locations — org admins only (staff cannot view locations or the
+          admin-only order tracker the "View orders" link points to) */}
+      {access.canViewLocations && (
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Locations</h2>
