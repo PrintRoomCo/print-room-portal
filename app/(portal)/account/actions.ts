@@ -6,25 +6,7 @@ import { getSupabaseServer } from '@/lib/supabase'
 import { changePassword } from '@/lib/supabase-auth'
 import { cacheTags } from '@/lib/cache/tags'
 import { isPreviewRequest } from '@/lib/preview/guard'
-
-const NZ_REGIONS = [
-  { code: 'AUK', name: 'Auckland' },
-  { code: 'BOP', name: 'Bay of Plenty' },
-  { code: 'CAN', name: 'Canterbury' },
-  { code: 'GIS', name: 'Gisborne' },
-  { code: 'HKB', name: "Hawke's Bay" },
-  { code: 'MBH', name: 'Marlborough' },
-  { code: 'MWT', name: 'Manawatu-Wanganui' },
-  { code: 'NSN', name: 'Nelson' },
-  { code: 'NTL', name: 'Northland' },
-  { code: 'OTA', name: 'Otago' },
-  { code: 'STL', name: 'Southland' },
-  { code: 'TAS', name: 'Tasman' },
-  { code: 'TKI', name: 'Taranaki' },
-  { code: 'WGN', name: 'Wellington' },
-  { code: 'WKO', name: 'Waikato' },
-  { code: 'WTC', name: 'West Coast' },
-]
+import { NZ_REGIONS } from '@/lib/nz-regions'
 
 function formatPhoneE164(phone: string): string | null {
   if (!phone) return null
@@ -184,6 +166,83 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
   revalidateTag(cacheTags.companyAccess, { expire: 0 })
 
   return { success: true, message: `Store "${storeName}" has been created successfully!` }
+}
+
+export async function updateLocationAction(formData: FormData): Promise<ActionResult> {
+  if (await isPreviewRequest()) {
+    return { success: false, errors: ['Preview only — nothing was saved.'] }
+  }
+  const supabase = await getSupabaseServerComponent()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, errors: ['Not authenticated.'] }
+
+  const adminClient = getSupabaseServer()
+
+  const { data: membership } = await adminClient
+    .from('user_organizations')
+    .select('organization_id, role')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!membership) {
+    return { success: false, errors: ['No company associated with your account.'] }
+  }
+
+  // Same gate as createLocationAction — the Edit affordance is admin-only in the
+  // UI, but this action is directly callable, so re-check the role here.
+  if (membership.role !== 'org_admin') {
+    return { success: false, errors: ['Only organisation admins can edit locations.'] }
+  }
+
+  const storeId = (formData.get('storeId') as string)?.trim()
+  if (!storeId) {
+    return { success: false, errors: ['Missing location to update.'] }
+  }
+
+  const storeName = (formData.get('storeName') as string)?.trim()
+  if (!storeName) {
+    return { success: false, errors: ['Store name is required.'] }
+  }
+
+  const phone = (formData.get('phone') as string)?.trim() || ''
+  const address1 = (formData.get('address1') as string)?.trim() || ''
+  const address2 = (formData.get('address2') as string)?.trim() || ''
+  const city = (formData.get('city') as string)?.trim() || ''
+  const regionCode = formData.get('regionCode') as string
+  const zip = (formData.get('zip') as string)?.trim() || ''
+
+  const formattedPhone = formatPhoneE164(phone)
+  const region = NZ_REGIONS.find((r) => r.code === regionCode)
+
+  // Scope the update to BOTH the store id and the caller's organisation. The
+  // service-role client bypasses RLS, so this second .eq() is the security
+  // boundary: a forged storeId from another org matches no row and no-ops.
+  const { error } = await adminClient
+    .from('stores')
+    .update({
+      name: storeName,
+      address: address1 || null,
+      location: address2 || null,
+      city: city || null,
+      state: region?.name || regionCode || null,
+      country: 'New Zealand',
+      postal_code: zip || null,
+      phone: formattedPhone || phone || null,
+    })
+    .eq('id', storeId)
+    .eq('organization_id', membership.organization_id)
+
+  if (error) {
+    console.error('[Account] Update location error:', error)
+    return { success: false, errors: ['Failed to update location.'] }
+  }
+
+  // Store list (name/address) lives in getPortalAccountData → bust account-data.
+  // Unlike create, no new location id is added, so company-access (which carries
+  // locationIds, not address fields) does not need busting.
+  revalidateTag(cacheTags.accountData, { expire: 0 })
+
+  return { success: true, message: `"${storeName}" has been updated.` }
 }
 
 // Org header logo — public bucket reused from artworks; logos live under an

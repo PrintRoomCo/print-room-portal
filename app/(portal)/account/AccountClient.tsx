@@ -1,15 +1,14 @@
 'use client'
 
-import * as Dialog from '@radix-ui/react-dialog'
 import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { CurrencyDisplayPreferenceSection } from '@/components/account/CurrencyDisplayPreferenceSection'
+import { LocationFormModal } from '@/components/account/LocationFormModal'
 import {
   updateProfile,
   changePasswordAction,
-  createLocationAction,
   updateOrgLogoAction,
   removeOrgLogoAction,
   type ActionResult,
@@ -19,25 +18,6 @@ import { formatCurrency } from '@/lib/currency/format'
 import type { SupportedCurrency } from '@/lib/currency/types'
 import { getPortalOwnerKey } from '@/lib/portal-owner'
 import type { PortalAccountData } from '@/lib/portal-data'
-
-const NZ_REGIONS = [
-  { code: 'AUK', name: 'Auckland' },
-  { code: 'BOP', name: 'Bay of Plenty' },
-  { code: 'CAN', name: 'Canterbury' },
-  { code: 'GIS', name: 'Gisborne' },
-  { code: 'HKB', name: "Hawke's Bay" },
-  { code: 'MBH', name: 'Marlborough' },
-  { code: 'MWT', name: 'Manawatu-Wanganui' },
-  { code: 'NSN', name: 'Nelson' },
-  { code: 'NTL', name: 'Northland' },
-  { code: 'OTA', name: 'Otago' },
-  { code: 'STL', name: 'Southland' },
-  { code: 'TAS', name: 'Tasman' },
-  { code: 'TKI', name: 'Taranaki' },
-  { code: 'WGN', name: 'Wellington' },
-  { code: 'WKO', name: 'Waikato' },
-  { code: 'WTC', name: 'West Coast' },
-]
 
 interface Store {
   id: string
@@ -75,7 +55,9 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
   const [dataOwnerKey, setDataOwnerKey] = useState(initialData.ownerKey)
   const [dataLoading, setDataLoading] = useState(false)
 
-  const [showAddStore, setShowAddStore] = useState(false)
+  const [locationModal, setLocationModal] = useState<
+    { mode: 'add' } | { mode: 'edit'; store: Store } | null
+  >(null)
   const [editingProfile, setEditingProfile] = useState(false)
   const [showPasswordChange, setShowPasswordChange] = useState(false)
 
@@ -84,9 +66,6 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
 
   const [passwordResult, setPasswordResult] = useState<ActionResult | null>(null)
   const [passwordSubmitting, setPasswordSubmitting] = useState(false)
-
-  const [locationResult, setLocationResult] = useState<ActionResult | null>(null)
-  const [locationSubmitting, setLocationSubmitting] = useState(false)
 
   const [logoResult, setLogoResult] = useState<ActionResult | null>(null)
   const [logoSubmitting, setLogoSubmitting] = useState(false)
@@ -153,17 +132,6 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
     }
   }, [passwordResult, showPasswordChange])
 
-  useEffect(() => {
-    if (locationResult?.success && showAddStore) {
-      const timer = setTimeout(() => {
-        setShowAddStore(false)
-        setLocationResult(null)
-        fetchAccountData()
-      }, 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [locationResult, showAddStore, fetchAccountData])
-
   // The header logo is read from company-access (cached in CompanyContext), so a
   // full reload is the simplest way to repaint it after a change — same approach
   // the profile save uses above.
@@ -194,17 +162,6 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
     const result = await changePasswordAction(formData)
     setPasswordResult(result)
     setPasswordSubmitting(false)
-  }
-
-  async function handleLocationSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (locationSubmitting) return
-    setLocationSubmitting(true)
-    setLocationResult(null)
-    const formData = new FormData(e.currentTarget)
-    const result = await createLocationAction(formData)
-    setLocationResult(result)
-    setLocationSubmitting(false)
   }
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -368,7 +325,18 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
             <h2 className="text-lg font-semibold text-gray-900">
               Default Address
             </h2>
-            <AddressIcon />
+            <div className="flex items-center gap-3">
+              {access.isOrgAdmin && primaryStore && (
+                <button
+                  type="button"
+                  onClick={() => setLocationModal({ mode: 'edit', store: primaryStore })}
+                  className="text-sm text-[rgb(var(--color-primary))] hover:underline"
+                >
+                  Edit
+                </button>
+              )}
+              <AddressIcon />
+            </div>
           </div>
           {primaryStore && (primaryStore.address || primaryStore.city) ? (
             <div className="text-gray-900">
@@ -641,13 +609,22 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
                 {store.phone && (
                   <p className="text-sm text-gray-500 mt-2">Tel: {store.phone}</p>
                 )}
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
                   <Link
                     href={`/tracking?location=${encodeURIComponent(store.id)}`}
                     className="text-sm text-[rgb(var(--color-primary))] hover:underline"
                   >
                     View orders for this location
                   </Link>
+                  {access.isOrgAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setLocationModal({ mode: 'edit', store })}
+                      className="text-sm text-[rgb(var(--color-primary))] hover:underline"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -655,7 +632,7 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
             {/* Add Location Card - Only for org admins */}
             {access.isOrgAdmin && (
               <button
-                onClick={() => setShowAddStore(true)}
+                onClick={() => setLocationModal({ mode: 'add' })}
                 className="card-elevated p-6 border-2 border-dashed border-gray-200 hover:border-[rgb(var(--color-primary))]/30 flex flex-col items-center justify-center text-center min-h-[200px] cursor-pointer group transition-all duration-300"
               >
                 <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-[rgb(var(--color-primary))]/10 flex items-center justify-center mb-3 transition-colors">
@@ -671,181 +648,14 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
         </div>
       )}
 
-      {/* Add Location Modal */}
-      {showAddStore && (
-        <Dialog.Root
-          open={showAddStore}
-          onOpenChange={(open) => {
-            if (!open) {
-              setShowAddStore(false)
-              setLocationResult(null)
-            }
-          }}
-        >
-          <Dialog.Portal>
-            <Dialog.Overlay className="glass-modal-backdrop" />
-            <Dialog.Content className="glass-modal-content fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Dialog.Title className="text-xl font-bold text-gray-900">
-                  Add New Location
-                </Dialog.Title>
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label="Close modal"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </Dialog.Close>
-              </div>
-
-              {locationResult?.success && (
-                <div className="glass-success-box p-3 mb-4">
-                  <p className="text-sm">{locationResult.message}</p>
-                </div>
-              )}
-
-              {locationResult?.errors && (
-                <div className="glass-error-box p-3 mb-4">
-                  {locationResult.errors.map((error, i) => (
-                    <p key={i} className="text-sm">{error}</p>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={handleLocationSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="storeName"
-                    name="storeName"
-                    required
-                    placeholder="e.g., Auckland Downtown"
-                    className="input-glass"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    name="phone"
-                    placeholder="e.g., 09 123 4567 or 021 123 4567"
-                    className="input-glass"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">NZ numbers will be formatted automatically</p>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">Shipping Address</h3>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label htmlFor="address1" className="block text-sm font-medium text-gray-700 mb-1">
-                        Street Address
-                      </label>
-                      <input
-                        type="text"
-                        id="address1"
-                        name="address1"
-                        placeholder="123 Main Street"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="address2" className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit / Suite (optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="address2"
-                        name="address2"
-                        placeholder="Suite 100"
-                        className="input-glass"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          id="city"
-                          name="city"
-                          placeholder="Auckland"
-                          className="input-glass"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="regionCode" className="block text-sm font-medium text-gray-700 mb-1">
-                          Region
-                        </label>
-                        <select
-                          id="regionCode"
-                          name="regionCode"
-                          className="input-glass"
-                        >
-                          <option value="">Select region...</option>
-                          {NZ_REGIONS.map((region) => (
-                            <option key={region.code} value={region.code}>
-                              {region.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="zip" className="block text-sm font-medium text-gray-700 mb-1">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        id="zip"
-                        name="zip"
-                        placeholder="1010"
-                        className="input-glass"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      className="flex-1 btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                  </Dialog.Close>
-                  <button
-                    type="submit"
-                    disabled={locationSubmitting}
-                    className="flex-1 btn-primary"
-                  >
-                    {locationSubmitting ? 'Creating...' : 'Create Location'}
-                  </button>
-                </div>
-              </form>
-            </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+      {/* Add / Edit Location Modal (shared) */}
+      {locationModal && (
+        <LocationFormModal
+          mode={locationModal.mode}
+          store={locationModal.mode === 'edit' ? locationModal.store : null}
+          onClose={() => setLocationModal(null)}
+          onSaved={() => fetchAccountData()}
+        />
       )}
     </div>
   )

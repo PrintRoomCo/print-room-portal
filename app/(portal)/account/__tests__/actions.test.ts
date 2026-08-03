@@ -8,7 +8,12 @@ vi.mock('@/lib/supabase-auth', () => ({ changePassword: vi.fn() }))
 // Preview guard reads cookies(); stub it to the non-preview path for these tests.
 vi.mock('@/lib/preview/guard', () => ({ isPreviewRequest: vi.fn(async () => false) }))
 
-import { createLocationAction, updateOrgLogoAction, removeOrgLogoAction } from '../actions'
+import {
+  createLocationAction,
+  updateLocationAction,
+  updateOrgLogoAction,
+  removeOrgLogoAction,
+} from '../actions'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
 
@@ -18,11 +23,15 @@ type AnyRow = Record<string, unknown>
  * Minimal chainable Supabase admin stub.
  * - user_organizations: `.select().eq().single()` → the configured membership.
  * - stores: `.insert()` records the call and resolves `{ error }`.
+ * - stores: `.update().eq().eq()` records `{ payload, filters }` (the two eq
+ *   filters that scope the write) and resolves `{ error }`.
  */
 function makeAdmin(opts: {
   membership: { data: unknown; error: unknown }
   insertResult?: { error: unknown }
+  updateResult?: { error: unknown }
   storesInsert?: ReturnType<typeof vi.fn>
+  storesUpdate?: ReturnType<typeof vi.fn>
 }) {
   function builder(table: string): AnyRow {
     const b: AnyRow = {
@@ -33,6 +42,23 @@ function makeAdmin(opts: {
       insert: (payload: unknown) => {
         if (table === 'stores') opts.storesInsert?.(payload)
         return Promise.resolve(opts.insertResult ?? { error: null })
+      },
+      update: (payload: unknown) => {
+        const filters: Record<string, unknown> = {}
+        const chain: AnyRow = {
+          eq: (col: string, val: unknown) => {
+            filters[col] = val
+            return chain
+          },
+          then: (
+            resolve: (v: { error: unknown }) => unknown,
+            reject: (e: unknown) => unknown,
+          ) => {
+            if (table === 'stores') opts.storesUpdate?.({ payload, filters })
+            return Promise.resolve(opts.updateResult ?? { error: null }).then(resolve, reject)
+          },
+        }
+        return chain
       },
     }
     return b
@@ -139,6 +165,64 @@ describe('createLocationAction — org_admin guard', () => {
 
     expect(result.success).toBe(true)
     expect(storesInsert).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('updateLocationAction — org_admin guard + org scoping', () => {
+  it('rejects a non-admin member and never updates', async () => {
+    mockAuth({ id: 'u-1' })
+    const storesUpdate = vi.fn()
+    vi.mocked(getSupabaseServer).mockReturnValue(
+      makeAdmin({
+        membership: { data: { organization_id: 'org-1', role: 'buyer' }, error: null },
+        storesUpdate,
+      }) as never,
+    )
+
+    const result = await updateLocationAction(
+      formData({ storeId: 's-1', storeName: 'Auckland Downtown' }),
+    )
+
+    expect(result.success).toBe(false)
+    expect(storesUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing storeId and never updates', async () => {
+    mockAuth({ id: 'u-1' })
+    const storesUpdate = vi.fn()
+    vi.mocked(getSupabaseServer).mockReturnValue(
+      makeAdmin({
+        membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+        storesUpdate,
+      }) as never,
+    )
+
+    const result = await updateLocationAction(formData({ storeName: 'Auckland Downtown' }))
+
+    expect(result.success).toBe(false)
+    expect(storesUpdate).not.toHaveBeenCalled()
+  })
+
+  it('scopes the update to both the store id and the caller org', async () => {
+    mockAuth({ id: 'u-1' })
+    const storesUpdate = vi.fn()
+    vi.mocked(getSupabaseServer).mockReturnValue(
+      makeAdmin({
+        membership: { data: { organization_id: 'org-1', role: 'org_admin' }, error: null },
+        storesUpdate,
+      }) as never,
+    )
+
+    const result = await updateLocationAction(
+      formData({ storeId: 's-1', storeName: 'Warehouse', city: 'Auckland', regionCode: 'AUK' }),
+    )
+
+    expect(result.success).toBe(true)
+    expect(storesUpdate).toHaveBeenCalledTimes(1)
+    const { payload, filters } = storesUpdate.mock.calls[0][0]
+    // The two .eq() filters are the security boundary against cross-org edits.
+    expect(filters).toEqual({ id: 's-1', organization_id: 'org-1' })
+    expect(payload).toMatchObject({ name: 'Warehouse', city: 'Auckland', state: 'Auckland' })
   })
 })
 
