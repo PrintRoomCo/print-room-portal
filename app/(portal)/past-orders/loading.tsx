@@ -1,5 +1,5 @@
-import { OrderTrackerRouteSkeleton } from '@/components/ui/PortalRouteSkeletons'
+import { PastOrdersRouteSkeleton } from '@/components/ui/PortalRouteSkeletons'
 
 export default function Loading() {
-  return <OrderTrackerRouteSkeleton />
+  return <PastOrdersRouteSkeleton />
 }

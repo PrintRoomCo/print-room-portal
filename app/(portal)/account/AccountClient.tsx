@@ -548,7 +548,7 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
             <h2 className="text-lg font-semibold text-gray-900">
               Recent Orders
             </h2>
-            <Link href="/my-collections" className="text-sm text-[rgb(var(--color-primary))] hover:underline">
+            <Link href="/past-orders" className="text-sm text-[rgb(var(--color-primary))] hover:underline">
               View all orders
             </Link>
           </div>

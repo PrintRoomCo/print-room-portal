@@ -11,11 +11,11 @@ import { OrdersTable } from './OrdersTable'
 
 type Order = PortalPastOrder
 
-interface MyCollectionsClientProps {
+interface PastOrdersClientProps {
   initialData: PortalPastOrdersData
 }
 
-export function MyCollectionsClient({ initialData }: MyCollectionsClientProps) {
+export function PastOrdersClient({ initialData }: PastOrdersClientProps) {
   const { access, loading: companyLoading } = useCompany()
   const currentOwnerKey = getPortalOwnerKey(access)
   const [orders, setOrders] = useState<Order[]>(initialData.orders)

@@ -52,9 +52,9 @@ describe('OrdersTable', () => {
     expect(bodyRefs()).toEqual(['REF-2', 'REF-1'])
   })
 
-  it('rows link to the my-collections detail page keyed on quoteId', () => {
+  it('rows link to the past-orders detail page keyed on quoteId', () => {
     render(<OrdersTable orders={[cheap]} />)
-    expect(screen.getByRole('link', { name: 'REF-1' }).getAttribute('href')).toBe('/my-collections/q1')
+    expect(screen.getByRole('link', { name: 'REF-1' }).getAttribute('href')).toBe('/past-orders/q1')
   })
 
   it('shows a fulfilment badge — not the production status — for stock orders', () => {

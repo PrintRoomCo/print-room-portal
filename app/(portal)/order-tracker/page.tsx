@@ -13,7 +13,7 @@ export default async function OrderTrackerPage() {
   // default, so they are covered too.
   const access = await getPortalCompanyAccess()
   if (!access) redirect('/sign-in')
-  if (!access.isOrgAdmin) redirect('/my-collections')
+  if (!access.isOrgAdmin) redirect('/past-orders')
 
   const initialData = await getPortalOrderTrackerData()
   return <OrderTrackerClient initialData={initialData} />

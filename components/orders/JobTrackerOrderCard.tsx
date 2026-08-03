@@ -100,7 +100,7 @@ export function JobTrackerOrderCard({
                   {completed && <ReorderButton tracker={tracker} />}
                   {tracker.quote_id && (
                     <Link
-                      href={`/my-collections/${tracker.quote_id}`}
+                      href={`/past-orders/${tracker.quote_id}`}
                       onClick={(e) => e.stopPropagation()}
                       className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 transition-all duration-150 hover:bg-gray-200 active:scale-[0.98]"
                     >

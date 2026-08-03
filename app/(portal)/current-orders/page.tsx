@@ -9,5 +9,5 @@ export const metadata: Metadata = {
 // "Current Orders"). The page body, the admin-only guard and the data fetching
 // all live in ../order-tracker, which stays as the internal implementation
 // because already-sent tracker emails deep-link to /order-tracker/[token]. Old
-// /past-orders, /tracking, /projects and /quote-requests bookmarks redirect here.
+// /tracking, /projects and /quote-requests bookmarks redirect here.
 export default OrderTrackerPage

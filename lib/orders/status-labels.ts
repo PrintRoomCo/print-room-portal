@@ -12,7 +12,7 @@
  *   export type OrderStatus = Database['public']['Enums']['order_status']
  *
  * Existing inline status maps (e.g. `QuoteStatusChip` in
- * `app/(portal)/my-collections/[collectionId]/page.tsx`) will be
+ * `app/(portal)/past-orders/[collectionId]/page.tsx`) will be
  * consolidated to import from this file in a follow-up pass.
  */
 

@@ -40,6 +40,10 @@ const nextConfig = {
       // Keep /team bookmarks alive.
       { source: '/team', destination: '/users', permanent: true },
       { source: '/team/:path*', destination: '/users', permanent: true },
+      // 2026-08-04 — "Order history" (/my-collections) renamed to "Past orders"
+      // (/past-orders). Keep old bookmarks — including per-order deep links — alive.
+      { source: '/my-collections', destination: '/past-orders', permanent: true },
+      { source: '/my-collections/:path*', destination: '/past-orders/:path*', permanent: true },
       // 2026-06-02 — /inventory reinstated as a distinct org-admin Inventory page;
       // its old `/inventory -> /catalogue` redirect is intentionally removed (a
       // permanent 308 would otherwise shadow the new route on every environment).

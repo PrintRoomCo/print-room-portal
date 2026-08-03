@@ -52,8 +52,8 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiredTenantTypes: null,
   },
   {
-    name: 'Order history',
-    href: '/my-collections',
+    name: 'Past orders',
+    href: '/past-orders',
     iconKey: 'orders',
     requiresCompany: false,
     requiresLeavers: false,

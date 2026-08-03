@@ -40,7 +40,7 @@ function queryResult(result: unknown) {
   return builder
 }
 
-describe('getPortalAccountData my-collections order status', () => {
+describe('getPortalAccountData past-orders order status', () => {
   it('surfaces a newly submitted order as awaiting approval', async () => {
     mocks.admin.from.mockImplementation((table: string) => {
       if (table === 'user_organizations') {

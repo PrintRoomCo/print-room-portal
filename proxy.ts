@@ -29,10 +29,10 @@ export async function proxy(request: NextRequest) {
     '/catalogue',
     '/checkout',
     '/inventory',
-    '/my-collections',
+    '/my-collections', // legacy alias; redirects to /past-orders via next.config.mjs, kept protected for the hop
     '/order-tracker',
     '/current-orders',
-    '/past-orders', // legacy alias; redirects to /current-orders, kept protected for the hop
+    '/past-orders', // customer order-history page (renamed from /my-collections 2026-08-04)
     '/projects', // legacy alias; redirected to /current-orders via next.config.mjs
     '/tracking', // redirects to /current-orders; kept protected for the hop
     '/proofs',

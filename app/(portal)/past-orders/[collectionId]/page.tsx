@@ -202,7 +202,7 @@ export default function CollectionDetail() {
       <div className="max-w-7xl mx-auto">
         <div className="card-elevated p-12 text-center">
           <h2 className="text-lg font-semibold text-gray-900">Collection not found</h2>
-          <Link href="/my-collections" className="mt-4 btn-primary inline-block">
+          <Link href="/past-orders" className="mt-4 btn-primary inline-block">
             Back to My Orders
           </Link>
         </div>
@@ -258,7 +258,7 @@ export default function CollectionDetail() {
     if (result.error) {
       setActionError(result.error)
     } else {
-      router.push('/my-collections')
+      router.push('/past-orders')
     }
   }
 
@@ -295,7 +295,7 @@ export default function CollectionDetail() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-3">
-            <Link href="/my-collections" className="text-gray-500 hover:text-gray-700" title="Back to My Orders">
+            <Link href="/past-orders" className="text-gray-500 hover:text-gray-700" title="Back to My Orders">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
@@ -721,7 +721,7 @@ function QuoteDetail({
         {/* Hero */}
         <header className="mb-10 md:mb-14">
           <Link
-            href="/my-collections"
+            href="/past-orders"
             className="inline-flex rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
             aria-label="Back to my orders"
           >
@@ -754,7 +754,7 @@ function QuoteDetail({
             <p className="mt-3 max-w-2xl text-sm text-gray-600">
               Linked design workspace:{' '}
               <Link
-                href={`/my-collections/${linkedCollection.id}`}
+                href={`/past-orders/${linkedCollection.id}`}
                 className="rounded-full text-gray-900 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
               >
                 {linkedCollection.name}
@@ -942,7 +942,7 @@ function QuoteDetail({
                   </Link>
                 )}
                 <Link
-                  href="/my-collections"
+                  href="/past-orders"
                   className="flex w-full items-center justify-center rounded-full bg-gray-50 px-6 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2"
                 >
                   Back to my orders

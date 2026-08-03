@@ -54,10 +54,10 @@ describe('getNavigationItems — Current Orders gating (Item 5)', () => {
   })
 })
 
-describe('Orders → Order history rename (Item 10)', () => {
-  it('labels the /my-collections item "Order history" (frees "Current Orders" for the tracker)', () => {
-    const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/my-collections')
-    expect(item?.name).toBe('Order history')
+describe('Orders → Past orders rename', () => {
+  it('labels the /past-orders item "Past orders" (frees "Current Orders" for the tracker)', () => {
+    const item = PORTAL_NAV_ITEMS.find((i) => i.href === '/past-orders')
+    expect(item?.name).toBe('Past orders')
   })
 })
 

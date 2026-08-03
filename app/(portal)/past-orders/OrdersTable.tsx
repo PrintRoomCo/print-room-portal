@@ -84,7 +84,7 @@ export function OrdersTable({ orders }: { orders: PortalPastOrder[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <Link
-                    href={`/my-collections/${order.quoteId ?? order.orderId}`}
+                    href={`/past-orders/${order.quoteId ?? order.orderId}`}
                     className="font-semibold text-black hover:underline"
                   >
                     {ref}

@@ -24,10 +24,10 @@ describe('OrderTrackerPage guard (Item 5)', () => {
     mocks.trackerData.mockClear()
   })
 
-  it('redirects a staff (non-admin) user to /my-collections and never loads tracker data', async () => {
+  it('redirects a staff (non-admin) user to /past-orders and never loads tracker data', async () => {
     mocks.access.mockResolvedValueOnce({ isOrgAdmin: false } as never)
     const { default: OrderTrackerPage } = await import('../page')
-    await expect(OrderTrackerPage()).rejects.toThrow('REDIRECT:/my-collections')
+    await expect(OrderTrackerPage()).rejects.toThrow('REDIRECT:/past-orders')
     expect(mocks.trackerData).not.toHaveBeenCalled()
   })
 

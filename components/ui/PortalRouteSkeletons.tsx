@@ -198,7 +198,7 @@ export function OrderTrackerRouteSkeleton() {
   )
 }
 
-export function MyCollectionsRouteSkeleton() {
+export function PastOrdersRouteSkeleton() {
   return (
     <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading orders">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">

@@ -1,8 +1,12 @@
-import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
+import { PastOrdersClient } from './PastOrdersClient'
+import { getPortalPastOrdersData } from '@/lib/portal-data'
 
-// 2026-07-31: the order tracker's canonical home moved from /past-orders to
-// /current-orders (renamed "Current Orders"). /past-orders shipped only briefly,
-// so this stub keeps that URL — and any still-open nav tab — alive.
-export default function PastOrdersRedirect() {
-  redirect('/current-orders')
+export const metadata: Metadata = {
+  title: 'Past orders',
+}
+
+export default async function PastOrdersPage() {
+  const initialData = await getPortalPastOrdersData()
+  return <PastOrdersClient initialData={initialData} />
 }
