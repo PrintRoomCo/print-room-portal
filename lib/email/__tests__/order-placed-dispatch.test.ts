@@ -43,6 +43,40 @@ describe('buildOrderPlacedDispatchEmail', () => {
   })
 })
 
+describe('buildOrderPlacedDispatchEmail — orderer + delivery address', () => {
+  it('renders the orderer name/email and delivery address when provided', () => {
+    const { html, text } = buildOrderPlacedDispatchEmail({
+      ...params,
+      ordererName: 'Charlotte Robertson',
+      ordererEmail: 'charlotte@reburger.co.nz',
+      deliveryAddress: 'Reburger HQ\n12 Queen St\nAuckland 1010\nNew Zealand',
+    })
+    expect(html).toContain('Charlotte Robertson')
+    expect(html).toContain('charlotte@reburger.co.nz')
+    expect(html).toContain('12 Queen St')
+    expect(html).toContain('Auckland 1010')
+    expect(text).toContain('Ordered by: Charlotte Robertson (charlotte@reburger.co.nz)')
+    expect(text).toContain('Deliver to:')
+    expect(text).toContain('12 Queen St')
+  })
+
+  it('shows the orderer name alone when no email is supplied', () => {
+    const { text } = buildOrderPlacedDispatchEmail({ ...params, ordererName: 'Jamie' })
+    expect(text).toContain('Ordered by: Jamie')
+    expect(text).not.toContain('Ordered by: Jamie (')
+  })
+
+  it('omits the orderer and delivery rows cleanly when absent (no "undefined")', () => {
+    const { html, text } = buildOrderPlacedDispatchEmail(params)
+    expect(html).not.toContain('undefined')
+    expect(html).not.toContain('Ordered by')
+    expect(html).not.toContain('Deliver to')
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('Ordered by')
+    expect(text).not.toContain('Deliver to')
+  })
+})
+
 describe('sendOrderPlacedDispatch', () => {
   beforeEach(() => sendEmail.mockClear())
   it('sends to the provided recipient with the built subject', async () => {

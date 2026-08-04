@@ -35,6 +35,16 @@ export interface OrderPlacedDispatchParams {
   totalAmount: number
   /** Absolute portal deep link to the order. */
   orderUrl: string
+  /** Person who placed the order (B2BCustomerContext.fullName). Optional — omitted when unknown. */
+  ordererName?: string | null
+  /** Email of the person who placed the order. Optional — pairs with ordererName. */
+  ordererEmail?: string | null
+  /**
+   * Formatted multi-line delivery address (formatShippingAddress output, '\n'
+   * separated). Null for stock-into-inventory orders with no ship-to — the row
+   * is then omitted rather than rendered blank.
+   */
+  deliveryAddress?: string | null
   lines: Array<{
     productName: string
     variantLabel: string
@@ -57,12 +67,22 @@ function hasVariant(label: string): boolean {
   return v.length > 0 && v !== '-' && v !== '—'
 }
 
+/** "Name (email)" / "Name" / "email" / null — never a bare "()" or "undefined". */
+function formatOrderer(name?: string | null, email?: string | null): string | null {
+  const n = name?.trim()
+  const e = email?.trim()
+  if (n && e) return `${n} (${e})`
+  return n || e || null
+}
+
 export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams): {
   subject: string
   html: string
   text: string
 } {
   const typeLabel = ORDER_TYPE_LABEL[params.orderType]
+  const orderer = formatOrderer(params.ordererName, params.ordererEmail)
+  const deliveryAddress = params.deliveryAddress?.trim() || null
   const labelStyle = `font-family:${BRAND_FONT};font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${MUTED};`
   const headCell = `padding:0 0 10px;border-bottom:2px solid ${INK};${labelStyle}`
   const cellBase = `padding:12px 0;border-bottom:1px solid ${LINE};vertical-align:top;`
@@ -93,8 +113,16 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
 
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;background-color:${SURFACE};border-radius:12px;">
               <tr><td style="padding:16px 18px;font-family:${BRAND_FONT};font-size:14px;line-height:1.7;color:${BODY};">
-                <div>Customer: <strong style="color:${INK};">${escapeHtml(params.customerName)}</strong></div>
-                <div>Order type: <strong style="color:${INK};">${escapeHtml(typeLabel)}</strong></div>
+                <div>Customer: <strong style="color:${INK};">${escapeHtml(params.customerName)}</strong></div>${
+                  orderer
+                    ? `\n                <div>Ordered by: <strong style="color:${INK};">${escapeHtml(orderer)}</strong></div>`
+                    : ''
+                }
+                <div>Order type: <strong style="color:${INK};">${escapeHtml(typeLabel)}</strong></div>${
+                  deliveryAddress
+                    ? `\n                <div style="margin-top:8px;">Deliver to:<br/><strong style="color:${INK};">${escapeHtml(deliveryAddress).replace(/\n/g, '<br/>')}</strong></div>`
+                    : ''
+                }
               </td></tr>
             </table>
 
@@ -132,8 +160,10 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
   const text =
     `Order placed — ${params.orderRef} (${typeLabel})\n\n` +
     `Customer: ${params.customerName}\n` +
-    `Order type: ${typeLabel}\n\n` +
-    `${textLines}\n\n` +
+    (orderer ? `Ordered by: ${orderer}\n` : '') +
+    `Order type: ${typeLabel}\n` +
+    (deliveryAddress ? `\nDeliver to:\n${deliveryAddress}\n` : '') +
+    `\n${textLines}\n\n` +
     `Goods value: ${formatMoney(params.totalAmount)}\n\n` +
     `Open order: ${params.orderUrl}\n`
 

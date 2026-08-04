@@ -535,6 +535,11 @@ const loadProductDetailPageData = cache(async (
       product: {
         id: displayProduct.id,
         name: displayProduct.name,
+        // Garment Name mirrors the catalogue grid's "Product" line: the blank
+        // garment name, derived exactly like catalogue/page.tsx —
+        // stripTrailingSku(product name, effective SKU). displayProduct.sku already
+        // carries the catalogue-item sku_override, matching the grid's effectiveSku.
+        garment_name: stripTrailingSku(productRow.name, displayProduct.sku),
         description: displayProduct.description,
         image_url: displayProduct.image_url,
         moq: displayProduct.moq,

@@ -55,6 +55,7 @@ describe('ProductDetailClient PDP layout', () => {
         product={{
           id: 'p1',
           name: 'Staple Tee',
+          garment_name: 'AS Colour Staple Tee',
           description: null,
           image_url: null,
           moq: 1,
@@ -115,6 +116,8 @@ describe('ProductDetailClient PDP layout', () => {
     expect(screen.queryByText(/Decoration included/i)).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /artwork: Screen print - Left Chest/i })).toBeInTheDocument()
 
+    expect(screen.getByText('Garment Name')).toBeInTheDocument()
+    expect(screen.getByText('AS Colour Staple Tee')).toBeInTheDocument()
     expect(screen.getByText('SKU')).toBeInTheDocument()
     expect(screen.getByText('5001')).toBeInTheDocument()
     expect(screen.getByText('Brand')).toBeInTheDocument()

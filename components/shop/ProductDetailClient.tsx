@@ -70,6 +70,9 @@ interface ProductData {
   specs: Record<string, unknown> | null
   supports_labels: boolean | null
   garment_family: string | null
+  // Base blank garment name (e.g. "AS Colour Classic Tee"), distinct from `name`
+  // which is the design-title heading. Optional so test fixtures need not set it.
+  garment_name?: string | null
   default_sizes: string[] | null
   fulfilment_type: FulfilmentType
   brand_name: string | null
@@ -2002,7 +2005,10 @@ function OrderIntentToggle({
 function ProductDetailsCondensed({ product }: { product: ProductData }) {
   const rows: { label: string; value: React.ReactNode }[] = []
 
-  if (product.garment_family) rows.push({ label: 'Garment Name', value: product.garment_family })
+  // Garment Name mirrors the catalogue grid's "Product" line (the blank garment
+  // name). Shown whenever present — including when it matches the heading, exactly
+  // as the catalogue card does.
+  if (product.garment_name) rows.push({ label: 'Garment Name', value: product.garment_name })
   if (product.brand_name) rows.push({ label: 'Brand', value: product.brand_name })
   if (product.sku) rows.push({ label: 'SKU', value: product.sku })
   // Category intentionally omitted from the customer PDP (Anna portal feedback):

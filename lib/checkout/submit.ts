@@ -32,6 +32,7 @@ import type { BillingMode } from '@/lib/shop/billing-mode'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
+import { staffOrderUrl } from '@/lib/config/staff-portal-url'
 import {
   resolveDispatchNotificationRecipient,
   isTestOrgFailClosed,
@@ -2257,12 +2258,12 @@ export async function submitCustomerOrder(
     //    moment it commits: a Block Kit Slack message (no-op until the webhook env
     //    exists) plus an email to the dispatch desk (charlotte@ in prod, or the
     //    test inbox for demo orgs). Best-effort — a notification failure must
-    //    never break the order. Reuses the step-6 email summary + a portal deep
-    //    link to the order's confirmation page (the only order_id-keyed route).
+    //    never break the order. Reuses the step-6 email summary + a STAFF-portal
+    //    deep link to the order detail page. (Previously linked the CUSTOMER
+    //    portal's confirmation page, which forced staff through a customer login
+    //    wall — see staffOrderUrl / lib/config/staff-portal-url.ts.)
     try {
-      const notifyOrderUrl = `${
-        process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.theprintroom.nz'
-      }/checkout/confirmation/${order_id}`
+      const notifyOrderUrl = staffOrderUrl(order_id)
 
       const notifyLines =
         emailLines.length > 0
@@ -2321,6 +2322,9 @@ export async function submitCustomerOrder(
           orderType,
           totalAmount: notifyTotal,
           orderUrl: notifyOrderUrl,
+          ordererName: input.context.fullName,
+          ordererEmail: input.context.email,
+          deliveryAddress: formattedShippingAddress,
           lines: notifyLines,
         })
       }
