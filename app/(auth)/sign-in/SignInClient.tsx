@@ -24,6 +24,50 @@ function safeReturnTo(rt: string | null): string {
   return rt
 }
 
+// Persist the pending email-code verification so Android Chrome discarding the tab
+// (when the user switches to their email app to read the code) doesn't drop them back
+// to the email step on the automatic reload. sessionStorage survives tab discard/restore,
+// and the emailed 6-digit code stays valid across reloads — verifyOtp only needs email + code.
+const PENDING_CODE_KEY = 'pr:signin:pending-code'
+const CODE_TTL_MS = 10 * 60 * 1000 // matches the "expires in 10 minutes" copy below
+
+type PendingCode = { email: string; sentAt: number }
+
+function readPendingCode(): PendingCode | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_CODE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PendingCode
+    if (!parsed?.email || typeof parsed.sentAt !== 'number') return null
+    if (Date.now() - parsed.sentAt > CODE_TTL_MS) {
+      window.sessionStorage.removeItem(PENDING_CODE_KEY)
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writePendingCode(email: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(PENDING_CODE_KEY, JSON.stringify({ email, sentAt: Date.now() }))
+  } catch {
+    // sessionStorage unavailable (private mode / disabled) — persistence is best-effort.
+  }
+}
+
+function clearPendingCode(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(PENDING_CODE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 function SignIn() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -64,12 +108,24 @@ function SignIn() {
     }
   }, [error])
 
+  // If the tab was discarded/reloaded mid-verification (common on Android Chrome), bring the
+  // user straight back to the code-entry step with their email intact instead of the start.
+  useEffect(() => {
+    const pending = readPendingCode()
+    if (!pending) return
+    setEmail(pending.email)
+    setMode('code')
+    setCodeStage('verify')
+    setInfo(`We emailed a 6-digit code to ${pending.email}. It expires in 10 minutes.`)
+  }, [])
+
   function switchMode(next: Mode) {
     setMode(next)
     setError(null)
     setInfo(null)
     setCodeStage('request')
     setCode('')
+    clearPendingCode()
   }
 
   async function handlePasswordSubmit(e: React.FormEvent) {
@@ -97,6 +153,7 @@ function SignIn() {
       return
     }
     setCodeStage('verify')
+    writePendingCode(email)
     setInfo(`We emailed a 6-digit code to ${email}. It expires in 10 minutes.`)
   }
 
@@ -110,6 +167,7 @@ function SignIn() {
       setIsSubmitting(false)
       return
     }
+    clearPendingCode()
     router.push(returnTo)
   }
 
@@ -284,6 +342,7 @@ function SignIn() {
                     setCodeStage('request')
                     setCode('')
                     setInfo(null)
+                    clearPendingCode()
                   }}
                   className="font-medium text-pr-charcoal underline-offset-4 hover:underline"
                 >
