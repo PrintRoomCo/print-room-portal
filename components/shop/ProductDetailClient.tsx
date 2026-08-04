@@ -2002,10 +2002,11 @@ function OrderIntentToggle({
 function ProductDetailsCondensed({ product }: { product: ProductData }) {
   const rows: { label: string; value: React.ReactNode }[] = []
 
-  if (product.sku) rows.push({ label: 'SKU', value: product.sku })
+  if (product.garment_family) rows.push({ label: 'Garment Name', value: product.garment_family })
   if (product.brand_name) rows.push({ label: 'Brand', value: product.brand_name })
+  if (product.sku) rows.push({ label: 'SKU', value: product.sku })
   // Category intentionally omitted from the customer PDP (Anna portal feedback):
-  // the title already carries the design name; brand + SKU are enough context.
+  // the design title carries the name; garment name, brand + SKU are enough context.
 
   if (rows.length === 0) return null
 
