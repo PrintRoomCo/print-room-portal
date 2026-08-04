@@ -14,8 +14,8 @@
  * never hijacked — touch is routed by hand instead, and only claims a gesture
  * that starts on a merch piece.
  *
- * prefers-reduced-motion, pointerless devices, and SSR fall back to a static
- * SVG pile with no motion or interaction.
+ * prefers-reduced-motion, pointerless devices, low-RAM devices, and SSR fall
+ * back to a static SVG pile with no motion or interaction.
  */
 
 import { useEffect, useRef } from 'react'
@@ -41,6 +41,13 @@ const TEXTURE_PX = 512
 // and restore the low value on release so free tumbling stays smooth.
 const FRICTION_AIR = 0.02
 const HELD_FRICTION_AIR = 0.1
+// Devices reporting this many GiB of RAM or less get the static pile instead of
+// the live Matter.js scene — it's the heaviest ongoing CPU/allocation cost on the
+// auth page and purely decorative, so it's not worth running on the budget Android
+// tablets the counter crew use. navigator.deviceMemory is a Chromium-only, rounded
+// estimate stepping 0.25/0.5/1/2/4/8; 4 catches low-and-mid-end, and it's absent on
+// Safari/Firefox (treated as capable). Drop to 2 to gate only the weakest devices.
+const LOW_MEMORY_GB = 4
 
 export default function MerchPile({ floorOffset = 400 }: { floorOffset?: number }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -61,6 +68,12 @@ export default function MerchPile({ floorOffset = 400 }: { floorOffset?: number 
     // Keep the static fallback for reduced motion and pointerless / non-DOM
     // (test) envs — jsdom's matchMedia matches neither pointer query.
     if (reduced || !hasPointer) return
+
+    // Low-RAM devices (budget Android tablets) skip the physics entirely and keep
+    // the static pile — and, because the import below is lazy, never download
+    // matter-js. deviceMemory is Chromium-only; absent elsewhere → treated as capable.
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+    if (typeof deviceMemory === 'number' && deviceMemory <= LOW_MEMORY_GB) return
 
     let disposed = false
     let teardown: (() => void) | null = null
