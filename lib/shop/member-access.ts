@@ -14,6 +14,10 @@ export interface GrantedCatalogueItemRow {
   card_image_id: string | null
   price_mode: 'computed' | 'manual_final' | null
   image_layout_override: ImageLayout | null
+  /** Customer-facing catalogue-item name (the card title); null falls back to the product name. */
+  name: string | null
+  /** Catalogue-item SKU override; null falls back to products.sku. */
+  sku_override: string | null
 }
 
 // The column list the grid consumes. Selected in BOTH resolution paths so a
@@ -21,7 +25,7 @@ export interface GrantedCatalogueItemRow {
 // pick up these fields (that second round-trip was the catalogue page's hot
 // path — see getGrantedCatalogueItems callers).
 const GRID_ITEM_COLUMNS =
-  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode, stock_unit_price, image_layout_override'
+  'id, catalogue_id, source_product_id, fulfilment_type_override, card_image_id, price_mode, stock_unit_price, image_layout_override, name, sku_override'
 
 /**
  * Resolve the full b2b_catalogue_items rows a member can see (not just ids).
@@ -150,6 +154,8 @@ function normaliseRow(row: Partial<GrantedCatalogueItemRow> & { id: string }): G
     card_image_id: row.card_image_id ?? null,
     price_mode: row.price_mode ?? null,
     image_layout_override: row.image_layout_override ?? null,
+    name: row.name ?? null,
+    sku_override: row.sku_override ?? null,
   }
 }
 

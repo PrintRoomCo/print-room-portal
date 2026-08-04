@@ -25,7 +25,8 @@ vi.mock('next/image', () => ({
 
 const products: CatalogueProductForGrid[] = [
   {
-    id: 'p1', name: 'Crew Socks', sku: 'CS', image_url: 'master.png', type: null,
+    id: 'p1', title: 'Team Crew Socks', name: 'Crew Socks', brand: 'AS Colour', sku: 'CS',
+    image_url: 'master.png', type: null,
     price_low: 10, price_high: 18, price_status: 'ok', has_stock: true, total_stock: null,
     colours: [
       { swatchId: 'sw-black', label: 'Black', hex: '#191919', imageUrl: 'black.png' },
@@ -37,10 +38,17 @@ const products: CatalogueProductForGrid[] = [
 describe('CatalogueGrid', () => {
   it('renders one card per product, linking to the PDP (no colour explosion)', () => {
     render(<CatalogueGrid products={products} />)
-    const card = screen.getByText('Crew Socks')
+    const card = screen.getByText('Team Crew Socks')
     expect(card).toBeInTheDocument()
     expect(screen.queryByText('Crew Socks — Black')).not.toBeInTheDocument()
     expect(card.closest('a')).toHaveAttribute('href', '/catalogue/p1')
+  })
+
+  it('shows the title and the brand + product name + SKU line', () => {
+    render(<CatalogueGrid products={products} />)
+    // Title = catalogue-item name; Product line = "[brand] [name] – [SKU]".
+    expect(screen.getByText('Team Crew Socks')).toBeInTheDocument()
+    expect(screen.getByText('AS Colour Crew Socks – CS')).toBeInTheDocument()
   })
 
   it('shows the product colours as swatches on the single card', () => {

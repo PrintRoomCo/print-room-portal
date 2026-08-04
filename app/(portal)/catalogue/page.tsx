@@ -56,6 +56,7 @@ interface ProductRow {
   moq: number | null
   created_at: string | null
   image_layout: ImageLayout
+  brands: { name: string } | { name: string }[] | null
 }
 
 type CatalogueSwatchEmbed = {
@@ -150,6 +151,8 @@ export default async function CataloguePage({
     price_mode: 'computed' | 'manual_final' | null
     stock_unit_price: number | string | null
     image_layout_override: ImageLayout | null
+    name: string | null
+    sku_override: string | null
   }>
   const priceModeByItemId = new Map(catItemRows.map((r) => [r.id, r.price_mode]))
   // Explicit ex-GST stock sell price per item (Stock-on-hand). When set, the
@@ -229,7 +232,7 @@ export default async function CataloguePage({
 
   let q = admin
     .from('products')
-    .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at, image_layout', { count: 'exact' })
+    .select('id, name, sku, image_url, brand_id, category_id, garment_family, moq, created_at, image_layout, brands!products_brand_id_fkey(name)', { count: 'exact' })
     .eq('is_active', true)
     .in('id', modeScopedProductIds)
 
@@ -636,10 +639,22 @@ export default async function CataloguePage({
       : null
     const pickedUrl = cardImageId ? (cardImageIdToUrl.get(cardImageId) ?? null) : null
     const leadColorSwatchId = catItemId ? (leadColorByItemId.get(catItemId) ?? null) : null
+    // SKU + names: honour the catalogue-item overrides so the card matches the
+    // PDP. `name` is the underlying blank garment (brand + product name + SKU);
+    // `title` is the customer-facing catalogue-item name, falling back to it.
+    const catItem = itemByProductId.get(p.id)
+    const effectiveSku = catItem?.sku_override ?? p.sku
+    const productName = stripTrailingSku(p.name, effectiveSku)
+    const title = stripTrailingSku(catItem?.name ?? p.name, effectiveSku)
+    const brandName = Array.isArray(p.brands)
+      ? (p.brands[0]?.name ?? null)
+      : p.brands?.name ?? null
     return {
       id: p.id,
-      name: stripTrailingSku(p.name, p.sku),
-      sku: p.sku,
+      title,
+      name: productName,
+      brand: brandName,
+      sku: effectiveSku,
       image_url: pickCatalogueGridThumbnail({
         kind: 'collapsed',
         layout: imageLayoutByProductId.get(p.id) ?? 'standard_views',

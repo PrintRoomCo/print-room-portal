@@ -11,7 +11,12 @@ export interface CatalogueColour {
 /** Product shape the grid needs: the ProductCard fields plus the colour breakdown. */
 export interface CatalogueProductForGrid {
   id: string
+  /** Customer-facing catalogue-item name shown as the card title. */
+  title: string
+  /** Underlying blank garment name (the "Product" line, alongside brand + SKU). */
   name: string
+  /** Brand of the blank garment; null when unset. */
+  brand: string | null
   sku: string | null
   image_url: string | null
   type: string | null
@@ -25,7 +30,9 @@ export interface CatalogueProductForGrid {
 
 export interface ProductCardData {
   id: string
+  title: string
   name: string
+  brand: string | null
   sku: string | null
   image_url: string | null
   type: string | null
@@ -54,7 +61,9 @@ export function toProductTile(p: CatalogueProductForGrid): CatalogueTile {
     href: `/catalogue/${p.id}`,
     product: {
       id: p.id,
+      title: p.title,
       name: p.name,
+      brand: p.brand,
       sku: p.sku,
       image_url: p.image_url,
       type: p.type,

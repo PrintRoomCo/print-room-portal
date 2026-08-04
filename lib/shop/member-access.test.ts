@@ -122,6 +122,8 @@ describe('getGrantedCatalogueItems (full rows)', () => {
         card_image_id: 'img1',
         price_mode: 'manual_final',
         image_layout_override: 'merchandised_gallery',
+        name: null,
+        sku_override: null,
       },
       {
         id: 'i2',
@@ -131,6 +133,8 @@ describe('getGrantedCatalogueItems (full rows)', () => {
         card_image_id: null,
         price_mode: 'computed',
         image_layout_override: null,
+        name: null,
+        sku_override: null,
       },
     ])
   })

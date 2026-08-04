@@ -3,7 +3,9 @@ import { toProductTile, type CatalogueProductForGrid } from '../catalogue-tile'
 
 const base: CatalogueProductForGrid = {
   id: 'p1',
+  title: 'Team Crew Socks',
   name: 'Crew Socks',
+  brand: 'AS Colour',
   sku: 'CS',
   image_url: 'master.png',
   type: null,
@@ -23,7 +25,9 @@ describe('toProductTile', () => {
     const tile = toProductTile(base)
     expect(tile.key).toBe('p1')
     expect(tile.href).toBe('/catalogue/p1')
+    expect(tile.product.title).toBe('Team Crew Socks')
     expect(tile.product.name).toBe('Crew Socks')
+    expect(tile.product.brand).toBe('AS Colour')
     expect(tile.product.image_url).toBe('master.png')
   })
 
