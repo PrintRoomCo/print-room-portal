@@ -3,8 +3,10 @@ import { evaluateStarshipitEligibility, type StarshipitEligibilityInput } from '
 
 const base: StarshipitEligibilityInput = {
   enabled: true,
+  trigger: 'placement',
   intent: 'customer',
   isTestOrg: false,
+  alreadyPushed: false,
   isStockOnHand: true,
   hasDeliveryAddress: true,
   orderType: null,
@@ -48,8 +50,26 @@ describe('evaluateStarshipitEligibility', () => {
   })
   it('precedence: disabled > test_org > inventory_intent > not_stock_on_hand > non_delivery_type > no_address', () => {
     expect(evaluateStarshipitEligibility({
-      enabled: true, isTestOrg: true, intent: 'inventory', isStockOnHand: false,
+      enabled: true, trigger: 'placement', isTestOrg: true, intent: 'inventory',
+      alreadyPushed: true, isStockOnHand: false,
       hasDeliveryAddress: false, orderType: 'pickup',
     })).toEqual({ eligible: false, reason: 'test_org' })
+  })
+  it('skips an already-pushed order (idempotency, D6)', () => {
+    expect(evaluateStarshipitEligibility({ ...base, alreadyPushed: true }))
+      .toEqual({ eligible: false, reason: 'already_pushed' })
+  })
+  it('production_complete trigger: a made-to-order order IS eligible', () => {
+    expect(evaluateStarshipitEligibility({ ...base, trigger: 'production_complete', isStockOnHand: false }))
+      .toEqual({ eligible: true, reason: 'ok' })
+  })
+  it('production_complete trigger still requires a delivery address', () => {
+    expect(evaluateStarshipitEligibility({
+      ...base, trigger: 'production_complete', isStockOnHand: false, hasDeliveryAddress: false,
+    })).toEqual({ eligible: false, reason: 'no_address' })
+  })
+  it('precedence: already_pushed beats not_stock_on_hand', () => {
+    expect(evaluateStarshipitEligibility({ ...base, alreadyPushed: true, isStockOnHand: false }))
+      .toEqual({ eligible: false, reason: 'already_pushed' })
   })
 })
