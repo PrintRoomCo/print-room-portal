@@ -1053,7 +1053,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 No code. This is the gated go-live for the stock-on-hand path. Every step needs Jon (or explicit authorization):
 
-- [ ] **Step 1:** Apply the Task 1 migration to prod (house pattern: psql against the pooler — remember the password ends `!@`, URL-encode as `!%40`). Verify: `select column_name from information_schema.columns where table_name = 'orders' and column_name like 'starshipit%';` returns both columns.
+- [x] **Step 1:** Apply the Task 1 migration to prod (house pattern: psql against the pooler — remember the password ends `!@`, URL-encode as `!%40`). Verify: `select column_name from information_schema.columns where table_name = 'orders' and column_name like 'starshipit%';` returns both columns. — DONE 2026-08-06 (applied via node `pg` in a committed transaction; both columns verified nullable with correct types).
 - [ ] **Step 2:** Merge/deploy the portal mainline containing Tasks 2–7 (deploy is safe before enablement — everything is dark).
 - [ ] **Step 2b (from P0):** In the Starshipit web app, Settings → Tracking & notifications — confirm the account webhook is NOT pointed at the portal's `/api/webhooks/starshipit` (it would 401 on every scan). Leave whatever is there untouched.
 - [ ] **Step 3:** Set Vercel env vars on the portal project (production): `STARSHIPIT_API_KEY`, `STARSHIPIT_SUBSCRIPTION_KEY`, then `STARSHIPIT_ENABLED=true`. Redeploy to pick them up.
