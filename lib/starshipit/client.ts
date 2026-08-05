@@ -29,9 +29,8 @@ export interface CreateStarshipitOrderArgs {
  * details only (no tracking number yet). When staff later mark it Shipped in
  * Starshipit, the carrier tracking number flows back via the portal webhook.
  *
- * Endpoint: POST /api/orders. Payload field names + response path are gated on
- * the P0 live test push (scripts/starshipit-test-push.mjs) before
- * STARSHIPIT_ENABLED is ever set — findings land in "P0 findings" in
+ * Endpoint: POST /api/orders. Payload field names + response path VERIFIED
+ * against the live account 2026-08-06 — see "P0 findings" in
  * docs/superpowers/specs/2026-08-06-starshipit-order-push-design.md.
  *
  * @returns Starshipit order id string, or null on a handled non-2xx.
@@ -47,7 +46,8 @@ export async function createStarshipitOrder(
         name: a.name ?? '',
         street: a.street ?? '',
         // The portal address model has one locality field; send it as both
-        // suburb (NZ courier convention) and city until P0 findings say otherwise.
+        // suburb (NZ courier convention) and city — P0 confirmed both fields
+        // are accepted and the address validates.
         suburb: a.city ?? '',
         city: a.city ?? '',
         state: a.state ?? '',
@@ -79,8 +79,8 @@ export async function createStarshipitOrder(
 
 /**
  * Remove an order from the Starshipit queue (delete-on-cancel, design D7/P3).
- * Endpoint: DELETE /api/orders/delete?order_id={id} — exercised by the P0
- * script's --delete mode before STARSHIPIT_ENABLED is ever set.
+ * Endpoint: DELETE /api/orders/delete?order_id={id} — VERIFIED against the
+ * live account 2026-08-06 (P0 findings: HTTP 200, { success: true }).
  * @returns true when Starshipit confirms deletion; false on a handled non-2xx.
  */
 export async function deleteStarshipitOrder(starshipitOrderId: string): Promise<boolean> {

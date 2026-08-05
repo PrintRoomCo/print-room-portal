@@ -245,7 +245,7 @@ git commit -m "chore(starshipit): document env vars + P0 live schema verificatio
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5 (HITL — requires Jon + Starshipit credentials): run the P0 runbook**
+- [x] **Step 5 (HITL — requires Jon + Starshipit credentials): run the P0 runbook** — DONE 2026-08-06 (create + delete verified against the live account, payload confirmed as coded, weight resolved via account default packaging; findings in the spec's "P0 findings" section). One item moved to Task 8: the account-webhook settings check.
 
 This step is a checkpoint: pause and ask Jon for the API keys (Starshipit web app → Settings → API), then:
 
@@ -1055,6 +1055,7 @@ No code. This is the gated go-live for the stock-on-hand path. Every step needs 
 
 - [ ] **Step 1:** Apply the Task 1 migration to prod (house pattern: psql against the pooler — remember the password ends `!@`, URL-encode as `!%40`). Verify: `select column_name from information_schema.columns where table_name = 'orders' and column_name like 'starshipit%';` returns both columns.
 - [ ] **Step 2:** Merge/deploy the portal mainline containing Tasks 2–7 (deploy is safe before enablement — everything is dark).
+- [ ] **Step 2b (from P0):** In the Starshipit web app, Settings → Tracking & notifications — confirm the account webhook is NOT pointed at the portal's `/api/webhooks/starshipit` (it would 401 on every scan). Leave whatever is there untouched.
 - [ ] **Step 3:** Set Vercel env vars on the portal project (production): `STARSHIPIT_API_KEY`, `STARSHIPIT_SUBSCRIPTION_KEY`, then `STARSHIPIT_ENABLED=true`. Redeploy to pick them up.
 - [ ] **Step 4:** Smoke: place one stock-on-hand order from a TEST org first (expect: skip with reason `test_org` in `audit_events`, nothing in Starshipit). Then one real (or realistic) stock order → confirm it appears in Starshipit Unshipped with items, `audit_events` has `order.starshipit_pushed`, and `orders.starshipit_pushed_at`/`starshipit_order_id` are set. Delete the entry from Starshipit if it was a test.
 - [ ] **Step 5:** Rollback lever (verify it's understood): unset `STARSHIPIT_ENABLED` → all pushes halt instantly; no customer-facing effect.

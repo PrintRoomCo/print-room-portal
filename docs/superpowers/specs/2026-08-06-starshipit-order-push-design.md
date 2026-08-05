@@ -116,3 +116,23 @@ Add `already_pushed` to the ineligible-reason union; keep the existing reasons.
 - `STARSHIPIT_ENABLED` stays the master dark switch; every path no-ops while unset.
 - Inbound webhook stays fail-closed (no secret) for the entire build.
 - P1 and P2 ship independently behind the same flag; disabling the flag instantly halts all pushes with no customer-facing effect (customer side is 100% Monday-owned this build).
+
+## P0 findings (2026-08-06)
+
+Live test push against the real Print Room Dispatch account (`scripts/starshipit-test-push.mjs`, test order `PORTAL-TEST-20260805`, Starshipit `order_id` 740018611 — created, verified, deleted).
+
+**Create (`POST /api/orders`) — payload CONFIRMED as coded. No changes needed.**
+- HTTP 200; response is `{ order: {...}, success: true }`; the id lives at `order.order_id` (numeric) — exactly the path `createStarshipitOrder` parses.
+- Every destination field name accepted and echoed verbatim: `name, email, phone, company, street, suburb, city, state, post_code, country`. `suburb` and `city` are distinct fields; sending the portal's single locality value in both worked (`address_validation: "Valid"`).
+- `items[]` accepted with `description/quantity/value`; item `weight: 0` accepted — **no weight required at registration**.
+- Order lands with `status: "Unshipped"` (D1 confirmed) and the account rules auto-assigned **CourierPost / NZ Post Domestic, service CPOLCT1** with no carrier field in the payload (D3 confirmed).
+- **Weight (spec risk 2): resolved.** The account's default packaging ("AS COL - MED", 15 kg, 0.6×0.4×0.3 m) auto-populated the package, so orders arrive print-ready; staff adjust the package/weight at print time as they do today. No weight column, no payload weight.
+- Defaults observed: `signature_required: true`, `currency: NZD`, address validated, `platform: "API"`.
+- Gotcha (no impact): the `reference` field truncates at 50 chars. The portal payload doesn't send `reference` — `order_number` (= order_ref) carried fine.
+
+**Delete (`DELETE /api/orders/delete?order_id={id}`) — CONFIRMED as coded.**
+- HTTP 200, `{ "success": true }` — matches `deleteStarshipitOrder`'s success check. P3 delete-on-cancel is safe as built.
+
+**Still open (HITL, non-blocking for merge/deploy while dark):**
+1. Spec risk 4: in the Starshipit web app, Settings → Tracking & notifications — confirm the account webhook is NOT pointed at the portal's dark `/api/webhooks/starshipit` endpoint (leave whatever is there untouched). Do this before setting `STARSHIPIT_ENABLED`.
+2. Optional confidence check: print (don't ship) a label for a future test entry to confirm the default-package weight satisfies NZ Post at print time.
