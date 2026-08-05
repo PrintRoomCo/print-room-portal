@@ -31,6 +31,7 @@ import {
   PRODUCTION_COLUMNS,
 } from '@/lib/monday/column-ids'
 import { syncJobTrackerItemsFromMonday } from '@/lib/monday/sync-job-tracker-items'
+import { pushOrderOnProductionComplete } from '@/lib/starshipit/push-on-production-complete'
 
 interface MondayWebhookPayload {
   event?: {
@@ -562,6 +563,15 @@ async function handleTrackerStatusChange(
         columnId,
         changedAt,
         userId: event.userId,
+      })
+    }
+
+    if (tracker.quote_id) {
+      // Made-to-order Starshipit bridge — self-filtering on flag + label,
+      // never throws. See lib/starshipit/push-on-production-complete.ts.
+      await pushOrderOnProductionComplete(supabase, {
+        quoteId: tracker.quote_id,
+        displayLabel,
       })
     }
   })

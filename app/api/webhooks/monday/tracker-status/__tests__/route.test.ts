@@ -88,7 +88,12 @@ vi.mock('@/lib/orders/tracker-test-org', () => ({
   isTrackerTestOrg: (...a: unknown[]) => isTrackerTestOrg(...(a as [])),
 }))
 
+vi.mock('@/lib/starshipit/push-on-production-complete', () => ({
+  pushOrderOnProductionComplete: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { POST } from '../route'
+import { pushOrderOnProductionComplete } from '@/lib/starshipit/push-on-production-complete'
 
 declare const flushAfter: () => Promise<void>
 
@@ -360,6 +365,29 @@ describe('tracker-status route — milestone email gate', () => {
     expect(supaUpdates[0].set.status).toBe('proof-sent')
     await flushAfter()
     expect(sendTrackerStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('All Production Complete → invokes the Starshipit production-complete bridge', async () => {
+    trackerRow.current = { ...baseTracker(), status: 'proof-approved' }
+    const res = await post(
+      statusEvent({ value: { label: { index: 9, text: 'All Production Complete' } } }),
+    )
+    expect(res.status).toBe(200)
+    await flushAfter()
+    expect(pushOrderOnProductionComplete).toHaveBeenCalledWith(expect.anything(), {
+      quoteId: 'q1',
+      displayLabel: 'All Production Complete',
+    })
+  })
+
+  it('a duplicate same-status delivery does NOT re-invoke the bridge', async () => {
+    trackerRow.current = { ...baseTracker(), status: 'in-production' }
+    const res = await post(
+      statusEvent({ value: { label: { index: 9, text: 'All Production Complete' } } }),
+    )
+    expect(res.status).toBe(200)
+    await flushAfter()
+    expect(pushOrderOnProductionComplete).not.toHaveBeenCalled()
   })
 })
 
