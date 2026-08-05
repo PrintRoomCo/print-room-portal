@@ -2029,6 +2029,9 @@ export async function submitCustomerOrder(
         quoteId: quote_id,
         organizationId: input.context.organizationId,
         organizationName: input.context.organizationName,
+        // Quote is made out to the ship-to location; one destination per order
+        // (mixed-address guard), so the first line's store speaks for all.
+        shipToStoreId: input.lines[0]?.ship_to_store_id ?? null,
         actorUserId: input.context.userId,
         ordererEmail: input.context.email ?? null,
         paymentTerms: input.context.paymentTerms ?? null,

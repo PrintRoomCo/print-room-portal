@@ -180,11 +180,27 @@ interface XeroContactsResponse {
   Contacts?: Array<{ ContactID: string }>
 }
 
+export interface XeroContactAddress {
+  line1: string | null
+  city: string | null
+  region: string | null
+  postalCode: string | null
+  country: string | null
+}
+
+/** Optional details stamped onto a contact when we CREATE it (never on reuse). */
+export interface XeroContactDetails {
+  address: XeroContactAddress | null
+  phone: string | null
+}
+
 export interface ResolveContactArgs {
-  /** organizations.xero_contact_id, if already cached. */
+  /** stores/organizations .xero_contact_id, if already cached. */
   cachedContactId: string | null
-  orgName: string
+  /** Contact name — the ship-to store's name, or the org name as fallback. */
+  name: string
   email: string | null
+  details?: XeroContactDetails | null
 }
 
 export interface ResolvedContact {
@@ -193,21 +209,36 @@ export interface ResolvedContact {
   created: boolean
 }
 
-function contactNameWhere(orgName: string): string {
+function contactNameWhere(name: string): string {
   // Xero `where` uses double-quoted string literals; escape embedded quotes.
-  const escaped = orgName.replace(/"/g, '\\"')
+  const escaped = name.replace(/"/g, '\\"')
   return `/Contacts?where=${encodeURIComponent(`Name=="${escaped}"`)}`
 }
 
+/** POBOX (shown on documents) + STREET copies of the same location address. */
+function contactAddressesFor(a: XeroContactAddress): Array<Record<string, string>> {
+  const fields = {
+    ...(a.line1 ? { AddressLine1: a.line1 } : {}),
+    ...(a.city ? { City: a.city } : {}),
+    ...(a.region ? { Region: a.region } : {}),
+    ...(a.postalCode ? { PostalCode: a.postalCode } : {}),
+    ...(a.country ? { Country: a.country } : {}),
+  }
+  return [
+    { AddressType: 'POBOX', ...fields },
+    { AddressType: 'STREET', ...fields },
+  ]
+}
+
 /**
- * Resolve the org's Xero ContactID: cache → single name match → create. Handles
+ * Resolve a Xero ContactID by name: cache → single name match → create. Handles
  * Xero's unique-name-on-create by re-querying (covers a first-order race between
- * two checkouts for a brand-new org).
+ * two checkouts for a brand-new contact).
  */
 export async function resolveXeroContactId(args: ResolveContactArgs): Promise<ResolvedContact> {
   if (args.cachedContactId) return { contactId: args.cachedContactId, created: false }
 
-  const where = contactNameWhere(args.orgName)
+  const where = contactNameWhere(args.name)
   const found = await xeroFetch<XeroContactsResponse>(where)
   if (found.Contacts && found.Contacts.length === 1) {
     return { contactId: found.Contacts[0].ContactID, created: false }
@@ -217,7 +248,16 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
     const created = await xeroFetch<XeroContactsResponse>('/Contacts', {
       method: 'POST',
       body: JSON.stringify({
-        Contacts: [{ Name: args.orgName, ...(args.email ? { EmailAddress: args.email } : {}) }],
+        Contacts: [
+          {
+            Name: args.name,
+            ...(args.email ? { EmailAddress: args.email } : {}),
+            ...(args.details?.address ? { Addresses: contactAddressesFor(args.details.address) } : {}),
+            ...(args.details?.phone
+              ? { Phones: [{ PhoneType: 'DEFAULT', PhoneNumber: args.details.phone }] }
+              : {}),
+          },
+        ],
       }),
     })
     const id = created.Contacts?.[0]?.ContactID
@@ -245,6 +285,9 @@ export interface CreateDraftInvoiceArgs {
   quoteId: string
   organizationId: string
   organizationName: string
+  /** Ship-to store (location) — the quote's Xero contact when set. Null/absent
+   *  (one-time custom address) falls back to the organisation contact. */
+  shipToStoreId?: string | null
   actorUserId: string | null
   ordererEmail: string | null
   paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
@@ -297,21 +340,74 @@ export async function createDraftInvoiceForOrder(
 
   const cfg = getXeroConfig()
 
-  // Contact — read the cached id, resolve, and cache back if newly created.
-  const { data: orgRow } = await admin
-    .from('organizations')
-    .select('xero_contact_id')
-    .eq('id', args.organizationId)
-    .maybeSingle()
-  const cachedContactId = (orgRow as { xero_contact_id: string | null } | null)?.xero_contact_id ?? null
-  const { contactId, created } = await resolveXeroContactId({
-    cachedContactId,
-    orgName: args.organizationName,
-    email: args.ordererEmail,
-  })
-  if (created || !cachedContactId) {
-    await admin.from('organizations').update({ xero_contact_id: contactId }).eq('id', args.organizationId)
+  // Contact — the quote is made out to the ship-to LOCATION (store): its own
+  // cached id, its name (e.g. "Reburger Takapuna"), and its address/phone/email
+  // as the contact details. One-time custom-address orders (no store) fall back
+  // to the organisation contact, as before.
+  let resolvedContact: ResolvedContact | null = null
+  if (args.shipToStoreId) {
+    const { data: storeRow } = await admin
+      .from('stores')
+      .select('xero_contact_id, name, address, city, state, country, postal_code, phone, email')
+      .eq('id', args.shipToStoreId)
+      .maybeSingle()
+    const store = storeRow as {
+      xero_contact_id: string | null
+      name: string | null
+      address: string | null
+      city: string | null
+      state: string | null
+      country: string | null
+      postal_code: string | null
+      phone: string | null
+      email: string | null
+    } | null
+    if (store?.name) {
+      const resolved = await resolveXeroContactId({
+        cachedContactId: store.xero_contact_id,
+        name: store.name,
+        email: store.email ?? args.ordererEmail,
+        details: {
+          address: {
+            line1: store.address,
+            city: store.city,
+            region: store.state,
+            postalCode: store.postal_code,
+            country: store.country,
+          },
+          phone: store.phone,
+        },
+      })
+      if (resolved.created || !store.xero_contact_id) {
+        await admin
+          .from('stores')
+          .update({ xero_contact_id: resolved.contactId })
+          .eq('id', args.shipToStoreId)
+      }
+      resolvedContact = resolved
+    }
   }
+  if (!resolvedContact) {
+    // Read the cached org id, resolve, and cache back if newly created.
+    const { data: orgRow } = await admin
+      .from('organizations')
+      .select('xero_contact_id')
+      .eq('id', args.organizationId)
+      .maybeSingle()
+    const cachedContactId = (orgRow as { xero_contact_id: string | null } | null)?.xero_contact_id ?? null
+    resolvedContact = await resolveXeroContactId({
+      cachedContactId,
+      name: args.organizationName,
+      email: args.ordererEmail,
+    })
+    if (resolvedContact.created || !cachedContactId) {
+      await admin
+        .from('organizations')
+        .update({ xero_contact_id: resolvedContact.contactId })
+        .eq('id', args.organizationId)
+    }
+  }
+  const { contactId } = resolvedContact
 
   // Lines — read the persisted quote_items (canonical, decoration already folded).
   const { data: itemRows } = await admin
