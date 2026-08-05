@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createStarshipitOrder } from '../client'
+import { createStarshipitOrder, deleteStarshipitOrder } from '../client'
 import type { NormalizedShippingAddress } from '@/lib/checkout/shipping-address'
 
 const OK_ADDRESS: NormalizedShippingAddress = {
@@ -49,5 +49,62 @@ describe('createStarshipitOrder', () => {
     }))
     const id = await createStarshipitOrder({ orderNumber: 'PR-2', address: OK_ADDRESS, customerEmail: null })
     expect(id).toBeNull()
+  })
+
+  it('sends city in both suburb and city, and includes items when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, order: { order_id: 1 } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createStarshipitOrder({
+      orderNumber: 'PR-3',
+      address: OK_ADDRESS,
+      customerEmail: null,
+      items: [{ description: 'Classic Tee — L — Black', quantity: 5, value: 24.5 }],
+    })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(sent.order.destination.suburb).toBe('Auckland')
+    expect(sent.order.destination.city).toBe('Auckland')
+    expect(sent.order.items).toEqual([
+      { description: 'Classic Tee — L — Black', quantity: 5, value: 24.5 },
+    ])
+  })
+
+  it('omits the items key entirely when no items are passed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, order: { order_id: 1 } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createStarshipitOrder({ orderNumber: 'PR-4', address: OK_ADDRESS, customerEmail: null })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect('items' in sent.order).toBe(false)
+  })
+})
+
+describe('deleteStarshipitOrder', () => {
+  beforeEach(() => {
+    process.env.STARSHIPIT_API_KEY = 'k'
+    process.env.STARSHIPIT_SUBSCRIPTION_KEY = 's'
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('DELETEs by starshipit order id and returns true on success', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(deleteStarshipitOrder('987')).resolves.toBe(true)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.starshipit.com/api/orders/delete?order_id=987')
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('returns false on a non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({ success: false }) }))
+    await expect(deleteStarshipitOrder('987')).resolves.toBe(false)
   })
 })

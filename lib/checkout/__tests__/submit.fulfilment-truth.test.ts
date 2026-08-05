@@ -322,6 +322,55 @@ beforeEach(() => {
 const flushAfter = () =>
   (globalThis as unknown as { flushAfter: () => Promise<void> }).flushAfter()
 
+describe('submitCustomerOrder — Xero location contact wiring', () => {
+  const STORE_ID = '00000000-0000-0000-0000-000000000444'
+
+  it('passes the ship-to store id through to the Xero draft', async () => {
+    const { admin } = makeSupabaseStub({
+      selects: [
+        {
+          table: 'stores',
+          response: {
+            data: {
+              id: STORE_ID,
+              name: 'Reburger Takapuna',
+              address: '6 Te Rauroha Street, Papakura',
+              city: 'Auckland',
+              state: null,
+              country: 'NZ',
+              postal_code: '2110',
+            },
+            error: null,
+          },
+        },
+        ...baseSelects({ productNature: 'mixed' }),
+      ],
+      rpc: happyRpc,
+    })
+
+    const input = {
+      ...buildInput({ ship_to_store_id: STORE_ID }),
+      custom_shipping_address: null,
+    }
+    const result = await submitCustomerOrder(admin, input)
+    await flushAfter()
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].shipToStoreId).toBe(STORE_ID)
+  })
+
+  it('passes a null store id for a one-time custom-address order', async () => {
+    const { admin } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }),
+      rpc: happyRpc,
+    })
+
+    const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].shipToStoreId).toBeNull()
+  })
+})
+
 describe('submitCustomerOrder — server-side fulfilment truth', () => {
   it("coerces a false 'stocked' claim on a made_to_order product: MOQ applies and rejects", async () => {
     const { admin } = makeSupabaseStub({
