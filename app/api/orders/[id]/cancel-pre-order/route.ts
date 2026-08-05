@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { cacheTags } from '@/lib/cache/tags'
+import { deleteStarshipitOrderOnCancel } from '@/lib/starshipit/delete-on-cancel'
 
 export async function POST(
   _req: Request,
@@ -54,6 +55,11 @@ export async function POST(
     p_reason: 'customer_cancel_before_close',
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Best-effort: pull the cancelled order back out of the Starshipit print
+  // queue (design D7/P3). Never throws; no-op while STARSHIPIT_ENABLED unset
+  // or when the order was never pushed.
+  await deleteStarshipitOrderOnCancel(admin, { orderId, organizationId: orgId })
 
   revalidateTag(cacheTags.orderTracker, { expire: 0 })
 
