@@ -22,6 +22,8 @@ export const AUDIT_ACTIONS = {
   ORDER_STARSHIPIT_PUSHED: 'order.starshipit_pushed',
   ORDER_STARSHIPIT_SKIPPED: 'order.starshipit_skipped',
   ORDER_STARSHIPIT_PUSH_FAILED: 'order.starshipit_push_failed',
+  ORDER_STARSHIPIT_DELETED: 'order.starshipit_deleted',
+  ORDER_STARSHIPIT_DELETE_FAILED: 'order.starshipit_delete_failed',
 
   PROOF_AUTOFILL_SUCCEEDED: 'proof.autofill_succeeded',
   PROOF_AUTOFILL_SKIPPED: 'proof.autofill_skipped',

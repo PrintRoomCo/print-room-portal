@@ -76,3 +76,22 @@ export async function createStarshipitOrder(
   }
   return data.order?.order_id != null ? String(data.order.order_id) : null
 }
+
+/**
+ * Remove an order from the Starshipit queue (delete-on-cancel, design D7/P3).
+ * Endpoint: DELETE /api/orders/delete?order_id={id} — exercised by the P0
+ * script's --delete mode before STARSHIPIT_ENABLED is ever set.
+ * @returns true when Starshipit confirms deletion; false on a handled non-2xx.
+ */
+export async function deleteStarshipitOrder(starshipitOrderId: string): Promise<boolean> {
+  const response = await fetch(
+    `${BASE_URL}/api/orders/delete?order_id=${encodeURIComponent(starshipitOrderId)}`,
+    { method: 'DELETE', headers: getHeaders() },
+  )
+  const data = (await response.json().catch(() => ({}))) as { success?: boolean }
+  if (!response.ok || !data.success) {
+    console.error('[starshipit] deleteStarshipitOrder failed:', response.status, JSON.stringify(data))
+    return false
+  }
+  return true
+}
