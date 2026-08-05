@@ -1,6 +1,7 @@
 // lib/starshipit/client.ts
 import { getStarshipitCredentials } from './config'
 import type { NormalizedShippingAddress } from '@/lib/checkout/shipping-address'
+import type { StarshipitOrderItem } from './items'
 
 const BASE_URL = 'https://api.starshipit.com'
 
@@ -19,6 +20,8 @@ export interface CreateStarshipitOrderArgs {
   orderNumber: string
   address: NormalizedShippingAddress
   customerEmail: string | null
+  /** Line items for the printed ticket/packing slip (design D5). Optional. */
+  items?: StarshipitOrderItem[]
 }
 
 /**
@@ -26,11 +29,10 @@ export interface CreateStarshipitOrderArgs {
  * details only (no tracking number yet). When staff later mark it Shipped in
  * Starshipit, the carrier tracking number flows back via the portal webhook.
  *
- * Endpoint: POST /api/orders. NB the studio only exercises POST
- * /api/orders/shipped (needs an existing tracking_number); the create-order
- * destination field names + response path below MUST be confirmed against
- * Starshipit's live API docs before STARSHIPIT_ENABLED is turned on
- * (see Decision gate). Dark-by-default guarantees this never runs in prod first.
+ * Endpoint: POST /api/orders. Payload field names + response path are gated on
+ * the P0 live test push (scripts/starshipit-test-push.mjs) before
+ * STARSHIPIT_ENABLED is ever set — findings land in "P0 findings" in
+ * docs/superpowers/specs/2026-08-06-starshipit-order-push-design.md.
  *
  * @returns Starshipit order id string, or null on a handled non-2xx.
  */
@@ -44,7 +46,10 @@ export async function createStarshipitOrder(
       destination: {
         name: a.name ?? '',
         street: a.street ?? '',
+        // The portal address model has one locality field; send it as both
+        // suburb (NZ courier convention) and city until P0 findings say otherwise.
         suburb: a.city ?? '',
+        city: a.city ?? '',
         state: a.state ?? '',
         post_code: a.postalCode ?? '',
         country: a.country ?? 'New Zealand',
@@ -52,6 +57,7 @@ export async function createStarshipitOrder(
         email: args.customerEmail ?? a.email ?? '',
         company: a.company ?? '',
       },
+      ...(args.items && args.items.length > 0 ? { items: args.items } : {}),
     },
   }
 

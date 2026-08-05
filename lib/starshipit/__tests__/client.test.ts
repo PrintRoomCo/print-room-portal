@@ -50,4 +50,39 @@ describe('createStarshipitOrder', () => {
     const id = await createStarshipitOrder({ orderNumber: 'PR-2', address: OK_ADDRESS, customerEmail: null })
     expect(id).toBeNull()
   })
+
+  it('sends city in both suburb and city, and includes items when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, order: { order_id: 1 } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createStarshipitOrder({
+      orderNumber: 'PR-3',
+      address: OK_ADDRESS,
+      customerEmail: null,
+      items: [{ description: 'Classic Tee — L — Black', quantity: 5, value: 24.5 }],
+    })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(sent.order.destination.suburb).toBe('Auckland')
+    expect(sent.order.destination.city).toBe('Auckland')
+    expect(sent.order.items).toEqual([
+      { description: 'Classic Tee — L — Black', quantity: 5, value: 24.5 },
+    ])
+  })
+
+  it('omits the items key entirely when no items are passed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, order: { order_id: 1 } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createStarshipitOrder({ orderNumber: 'PR-4', address: OK_ADDRESS, customerEmail: null })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect('items' in sent.order).toBe(false)
+  })
 })
