@@ -2100,8 +2100,10 @@ export async function submitCustomerOrder(
       const ssResult = await pushOrderToStarshipit(admin, {
         orderId: order_id,
         orderRef: order_ref,
+        quoteId: quote_id,
         organizationId: input.context.organizationId,
         actorUserId: input.context.userId,
+        trigger: 'placement',
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
         isStockOnHand: isStockOnHandOrder,
