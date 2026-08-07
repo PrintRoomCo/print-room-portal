@@ -63,6 +63,19 @@ const storeArgs = {
   },
 }
 
+// A store snapshot whose locality was flattened into the address blob — street
+// fills from the blob (normalize: street ?? address ?? line1), city stays null.
+// This is the exact gate trap this bucket fixes.
+const blockedStoreArgs = {
+  ...baseArgs,
+  shippingAddress: {
+    id: 'store-ferrymead',
+    name: 'Anytime Fitness Ferrymead',
+    address: '1105 Ferry Road, Ferrymead, Christchurch',
+    country: 'New Zealand',
+  },
+}
+
 describe('pushOrderToStarshipit', () => {
   beforeEach(() => {
     process.env.STARSHIPIT_ENABLED = 'true'
@@ -170,5 +183,13 @@ describe('pushOrderToStarshipit', () => {
         address: expect.objectContaining({ company: 'Reburger Takapuna', name: 'Reburger Takapuna' }),
       }),
     )
+  })
+
+  it('store order with a street blob but no city column now pushes (gate relaxed)', async () => {
+    createMock.mockResolvedValue('987')
+    const { admin } = makeAdmin()
+    const r = await pushOrderToStarshipit(admin, blockedStoreArgs)
+    expect(r).toEqual({ status: 'pushed', reason: 'ok', starshipitOrderId: '987' })
+    expect(createStarshipitOrder).toHaveBeenCalled()
   })
 })

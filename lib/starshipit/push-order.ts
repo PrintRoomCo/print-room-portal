@@ -64,7 +64,13 @@ export async function pushOrderToStarshipit(
   )
 
   const address = normalizeShippingAddress(args.shippingAddress)
-  const hasDeliveryAddress = Boolean(address?.street && address?.city)
+  // Store snapshots carry the full locality in the street blob even when the
+  // city column is blank, so a street alone is a shippable store address.
+  // Custom (customer-typed) addresses still require city — an incomplete
+  // customer address is genuinely not deliverable.
+  const hasDeliveryAddress = isStoreShipment(args.shippingAddress)
+    ? Boolean(address?.street)
+    : Boolean(address?.street && address?.city)
 
   const elig = evaluateStarshipitEligibility({
     enabled: true, // flag checked above
