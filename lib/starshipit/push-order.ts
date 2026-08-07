@@ -7,6 +7,7 @@ import { isStarshipitEnabled } from './config'
 import { evaluateStarshipitEligibility, type StarshipitPushTrigger } from './eligibility'
 import { createStarshipitOrder } from './client'
 import { loadStarshipitOrderItems } from './items'
+import { isStoreShipment, loadOrdererName, resolveStarshipitDestination } from './destination'
 
 export interface PushOrderToStarshipitArgs {
   orderId: string
@@ -77,13 +78,23 @@ export async function pushOrderToStarshipit(
   })
   if (!elig.eligible) return { status: 'skipped', reason: elig.reason }
 
-  // Best-effort enrichment — loadStarshipitOrderItems returns [] on error; a
-  // failed items read must never lose the push.
+  // Best-effort enrichment — a failed enrichment read must never lose the push.
+  // Store orders: company ← branch, name ← orderer (design A2). Gate the name
+  // lookup on isStoreShipment so custom orders don't pay an extra round-trip.
+  const ordererName = isStoreShipment(args.shippingAddress)
+    ? await loadOrdererName(admin, args.quoteId)
+    : null
+  const destination = resolveStarshipitDestination({
+    address: address!,
+    rawAddress: args.shippingAddress,
+    ordererName,
+  })
+  // loadStarshipitOrderItems returns [] on error (an address-only ticket still prints).
   const items = await loadStarshipitOrderItems(admin, args.quoteId)
 
   const starshipitOrderId = await createStarshipitOrder({
     orderNumber: args.orderRef,
-    address: address!,
+    address: destination,
     customerEmail: args.customerEmail,
     items,
   })

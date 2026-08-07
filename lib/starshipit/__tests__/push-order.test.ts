@@ -4,13 +4,19 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 vi.mock('../client', () => ({ createStarshipitOrder: vi.fn() }))
 vi.mock('../items', () => ({ loadStarshipitOrderItems: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/audit/recordEvent', () => ({ recordAuditEvent: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../destination', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../destination')>()),
+  loadOrdererName: vi.fn(),
+}))
 
 import { pushOrderToStarshipit } from '../push-order'
 import { createStarshipitOrder } from '../client'
 import { loadStarshipitOrderItems } from '../items'
+import { loadOrdererName } from '../destination'
 
 const createMock = createStarshipitOrder as unknown as ReturnType<typeof vi.fn>
 const itemsMock = loadStarshipitOrderItems as unknown as ReturnType<typeof vi.fn>
+const ordererNameMock = loadOrdererName as unknown as ReturnType<typeof vi.fn>
 
 /** Table-aware admin stub: orders select -> {starshipit_pushed_at}, update recorded. */
 function makeAdmin({ pushedAt = null as string | null } = {}) {
@@ -46,10 +52,22 @@ const baseArgs = {
   shippingAddress: { name: 'AF', street: '12 Example St', city: 'Auckland', postcode: '1023', country: 'New Zealand' },
 }
 
+const storeArgs = {
+  ...baseArgs,
+  shippingAddress: {
+    id: 'store-1',
+    name: 'Reburger Takapuna',
+    street: '1 Hurstmere Rd',
+    city: 'Takapuna',
+    country: 'New Zealand',
+  },
+}
+
 describe('pushOrderToStarshipit', () => {
   beforeEach(() => {
     process.env.STARSHIPIT_ENABLED = 'true'
     itemsMock.mockResolvedValue([])
+    ordererNameMock.mockResolvedValue(null)
   })
   afterEach(() => {
     vi.clearAllMocks()
@@ -114,5 +132,43 @@ describe('pushOrderToStarshipit', () => {
     const { admin, updates } = makeAdmin()
     await expect(pushOrderToStarshipit(admin, baseArgs)).rejects.toThrow(/no order id/)
     expect(updates).toHaveLength(0)
+  })
+
+  it('store order: sends company=branch, name=orderer, and items with sku', async () => {
+    createMock.mockResolvedValue('987')
+    ordererNameMock.mockResolvedValue('Jane Doe')
+    itemsMock.mockResolvedValue([{ description: 'Tee — L', quantity: 2, sku: 'TEE-001' }])
+    const { admin } = makeAdmin()
+    await pushOrderToStarshipit(admin, storeArgs)
+    expect(ordererNameMock).toHaveBeenCalledWith(admin, 'q1')
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: expect.objectContaining({ company: 'Reburger Takapuna', name: 'Jane Doe' }),
+        items: [{ description: 'Tee — L', quantity: 2, sku: 'TEE-001' }],
+      }),
+    )
+  })
+
+  it('custom order: does not look up the orderer and keeps the typed recipient name', async () => {
+    createMock.mockResolvedValue('987')
+    const { admin } = makeAdmin()
+    await pushOrderToStarshipit(admin, baseArgs) // baseArgs carries no store id
+    expect(ordererNameMock).not.toHaveBeenCalled()
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ address: expect.objectContaining({ name: 'AF' }) }),
+    )
+  })
+
+  it('store order: falls back to the branch name when the orderer lookup returns null', async () => {
+    createMock.mockResolvedValue('987')
+    ordererNameMock.mockResolvedValue(null)
+    const { admin } = makeAdmin()
+    const r = await pushOrderToStarshipit(admin, storeArgs)
+    expect(r.status).toBe('pushed')
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: expect.objectContaining({ company: 'Reburger Takapuna', name: 'Reburger Takapuna' }),
+      }),
+    )
   })
 })
