@@ -76,6 +76,18 @@ const blockedStoreArgs = {
   },
 }
 
+// A customer-typed address missing the city — genuinely not deliverable.
+const customNoCityArgs = {
+  ...baseArgs,
+  shippingAddress: { name: 'Jane Doe', street: '12 Example St', country: 'New Zealand' },
+}
+
+// A store snapshot with neither a street/blob nor a city — nothing to ship to.
+const storeNoStreetArgs = {
+  ...baseArgs,
+  shippingAddress: { id: 'store-empty', name: 'Anytime Fitness Nowhere', country: 'New Zealand' },
+}
+
 describe('pushOrderToStarshipit', () => {
   beforeEach(() => {
     process.env.STARSHIPIT_ENABLED = 'true'
@@ -191,5 +203,19 @@ describe('pushOrderToStarshipit', () => {
     const r = await pushOrderToStarshipit(admin, blockedStoreArgs)
     expect(r).toEqual({ status: 'pushed', reason: 'ok', starshipitOrderId: '987' })
     expect(createStarshipitOrder).toHaveBeenCalled()
+  })
+
+  it('custom address with a street but no city is still skipped (no_address)', async () => {
+    const { admin } = makeAdmin()
+    const r = await pushOrderToStarshipit(admin, customNoCityArgs)
+    expect(r).toEqual({ status: 'skipped', reason: 'no_address' })
+    expect(createStarshipitOrder).not.toHaveBeenCalled()
+  })
+
+  it('store order with neither a street blob nor a city is still skipped (no_address)', async () => {
+    const { admin } = makeAdmin()
+    const r = await pushOrderToStarshipit(admin, storeNoStreetArgs)
+    expect(r).toEqual({ status: 'skipped', reason: 'no_address' })
+    expect(createStarshipitOrder).not.toHaveBeenCalled()
   })
 })
