@@ -59,6 +59,10 @@ interface ProductData {
   id: string
   name: string
   description: string | null
+  // Sanitised rich-text description (server-sanitised to the spec allowlist).
+  // Exactly one of description / description_html is non-null. Optional so
+  // test fixtures need not set it.
+  description_html?: string | null
   image_url: string | null
   moq: number | null
   lead_time_days: number | null
@@ -1391,11 +1395,18 @@ export function ProductDetailClient({
                   </span>
                 )}
               </div>
-              {product.description && (
+              {product.description_html ? (
+                <div
+                  className="mt-5 max-w-prose text-base leading-relaxed text-gray-600 [&_p]:my-0 [&_p+p]:mt-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_a]:underline"
+                  // Server-sanitised in lib/shop/sanitize-description.ts — the
+                  // client never receives unsanitised markup here.
+                  dangerouslySetInnerHTML={{ __html: product.description_html }}
+                />
+              ) : product.description ? (
                 <p className="mt-5 max-w-prose whitespace-pre-line text-base leading-relaxed text-gray-600">
                   {product.description}
                 </p>
-              )}
+              ) : null}
               <ProductDetailsCondensed product={product} />
             </header>
 

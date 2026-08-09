@@ -5,6 +5,7 @@ import {
   getPreOrderItemIds,
   getPeriodBracketsForItem,
 } from '@/lib/pricing/period-brackets'
+import { sanitizeDescription } from '@/lib/shop/sanitize-description'
 
 export async function GET(
   _request: Request,
@@ -171,7 +172,7 @@ export async function GET(
     product: {
       ...productRow,
       name: catItem.name ?? productRow.name,
-      description: catItem.description ?? productRow.description,
+      description: sanitizeDescription(catItem.description ?? productRow.description),
       image_url: productRow.image_url,
     },
     variants: mappedVariants,
