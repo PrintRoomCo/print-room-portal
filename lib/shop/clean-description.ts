@@ -1,3 +1,5 @@
+import { hasHtmlTags, sanitizeRichDescriptionHtml } from './sanitize-description'
+
 const ENTITY_MAP: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -57,4 +59,26 @@ export function cleanDescription(raw: string | null | undefined): string | null 
     .trim()
 
   return normalised || null
+}
+
+export type DisplayDescription =
+  | { format: 'plain'; text: string }
+  | { format: 'rich'; html: string }
+
+// Format-aware successor to cleanDescription (spec 2026-08-10). Tagless values
+// keep today's plain-text pipeline (entity decode + newline preservation);
+// anything with markup — staff-authored rich text AND legacy supplier HTML —
+// is sanitised to the shared allowlist and rendered as HTML by the PDP.
+export function cleanDescriptionForDisplay(
+  raw: string | null | undefined,
+): DisplayDescription | null {
+  if (raw == null) return null
+  const trimmed = String(raw).trim()
+  if (!trimmed) return null
+  if (!hasHtmlTags(trimmed)) {
+    const text = cleanDescription(trimmed)
+    return text ? { format: 'plain', text } : null
+  }
+  const html = sanitizeRichDescriptionHtml(trimmed)
+  return html ? { format: 'rich', html } : null
 }

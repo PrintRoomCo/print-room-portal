@@ -78,3 +78,49 @@ describe('cleanDescription', () => {
     expect(cleanDescription(raw)).toBe(raw)
   })
 })
+
+import { cleanDescriptionForDisplay } from './clean-description'
+
+describe('cleanDescriptionForDisplay', () => {
+  it('returns null for null / empty / whitespace', () => {
+    expect(cleanDescriptionForDisplay(null)).toBeNull()
+    expect(cleanDescriptionForDisplay(undefined)).toBeNull()
+    expect(cleanDescriptionForDisplay('   ')).toBeNull()
+  })
+
+  it('routes tagless text to the plain branch with cleanDescription semantics', () => {
+    expect(cleanDescriptionForDisplay('one\n- two\n- three')).toEqual({
+      format: 'plain',
+      text: 'one\n- two\n- three',
+    })
+    // entity decoding still happens on the plain branch (no tags present)
+    expect(cleanDescriptionForDisplay('a&nbsp;&nbsp;b &#8212; c')).toEqual({
+      format: 'plain',
+      text: 'a b — c',
+    })
+  })
+
+  it('routes staff-authored rich HTML to the rich branch, allowlist intact', () => {
+    const raw = '<p><strong>Pre-orders close 15 July.</strong></p><ul><li>MOQ 100 units</li></ul>'
+    expect(cleanDescriptionForDisplay(raw)).toEqual({ format: 'rich', html: raw })
+  })
+
+  it('sanitises hostile markup on the rich branch', () => {
+    expect(cleanDescriptionForDisplay('<p onclick="x()">hi</p><script>bad()</script>')).toEqual({
+      format: 'rich',
+      html: '<p>hi</p>',
+    })
+  })
+
+  it('renders legacy supplier HTML as sanitised structure (spans unwrapped, styles dropped)', () => {
+    expect(
+      cleanDescriptionForDisplay(
+        '<p><span style="font-weight: 400;">It&rsquo;s a staple &amp; more</span></p>',
+      ),
+    ).toEqual({ format: 'rich', html: '<p>It’s a staple &amp; more</p>' })
+  })
+
+  it('returns null when rich input sanitises to nothing', () => {
+    expect(cleanDescriptionForDisplay('<script>x()</script>')).toBeNull()
+  })
+})
