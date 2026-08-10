@@ -63,6 +63,27 @@ describe('Sidebar', () => {
       'Past orders',
       'Inventory',
       'Users',
+      'Support',
     ])
+  })
+
+  it('renders Support for a least-privileged portal user', () => {
+    const { getByRole } = render(
+      <PortalTopBarProvider>
+        <Sidebar
+          customer={customer({
+            isCompanyUser: false,
+            isOrgAdmin: false,
+            canManageUsers: false,
+            canUseLeavers: false,
+            tenantType: 'studio',
+          })}
+        >
+          content
+        </Sidebar>
+      </PortalTopBarProvider>,
+    )
+
+    expect(getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/support')
   })
 })

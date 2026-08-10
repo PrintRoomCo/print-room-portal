@@ -38,6 +38,7 @@ export async function proxy(request: NextRequest) {
     '/proofs',
     '/quote-requests',
     '/shop',
+    '/support',
     '/users',
     '/welcome',
   ]
@@ -92,6 +93,7 @@ export const config = {
     '/proofs/:path*',
     '/quote-requests/:path*',
     '/shop/:path*',
+    '/support/:path*',
     '/users/:path*',
     '/welcome',
     '/my-collections/:path*',

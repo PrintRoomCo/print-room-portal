@@ -304,6 +304,16 @@ const ROW_ICONS: Record<NavIconKey, React.ReactElement> = {
       d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.5-1.35"
     />
   ),
+  support: (
+    /* Headset with a small speech bubble — portal support. */
+    <>
+      <path
+        className="cls-line"
+        d="M4 13v-1a8 8 0 0116 0v1M4 13v4h3v-5H5a1 1 0 00-1 1zm16 0v4h-3v-5h2a1 1 0 011 1z"
+      />
+      <path className="cls-line" d="M17 17c0 2-1.6 3-4 3h-2" />
+    </>
+  ),
 }
 
 function CloseIcon({ className }: { className?: string }) {

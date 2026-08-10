@@ -72,3 +72,17 @@ describe('getNavigationItems — Users gating (canManageUsers)', () => {
     expect(hrefs(access({ isCompanyUser: false, canManageUsers: true }))).not.toContain('/users')
   })
 })
+
+describe('getNavigationItems — Support', () => {
+  it('shows Support to every portal user and keeps it last', () => {
+    const navigation = getNavigationItems(access({
+      isCompanyUser: false,
+      canUseLeavers: false,
+      isOrgAdmin: false,
+      canManageUsers: false,
+      tenantType: null,
+    }))
+
+    expect(navigation.at(-1)).toMatchObject({ name: 'Support', href: '/support' })
+  })
+})

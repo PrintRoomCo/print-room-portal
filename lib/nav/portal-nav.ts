@@ -8,6 +8,7 @@ export type NavIconKey =
   | 'leavers'
   | 'inventory'
   | 'team'
+  | 'support'
 
 export interface PortalNavItem {
   name: string
@@ -99,6 +100,15 @@ export const PORTAL_NAV_ITEMS: ReadonlyArray<PortalNavItem> = [
     requiresLeavers: false,
     requiresOrgAdmin: false,
     requiresManageUsers: true,
+    requiredTenantTypes: null,
+  },
+  {
+    name: 'Support',
+    href: '/support',
+    iconKey: 'support',
+    requiresCompany: false,
+    requiresLeavers: false,
+    requiresOrgAdmin: false,
     requiredTenantTypes: null,
   },
 ]
