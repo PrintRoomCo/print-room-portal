@@ -43,6 +43,13 @@ function makeSupabaseStub(opts: {
     data: unknown
     error: { message: string } | null
   }
+  /**
+   * When present and it returns true for an INSERT, the stub throws synchronously
+   * instead of recording the write — exercises submit.ts's best-effort try/catch
+   * around the TERMS_ACCEPTED write (recordAuditEvent swallows a RETURNED {error},
+   * so only a thrown/rejected insert reaches submit.ts's guard).
+   */
+  failInsertWhen?: (table: string, payload: AnyRow) => boolean
 }) {
   const writes: RecordedWrite[] = []
 
@@ -55,6 +62,12 @@ function makeSupabaseStub(opts: {
 
     const settle = (): SelectResponse => {
       if (pendingWrite) {
+        if (
+          pendingWrite.op === 'insert' &&
+          opts.failInsertWhen?.(table, pendingWrite.payload as AnyRow)
+        ) {
+          throw new Error('audit insert boom')
+        }
         writes.push({ table, op: pendingWrite.op, payload: pendingWrite.payload, filters: [...filters] })
         return { data: null, error: null }
       }
@@ -209,5 +222,38 @@ describe('submitCustomerOrder — Terms & Conditions consent trail', () => {
     expect(submitAudits).toHaveLength(1)
     const meta = (submitAudits[0].payload as AnyRow).metadata as AnyRow
     expect(meta.terms_version).toBe('v1-2026-08-11')
+  })
+
+  it('still commits the order (no 500) when the TERMS_ACCEPTED audit write throws', async () => {
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects(),
+      rpc,
+      failInsertWhen: (table, payload) =>
+        table === 'audit_events' && payload.action === 'order.terms_accepted',
+    })
+
+    // Must RESOLVE with the committed order — a thrown best-effort consent write
+    // must never turn a committed order into a 500.
+    const result = await submitCustomerOrder(admin, buildInput())
+    await flushAfter()
+
+    expect(result.order_id).toBe(ORDER_ID)
+    expect(result.order_ref).toBe('ORD-TEST-1')
+
+    // The failure was isolated to the terms write: the ORDER_SUBMIT audit row
+    // (written first, before the guarded terms write) still landed, proving the
+    // commit path completed.
+    const submitAudits = writes.filter(
+      (w) => w.table === 'audit_events' && w.op === 'insert' &&
+        (w.payload as AnyRow).action === 'order.submit',
+    )
+    expect(submitAudits.length).toBeGreaterThanOrEqual(1)
+
+    // And the terms row itself was NOT recorded (its insert threw).
+    const termsAudits = writes.filter(
+      (w) => w.table === 'audit_events' && w.op === 'insert' &&
+        (w.payload as AnyRow).action === 'order.terms_accepted',
+    )
+    expect(termsAudits).toHaveLength(0)
   })
 })
