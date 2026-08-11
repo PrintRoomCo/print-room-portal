@@ -9,6 +9,9 @@ export const AUDIT_ACTIONS = {
   B2B_MEMBER_STORE_GRANTS_CHANGE: 'b2b_member_store_grants.change',
 
   ORDER_SUBMIT: 'order.submit',
+  // Customer-only (design 2026-08-11). NOT mirrored to staff — order.* actions
+  // are not part of the cross-repo MIRROR contract.
+  TERMS_ACCEPTED: 'order.terms_accepted',
   ORDER_TYPE_STAMP_FAILED: 'order.order_type_stamp_failed',
   ORDER_MONDAY_PUSH_FAILED: 'order.monday_push_failed',
   ORDER_PRE_APPROVED_INVENTORY: 'order.pre_approved_inventory',

@@ -127,6 +127,15 @@ export interface CheckoutInput {
    * lines are still `lines`. Defaults to `lines` (single-order path unchanged).
    */
   pricing_pool_lines?: CheckoutLineInput[]
+  /**
+   * Design 2026-08-11: the buyer's affirmative T&C acceptance for THIS order.
+   * Validated at the route (400 unless accepted === true AND a non-empty
+   * version). Recorded post-commit as a TERMS_ACCEPTED audit event and folded
+   * into ORDER_SUBMIT metadata — best-effort, like every post-commit side-effect
+   * here. The route is the legal gate; these writes are the queryable trail.
+   */
+  terms_accepted?: boolean
+  terms_version?: string
 }
 
 export interface CheckoutResult {
@@ -1493,10 +1502,40 @@ export async function submitCustomerOrder(
         line_count: input.lines.length,
         total_qty: input.lines.reduce((acc, l) => acc + l.qty, 0),
         idempotency_key: input.idempotency_key,
+        terms_version: input.terms_version ?? null,
       },
     },
     admin,
   )
+
+  // Design 2026-08-11 — dedicated consent signal. The route already guarantees
+  // no order exists without an accepted, non-empty terms_version (the legal
+  // gate); this is the clean queryable row. Best-effort like the audit writes
+  // above — a failed write must never turn a committed order into a 500. One row
+  // per order (two for a split cart); retries may duplicate (accepted), collapsed
+  // in queries via the shared base idempotency_key.
+  try {
+    await recordAuditEvent(
+      {
+        orgId: input.context.organizationId,
+        actorUserId: input.context.userId,
+        action: AUDIT_ACTIONS.TERMS_ACCEPTED,
+        targetType: 'order',
+        targetId: order_id,
+        metadata: {
+          order_ref,
+          terms_version: input.terms_version ?? null,
+          idempotency_key: input.idempotency_key,
+        },
+      },
+      admin,
+    )
+  } catch (auditErr) {
+    console.error('[Checkout] terms_accepted audit threw (swallowed, order committed)', {
+      orderId: order_id,
+      err: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    })
+  }
 
   // 4. Apply per-line ship_to_store_id, location label, and the decorations
   //    snapshot. The RPC creates quote_items without any of these; we set them
