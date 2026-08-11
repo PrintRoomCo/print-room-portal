@@ -133,6 +133,8 @@ export interface CheckoutInput {
    * version). Recorded post-commit as a TERMS_ACCEPTED audit event and folded
    * into ORDER_SUBMIT metadata — best-effort, like every post-commit side-effect
    * here. The route is the legal gate; these writes are the queryable trail.
+   * By design this function never re-reads terms_accepted (the route already
+   * proved it true); only terms_version is consumed, for the audit trail.
    */
   terms_accepted?: boolean
   terms_version?: string

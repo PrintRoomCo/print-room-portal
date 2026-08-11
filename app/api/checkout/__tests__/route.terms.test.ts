@@ -64,6 +64,13 @@ describe('POST /api/checkout — Terms & Conditions gate', () => {
     expect(submitCustomerOrder).not.toHaveBeenCalled()
   })
 
+  it('returns 400 terms_not_accepted when the terms_version key is absent', async () => {
+    const res = await POST(req({ ...baseBody, terms_accepted: true }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('terms_not_accepted')
+    expect(submitCustomerOrder).not.toHaveBeenCalled()
+  })
+
   it('threads terms_accepted + terms_version into submitCustomerOrder on the happy path', async () => {
     vi.mocked(submitCustomerOrder).mockResolvedValueOnce({ order_id: 'o-1', order_ref: 'O-1' })
     const res = await POST(req({ ...baseBody, terms_accepted: true, terms_version: 'v1-2026-08-11' }))
