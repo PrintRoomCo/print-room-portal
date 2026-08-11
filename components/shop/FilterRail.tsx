@@ -5,6 +5,7 @@ import { activeFilterCount } from '@/lib/shop/filter-params'
 import { FilterAutoSubmitSelect } from './FilterAutoSubmitSelect'
 import { FilterAutoSubmitCheckbox } from './FilterAutoSubmitCheckbox'
 import { PILL_LABELS } from '@/lib/shop/fulfilment-mode'
+import { garmentTypeLabel } from '@/lib/shop/garment-type'
 
 interface Props {
   filters: ShopFilters
@@ -61,6 +62,29 @@ export function FilterRail({ filters, facets, basePath, showModeFilter = true }:
             ]}
           />
         </Section>
+
+        {/* Garment type — the display counterpart of the DB `garment_family`
+            column. The form field + URL param intentionally stay `garment_family`
+            (see lib/shop/garment-type.ts); only the option labels are nice-cased.
+            Shown only when the catalogue in scope actually has garment families —
+            unlike brand/category, garment_family is often unset, and a zero-option
+            filter would be inert. */}
+        {facets.garmentFamilies.length > 0 && (
+          <Section label="Garment type">
+            <FilterAutoSubmitSelect
+              name="garment_family"
+              defaultValue={filters.garmentFamily ?? ''}
+              ariaLabel="Filter by garment type"
+              options={[
+                { value: '', label: 'All types' },
+                ...facets.garmentFamilies.map((v) => ({
+                  value: v,
+                  label: garmentTypeLabel(v),
+                })),
+              ]}
+            />
+          </Section>
+        )}
 
         {showModeFilter && (
           <Section label="Ordering mode">

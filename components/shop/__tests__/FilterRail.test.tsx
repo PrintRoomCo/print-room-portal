@@ -32,3 +32,40 @@ describe('FilterRail ordering-mode gate (Item 7)', () => {
     expect(screen.getByText('Brand')).toBeInTheDocument()
   })
 })
+
+describe('FilterRail garment-type filter', () => {
+  const withFamilies = {
+    brands: [],
+    categories: [],
+    garmentFamilies: ['headwear', 'tee'],
+  }
+
+  it('renders a "Garment type" section when the catalogue has garment families', () => {
+    render(
+      <FilterRail filters={DEFAULT_SHOP_FILTERS} facets={withFamilies} basePath="/catalogue" />,
+    )
+    expect(screen.getByText('Garment type')).toBeInTheDocument()
+  })
+
+  it('nice-cases the garment-type options for display', () => {
+    render(
+      <FilterRail filters={DEFAULT_SHOP_FILTERS} facets={withFamilies} basePath="/catalogue" />,
+    )
+    // Options are rendered from the raw lowercase DB values, labelled for display.
+    expect(screen.getByText('Tee')).toBeInTheDocument()
+    expect(screen.getByText('Headwear')).toBeInTheDocument()
+  })
+
+  it('keeps the query field named garment_family (stable URL param, not garment_type)', () => {
+    const { container } = render(
+      <FilterRail filters={DEFAULT_SHOP_FILTERS} facets={withFamilies} basePath="/catalogue" />,
+    )
+    expect(container.querySelector('input[name="garment_family"]')).not.toBeNull()
+    expect(container.querySelector('input[name="garment_type"]')).toBeNull()
+  })
+
+  it('hides the Garment type section when the catalogue has no garment families', () => {
+    render(<FilterRail filters={DEFAULT_SHOP_FILTERS} facets={facets} basePath="/catalogue" />)
+    expect(screen.queryByText('Garment type')).not.toBeInTheDocument()
+  })
+})

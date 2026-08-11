@@ -11,6 +11,7 @@ import { FilterRail } from '@/components/shop/FilterRail'
 import { FilterSheetTrigger } from '@/components/shop/FilterSheetTrigger'
 import { parseShopFilters, activeFilterCount } from '@/lib/shop/filter-params'
 import { getShopFacets } from '@/lib/shop/facets'
+import { garmentTypeLabel } from '@/lib/shop/garment-type'
 import { effectiveFulfilment, matchesMode, memberCanReorder, type FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
   hiddenViewSetForColour,
@@ -670,7 +671,11 @@ export default async function CataloguePage({
             )
           : undefined,
       }),
-      type: p.garment_family,
+      // Display label only — the raw `garment_family` value still flows to the
+      // query (.eq) and DB untouched; this is the "garment type" nice-cased for
+      // the card. (The card doesn't currently surface `type`, but keeping the
+      // label here means it reads correctly if/when it does.)
+      type: p.garment_family ? garmentTypeLabel(p.garment_family) : null,
       price_low: priceLow,
       price_high: priceHigh,
       price_status: priceHigh > 0 ? ('ok' as const) : ('missing' as const),
