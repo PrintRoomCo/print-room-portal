@@ -30,6 +30,8 @@ import {
   type CheckoutReviewState,
 } from './checkoutReviewState'
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
+import { TERMS_VERSION } from '@/lib/checkout/terms'
+import { TermsModal } from './TermsModal'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -75,6 +77,12 @@ export function CheckoutReviewClient({
   // in-flight submit.
   const inFlightRef = useRef(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
+  // T&C consent + honeypot: ephemeral, NOT persisted to reviewState — the box
+  // resets to unticked on every reload so each checkout is a fresh affirmation
+  // (design 2026-08-11, Decision 6).
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [termsOpen, setTermsOpen] = useState(false)
+  const [honeypot, setHoneypot] = useState('')
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   useEffect(() => {
@@ -164,6 +172,22 @@ export function CheckoutReviewClient({
     if (isPreview) return // read-only preview — never POST
     if (!reviewState || cart.lines.length === 0) return
 
+    // Client-only honeypot (design 2026-08-11, Decision 5): a real user can
+    // never see or focus this off-screen field. If it is non-empty it was
+    // autofilled/scripted — abort silently, no banner, no POST. NEVER sent to
+    // the server; the auth gate is the real anti-bot control.
+    if (honeypot !== '') return
+
+    // Terms gate (Decision 8): a *validation* concern like missingShipTo below —
+    // the button stays enabled and we guard here so the message is announced.
+    if (!termsAccepted) {
+      setBanner({
+        kind: 'error',
+        msg: 'Please read and agree to the Terms & Conditions before placing your order.',
+      })
+      return
+    }
+
     const missingShipTo = cart.lines.some(
       (line) => !Object.prototype.hasOwnProperty.call(reviewState.perLineShipTo, line.lineId),
     )
@@ -229,6 +253,10 @@ export function CheckoutReviewClient({
               ? modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
               : null,
           })),
+          // Consent for this order (design 2026-08-11). The server re-validates
+          // and 400s without these — the checkbox is not the only gate.
+          terms_accepted: true,
+          terms_version: TERMS_VERSION,
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),
       })
@@ -651,8 +679,56 @@ export function CheckoutReviewClient({
           </div>
         </dl>
       </section>
+
+      <section className="mt-6">
+          {/*
+            Client-only honeypot (design 2026-08-11, Decision 5). Deliberately
+            NOT Tailwind `sr-only` — that EXPOSES the field to screen readers,
+            the one false-positive path where a real assistive-tech user could
+            fill it. Off-screen + aria-hidden + tabIndex=-1 keeps it out of both
+            the visual and the accessibility tree. autoComplete="off" + an
+            autofill-resistant name avoid browser autofill tripping it.
+          */}
+          <input
+            type="text"
+            name="company_url"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+            style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+          />
+          <label htmlFor="terms-agree" className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              id="terms-agree"
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-pr-blue focus:ring-pr-blue/40"
+            />
+            <span>
+              I have read and agree to the{' '}
+              <button
+                type="button"
+                onClick={(e) => {
+                  // Stop the label from forwarding the click to the checkbox —
+                  // opening the terms must not tick the box.
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setTermsOpen(true)
+                }}
+                className="font-medium text-pr-blue underline underline-offset-2 hover:text-pr-blue/80"
+              >
+                Terms &amp; Conditions
+              </button>
+            </span>
+          </label>
+      </section>
         </div>
       </div>
+
+      {termsOpen && <TermsModal onClose={() => setTermsOpen(false)} />}
 
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}

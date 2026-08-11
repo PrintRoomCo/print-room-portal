@@ -67,6 +67,12 @@ function renderReview(overrides?: { isTest?: boolean; paymentTerms?: string | nu
   )
 }
 
+// These tests exercise post-terms-guard behavior (conflicts, double-submit,
+// the placing overlay) — they need the box ticked to reach the POST at all.
+async function tickTerms(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByLabelText(/i have read and agree/i))
+}
+
 function mockCheckoutFetch(response: Response) {
   vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -141,6 +147,7 @@ describe('CheckoutReviewClient conflict handling', () => {
 
     renderReview()
 
+    await tickTerms(user)
     await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
 
     await waitFor(() =>
@@ -160,6 +167,7 @@ describe('CheckoutReviewClient conflict handling', () => {
 
     renderReview()
 
+    await tickTerms(user)
     await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
 
     await waitFor(() =>
@@ -196,8 +204,10 @@ describe('CheckoutReviewClient double-submit guard', () => {
       return Promise.reject(new Error(`Unexpected fetch: ${url}`))
     })
 
+    const user = userEvent.setup()
     renderReview()
     const btn = await screen.findByRole('button', { name: /confirm & place order/i })
+    await tickTerms(user)
 
     await act(async () => {
       btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
@@ -240,6 +250,7 @@ describe('CheckoutReviewClient placing overlay', () => {
 
     const user = userEvent.setup()
     renderReview()
+    await tickTerms(user)
     await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
 
     // Overlay visible while the POST is in flight.
