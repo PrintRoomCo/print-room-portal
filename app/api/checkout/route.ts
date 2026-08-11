@@ -25,6 +25,14 @@ interface CheckoutRequestBody {
   intent?: 'customer' | 'inventory'
   lines?: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
+  /**
+   * Design 2026-08-11: the buyer's affirmative T&C acceptance + the exact
+   * version string they saw. The route rejects (400) unless terms_accepted ===
+   * true AND terms_version is a non-empty string; both are threaded to
+   * submitCustomerOrder. No honeypot field — the honeypot is client-only.
+   */
+  terms_accepted?: boolean
+  terms_version?: string
 }
 
 export async function POST(request: Request) {
@@ -47,6 +55,18 @@ export async function POST(request: Request) {
       { error: 'idempotency_key + non-empty lines required' },
       { status: 400 }
     )
+  }
+
+  // Terms & Conditions gate (design 2026-08-11, Decision 2 — THE legal proof).
+  // No order is ever created unless the buyer affirmatively accepted a specific,
+  // non-empty terms version. This structural guarantee — not the best-effort
+  // audit write — is what makes "an order exists" imply "terms were accepted".
+  if (
+    body.terms_accepted !== true ||
+    typeof body.terms_version !== 'string' ||
+    body.terms_version.trim() === ''
+  ) {
+    return NextResponse.json({ error: 'terms_not_accepted' }, { status: 400 })
   }
 
   // Mixed per-line custom addresses are NOT supported in v1 (spec §9.1 /
@@ -160,6 +180,10 @@ export async function POST(request: Request) {
         pricing_pool_lines: body.lines,
         custom_shipping_address: body.custom_shipping_address ?? null,
         intent,
+        // Consent for THIS order (design 2026-08-11). Both partitions of a split
+        // cart carry the same acceptance — the customer agreed once for the cart.
+        terms_accepted: body.terms_accepted,
+        terms_version: body.terms_version,
         // order_type intentionally NOT passed: submit self-classifies each
         // homogeneous partition via classifyOrderType(input.lines) (the RPC has
         // no p_order_type param). The partition orderType — which equals that

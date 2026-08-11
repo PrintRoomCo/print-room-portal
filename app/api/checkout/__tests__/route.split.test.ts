@@ -45,6 +45,7 @@ describe('POST /api/checkout — mixed-cart split', () => {
         { product_id: 'mto', product_name: 'Tee', qty: 10, ship_to_store_id: 's1', fulfilment_type: 'made_to_order' },
         { product_id: 'stk', product_name: 'Cap', qty: 5, ship_to_store_id: 's1', fulfilment_type: 'stocked' },
       ],
+      terms_accepted: true, terms_version: 'v1-2026-08-11',
     }))
 
     expect(res.status).toBe(200)
@@ -75,6 +76,7 @@ describe('POST /api/checkout — mixed-cart split', () => {
     const res = await POST(req({
       idempotency_key: 'idem-2',
       lines: [{ product_id: 'stk', product_name: 'Cap', qty: 5, ship_to_store_id: 's1', fulfilment_type: 'stocked' }],
+      terms_accepted: true, terms_version: 'v1-2026-08-11',
     }))
     expect(res.status).toBe(200)
     expect(submitCustomerOrder).toHaveBeenCalledTimes(1)

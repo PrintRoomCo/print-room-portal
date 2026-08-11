@@ -37,6 +37,7 @@ const VALID_BODY = {
   idempotency_key: 'idem-1',
   lines: [{ product_id: 'p1', product_name: 'Staple Tee', qty: 10 }],
   custom_shipping_address: { line1: '1 Test St' },
+  terms_accepted: true, terms_version: 'v1-2026-08-11',
 }
 
 beforeEach(() => {
