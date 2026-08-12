@@ -9,6 +9,7 @@ import {
   applyStarshipitWebhook,
   type StarshipitWebhookPayload,
 } from '@/lib/starshipit/apply-webhook'
+import { applyStarshipitOrderShipment } from '@/lib/starshipit/order-shipments'
 
 const JOB_SELECT =
   'id, tracker_token, job_reference, quote_number, tracking_info, production_updates'
@@ -103,9 +104,18 @@ export async function POST(request: Request) {
     updateError = error ? error.message : null
   }
 
+  // 3.5. Staff-order fulfillment extension (staff spec 2026-08-12 §4).
+  //      Additive: the tracker steps above are untouched. Matches
+  //      quotes.order_ref → orders, upserts order_shipments, latches and
+  //      recomputes orders.fulfillment_status. Order-write failures land in
+  //      the log's `error`, never a 5xx — the tracker outcome owns the
+  //      response, and Starshipit must not retry a half-applied event.
+  const orderResult = await applyStarshipitOrderShipment(supabase, payload)
+
   // 4. Log every hit (matched or not) — mirrors the studio receiver. Written
   //    AFTER the tracker update so a failed write is recorded as an error
   //    instead of a false 'matched' row with no indication anything failed.
+  const logError = [updateError, orderResult.error].filter(Boolean).join(' | ') || null
   await supabase.from('starshipit_webhook_logs').insert({
     order_number: payload.order_number ?? null,
     tracking_number: payload.tracking_number ?? null,
@@ -114,13 +124,18 @@ export async function POST(request: Request) {
     carrier_service: payload.carrier_service ?? null,
     payload,
     matched_job_tracker_id: tracker ? Number(tracker.id) : null,
+    matched_order_id: orderResult.matchedOrderId,
     status: updateError ? 'error' : tracker ? 'matched' : 'unmatched',
-    error: updateError,
+    error: logError,
     processed_at: new Date().toISOString(),
   })
 
   if (!tracker) {
-    return NextResponse.json({ success: true, matched: false })
+    return NextResponse.json({
+      success: true,
+      matched: false,
+      orderMatched: orderResult.matchedOrderId !== null,
+    })
   }
   if (updateError) {
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
@@ -128,7 +143,12 @@ export async function POST(request: Request) {
 
   revalidateTag(cacheTags.orderTracker, { expire: 0 })
 
-  return NextResponse.json({ success: true, matched: true, trackerId: tracker.id })
+  return NextResponse.json({
+    success: true,
+    matched: true,
+    trackerId: tracker.id,
+    orderMatched: orderResult.matchedOrderId !== null,
+  })
 }
 
 export async function GET() {

@@ -3,10 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const mocks = vi.hoisted(() => ({
   supabase: null as unknown,
   revalidateTag: vi.fn(),
+  applyOrderShipment: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase', () => ({ getSupabaseServer: () => mocks.supabase }))
 vi.mock('next/cache', () => ({ revalidateTag: mocks.revalidateTag }))
+vi.mock('@/lib/starshipit/order-shipments', () => ({
+  applyStarshipitOrderShipment: mocks.applyOrderShipment,
+}))
 
 import { POST } from '../route'
 
@@ -86,6 +90,12 @@ function req(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.applyOrderShipment.mockResolvedValue({
+    matchedOrderId: null,
+    parcelWritten: false,
+    skipReason: 'no_order_match',
+    error: null,
+  })
   vi.stubEnv('STARSHIPIT_WEBHOOK_SECRET', 's3cret')
 })
 afterEach(() => vi.unstubAllEnvs())
@@ -125,5 +135,56 @@ describe('POST /api/webhooks/starshipit — parameterized matching', () => {
     const res = await POST(req({ order_number: 'PR-100', tracking_number: 'TN1' }))
     expect(res.status).toBe(500)
     expect(f.logs[0]).toMatchObject({ status: 'error', error: 'connection reset' })
+  })
+})
+
+describe('POST /api/webhooks/starshipit — staff order extension', () => {
+  it('passes the payload to the order-shipments module and logs matched_order_id', async () => {
+    const f = makeSupabase({ trackerByColumn: { 'job_reference:PR-100': TRACKER } })
+    mocks.supabase = f.supabase
+    mocks.applyOrderShipment.mockResolvedValue({
+      matchedOrderId: 'o1', parcelWritten: true, skipReason: null, error: null,
+    })
+
+    const res = await POST(
+      req({ order_number: 'PR-100', tracking_number: 'TN1', tracking_status: 'Dispatched' }),
+    )
+    expect(res.status).toBe(200)
+    expect(mocks.applyOrderShipment).toHaveBeenCalledWith(
+      f.supabase,
+      expect.objectContaining({ order_number: 'PR-100', tracking_number: 'TN1' }),
+    )
+    expect(f.logs[0]).toMatchObject({ status: 'matched', matched_order_id: 'o1' })
+    expect((await res.json()).orderMatched).toBe(true)
+  })
+
+  it('an order-only match still returns 200 with tracker matched:false', async () => {
+    const f = makeSupabase()
+    mocks.supabase = f.supabase
+    mocks.applyOrderShipment.mockResolvedValue({
+      matchedOrderId: 'o1', parcelWritten: true, skipReason: null, error: null,
+    })
+
+    const res = await POST(req({ order_number: 'PO-1', tracking_number: 'TN9' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ matched: false, orderMatched: true })
+    expect(f.logs[0]).toMatchObject({ status: 'unmatched', matched_order_id: 'o1' })
+  })
+
+  it('records an order-write failure in error without flipping tracker status or the 200', async () => {
+    const f = makeSupabase({ trackerByColumn: { 'job_reference:PR-100': TRACKER } })
+    mocks.supabase = f.supabase
+    mocks.applyOrderShipment.mockResolvedValue({
+      matchedOrderId: 'o1', parcelWritten: false, skipReason: null,
+      error: 'order_shipments insert failed',
+    })
+
+    const res = await POST(req({ order_number: 'PR-100', tracking_number: 'TN1' }))
+    expect(res.status).toBe(200)
+    expect(f.logs[0]).toMatchObject({
+      status: 'matched',
+      matched_order_id: 'o1',
+      error: 'order_shipments insert failed',
+    })
   })
 })
