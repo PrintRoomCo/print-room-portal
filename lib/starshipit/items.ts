@@ -4,10 +4,13 @@
 // they make the printed ticket/packing slip complete, but a failed load must
 // never lose the push — loadStarshipitOrderItems degrades to [] on error.
 //
-// No sku: quote_items carries none, and the products(sku) embed is unverified
-// (product_id is inserted untyped by submit_b2b_order). No weight: verified
-// 2026-08-06 that no weight column exists anywhere in the schema — staff enter
-// weight in Starshipit at print time.
+// SKU: resolved from products.sku via quote_items.source_product_id (a clean
+// uuid FK) with a deterministic second lookup — NOT a PostgREST embed, and NOT
+// the stale product_variants.sku_suffix (post-SKUCOLLAPSE one colourway variant
+// now spans many sizes, so its suffix would misprint). Lines whose product has
+// no sku ship SKU-blank (accepted). No weight: verified 2026-08-06 that no
+// weight column exists anywhere in the schema — staff enter weight in Starshipit
+// at print time.
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface StarshipitOrderItem {
@@ -29,6 +32,10 @@ export interface StarshipitQuoteItemRow {
   quantity: number | null
   unit_price: number | null
   size_label: string | null
+  /** products.id for this line — the key we resolve products.sku through. */
+  source_product_id?: string | null
+  /** Resolved from products.sku by loadStarshipitOrderItems; not selected directly. */
+  sku?: string | null
   product_variants?: VariantEmbed
 }
 
@@ -61,6 +68,9 @@ export function mapQuoteItemsToStarshipitItems(
     if (typeof row.unit_price === 'number' && Number.isFinite(row.unit_price)) {
       item.value = row.unit_price
     }
+    if (typeof row.sku === 'string' && row.sku.trim().length > 0) {
+      item.sku = row.sku.trim()
+    }
     return item
   })
 }
@@ -72,9 +82,29 @@ export async function loadStarshipitOrderItems(
   const { data, error } = await admin
     .from('quote_items')
     .select(
-      'product_name, quantity, unit_price, size_label, product_variants ( product_color_swatches ( label ) )',
+      'product_name, quantity, unit_price, size_label, source_product_id, product_variants ( product_color_swatches ( label ) )',
     )
     .eq('quote_id', quoteId)
   if (error || !data) return []
-  return mapQuoteItemsToStarshipitItems(data as unknown as StarshipitQuoteItemRow[])
+  const rows = data as unknown as StarshipitQuoteItemRow[]
+
+  // Resolve products.sku with a deterministic second lookup (the source_product_id
+  // FK is not guaranteed embeddable). Best-effort: a failed or empty products read
+  // leaves every line SKU-blank while the push still carries descriptions. No throw.
+  const ids = [...new Set(rows.map((r) => r.source_product_id).filter((x): x is string => !!x))]
+  const skuById = new Map<string, string>()
+  if (ids.length > 0) {
+    const { data: prods } = await admin.from('products').select('id, sku').in('id', ids)
+    for (const p of (prods ?? []) as Array<{ id: string; sku: unknown }>) {
+      const sku = typeof p.sku === 'string' ? p.sku.trim() : ''
+      if (sku) skuById.set(p.id, sku)
+    }
+  }
+
+  return mapQuoteItemsToStarshipitItems(
+    rows.map((r) => ({
+      ...r,
+      sku: r.source_product_id ? skuById.get(r.source_product_id) ?? null : null,
+    })),
+  )
 }

@@ -85,6 +85,26 @@ describe('createStarshipitOrder', () => {
     const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
     expect('items' in sent.order).toBe(false)
   })
+
+  it('forwards item sku and destination company + name (regression guard)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, order: { order_id: 1 } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createStarshipitOrder({
+      orderNumber: 'PR-5',
+      address: { ...OK_ADDRESS, name: 'Jane Doe', company: 'Reburger Takapuna' },
+      customerEmail: null,
+      items: [{ description: 'Tee — L', quantity: 2, sku: 'TEE-001' }],
+    })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(sent.order.destination.company).toBe('Reburger Takapuna')
+    expect(sent.order.destination.name).toBe('Jane Doe')
+    expect(sent.order.items).toEqual([{ description: 'Tee — L', quantity: 2, sku: 'TEE-001' }])
+  })
 })
 
 describe('deleteStarshipitOrder', () => {
