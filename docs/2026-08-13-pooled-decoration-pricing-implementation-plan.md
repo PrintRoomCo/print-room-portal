@@ -289,6 +289,29 @@ Eleven commits from a concurrent session's Orders order-type work landed interle
 - The first four pooling commits were contiguous at the base and were left untouched, so the two already on `origin` keep their SHAs and **`origin/feat/pooled-decoration-pricing` remains an ancestor — the next push fast-forwards, no `--force`.** Only `06442a19` and `8b346694` (neither pushed) were replayed.
 - `git diff --stat master..HEAD` lists only pooling files; every orders artifact is gone and the two shared files (`audit/actions.ts`, `OrderAmendmentWorkflow.tsx`) carry only this build's changes.
 
+### Prod schema drift — both migrations already applied (2026-08-14)
+
+**Both pooling migrations are LIVE in production, applied without approval.** The same concurrent session's `supabase db push` swept up `20260813120000` and `20260813130000` — they were sitting un-applied in the shared working tree's `supabase/migrations/` — executed them alongside its own `20260813140000`, then repaired *mine* out of the history table **without rolling back the DDL**. Verified state:
+
+| check | result |
+|---|---|
+| `org_decoration_pricing_tiers` table / RLS / policy | exists, RLS on, 1 staff policy |
+| `b2b_catalogues.decoration_pooling_enabled` | exists, `NOT NULL DEFAULT false` |
+| `replace_org_decoration_pricing_tiers`, `pooled_decoration_qty` | exist |
+| `effective_decoration_unit_price`, `plan_order_amendment` | carry the pooling changes |
+| **all four function bodies vs committed files** | **byte-identical (md5 match on all four)** |
+| `schema_migrations` rows for `…120000` / `…130000` | **absent** |
+
+**No prices moved.** Pooling is inert in prod: 0 of 8 catalogues have the flag on and `org_decoration_pricing_tiers` has 0 rows, so the prepended ladder lookup can never match and falls straight through to the unchanged engine. Confirmed empirically against six live decorations — embroidery qty-independent (7.00/8.00/47.50 flat across q1–q500), screenprint still descending (12.49 → 4.79 → 3.22 at q1/q100/q500), heatpress still null. This is exactly the flag-off byte parity of Guardrail 1, holding in production.
+
+**The live hazard is the history gap, not the schema.** `20260813130000` is all `create or replace` + grants and re-runs harmlessly, but `20260813120000` opens with a bare `create table` (:16) and a bare `create policy` (:38) — the next `supabase db push` by *anyone*, for *any* migration, hard-fails on `relation already exists` before reaching its own work. Remedy is history-only, no DDL:
+
+```
+supabase migration repair --status applied 20260813120000 20260813130000
+```
+
+Safe precisely because the four function bodies were proven identical first. A fresh bootstrap is unaffected — on an empty DB both files run normally. **HELD pending approval.** Optional hardening afterwards: `create table if not exists` + `drop policy if exists` in `…120000` so a future replay cannot wedge the same way.
+
 ### Phase 0 detail
 
 - **2026-08-13 — Phase 0 customer plumbing — done.** `lib/shop/resolve-catalogue-item.ts` LIVE loader select now carries `b2b_catalogues!inner(id, …, decoration_pooling_enabled)`, flattened onto `PdpCatalogueItem` as `catalogue_id` / `decoration_pooling_enabled` by a `withCatalogueFields` normaliser (handles PostgREST object-vs-array embeds; no embed → null/false, i.e. never pools). `app/api/shop/products/[id]/route.ts` left untouched per the review changelog. PDP page threads `catalogueId`/`poolingEnabled` into the `product` payload; `ProductDetailClient` carries them onto all three `cart.addLine` sites. `CartLine` gains `catalogueId?`/`poolingEnabled?`; `CartLineDecoration` gains `poolable?`; `DecorationOption.poolable` is server-computed in `loadCatalogueItemDecorations` as `artwork != null && decoration_method !== 'custom'`. Tests: new `lib/shop/decorations.poolable.test.ts` (5) pins eligibility across all six DB methods and proves the rule is shape-based not price-based; `resolve-catalogue-item.test.ts` +2.
