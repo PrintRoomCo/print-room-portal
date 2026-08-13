@@ -275,8 +275,19 @@ Staff suite after Phase 1: **3 files / 8 tests failing — exactly the recorded 
 |---|---|---|
 | Customer `npm test` | 5 failed / 1352 passed | **5 failed / 1450 passed** — same 5 |
 | Customer `tsc` | 14 errors | **14** — same |
-| Staff `npm test` | 8 failed / 2321 passed | **8 failed / 2432 passed** — same 8 |
-| Staff `tsc` | 7 errors | **0** — stale `.next` artifacts regenerated; the 4 order-test errors were fixed by a concurrent session's work, not by this build |
+| Staff `npm test` | 8 failed / 2321 passed | **8 failed / 2393 passed** — same 8 |
+| Staff `tsc` | 7 errors | **4** — the 3 stale `.next/types/validator.ts` artifacts regenerated away; the 4 `OrderDetailClient.test.tsx` / `OrderDocument.test.tsx` errors are the pre-existing ones and remain |
+
+> Both staff figures were re-measured on 2026-08-14 **after** the branch strip below. The earlier reading (2432 passed, tsc 0) was taken while a concurrent session's Orders commits were interleaved on the branch: those commits carried their own tests (+39) and their own fix for the 4 order-test type errors. Neither belongs to this build, so both reverted when the commits left. Nothing in this build regressed.
+
+### Branch hygiene — 2026-08-14
+
+Eleven commits from a concurrent session's Orders order-type work landed interleaved on staff `feat/pooled-decoration-pricing` (shared working tree; the checkout was switched mid-build). Stripped at the user's request:
+
+- Backup of the entangled state kept at `backup/pooling-with-orders-2026-08-14`.
+- All ten orders commits confirmed already present on `feat/orders-order-type-column` **before** anything was dropped — nine matched by patch-id; the tenth (`bb16e3fc` vs `834fd4ce`) was diffed by hand and differed only in context lines displaced by this build's own `audit/actions.ts` entry.
+- The first four pooling commits were contiguous at the base and were left untouched, so the two already on `origin` keep their SHAs and **`origin/feat/pooled-decoration-pricing` remains an ancestor — the next push fast-forwards, no `--force`.** Only `06442a19` and `8b346694` (neither pushed) were replayed.
+- `git diff --stat master..HEAD` lists only pooling files; every orders artifact is gone and the two shared files (`audit/actions.ts`, `OrderAmendmentWorkflow.tsx`) carry only this build's changes.
 
 ### Phase 0 detail
 
