@@ -10,6 +10,12 @@ import { tierAggregationKey, type CheckoutLineDecorationInput } from '../submit'
  * These tests mirror the cart-side coverage in lib/cart/__tests__/types.test.ts
  * so divergence between the two surfaces shows up as a test diff, not a
  * production drift error.
+ *
+ * Pooled decoration pricing (2026-08-13) does NOT change this key. Pooling adds a
+ * separate band-selection quantity on top of these groups; the groups themselves
+ * — and therefore the fallback quantity every non-pooled line keeps using — are
+ * untouched. The pooled quantities that ride on top are pinned in
+ * submit.pooled-decoration.test.ts.
  */
 describe('tierAggregationKey', () => {
   const deco = (linkId: string): CheckoutLineDecorationInput => ({

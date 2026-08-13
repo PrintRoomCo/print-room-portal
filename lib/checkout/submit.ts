@@ -29,6 +29,13 @@ import { round2 } from '@/lib/pricing/pricingMath'
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import { billedFigures } from '@/lib/checkout/billed-figures'
 import type { BillingMode } from '@/lib/shop/billing-mode'
+import {
+  garmentBandQty,
+  isPoolingLine,
+  pooledDecorationQty,
+  pooledQtyByDecoration,
+  type PoolingLine,
+} from '@/lib/pricing/decoration-pooling'
 import { formatShippingAddress } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
@@ -501,11 +508,69 @@ function decorationAggregationSignature(
         .join('|')
 }
 
+/**
+ * Pooled decoration pricing (spec 2026-08-13) — the band-selection quantity a
+ * garment price group prices at, appended to the group key so that every line in
+ * a group provably shares one band. With pooling off this is always the group's
+ * own total, so the suffix is constant per group and the grouping (and therefore
+ * the RPC budget) is byte-identical to before.
+ */
+function garmentPriceKey(line: CheckoutLineInput, bandQty: number): string {
+  return `${garmentPriceAggregationKey(line)}::q${bandQty}`
+}
+
 function garmentPriceAggregationKey(line: CheckoutLineInput): string {
   const itemOrProduct = line.catalogueItemId
     ? `item:${line.catalogueItemId}`
     : `product:${line.product_id}`
   return `${itemOrProduct}::${decorationAggregationSignature(line.decorations)}`
+}
+
+/**
+ * Which of the cart's decorations may pool, resolved SERVER-SIDE from
+ * org_decorations. Never taken from the client: a tampered `poolable` flag would
+ * let a cart pool the $0 'custom' placeholder and drag a whole catalogue into one
+ * band. Same rule as the PDP loader and the staff ladder route — real artwork,
+ * real method — plus an org check, so a decoration id from another organization
+ * can never enter a pool.
+ */
+async function loadPoolableDecorationIds(
+  admin: SupabaseClient,
+  lines: readonly CheckoutLineInput[],
+  organizationId: string,
+): Promise<Set<string>> {
+  const ids = Array.from(
+    new Set(
+      lines.flatMap((l) => (l.decorations ?? []).map((d) => d.decorationId)).filter(Boolean),
+    ),
+  )
+  const poolable = new Set<string>()
+  if (ids.length === 0) return poolable
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await admin
+      .from('org_decorations')
+      .select('id, artwork_id, decoration_method, organization_id')
+      .in('id', ids.slice(i, i + 100))
+    // Fail closed: an unreadable decoration table means nothing pools, which is
+    // today's pricing, not a wrong price.
+    if (error) return new Set()
+    for (const r of (data ?? []) as Array<{
+      id: string
+      artwork_id: string | null
+      decoration_method: string | null
+      organization_id: string
+    }>) {
+      if (
+        r.organization_id === organizationId &&
+        r.artwork_id != null &&
+        r.decoration_method !== 'custom'
+      ) {
+        poolable.add(r.id)
+      }
+    }
+  }
+  return poolable
 }
 
 // b2b_accounts.payment_terms CHECK constraint allows only 'prepay' | 'net20' | 'net30'.
@@ -757,22 +822,108 @@ export async function submitCustomerOrder(
     )
   }
 
-  const garmentPriceGroups = new Map<
-    string,
-    { productId: string; catalogueItemId: string | null; totalQty: number }
-  >()
+  // ── Pooled decoration pricing (spec 2026-08-13) ──────────────────────────
+  // Resolved here, above the garment price loop, because the per-catalogue flag
+  // decides that loop's band quantity. This is the SAME once-per-checkout
+  // b2b_catalogue_items read that already resolves price_mode for manual-final
+  // lines (it used to sit further down) — widened with catalogue_id + the flag,
+  // and widened to poolLines so a partitioned submit still sees the whole cart's
+  // items. Extra rows are inert: isManualCheckoutLine only ever asks about this
+  // partition's own lines.
+  const catalogueItemIdsForPricing = Array.from(
+    new Set(
+      [...input.lines, ...poolLines]
+        .map((l) => l.catalogueItemId)
+        .filter((x): x is string => !!x),
+    ),
+  )
+  const manualItemIds = new Set<string>()
+  const catalogueIdByItemId = new Map<string, string>()
+  const poolingEnabledItemIds = new Set<string>()
+  if (catalogueItemIdsForPricing.length > 0) {
+    const { data: pmRows } = await admin
+      .from('b2b_catalogue_items')
+      .select('id, price_mode, catalogue_id, b2b_catalogues(decoration_pooling_enabled)')
+      .in('id', catalogueItemIdsForPricing)
+    for (const r of (pmRows ?? []) as Array<{
+      id: string
+      price_mode: string | null
+      catalogue_id?: string | null
+      b2b_catalogues?:
+        | { decoration_pooling_enabled?: boolean | null }
+        | { decoration_pooling_enabled?: boolean | null }[]
+        | null
+    }>) {
+      if (r.price_mode === 'manual_final') manualItemIds.add(r.id)
+      if (r.catalogue_id) catalogueIdByItemId.set(r.id, r.catalogue_id)
+      const cat = Array.isArray(r.b2b_catalogues) ? r.b2b_catalogues[0] : r.b2b_catalogues
+      if (cat?.decoration_pooling_enabled === true) poolingEnabledItemIds.add(r.id)
+    }
+  }
+
+  // With every catalogue's flag false — the default and the ship-time state —
+  // this is false and every pooled branch below is skipped entirely, including
+  // the decoration read. Flag-off costs exactly one widened select and nothing else.
+  const poolingActive = poolingEnabledItemIds.size > 0
+  const poolableDecorationIds = poolingActive
+    ? await loadPoolableDecorationIds(admin, poolLines, input.context.organizationId)
+    : new Set<string>()
+
+  /** Checkout's snake_case line adapted to the shared module's shape. */
+  const toPoolingLine = (l: CheckoutLineInput): PoolingLine => ({
+    catalogueId: l.catalogueItemId
+      ? catalogueIdByItemId.get(l.catalogueItemId) ?? null
+      : null,
+    poolingEnabled: !!l.catalogueItemId && poolingEnabledItemIds.has(l.catalogueItemId),
+    qty: l.qty,
+    fulfilmentType: l.fulfilment_type ?? null,
+    decorations: (l.decorations ?? []).map((d) => ({
+      decorationId: d.decorationId,
+      poolable: poolableDecorationIds.has(d.decorationId),
+    })),
+  })
+
+  // Seeded from poolLines — the FULL unpartitioned cart on every partition's
+  // submit call — so the shared module's stocked-line filter is load-bearing here,
+  // not incidental.
+  const poolQtyByDecorationId = poolingActive
+    ? pooledQtyByDecoration(poolLines.map(toPoolingLine))
+    : new Map<string, number>()
+
+  // Two passes, mirroring the cart: today's group totals first, then each line's
+  // band quantity from them. `totalQty` stays the REAL, un-inflated group total —
+  // it is what ordering-period pricing keeps reading. `bandQty` is the pooled
+  // max-rule quantity and is only ever an RPC qty argument.
+  const totalQtyByGarmentKey = new Map<string, number>()
   for (const line of poolLines) {
     const k = garmentPriceAggregationKey(line)
-    const existing = garmentPriceGroups.get(k)
-    if (existing) {
-      existing.totalQty += line.qty
-    } else {
-      garmentPriceGroups.set(k, {
-        productId: line.product_id,
-        catalogueItemId: line.catalogueItemId ?? null,
-        totalQty: line.qty,
-      })
+    totalQtyByGarmentKey.set(k, (totalQtyByGarmentKey.get(k) ?? 0) + line.qty)
+  }
+  const garmentBandQtyForLine = (line: CheckoutLineInput): number => {
+    const own = totalQtyByGarmentKey.get(garmentPriceAggregationKey(line)) ?? line.qty
+    if (!poolingActive) return own
+    return garmentBandQty(toPoolingLine(line), poolQtyByDecorationId, own)
+  }
+
+  const garmentPriceGroups = new Map<
+    string,
+    {
+      productId: string
+      catalogueItemId: string | null
+      totalQty: number
+      bandQty: number
     }
+  >()
+  for (const line of poolLines) {
+    const bandQty = garmentBandQtyForLine(line)
+    const k = garmentPriceKey(line, bandQty)
+    if (garmentPriceGroups.has(k)) continue
+    garmentPriceGroups.set(k, {
+      productId: line.product_id,
+      catalogueItemId: line.catalogueItemId ?? null,
+      totalQty: totalQtyByGarmentKey.get(garmentPriceAggregationKey(line)) ?? line.qty,
+      bandQty,
+    })
   }
 
   // PRE-ORDER: lines on pre_order items price from the period snapshot
@@ -799,6 +950,9 @@ export async function submitCustomerOrder(
         openPeriod &&
         preOrderItemIds.has(group.catalogueItemId)
       ) {
+        // Ordering-period pricing is spec-excluded from pooling (§5): periods
+        // pool per-item across orders on their own frozen-price system. It keeps
+        // the REAL group quantity, never the pooled band quantity.
         const { data: unit } = await admin.rpc('period_unit_price', {
           p_period_id: openPeriod.id,
           p_catalogue_item_id: group.catalogueItemId,
@@ -813,16 +967,18 @@ export async function submitCustomerOrder(
           admin,
           group.catalogueItemId,
           input.context.organizationId,
-          group.totalQty,
+          group.bandQty,
         )
         garmentPriceByKey.set(priceKey, unit)
         return
       }
 
+      // Legacy product-keyed lines carry no catalogueItemId, so they can never
+      // resolve a pooled catalogue and bandQty always equals totalQty here.
       const { data: unit } = await admin.rpc('effective_unit_price', {
         p_product_id: group.productId,
         p_org_id: input.context.organizationId,
-        p_qty: group.totalQty,
+        p_qty: group.bandQty,
       })
       garmentPriceByKey.set(priceKey, Number(unit ?? 0))
     }),
@@ -858,7 +1014,7 @@ export async function submitCustomerOrder(
     ...l,
     unit_price: garmentUnitPriceForLine(
       l,
-      garmentPriceByKey.get(garmentPriceAggregationKey(l)) ?? 0,
+      garmentPriceByKey.get(garmentPriceKey(l, garmentBandQtyForLine(l))) ?? 0,
       stockUnitPriceByItem,
     ),
   }))
@@ -877,7 +1033,7 @@ export async function submitCustomerOrder(
     if (typeof line.claimed_unit_price !== 'number') continue
     const canonical = garmentUnitPriceForLine(
       line,
-      garmentPriceByKey.get(garmentPriceAggregationKey(line)) ?? 0,
+      garmentPriceByKey.get(garmentPriceKey(line, garmentBandQtyForLine(line))) ?? 0,
       stockUnitPriceByItem,
     )
     if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
@@ -943,19 +1099,8 @@ export async function submitCustomerOrder(
   // than inferring from a non-null decoration RPC — a manual item priced below
   // its lowest decoration band returns NULL but must still bill 0 decoration,
   // NOT fall through to the per-placement rate-sheet sum.
-  const lineItemIds = Array.from(
-    new Set(input.lines.map((l) => l.catalogueItemId).filter((x): x is string => !!x)),
-  )
-  const manualItemIds = new Set<string>()
-  if (lineItemIds.length > 0) {
-    const { data: pmRows } = await admin
-      .from('b2b_catalogue_items')
-      .select('id, price_mode')
-      .in('id', lineItemIds)
-    for (const r of (pmRows ?? []) as Array<{ id: string; price_mode: string | null }>) {
-      if (r.price_mode === 'manual_final') manualItemIds.add(r.id)
-    }
-  }
+  // (manualItemIds is resolved above, in the same widened b2b_catalogue_items
+  // read that resolves each line's catalogue id and pooling flag.)
 
   type LinkRow = {
     id: string
@@ -1026,8 +1171,38 @@ export async function submitCustomerOrder(
     totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
     line.qty
 
+  /**
+   * The band quantity ONE decoration of ONE line prices at. Each placement reads
+   * its own pool, so a garment carrying an extra back print picks that print's
+   * smaller band independently — the spec's "sequential difference added on".
+   */
+  const decorationQtyFor = (line: CheckoutLineInput, decorationId: string): number => {
+    const fallback = decorationQtyForLine(line)
+    if (!poolingActive) return fallback
+    return pooledDecorationQty(
+      toPoolingLine(line),
+      { decorationId, poolable: poolableDecorationIds.has(decorationId) },
+      poolQtyByDecorationId,
+      fallback,
+    )
+  }
+
+  const isPooledLine = (line: CheckoutLineInput): boolean =>
+    poolingActive && isPoolingLine(toPoolingLine(line))
+
   const isManualCheckoutLine = (line: CheckoutLineInput): boolean =>
     !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
+
+  /**
+   * Manual-final items in a POOLED catalogue stop using the item's combined
+   * per-band decoration figure: one number per garment cannot express a
+   * per-placement delta, which is exactly why pooling moves decoration price onto
+   * per-decoration ladders (spec §3). Those lines take the per-placement path
+   * instead — Sigma effective_decoration_unit_price at each placement's pooled qty —
+   * matching what the cart claims for them.
+   */
+  const isCombinedManualLine = (line: CheckoutLineInput): boolean =>
+    isManualCheckoutLine(line) && !isPooledLine(line)
 
   // Pre-resolve every decoration price this order needs, concurrently and
   // deduplicated: manual lines need ONE combined figure per distinct
@@ -1037,8 +1212,8 @@ export async function submitCustomerOrder(
   const manualPairs = new Map<string, { itemId: string; qty: number }>()
   const computedPairs = new Map<string, { row: LinkRow; qty: number }>()
   for (const line of input.lines) {
-    const qty = decorationQtyForLine(line)
-    if (isManualCheckoutLine(line) && line.catalogueItemId) {
+    if (isCombinedManualLine(line) && line.catalogueItemId) {
+      const qty = decorationQtyForLine(line)
       manualPairs.set(`${line.catalogueItemId}::${qty}`, { itemId: line.catalogueItemId, qty })
       continue
     }
@@ -1049,6 +1224,7 @@ export async function submitCustomerOrder(
       if (od.organization_id !== input.context.organizationId) continue
       if (!od.is_active) continue
       if (row.b2b_catalogue_items.source_product_id !== line.product_id) continue
+      const qty = decorationQtyFor(line, od.id)
       computedPairs.set(`${row.id}::${qty}`, { row, qty })
     }
   }
@@ -1122,7 +1298,8 @@ export async function submitCustomerOrder(
 
   for (const line of input.lines) {
     const decs = line.decorations ?? []
-    const isManualLine = !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
+    // Pooled manual items take the per-placement path (see isCombinedManualLine).
+    const isManualLine = isCombinedManualLine(line)
     if (decs.length === 0) {
       if (isManualLine) {
         applyManualDecorationForLine(line, decorationQtyForLine(line), '')
@@ -1133,9 +1310,11 @@ export async function submitCustomerOrder(
     const byId = linkRowById
     const validated: CheckoutLineDecorationInput[] = []
 
-    // Decoration tier qty for this line (aggregated across same product+signature
-    // lines, mirroring the cart). Used for both the per-placement engine price
-    // and the manual-final combined figure.
+    // Line-level decoration tier qty (aggregated across same product+signature
+    // lines, mirroring the cart). Still the qty for the manual-final combined
+    // figure; per-placement prices now resolve their OWN pooled qty via
+    // decorationQtyFor, since two placements on one garment can sit in different
+    // bands when their artworks appear on different numbers of garments.
     const decorationQty = decorationQtyForLine(line)
 
     // Manual-final: when the line's catalogue item is manual, resolve the item's
@@ -1215,7 +1394,8 @@ export async function submitCustomerOrder(
         continue
       }
 
-      const effective = computedPriceByPair.get(`${row.id}::${decorationQty}`) ?? 0
+      const effective =
+        computedPriceByPair.get(`${row.id}::${decorationQtyFor(line, od.id)}`) ?? 0
       if (effective !== dec.unitPrice) {
         drift.push({
           cartLineId: line.cart_line_id ?? null,

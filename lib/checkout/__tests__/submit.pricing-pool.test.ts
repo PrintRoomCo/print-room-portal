@@ -201,4 +201,33 @@ describe('submitCustomerOrder — pricing_pool_lines volume-tier pooling', () =>
     const priceCall = rpcCalls.find((c) => c.name === 'effective_unit_price_for_item')
     expect(priceCall?.args?.p_qty).toBe(26)
   })
+
+  // Pooled decoration pricing (2026-08-13) rides on top of this same pool set.
+  // `pricing_pool_lines` is the FULL, UNPARTITIONED cart on every partition's
+  // submit call (app/api/checkout/route.ts passes body.lines to each), so it
+  // always contains the cart's stocked lines — which must not contribute to a
+  // decoration pool (spec §5). That filter therefore does real work here rather
+  // than being incidental, and is asserted end to end in
+  // submit.pooled-decoration.test.ts ('filters stocked lines out of the pool
+  // even though they are in the pool set'). This suite's own stocked line above
+  // is exactly that shape.
+  it('still pools volume tiers for this partition with pooling off (the ship-time state)', async () => {
+    const { admin, rpcCalls } = makeSupabaseStub(happyRpc)
+
+    await submitCustomerOrder(
+      admin,
+      buildInput({
+        pricing_pool_lines: [
+          line(),
+          line({ qty: 24, cart_line_id: 'line-po', fulfilment_type: 'made_to_order' }),
+        ],
+      }),
+    )
+
+    // Unchanged by the pooling release: volume-tier pooling is per product and
+    // has nothing to do with decoration pools.
+    expect(
+      rpcCalls.find((c) => c.name === 'effective_unit_price_for_item')?.args?.p_qty,
+    ).toBe(50)
+  })
 })

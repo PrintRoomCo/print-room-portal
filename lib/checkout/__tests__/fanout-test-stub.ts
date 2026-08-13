@@ -32,6 +32,13 @@ export interface StubLink {
     method?: string
     unitPrice: number | string
     isActive?: boolean
+    /**
+     * Pooled decoration pricing: poolability is resolved SERVER-SIDE from
+     * org_decorations (artwork present, method not 'custom'). Defaults to a real
+     * artwork so decorations pool when a catalogue opts in; set null to model the
+     * $0 placeholder that must never pool.
+     */
+    artworkId?: string | null
   }
 }
 
@@ -41,6 +48,9 @@ export interface StubItem {
   priceMode: 'manual_final' | 'computed'
   moqOverride?: number | null
   fulfilmentTypeOverride?: string | null
+  /** Pooled decoration pricing — the owning catalogue and its opt-in flag. */
+  catalogueId?: string
+  poolingEnabled?: boolean
 }
 
 export interface StubProduct {
@@ -74,7 +84,26 @@ export function makeFanoutStub(config: StubConfig) {
     price_mode: i.priceMode,
     moq_override: i.moqOverride ?? null,
     fulfilment_type_override: i.fulfilmentTypeOverride ?? null,
+    catalogue_id: i.catalogueId ?? 'cat-stub',
+    b2b_catalogues: { decoration_pooling_enabled: i.poolingEnabled === true },
   }))
+
+  // org_decorations, as read by loadPoolableDecorationIds. Deduped by id: one
+  // decoration is typically attached to many garments via many link rows.
+  const decorationRows = Array.from(
+    new Map(
+      config.links.map((l) => [
+        l.orgDecoration.id,
+        {
+          id: l.orgDecoration.id,
+          artwork_id:
+            l.orgDecoration.artworkId === undefined ? 'art-stub' : l.orgDecoration.artworkId,
+          decoration_method: l.orgDecoration.method ?? 'screenprint',
+          organization_id: l.orgDecoration.organizationId,
+        },
+      ]),
+    ).values(),
+  )
   const productRows = config.products.map((p) => ({
     id: p.id,
     moq: p.moq ?? 1,
@@ -107,6 +136,16 @@ export function makeFanoutStub(config: StubConfig) {
     if (err) return { data: null, error: { message: err } }
     if (table === 'user_organizations') return { data: [{ role: 'org_admin' }], error: null }
     if (table === 'b2b_catalogue_items') return { data: itemRows, error: null }
+    if (table === 'org_decorations') {
+      let rows = decorationRows
+      for (const f of filters) {
+        if (f.op === 'in' && f.column === 'id') {
+          const ids = new Set(f.value as string[])
+          rows = rows.filter((r) => ids.has(r.id))
+        }
+      }
+      return { data: rows, error: null }
+    }
     if (table === 'products') return { data: productRows, error: null }
     if (table === 'b2b_catalogue_item_decorations') {
       let rows = linkRows
