@@ -72,6 +72,8 @@ const detailsOnlyDecoration: DecorationOption = {
   sortOrder: 0,
   recalcInputs: null,
   overlay: null,
+  // Details-only: no artwork row, so it can never pool (spec §5).
+  poolable: false,
 }
 
 function renderPDP(decorations: DecorationOption[] = []) {

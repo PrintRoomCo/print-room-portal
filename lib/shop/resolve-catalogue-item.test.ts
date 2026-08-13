@@ -155,6 +155,72 @@ describe('resolveCatalogueItemForPdp', () => {
     expect(result).toBeNull()
   })
 
+  it('flattens the embedded catalogue row into catalogue_id + pooling flag', async () => {
+    const admin = makeStub({
+      b2b_catalogue_items: [
+        {
+          id: HOOD_ITEM,
+          source_product_id: HOOD_PRODUCT,
+          name: 'Hood',
+          b2b_catalogues: {
+            id: 'cat-1',
+            organization_id: ORG,
+            is_active: true,
+            decoration_pooling_enabled: true,
+          },
+        },
+      ],
+    })
+    const result = await resolveCatalogueItemForPdp(
+      admin,
+      {
+        productId: HOOD_PRODUCT,
+        organizationId: ORG,
+        membershipId: 'm1',
+        isPreview: false,
+        previewItemId: null,
+      },
+      { getGrantedItemIds: async () => [HOOD_ITEM] },
+    )
+    expect(result?.catalogue_id).toBe('cat-1')
+    expect(result?.decoration_pooling_enabled).toBe(true)
+  })
+
+  it('handles the array embed shape and degrades to pooling-off with no embed', async () => {
+    const arrayEmbed = makeStub({
+      b2b_catalogue_items: [
+        {
+          id: HOOD_ITEM,
+          source_product_id: HOOD_PRODUCT,
+          name: 'Hood',
+          b2b_catalogues: [{ id: 'cat-2', decoration_pooling_enabled: true }],
+        },
+      ],
+    })
+    // No embed at all — legacy/fixture rows must never accidentally pool.
+    const noEmbed = makeStub({
+      b2b_catalogue_items: [
+        { id: HOOD_ITEM, source_product_id: HOOD_PRODUCT, name: 'Hood' },
+      ],
+    })
+    const params = {
+      productId: HOOD_PRODUCT,
+      organizationId: ORG,
+      membershipId: 'm1',
+      isPreview: false,
+      previewItemId: null,
+    }
+    const deps = { getGrantedItemIds: async () => [HOOD_ITEM] }
+
+    const fromArray = await resolveCatalogueItemForPdp(arrayEmbed, params, deps)
+    expect(fromArray?.catalogue_id).toBe('cat-2')
+    expect(fromArray?.decoration_pooling_enabled).toBe(true)
+
+    const missing = await resolveCatalogueItemForPdp(noEmbed, params, deps)
+    expect(missing?.catalogue_id).toBeNull()
+    expect(missing?.decoration_pooling_enabled).toBe(false)
+  })
+
   it('threads the item override so the PDP can override or inherit the master layout', async () => {
     const standardOverrideAdmin = makeStub({
       b2b_catalogue_items: [

@@ -569,6 +569,12 @@ const loadProductDetailPageData = cache(async (
         // the cart line through checkout into submit_b2b_order. `catItem.id` was
         // already resolved server-side; we just stop dropping it.
         catalogueItemId: catItem.id ?? null,
+        // Pooled decoration pricing (2026-08-13 spec) — the owning catalogue and
+        // its opt-in flag, snapshotted onto the cart line at add-time. Pools never
+        // cross catalogues; the flag is false for every catalogue at ship time, so
+        // this is inert until a catalogue is explicitly opted in.
+        catalogueId: catItem.catalogue_id ?? null,
+        poolingEnabled: catItem.decoration_pooling_enabled === true,
         // Manual-final pricing (2026-06-10). Drives the client to read the
         // item's combined decoration figure instead of summing per-placement.
         priceMode: (catItem.price_mode as 'computed' | 'manual_final' | null) ?? 'computed',

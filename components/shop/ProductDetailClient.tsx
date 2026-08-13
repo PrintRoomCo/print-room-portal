@@ -84,6 +84,12 @@ interface ProductData {
   // Phase 2 — catalogue-item identity (named to avoid colliding with the
   // size/colour `variantLabel` on CartLine). Null for legacy/non-catalogue.
   catalogueItemId: string | null
+  // Pooled decoration pricing (2026-08-13 spec) — the owning catalogue id and its
+  // per-catalogue opt-in flag, snapshotted onto every cart line this PDP adds.
+  // Pools never cross catalogues. Optional: absent => no catalogue identity and
+  // pooling off, i.e. today's per-product band selection.
+  catalogueId?: string | null
+  poolingEnabled?: boolean
   // Manual-final pricing (2026-06-10). 'manual_final' => decoration is ONE
   // combined figure per band for the whole item (read from the engine), not a
   // per-placement sum, and the garment is already tier-exact. Optional: absent =>
@@ -1043,6 +1049,9 @@ export function ProductDetailClient({
         artworkUrl: d.artworkUrl,
         snapshotUrl: d.snapshotUrl,
         brackets: isManualPricing ? undefined : buildDecorationBrackets(d.linkId),
+        // Server-decided eligibility (real artwork + non-'custom' method); the
+        // client only carries it through so checkout can re-derive the same pools.
+        poolable: d.poolable,
       }))
     const cartImageForSwatch = (swatchId: string | null): string | null =>
       pickPreferredGalleryImageUrl(
@@ -1089,6 +1098,8 @@ export function ProductDetailClient({
             decorations: cartDecorationsForSwatch(variant.color_swatch_id),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
+            catalogueId: product.catalogueId ?? null,
+            poolingEnabled: product.poolingEnabled === true,
             locationLabel: selectedLocationLabel,
             customName: sanitisedCustomName,
             billingMode: billingModeForVariant(variant.variant_id),
@@ -1143,6 +1154,8 @@ export function ProductDetailClient({
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
+          catalogueId: product.catalogueId ?? null,
+          poolingEnabled: product.poolingEnabled === true,
           locationLabel: selectedLocationLabel,
           customName: sanitisedCustomName,
           billingMode: billingModeForVariant(variantsForSelectedColour[0]?.variant_id ?? null),
@@ -1192,6 +1205,8 @@ export function ProductDetailClient({
       fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
+      catalogueId: product.catalogueId ?? null,
+      poolingEnabled: product.poolingEnabled === true,
       locationLabel: selectedLocationLabel,
       customName: sanitisedCustomName,
       billingMode: billingModeForVariant(selectedVariant?.variant_id ?? null),

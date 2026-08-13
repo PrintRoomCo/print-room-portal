@@ -27,6 +27,16 @@ export interface CartLineDecoration {
    * etc.); in those cases unitPrice stays frozen until checkout re-prices.
    */
   brackets?: CartLineBracket[]
+  /**
+   * Pooled decoration pricing (2026-08-13 spec §5) — may this decoration's
+   * quantity pool across garments sharing it? Server-computed at add-time as
+   * `artwork_id is not null && decoration_method !== 'custom'`, which structurally
+   * excludes the $0 "Custom decoration" placeholder that is attached
+   * catalogue-wide (MTF x28, Anytime Fitness x15, Trades Services x12,
+   * Reburger x7) and would otherwise pool entire catalogues.
+   * Absent on legacy persisted lines → treated as not poolable.
+   */
+  poolable?: boolean
 }
 
 export interface CartLineBracket {
@@ -124,6 +134,19 @@ export interface CartLine {
    */
   manualDecorationPerUnit?: number | null
   manualDecorationBrackets?: CartLineBracket[]
+  /**
+   * Pooled decoration pricing (2026-08-13 spec §5) — the b2b_catalogues.id this
+   * line was added from. Pools never cross catalogues, so this is the pool scope.
+   * Absent on legacy persisted lines → the line never pools.
+   */
+  catalogueId?: string | null
+  /**
+   * Snapshot of the catalogue's `decoration_pooling_enabled` flag at add-time.
+   * Falsy (the default, and the state of every catalogue at ship time) keeps the
+   * line on today's per-product band selection, byte-identical. Old persisted
+   * carts lack the field and so simply never pool — correct degradation.
+   */
+  poolingEnabled?: boolean
 }
 
 export type CartLineFulfilmentType = 'stocked' | 'made_to_order'

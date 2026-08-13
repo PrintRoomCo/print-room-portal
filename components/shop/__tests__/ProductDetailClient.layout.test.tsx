@@ -46,6 +46,8 @@ const decoration: DecorationOption = {
   sortOrder: 0,
   recalcInputs: null,
   overlay: null,
+  // Real artwork + non-'custom' method → eligible to pool (spec §5).
+  poolable: true,
 }
 
 describe('ProductDetailClient PDP layout', () => {

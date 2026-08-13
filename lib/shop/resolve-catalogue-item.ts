@@ -30,10 +30,44 @@ export type PdpCatalogueItem = {
   custom_name_max_length: number | null
   /** Nullable item-level override; NULL inherits products.image_layout. */
   image_layout_override: ImageLayout | null
+  /**
+   * Pooled decoration pricing (2026-08-13 spec) — the owning catalogue's id.
+   * Pools are scoped to one catalogue, so the cart line snapshots this to know
+   * which lines may pool with it. Null when the join is missing (test fixtures,
+   * legacy rows) — a null catalogue id simply never pools.
+   */
+  catalogue_id: string | null
+  /**
+   * Per-catalogue opt-in for pooled decoration pricing. False (the default and
+   * the state of every catalogue at ship time) = today's per-item band
+   * selection, byte-identical.
+   */
+  decoration_pooling_enabled: boolean
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(organization_id, is_active)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
+
+/**
+ * Flatten the embedded catalogue row onto the item. PostgREST returns a
+ * many-to-one embed as an object, but the generated types model it either way,
+ * so normalise both shapes in one place rather than at every read site. A row
+ * with no embed (older fixtures) degrades to "no catalogue identity, pooling
+ * off", which is exactly today's behaviour.
+ */
+function withCatalogueFields(row: unknown): PdpCatalogueItem {
+  const raw = row as Record<string, unknown>
+  const embedded = raw.b2b_catalogues
+  const cat = (Array.isArray(embedded) ? embedded[0] : embedded) as
+    | { id?: string | null; decoration_pooling_enabled?: boolean | null }
+    | null
+    | undefined
+  return {
+    ...(raw as unknown as PdpCatalogueItem),
+    catalogue_id: cat?.id ?? null,
+    decoration_pooling_enabled: cat?.decoration_pooling_enabled === true,
+  }
+}
 
 export interface ResolveCatalogueItemParams {
   productId: string
@@ -110,7 +144,7 @@ export async function resolveCatalogueItemForPdp(
       .eq('source_product_id', productId)
       .eq('b2b_catalogues.organization_id', organizationId)
       .maybeSingle()
-    if (data) return data as unknown as PdpCatalogueItem
+    if (data) return withCatalogueFields(data)
     // Stale / cross-product preview item — fall through to normal access.
   }
 
@@ -128,5 +162,5 @@ export async function resolveCatalogueItemForPdp(
     .limit(1)
     .maybeSingle()
 
-  return (data as unknown as PdpCatalogueItem) ?? null
+  return data ? withCatalogueFields(data) : null
 }

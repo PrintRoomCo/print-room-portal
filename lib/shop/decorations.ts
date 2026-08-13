@@ -65,6 +65,15 @@ export interface DecorationOption {
    * or any required placement coord is missing.
    */
   overlay: DecorationOverlay | null
+  /**
+   * Pooled decoration pricing (2026-08-13 spec §5) — may this decoration's
+   * quantity pool across garments that share it? Decided server-side so the
+   * client can never widen eligibility: a real library decoration has an
+   * artwork and a real method. The $0 `method='custom'` "Custom decoration"
+   * placeholder is attached catalogue-wide, so pooling by decoration id would
+   * pool entire catalogues — excluded structurally here, not by price.
+   */
+  poolable: boolean
 }
 
 interface RawLinkRow {
@@ -260,6 +269,7 @@ export async function loadCatalogueItemDecorations(
       sortOrder: row.sort_order ?? 0,
       recalcInputs,
       overlay,
+      poolable: art != null && dec.decoration_method !== 'custom',
     })
   }
   return out
