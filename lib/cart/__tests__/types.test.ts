@@ -473,3 +473,117 @@ describe('manual-final decoration (price_mode=manual_final)', () => {
     expect(out[0]).toBe(line) // unchanged reference (no garment brackets either)
   })
 })
+
+/**
+ * Pooled decoration pricing (spec 2026-08-13). This file is the sibling of
+ * lib/cart/types.test.ts — both carry their own recomputeProductTierPrices block,
+ * so both get the pooled cases. The assertions here focus on the properties this
+ * suite already pins: cross-product isolation and the stocked/made_to_order
+ * aggregation, and how each changes (or deliberately does not) under pooling.
+ */
+describe('recomputeProductTierPrices — pooled decoration pricing', () => {
+  const teeLadder: CartLineBracket[] = [
+    { minQty: 1, maxQty: 99, unitPrice: 30 },
+    { minQty: 100, maxQty: 599, unitPrice: 25 },
+    { minQty: 600, maxQty: null, unitPrice: 20 },
+  ]
+  const decoLadder: CartLineBracket[] = [
+    { minQty: 1, maxQty: 599, unitPrice: 9 },
+    { minQty: 600, maxQty: null, unitPrice: 4 },
+  ]
+
+  function poolLine(over: Partial<CartLine> & { lineId: string; qty: number }): CartLine {
+    return {
+      productId: 'p-tee',
+      productName: 'Tee',
+      variantId: 'v1',
+      variantLabel: 'Bone / M',
+      unitPrice: 30,
+      imageUrl: null,
+      decorations: [],
+      brackets: teeLadder,
+      catalogueId: 'cat-1',
+      poolingEnabled: true,
+      fulfilmentType: 'made_to_order',
+      ...over,
+    }
+  }
+
+  function art(decorationId: string, poolable = true): CartLineDecoration {
+    return {
+      linkId: `link-${decorationId}`,
+      decorationId,
+      name: decorationId,
+      method: 'screenprint',
+      positionLabel: 'LC',
+      unitPrice: 9,
+      artworkUrl: '',
+      snapshotUrl: null,
+      brackets: decoLadder,
+      poolable,
+    }
+  }
+
+  it('BREAKS cross-product isolation only when the artwork is shared and pooling is on', () => {
+    // The isolation assertion earlier in this file ("same product + different
+    // decoration signatures: do not aggregate") is about ONE product. Pooling is
+    // the deliberate opposite across DIFFERENT products sharing an artwork.
+    const shared = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 500, decorations: [art('A')] }),
+      poolLine({ lineId: 'hood', productId: 'p-hood', qty: 100, decorations: [art('A')] }),
+    ])
+    expect(shared.map((l) => l.unitPrice)).toEqual([20, 20])
+
+    // Different artworks: still isolated, exactly as before pooling existed.
+    const distinct = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 500, decorations: [art('A')] }),
+      poolLine({ lineId: 'hood', productId: 'p-hood', qty: 100, decorations: [art('B')] }),
+    ])
+    expect(distinct.map((l) => l.unitPrice)).toEqual([25, 25])
+  })
+
+  it('cross-product isolation is untouched while the flag is off', () => {
+    const out = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 500, poolingEnabled: false, decorations: [art('A')] }),
+      poolLine({ lineId: 'hood', productId: 'p-hood', qty: 100, poolingEnabled: false, decorations: [art('A')] }),
+    ])
+    expect(out.map((l) => l.unitPrice)).toEqual([25, 25])
+    expect(out.map((l) => l.decorations[0].unitPrice)).toEqual([9, 9])
+  })
+
+  it('keeps pooling stocked + made_to_order lines of ONE product into a tier key', () => {
+    // Pooling excludes stocked lines from the DECORATION pool and from receiving a
+    // max-rule band. It must not disturb the existing same-product aggregation
+    // this suite pins elsewhere — the flat stock price still rides its own single
+    // synthesized bracket, and the made-to-order sibling still sees the group qty.
+    const out = recomputeProductTierPrices([
+      poolLine({ lineId: 'a', qty: 50, fulfilmentType: 'stocked' }),
+      poolLine({ lineId: 'b', qty: 50, fulfilmentType: 'made_to_order' }),
+    ])
+    // 50 + 50 = 100 → the 100-599 band, for BOTH lines. That is today's
+    // same-product aggregation and pooling must not disturb it.
+    expect(out[0].unitPrice).toBe(25)
+    expect(out[1].unitPrice).toBe(25)
+  })
+
+  it('a stocked line is not dragged up by a pooled sibling of another product', () => {
+    const out = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 590, decorations: [art('A')] }),
+      poolLine({ lineId: 'stock', productId: 'p-hood', qty: 20, fulfilmentType: 'stocked', decorations: [art('A')] }),
+    ])
+    // Pool = 590 (the stocked 20 does not contribute) → tee stays in 100-599.
+    expect(out[0].unitPrice).toBe(25)
+    // And the stocked line keeps its own 20 → the 1-99 band.
+    expect(out[1].unitPrice).toBe(30)
+  })
+
+  it('allInUnitPrice reflects the pooled garment AND pooled decoration', () => {
+    const [tee] = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 300, decorations: [art('A')] }),
+      poolLine({ lineId: 'hood', productId: 'p-hood', qty: 300, decorations: [art('A')] }),
+    ])
+    expect(tee.unitPrice).toBe(20)
+    expect(decorationPerUnit(tee)).toBe(4)
+    expect(allInUnitPrice(tee)).toBe(24)
+  })
+})

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cartLineDisplayImageUrl,
+  decorationPerUnit,
   isGenericCustomDecorationName,
   pickBracket,
   recomputeProductTierPrices,
@@ -307,5 +308,200 @@ describe('isGenericCustomDecorationName', () => {
     expect(isGenericCustomDecorationName(' custom decoration ')).toBe(true)
     expect(isGenericCustomDecorationName('Front logo')).toBe(false)
     expect(isGenericCustomDecorationName(null)).toBe(false)
+  })
+})
+
+describe('recomputeProductTierPrices — pooled decoration pricing', () => {
+  // Garment ladders differ per product ON PURPOSE: the spec's rule is that a
+  // pooled line jumps to the band the combined order earns but reads the price
+  // from ITS OWN ladder. A hood is never priced "as a tee".
+  const teeLadder: CartLineBracket[] = [
+    { minQty: 1, maxQty: 99, unitPrice: 30 },
+    { minQty: 100, maxQty: 599, unitPrice: 25 },
+    { minQty: 600, maxQty: null, unitPrice: 20 },
+  ]
+  const hoodLadder: CartLineBracket[] = [
+    { minQty: 1, maxQty: 99, unitPrice: 70 },
+    { minQty: 100, maxQty: 599, unitPrice: 65 },
+    { minQty: 600, maxQty: null, unitPrice: 55 },
+  ]
+  const ladderA: CartLineBracket[] = [
+    { minQty: 1, maxQty: 149, unitPrice: 9 },
+    { minQty: 150, maxQty: 599, unitPrice: 6 },
+    { minQty: 600, maxQty: null, unitPrice: 4 },
+  ]
+  const ladderB: CartLineBracket[] = [
+    { minQty: 1, maxQty: 149, unitPrice: 8 },
+    { minQty: 150, maxQty: null, unitPrice: 5 },
+  ]
+
+  function pooled(opts: {
+    lineId: string
+    productId: string
+    qty: number
+    unitPrice: number
+    brackets: CartLineBracket[]
+    decorations?: CartLineDecoration[]
+    poolingEnabled?: boolean
+    fulfilmentType?: 'stocked' | 'made_to_order'
+  }): CartLine {
+    return {
+      ...line({
+        lineId: opts.lineId,
+        productId: opts.productId,
+        qty: opts.qty,
+        unitPrice: opts.unitPrice,
+        brackets: opts.brackets,
+        decorations: opts.decorations ?? [],
+      }),
+      catalogueId: 'cat-1',
+      poolingEnabled: opts.poolingEnabled ?? true,
+      fulfilmentType: opts.fulfilmentType ?? 'made_to_order',
+    }
+  }
+
+  function placement(
+    decorationId: string,
+    unitPrice: number,
+    brackets: CartLineBracket[],
+    poolable = true,
+  ): CartLineDecoration {
+    return {
+      linkId: `link-${decorationId}`,
+      decorationId,
+      name: decorationId,
+      method: 'screenprint',
+      positionLabel: 'LC',
+      unitPrice,
+      artworkUrl: '',
+      snapshotUrl: null,
+      brackets,
+      poolable,
+    }
+  }
+
+  it('spec example A: 500 tees + 100 hoods on one artwork both band at 600', () => {
+    const out = recomputeProductTierPrices([
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('A', 9, ladderA)] }),
+      pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('A', 9, ladderA)] }),
+    ])
+    // Garment: each reads the 600+ row of its OWN ladder.
+    expect(out[0].unitPrice).toBe(20)
+    expect(out[1].unitPrice).toBe(55)
+    // Decoration: both at the pooled 600.
+    expect(out[0].decorations[0].unitPrice).toBe(4)
+    expect(out[1].decorations[0].unitPrice).toBe(4)
+  })
+
+  it('spec example B: mismatched sets — per-decoration pools and the max rule', () => {
+    const out = recomputeProductTierPrices([
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('A', 9, ladderA)] }),
+      pooled({
+        lineId: 'hood',
+        productId: 'p-hood',
+        qty: 100,
+        unitPrice: 65,
+        brackets: hoodLadder,
+        decorations: [placement('A', 9, ladderA), placement('B', 8, ladderB)],
+      }),
+      pooled({ lineId: 'cap', productId: 'p-cap', qty: 50, unitPrice: 30, brackets: teeLadder, decorations: [placement('B', 8, ladderB)] }),
+    ])
+    const [tee, hood, cap] = out
+    // A pools to 600, B to 150.
+    expect(tee.decorations[0].unitPrice).toBe(4) // A @600
+    expect(hood.decorations[0].unitPrice).toBe(4) // A @600
+    expect(hood.decorations[1].unitPrice).toBe(5) // B @150 — its own smaller pool
+    expect(cap.decorations[0].unitPrice).toBe(5) // B @150
+    // Garment band: max rule. The hood takes 600 (max of 600, 150)...
+    expect(hood.unitPrice).toBe(55)
+    // ...and the cap does NOT inherit 600 through the hood. 150 → the 100-599 band.
+    expect(cap.unitPrice).toBe(25)
+  })
+
+  it('re-bands DOWN when the big line is removed', () => {
+    const withTee = [
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('A', 9, ladderA)] }),
+      pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('A', 9, ladderA)] }),
+    ]
+    expect(recomputeProductTierPrices(withTee)[1].unitPrice).toBe(55)
+    const hoodAlone = recomputeProductTierPrices(withTee.filter((l) => l.lineId === 'hood'))
+    expect(hoodAlone[0].unitPrice).toBe(65) // back to its own 100-599 band
+    expect(hoodAlone[0].decorations[0].unitPrice).toBe(9) // A pool now 100
+  })
+
+  it('re-bands on a qty edit of a sibling line', () => {
+    const base = [
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 40, unitPrice: 30, brackets: teeLadder, decorations: [placement('A', 9, ladderA)] }),
+      pooled({ lineId: 'hood', productId: 'p-hood', qty: 40, unitPrice: 70, brackets: hoodLadder, decorations: [placement('A', 9, ladderA)] }),
+    ]
+    expect(recomputeProductTierPrices(base)[1].unitPrice).toBe(70) // 80 pooled → 1-99
+    const bumped = base.map((l) => (l.lineId === 'tee' ? { ...l, qty: 560 } : l))
+    expect(recomputeProductTierPrices(bumped)[1].unitPrice).toBe(55) // 600 pooled
+  })
+
+  it('stocked lines neither contribute to nor receive a pooled band', () => {
+    const out = recomputeProductTierPrices([
+      pooled({ lineId: 'stock', productId: 'p-tee', qty: 500, unitPrice: 30, brackets: teeLadder, fulfilmentType: 'stocked', decorations: [placement('A', 9, ladderA)] }),
+      pooled({ lineId: 'made', productId: 'p-hood', qty: 100, unitPrice: 70, brackets: hoodLadder, decorations: [placement('A', 9, ladderA)] }),
+    ])
+    // Does not receive: the stocked line keeps its own-qty band (500 → 100-599).
+    expect(out[0].unitPrice).toBe(25)
+    expect(out[0].decorations[0].unitPrice).toBe(6) // A at its own 500, not a pool
+    // Does not contribute: the made-to-order line sees a pool of 100, not 600.
+    expect(out[1].unitPrice).toBe(65)
+    expect(out[1].decorations[0].unitPrice).toBe(9)
+  })
+
+  it('the $0 custom placeholder never pools', () => {
+    const out = recomputeProductTierPrices([
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('ph', 0, ladderA, false)] }),
+      pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('ph', 0, ladderA, false)] }),
+    ])
+    expect(out[1].unitPrice).toBe(65) // own 100, not 600
+  })
+
+  it('never pools across catalogues', () => {
+    const out = recomputeProductTierPrices([
+      pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('A', 9, ladderA)] }),
+      { ...pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('A', 9, ladderA)] }), catalogueId: 'cat-2' },
+    ])
+    expect(out[1].unitPrice).toBe(65)
+  })
+
+  it('a pooled manual_final line drops the combined figure for the per-placement sum', () => {
+    // The per-band combined figure cannot express a per-placement delta, which is
+    // exactly why pooling moves decoration price onto per-decoration ladders.
+    const [out] = recomputeProductTierPrices([
+      {
+        ...pooled({
+          lineId: 'polo',
+          productId: 'p-polo',
+          qty: 600,
+          unitPrice: 20,
+          brackets: teeLadder,
+          decorations: [placement('A', 9, ladderA), placement('B', 8, ladderB)],
+        }),
+        manualDecorationPerUnit: 12,
+        manualDecorationBrackets: [{ minQty: 1, maxQty: null, unitPrice: 12 }],
+      },
+    ])
+    expect(out.manualDecorationPerUnit).toBeNull()
+    // Σ per-decoration ladder picks at the pooled qty: A@600 = 4, B@600 → tail = 5.
+    expect(out.decorations.map((d) => d.unitPrice)).toEqual([4, 5])
+    expect(decorationPerUnit(out)).toBe(9)
+  })
+
+  it('a NON-pooled manual_final line keeps the combined figure', () => {
+    const [out] = recomputeProductTierPrices([
+      {
+        ...pooled({ lineId: 'polo', productId: 'p-polo', qty: 600, unitPrice: 20, brackets: teeLadder, poolingEnabled: false }),
+        manualDecorationPerUnit: 12,
+        manualDecorationBrackets: [
+          { minQty: 1, maxQty: 99, unitPrice: 12 },
+          { minQty: 100, maxQty: null, unitPrice: 8 },
+        ],
+      },
+    ])
+    expect(out.manualDecorationPerUnit).toBe(8)
   })
 })

@@ -1,5 +1,11 @@
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import type { FulfilmentType } from '@/lib/shop/fulfilment-mode'
+import {
+  garmentBandQty,
+  isPoolingLine,
+  pooledDecorationQty,
+  pooledQtyByDecoration,
+} from '@/lib/pricing/decoration-pooling'
 
 export interface CartLineDecoration {
   /** b2b_catalogue_item_decorations.id — re-validated on submit. */
@@ -274,12 +280,24 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
     const k = aggKey(l)
     totalByKey.set(k, (totalByKey.get(k) ?? 0) + l.qty)
   }
+
+  // Pooled decoration pricing (spec 2026-08-13). Built from ALL lines, but only
+  // lines in a pooling-enabled catalogue contribute or receive — so with every
+  // catalogue's flag false (the ship-time state) `pools` is empty and every
+  // branch below collapses to the pre-pooling code path, byte for byte. Pinned
+  // by lib/cart/flag-off-parity.test.ts.
+  const pools = pooledQtyByDecoration(lines)
+
   return lines.map((l) => {
     const total = totalByKey.get(aggKey(l)) ?? l.qty
+    const pooling = pools.size > 0 && isPoolingLine(l)
+    // Band-selection quantity ONLY. `total` remains the real group quantity and
+    // is what every non-pricing consumer keeps reading.
+    const garmentQty = pooling ? garmentBandQty(l, pools, total) : total
 
     let nextUnitPrice = l.unitPrice
     if (l.brackets && l.brackets.length > 0) {
-      const bracket = pickBracket(l.brackets, total)
+      const bracket = pickBracket(l.brackets, garmentQty)
       if (bracket) nextUnitPrice = bracket.unitPrice
     }
 
@@ -288,7 +306,10 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
     if (l.decorations.length > 0) {
       const remapped = l.decorations.map((d) => {
         if (!d.brackets || d.brackets.length === 0) return d
-        const decoBracket = pickBracket(d.brackets, total)
+        // Each placement prices at ITS OWN pool, so a garment carrying an extra
+        // back print picks that print's smaller band independently.
+        const decoQty = pooling ? pooledDecorationQty(l, d, pools, total) : total
+        const decoBracket = pickBracket(d.brackets, decoQty)
         if (!decoBracket || decoBracket.unitPrice === d.unitPrice) return d
         decorationsChanged = true
         return { ...d, unitPrice: decoBracket.unitPrice }
@@ -298,9 +319,18 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
 
     // Manual-final: re-pick the line-level combined decoration from its own
     // ladder on a qty edit (mirrors the garment + per-placement re-pick above).
+    //
+    // Pooled lines do NOT use the combined figure at all: the item's per-band
+    // decoration_unit_price cannot express a per-placement delta, which is the
+    // whole reason pooling moves decoration price onto per-decoration ladders
+    // (spec §3). Clearing it makes decorationPerUnit() fall through to the
+    // per-placement sum, matching what the checkout server bills for these lines.
     let nextManualDeco = l.manualDecorationPerUnit
     let manualDecoChanged = false
-    if (
+    if (pooling && l.manualDecorationPerUnit != null) {
+      nextManualDeco = null
+      manualDecoChanged = true
+    } else if (
       l.manualDecorationPerUnit != null &&
       l.manualDecorationBrackets &&
       l.manualDecorationBrackets.length > 0

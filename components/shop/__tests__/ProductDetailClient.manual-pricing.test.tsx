@@ -74,6 +74,8 @@ const detailsOnlyDecoration: DecorationOption = {
   overlay: null,
   // Details-only: no artwork row, so it can never pool (spec §5).
   poolable: false,
+  // No authored price ladder → today's engine/flat pricing.
+  ladder: null,
 }
 
 function renderPDP(decorations: DecorationOption[] = []) {

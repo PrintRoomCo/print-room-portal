@@ -1,4 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { CartLineBracket } from '@/lib/cart/types'
+import {
+  ladderPriceAt,
+  normalizeLadderBrackets,
+  type DecorationLadderRow,
+} from '@/lib/pricing/decoration-ladder'
 
 const ARTWORK_BUCKET = 'org-artworks'
 
@@ -74,6 +80,19 @@ export interface DecorationOption {
    * pool entire catalogues — excluded structurally here, not by price.
    */
   poolable: boolean
+  /**
+   * The decoration's own authored price ladder (spec §3), normalised so that
+   * exact-band matching reproduces the database's clamped lookup at every
+   * quantity — see lib/pricing/decoration-ladder.ts. Null when no ladder is
+   * authored, in which case pricing stays on today's engine/flat path.
+   *
+   * When present this is snapshotted onto the cart line as
+   * `decorations[].brackets` INSTEAD of the client's probe-derived brackets. The
+   * probe samples fixed breakpoints; a pooled quantity can land between them, and
+   * a missed ladder band edge would make the cart claim one price and the server
+   * RPC compute another — a drift 409 at checkout.
+   */
+  ladder: CartLineBracket[] | null
 }
 
 interface RawLinkRow {
@@ -215,19 +234,38 @@ export async function loadCatalogueItemDecorations(
   }
 
   const rows = (data ?? []) as unknown as RawLinkRow[]
+
+  // Per-decoration price ladders (spec §3). One batched read for the whole item.
+  // A ladder is THE decoration price — it beats both the link override and the
+  // flat unit price, matching effective_decoration_unit_price, which every other
+  // customer price source already routes through. Without this the PDP's first
+  // paint would be the only place still showing the pre-ladder figure.
+  const ladderByDecorationId = await loadDecorationLadders(
+    admin,
+    rows
+      .map((r) => pickOne(r.decoration)?.id)
+      .filter((v): v is string => Boolean(v)),
+  )
+
   const out: DecorationOption[] = []
   for (const row of rows) {
     const dec = pickOne(row.decoration)
     if (!dec || !dec.is_active) continue
+    const ladderRows = ladderByDecorationId.get(dec.id) ?? null
     const art = pickOne(dec.artwork)
     const loc = pickOne(dec.location)
     const printArea = pickOne(row.print_area)
     const baseUnitPrice = Number(dec.unit_price)
     const overridePrice =
       row.unit_price_override != null ? Number(row.unit_price_override) : null
-    const unitPrice = Number.isFinite(overridePrice as number)
+    const staticPrice = Number.isFinite(overridePrice as number)
       ? (overridePrice as number)
       : baseUnitPrice
+    // First paint has no chosen quantity yet, so seed from the ladder at qty 1 —
+    // which the DB clamps to the lowest band. The debounced /api/shop/decoration-pricing
+    // recalc then moves it to the real (pooled) quantity.
+    const ladderSeed = ladderPriceAt(ladderRows, 1)
+    const unitPrice = ladderSeed ?? staticPrice
     const recalcInputs: DecorationOption['recalcInputs'] =
       dec.decoration_method === 'screenprint' &&
       dec.width_mm != null &&
@@ -270,9 +308,48 @@ export async function loadCatalogueItemDecorations(
       recalcInputs,
       overlay,
       poolable: art != null && dec.decoration_method !== 'custom',
+      ladder: normalizeLadderBrackets(ladderRows),
     })
   }
   return out
+}
+
+/**
+ * Batched ladder read, chunked to keep the PostgREST `in` filter bounded (same
+ * shape as the checkout link fetch). Returns an empty map on error rather than
+ * throwing — a failed ladder read degrades to today's engine/flat pricing, which
+ * is the pre-ladder behaviour, not a broken PDP.
+ */
+async function loadDecorationLadders(
+  admin: SupabaseClient,
+  decorationIds: string[],
+): Promise<Map<string, DecorationLadderRow[]>> {
+  const byDecoration = new Map<string, DecorationLadderRow[]>()
+  const ids = Array.from(new Set(decorationIds))
+  if (ids.length === 0) return byDecoration
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await admin
+      .from('org_decoration_pricing_tiers')
+      .select('org_decoration_id, min_quantity, max_quantity, unit_price')
+      .in('org_decoration_id', ids.slice(i, i + 100))
+    if (error) {
+      console.error('[loadDecorationLadders]', error)
+      return new Map()
+    }
+    for (const r of (data ?? []) as Array<
+      DecorationLadderRow & { org_decoration_id: string }
+    >) {
+      const bucket = byDecoration.get(r.org_decoration_id) ?? []
+      bucket.push({
+        min_quantity: r.min_quantity,
+        max_quantity: r.max_quantity,
+        unit_price: r.unit_price,
+      })
+      byDecoration.set(r.org_decoration_id, bucket)
+    }
+  }
+  return byDecoration
 }
 
 function buildOverlay(

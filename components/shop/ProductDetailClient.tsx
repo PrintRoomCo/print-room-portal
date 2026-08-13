@@ -22,7 +22,7 @@ import {
   filterDecorationsBySwatch,
   resolveDecorationsForPricing,
 } from '@/lib/shop/decoration-filter'
-import type { CartLineBracket, CartLineDecoration } from '@/lib/cart/types'
+import { pickBracket, type CartLineBracket, type CartLineDecoration } from '@/lib/cart/types'
 import { sanitiseCustomName } from '@/lib/cart/custom-name'
 import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -867,10 +867,22 @@ export function ProductDetailClient({
 
   // Resolve decoration unit price for a specific qty (falls back to static
   // unitPrice for legacy rows / cache miss).
+  //
+  // An authored ladder wins over the probe cache: it is the same source the
+  // server RPC reads, it is exact at every quantity (the snapshot is normalised
+  // so band matching reproduces the DB's clamp), and it does not depend on the
+  // debounced probe having resolved for this qty yet. That removes probe timing
+  // as a cause of cart/server price divergence for laddered decorations.
   const decorationPriceAt = useMemo(
-    () => (linkId: string, atQty: number, fallback: number) =>
-      decorationPricesByQty[atQty]?.[linkId] ?? fallback,
-    [decorationPricesByQty],
+    () => (linkId: string, atQty: number, fallback: number) => {
+      const authored = decorations.find((d) => d.linkId === linkId)?.ladder
+      if (authored && authored.length > 0) {
+        const band = pickBracket(authored, atQty)
+        if (band) return band.unitPrice
+      }
+      return decorationPricesByQty[atQty]?.[linkId] ?? fallback
+    },
+    [decorationPricesByQty, decorations],
   )
 
   // Manual-final: the item's ONE combined decoration figure at a given qty.
@@ -973,6 +985,16 @@ export function ProductDetailClient({
     // without recalcInputs) — cart will leave unitPrice frozen and the
     // server will re-price on submit either way.
     const buildDecorationBrackets = (linkId: string): CartLineBracket[] | undefined => {
+      // Pooled decoration pricing (spec §3): when the decoration has an authored
+      // ladder, snapshot its EXACT bands rather than probe output. The probe
+      // samples fixed breakpoints; a pooled quantity can land between two of
+      // them, and a ladder band edge the probe never sampled would make the cart
+      // claim one price while the server RPC computes another — a drift 409 at
+      // checkout. Computed screenprint (no ladder) keeps probe-derived brackets;
+      // there the probe breakpoints ARE the engine's band edges.
+      const authored = decorations.find((d) => d.linkId === linkId)?.ladder
+      if (authored && authored.length > 0) return authored
+
       const probeMins = Object.keys(decorationPricesByQty)
         .map((s) => Number(s))
         .filter((n) => Number.isFinite(n) && n >= 1)
@@ -1028,7 +1050,13 @@ export function ProductDetailClient({
     // hasn't (sub-debounce add / fetch error), snapshot null so the server
     // silently re-prices from the engine rather than us claiming a stale 0 that
     // would trip the zero-tolerance drift guard at checkout.
-    const manualDecorationActive = isManualPricing
+    // Pooled catalogues never use the item's combined per-band figure: it cannot
+    // express a per-placement delta, which is exactly why pooling moves decoration
+    // price onto per-decoration ladders (spec §3). Pooled manual items therefore
+    // snapshot real per-placement prices + ladders, like computed items, and the
+    // checkout server bills the same Σ per-decoration sum.
+    const poolingActive = product.poolingEnabled === true
+    const manualDecorationActive = isManualPricing && !poolingActive
     const hasManualData = Object.keys(manualDecorationByQty).length > 0
     const manualDecorationPerUnitSnapshot =
       manualDecorationActive && hasManualData ? manualDecorationAt(qty) : null
@@ -1045,10 +1073,12 @@ export function ProductDetailClient({
         // Manual items: per-placement price is not individually billed (the line
         // carries one combined figure). Snapshot 0 so any accidental fallback to
         // the per-placement sum yields 0, never a wrong positive number.
-        unitPrice: isManualPricing ? 0 : decorationPriceAt(d.linkId, qty, d.unitPrice),
+        unitPrice: manualDecorationActive
+          ? 0
+          : decorationPriceAt(d.linkId, qty, d.unitPrice),
         artworkUrl: d.artworkUrl,
         snapshotUrl: d.snapshotUrl,
-        brackets: isManualPricing ? undefined : buildDecorationBrackets(d.linkId),
+        brackets: manualDecorationActive ? undefined : buildDecorationBrackets(d.linkId),
         // Server-decided eligibility (real artwork + non-'custom' method); the
         // client only carries it through so checkout can re-derive the same pools.
         poolable: d.poolable,

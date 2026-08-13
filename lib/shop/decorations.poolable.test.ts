@@ -12,16 +12,21 @@ import { loadCatalogueItemDecorations } from './decorations'
 
 type Row = Record<string, unknown>
 
-function makeAdmin(rows: Row[]): SupabaseClient {
-  const b: Record<string, unknown> = {
-    select: () => b,
-    eq: () => b,
-    order: () => b,
-    then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
-      Promise.resolve({ data: rows, error: null }).then(resolve, reject),
+function makeAdmin(rows: Row[], ladderRows: Row[] = []): SupabaseClient {
+  function builder(table: string) {
+    const data = table === 'org_decoration_pricing_tiers' ? ladderRows : rows
+    const b: Record<string, unknown> = {
+      select: () => b,
+      eq: () => b,
+      in: () => b,
+      order: () => b,
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve({ data, error: null }).then(resolve, reject),
+    }
+    return b
   }
   return {
-    from: () => b,
+    from: (table: string) => builder(table),
     storage: { from: () => ({ getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
   } as unknown as SupabaseClient
 }
@@ -110,5 +115,54 @@ describe('loadCatalogueItemDecorations — poolable eligibility', () => {
       ['dtf', true],
       ['custom', false],
     ])
+  })
+})
+
+describe('loadCatalogueItemDecorations — ladder-aware first paint', () => {
+  it('leaves the static price and a null ladder when none is authored', () => {
+    // Covered by the eligibility cases above, but stated explicitly: no ladder
+    // rows => today's engine/flat behaviour, unchanged.
+    return loadCatalogueItemDecorations(
+      makeAdmin([link({ id: 'l1', method: 'embroidery', artwork: ARTWORK })]),
+      'item-1',
+    ).then(([dec]) => {
+      expect(dec.ladder).toBeNull()
+      expect(dec.unitPrice).toBe(0)
+    })
+  })
+
+  it('seeds first paint from the ladder, beating the flat price AND the link override', () => {
+    // effective_decoration_unit_price consults the ladder before anything else,
+    // so the PDP's first paint — the one price source that bypasses the RPC —
+    // has to agree or the customer sees a number checkout will not charge.
+    const row = link({ id: 'l1', method: 'embroidery', artwork: ARTWORK })
+    ;(row.decoration as Row).unit_price = 12
+    row.unit_price_override = 99
+    const admin = makeAdmin(
+      [row],
+      [
+        { org_decoration_id: 'dec-l1', min_quantity: 1, max_quantity: 23, unit_price: 9 },
+        { org_decoration_id: 'dec-l1', min_quantity: 24, max_quantity: null, unit_price: 6 },
+      ],
+    )
+    return loadCatalogueItemDecorations(admin, 'item-1').then(([dec]) => {
+      expect(dec.unitPrice).toBe(9)
+      expect(dec.ladder).toEqual([
+        { minQty: 1, maxQty: 23, unitPrice: 9 },
+        { minQty: 24, maxQty: null, unitPrice: 6 },
+      ])
+    })
+  })
+
+  it('clamps the first-paint seed up to the lowest band when the ladder starts above 1', () => {
+    const admin = makeAdmin(
+      [link({ id: 'l1', method: 'screenprint', artwork: ARTWORK })],
+      [{ org_decoration_id: 'dec-l1', min_quantity: 50, max_quantity: null, unit_price: 3 }],
+    )
+    return loadCatalogueItemDecorations(admin, 'item-1').then(([dec]) => {
+      expect(dec.unitPrice).toBe(3)
+      // Normalised so the cart's exact-band matching reproduces the DB clamp.
+      expect(dec.ladder).toEqual([{ minQty: 1, maxQty: null, unitPrice: 3 }])
+    })
   })
 })

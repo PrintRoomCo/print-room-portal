@@ -48,6 +48,8 @@ const decoration: DecorationOption = {
   overlay: null,
   // Real artwork + non-'custom' method → eligible to pool (spec §5).
   poolable: true,
+  // No authored price ladder → today's engine/flat pricing.
+  ladder: null,
 }
 
 describe('ProductDetailClient PDP layout', () => {
