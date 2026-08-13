@@ -5,6 +5,7 @@ import {
   isPoolingLine,
   pooledDecorationQty,
   pooledQtyByDecoration,
+  poolSizesForLine,
 } from '@/lib/pricing/decoration-pooling'
 
 export interface CartLineDecoration {
@@ -43,6 +44,13 @@ export interface CartLineDecoration {
    * Absent on legacy persisted lines → treated as not poolable.
    */
   poolable?: boolean
+  /**
+   * Pooled decoration pricing (spec §8) — how many garments in the cart carry
+   * this artwork, set by `recomputeProductTierPrices` on pooled lines. Display
+   * input for the "Same artwork savings" pill, so components state the outcome
+   * without re-deriving pools. Absent when the line does not pool.
+   */
+  pooledQty?: number
 }
 
 export interface CartLineBracket {
@@ -304,15 +312,25 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
     let nextDecorations: CartLineDecoration[] = l.decorations
     let decorationsChanged = false
     if (l.decorations.length > 0) {
+      const poolSizes = pooling ? poolSizesForLine(l, pools) : null
       const remapped = l.decorations.map((d) => {
-        if (!d.brackets || d.brackets.length === 0) return d
+        // Pool size rides on the decoration for display (spec §8) whether or not
+        // the price moved — a pooled line still says so when its band did not
+        // change. Only ever set on pooled lines, so flag-off is untouched.
+        const pooledQty = poolSizes?.get(d.decorationId)
+        let next = d
+        if (pooledQty != null && pooledQty !== d.pooledQty) {
+          next = { ...d, pooledQty }
+          decorationsChanged = true
+        }
+        if (!next.brackets || next.brackets.length === 0) return next
         // Each placement prices at ITS OWN pool, so a garment carrying an extra
         // back print picks that print's smaller band independently.
-        const decoQty = pooling ? pooledDecorationQty(l, d, pools, total) : total
-        const decoBracket = pickBracket(d.brackets, decoQty)
-        if (!decoBracket || decoBracket.unitPrice === d.unitPrice) return d
+        const decoQty = pooling ? pooledDecorationQty(l, next, pools, total) : total
+        const decoBracket = pickBracket(next.brackets, decoQty)
+        if (!decoBracket || decoBracket.unitPrice === next.unitPrice) return next
         decorationsChanged = true
-        return { ...d, unitPrice: decoBracket.unitPrice }
+        return { ...next, unitPrice: decoBracket.unitPrice }
       })
       if (decorationsChanged) nextDecorations = remapped
     }

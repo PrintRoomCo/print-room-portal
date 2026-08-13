@@ -13,6 +13,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 import { useCartLineFrontImages } from './useCartLineFrontImages'
+import { SameArtworkSavings } from '@/components/pricing/SameArtworkSavings'
 
 interface CartTableProps {
   lines: CartLine[]
@@ -198,6 +199,9 @@ export function CartTable({
                   {line.productName}
                 </p>
                 <p className="mt-1 text-sm text-gray-500">{line.variantLabel}</p>
+                {/* Pooled decoration pricing (spec §8) — inert until a catalogue
+                    opts in, then states the outcome for this line. */}
+                <SameArtworkSavings line={line} />
               </div>
 
               {/* Remove */}

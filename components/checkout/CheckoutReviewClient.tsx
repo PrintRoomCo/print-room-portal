@@ -32,6 +32,7 @@ import {
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 import { TERMS_VERSION } from '@/lib/checkout/terms'
 import { TermsModal } from './TermsModal'
+import { SameArtworkSavings } from '@/components/pricing/SameArtworkSavings'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -559,6 +560,10 @@ export function CheckoutReviewClient({
                           ))}
                         </ul>
                       )}
+                      {/* Pooled decoration pricing (spec §8) — the same pill the
+                          cart shows, so the price the customer is about to
+                          confirm carries the same explanation. */}
+                      <SameArtworkSavings line={line} />
                     </div>
                   </div>
                   <div className="shrink-0 text-right">

@@ -632,6 +632,10 @@ export function ProductDetailClient({
     Record<number, number>
   >(product.manualDecorationSeed ?? {})
   const isManualPricing = product.priceMode === 'manual_final'
+  // Pooled decoration pricing (spec 2026-08-13): false for every catalogue until
+  // an AM opts one in, so both the PDP note and the manual-combined suppression
+  // below are inert today.
+  const poolingActive = product.poolingEnabled === true
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -1055,7 +1059,6 @@ export function ProductDetailClient({
     // price onto per-decoration ladders (spec §3). Pooled manual items therefore
     // snapshot real per-placement prices + ladders, like computed items, and the
     // checkout server bills the same Σ per-decoration sum.
-    const poolingActive = product.poolingEnabled === true
     const manualDecorationActive = isManualPricing && !poolingActive
     const hasManualData = Object.keys(manualDecorationByQty).length > 0
     const manualDecorationPerUnitSnapshot =
@@ -1549,6 +1552,15 @@ export function ProductDetailClient({
                   </li>
                 ))}
               </ul>
+              {/* Pooled decoration pricing (spec §8): a static note only. No live
+                  cross-product simulation on the product page — the real pooled
+                  price appears in the cart, where the whole order is known. */}
+              {poolingActive && (
+                <p className="mt-4 text-xs leading-5 text-gray-500">
+                  Quantities combine across garments sharing this artwork, so
+                  adding other products with the same logo can move this price.
+                </p>
+              )}
             </section>
           )}
 
