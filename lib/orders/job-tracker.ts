@@ -38,6 +38,8 @@ export interface CreateJobTrackerShellArgs {
   /** Feature #7 — denormalised order classification for tracker visibility. */
   orderType: 'stock_on_hand' | 'purchase_order'
   shippingAddress?: Record<string, unknown> | null
+  /** Order billing currency for the tracker snapshot (default NZD). */
+  currencyCode?: 'NZD' | 'AUD'
 }
 
 interface QuoteRow {
@@ -211,7 +213,7 @@ export async function createJobTrackerShellForOrder(
     customerName: args.customerName ?? undefined,
     shippingAddress: shippingAddress ?? undefined,
     subtotal,
-    currencyCode: 'NZD',
+    currencyCode: args.currencyCode ?? 'NZD',
   }
 
   const row = {

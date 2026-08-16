@@ -51,6 +51,9 @@ export interface OrderPlacedDispatchParams {
     quantity: number
     unitPrice: number
   }>
+  /** Billing currency. AUD renders every money figure with an A$ prefix so staff
+   *  and customers can never misread an AUD figure as NZD. Default NZD. */
+  currency?: 'NZD' | 'AUD'
 }
 
 const ORDER_TYPE_LABEL: Record<OrderPlacedDispatchParams['orderType'], string> = {
@@ -58,8 +61,8 @@ const ORDER_TYPE_LABEL: Record<OrderPlacedDispatchParams['orderType'], string> =
   purchase_order: 'Purchase order',
 }
 
-function formatMoney(n: number): string {
-  return `$${n.toFixed(2)}`
+function formatMoney(n: number, currency: 'NZD' | 'AUD' = 'NZD'): string {
+  return `${currency === 'AUD' ? 'A$' : '$'}${n.toFixed(2)}`
 }
 
 function hasVariant(label: string): boolean {
@@ -80,6 +83,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
   html: string
   text: string
 } {
+  const money = (n: number) => formatMoney(n, params.currency ?? 'NZD')
   const typeLabel = ORDER_TYPE_LABEL[params.orderType]
   const orderer = formatOrderer(params.ordererName, params.ordererEmail)
   const deliveryAddress = params.deliveryAddress?.trim() || null
@@ -99,7 +103,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
                   : ''
               }</td>
               <td style="${numCell}color:${BODY};">${line.quantity}</td>
-              <td style="${numCell}color:${INK};">${formatMoney(line.unitPrice * line.quantity)}</td>
+              <td style="${numCell}color:${INK};">${money(line.unitPrice * line.quantity)}</td>
             </tr>`
     })
     .join('')
@@ -136,7 +140,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
               </tbody>
               <tfoot><tr>
                 <td colspan="2" style="padding:16px 0 0;text-align:right;${labelStyle}">Goods value</td>
-                <td style="padding:16px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
+                <td style="padding:16px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${money(params.totalAmount)}</td>
               </tr></tfoot>
             </table>
 
@@ -148,13 +152,13 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
 
   const subject = `Order placed — ${params.orderRef} (${typeLabel})`
   const html = wrapBrandedEmail(subject, body, {
-    preheader: `${params.customerName} — ${formatMoney(params.totalAmount)}`,
+    preheader: `${params.customerName} — ${money(params.totalAmount)}`,
   })
 
   const textLines = params.lines
     .map(
       (l) =>
-        `${l.productName}${hasVariant(l.variantLabel) ? ` (${l.variantLabel})` : ''} x ${l.quantity} = ${formatMoney(l.unitPrice * l.quantity)}`,
+        `${l.productName}${hasVariant(l.variantLabel) ? ` (${l.variantLabel})` : ''} x ${l.quantity} = ${money(l.unitPrice * l.quantity)}`,
     )
     .join('\n')
   const text =
@@ -164,7 +168,7 @@ export function buildOrderPlacedDispatchEmail(params: OrderPlacedDispatchParams)
     `Order type: ${typeLabel}\n` +
     (deliveryAddress ? `\nDeliver to:\n${deliveryAddress}\n` : '') +
     `\n${textLines}\n\n` +
-    `Goods value: ${formatMoney(params.totalAmount)}\n\n` +
+    `Goods value: ${money(params.totalAmount)}\n\n` +
     `Open order: ${params.orderUrl}\n`
 
   return { subject, html, text }

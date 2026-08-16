@@ -38,10 +38,13 @@ export interface OrderConfirmationParams {
     quantity: number
     unitPrice: number
   }>
+  /** Billing currency. AUD renders every money figure with an A$ prefix so staff
+   *  and customers can never misread an AUD figure as NZD. Default NZD. */
+  currency?: 'NZD' | 'AUD'
 }
 
-function formatMoney(n: number): string {
-  return `$${n.toFixed(2)}`
+function formatMoney(n: number, currency: 'NZD' | 'AUD' = 'NZD'): string {
+  return `${currency === 'AUD' ? 'A$' : '$'}${n.toFixed(2)}`
 }
 
 /** True when the variant label carries real content (not an empty/placeholder dash). */
@@ -61,6 +64,7 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
   html: string
   text: string
 } {
+  const money = (n: number) => formatMoney(n, params.currency ?? 'NZD')
   const provisionalNote = params.provisionalUntil
     ? `Pricing is provisional until your ordering window closes on ${new Date(
         params.provisionalUntil,
@@ -76,8 +80,8 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
       const productName = escapeHtml(line.productName)
       const variantLabel = escapeHtml(line.variantLabel)
       const quantity = line.quantity.toString()
-      const unitPrice = formatMoney(line.unitPrice)
-      const lineTotal = formatMoney(line.unitPrice * line.quantity)
+      const unitPrice = money(line.unitPrice)
+      const lineTotal = money(line.unitPrice * line.quantity)
 
       return `<tr>
               <td style="${cellBase}">
@@ -123,7 +127,7 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
                   ? `
                 <tr>
                   <td colspan="3" style="padding:14px 0 0;text-align:right;font-size:12px;color:#6b7280;">Drawn from pre-paid stock</td>
-                  <td style="padding:14px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:12px;color:#6b7280;white-space:nowrap;">${formatMoney(params.prepaidGoodsValue ?? 0)}</td>
+                  <td style="padding:14px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:12px;color:#6b7280;white-space:nowrap;">${money(params.prepaidGoodsValue ?? 0)}</td>
                 </tr>`
                   : ''
               }${
@@ -131,13 +135,13 @@ export function buildOrderConfirmationEmail(params: OrderConfirmationParams): {
                   ? `
                 <tr>
                   <td colspan="3" style="padding:6px 0 0;text-align:right;font-size:13px;color:#374151;">Picking fee</td>
-                  <td style="padding:6px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:13px;color:#374151;white-space:nowrap;">${formatMoney(params.pickingFee ?? 0)}</td>
+                  <td style="padding:6px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:13px;color:#374151;white-space:nowrap;">${money(params.pickingFee ?? 0)}</td>
                 </tr>`
                   : ''
               }
                 <tr>
                   <td colspan="3" style="padding:18px 0 0;text-align:right;${labelStyle}">Total</td>
-                  <td style="padding:18px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${formatMoney(params.totalAmount)}</td>
+                  <td style="padding:18px 0 0 16px;text-align:right;font-family:${BRAND_MONO};font-size:18px;font-weight:700;color:${INK};white-space:nowrap;">${money(params.totalAmount)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -162,7 +166,7 @@ ${
   const textLines = params.lines
     .map(
       (line) =>
-        `${line.productName}${hasVariant(line.variantLabel) ? ` (${line.variantLabel})` : ''} x ${line.quantity} @ ${formatMoney(line.unitPrice)} = ${formatMoney(line.unitPrice * line.quantity)}`
+        `${line.productName}${hasVariant(line.variantLabel) ? ` (${line.variantLabel})` : ''} x ${line.quantity} @ ${money(line.unitPrice)} = ${money(line.unitPrice * line.quantity)}`
     )
     .join('\n')
 
@@ -172,12 +176,12 @@ ${
     `Your reference: ${params.orderRef}\n\n` +
     `${textLines}\n\n` +
     ((params.prepaidGoodsValue ?? 0) > 0
-      ? `Drawn from pre-paid stock: ${formatMoney(params.prepaidGoodsValue ?? 0)}\n`
+      ? `Drawn from pre-paid stock: ${money(params.prepaidGoodsValue ?? 0)}\n`
       : '') +
     ((params.pickingFee ?? 0) > 0
-      ? `Picking fee: ${formatMoney(params.pickingFee ?? 0)}\n`
+      ? `Picking fee: ${money(params.pickingFee ?? 0)}\n`
       : '') +
-    `Total: ${formatMoney(params.totalAmount)}\n` +
+    `Total: ${money(params.totalAmount)}\n` +
     (provisionalNote ? `\n${provisionalNote}\n` : '') +
     `\nQuestions? Reply to this email or contact hello@theprint-room.co.nz.\n\n` +
     `Thanks,\nThe Print Room team`

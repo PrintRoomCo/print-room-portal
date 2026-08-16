@@ -266,6 +266,7 @@ describe('submitCustomerOrder — job tracker step 4c + Monday id attach (5a)', 
       requiredBy: '2026-06-01',
       orderType: 'purchase_order',
       shippingAddress: {},
+      currencyCode: 'NZD', // AU Stage 1 — NZ org, so the stamp is unchanged
     })
 
     const createdAudits = writes.filter(

@@ -419,6 +419,9 @@ export interface OrderDealData {
   deliveryAddress: string | null
   notes: string | null
   totalAmount: number
+  /** quotes.currency ('NZD' | 'AUD'). Non-NZD renders a suffix on the Total line
+   *  so the factory/accounts never misread a raw AUD number as NZD. */
+  currency?: string | null
   lines: OrderLineForMonday[]
 }
 
@@ -431,14 +434,15 @@ function buildOrderItemName(data: OrderDealData): string {
   return `${data.customerName}${company} - ${data.orderRef}`
 }
 
-function buildOrderFullFormResponse(data: OrderDealData): string {
+export function buildOrderFullFormResponse(data: OrderDealData): string {
   const lines: string[] = [
     `Order ref: ${data.orderRef}`,
     `Customer: ${data.customerName}`,
     `Email: ${data.customerEmail}`,
   ]
   if (data.customerCompany) lines.push(`Company: ${data.customerCompany}`)
-  lines.push(`Total: $${data.totalAmount.toFixed(2)}`)
+  const currencySuffix = data.currency && data.currency !== 'NZD' ? ` (${data.currency})` : ''
+  lines.push(`Total: $${data.totalAmount.toFixed(2)}${currencySuffix}`)
   if (data.inHandDate) lines.push(`In-hand: ${data.inHandDate}`)
   lines.push('')
 

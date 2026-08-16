@@ -239,6 +239,31 @@ describe('createJobTrackerShellForOrder', () => {
     ])
   })
 
+  // AU Stage 1: the snapshot currency comes from the caller (submit derives it
+  // from the org region); absent it stays NZD, as the case above asserts.
+  it('stamps the caller-supplied currencyCode on the tracker snapshot', async () => {
+    const { admin, writes } = makeStub({
+      selects: baseSelects(),
+      insertResponses: [{ table: 'job_trackers', data: { id: 't-au' }, error: null }],
+    })
+
+    await createJobTrackerShellForOrder(admin, {
+      quoteId: QUOTE_ID,
+      orderRef: 'ORD-TEST-AU',
+      organizationId: ORG_ID,
+      userId: USER_ID,
+      customerEmail: 'buyer@acme.test',
+      customerName: 'White Fox',
+      requiredBy: null,
+      orderType: 'purchase_order',
+      currencyCode: 'AUD',
+    })
+
+    const row = writes.filter((w) => w.table === 'job_trackers' && w.op === 'insert')[0]
+      .payload as AnyRow
+    expect((row.quote_data as { currencyCode: string }).currencyCode).toBe('AUD')
+  })
+
   it('updates an existing tracker row when one already exists for the quote (idempotent)', async () => {
     const selects = baseSelects().map((s) =>
       s.table === 'job_trackers'

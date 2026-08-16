@@ -25,6 +25,7 @@ import { orderBillingNote } from '@/lib/monday/billing-note'
 import { orderNeedsInvoicing } from './order-billing'
 import { resolveLineBillingModes } from './resolve-line-billing-modes'
 import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { currencyForRegion } from '@/lib/pricing/gst'
 import { round2 } from '@/lib/pricing/pricingMath'
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import { billedFigures } from '@/lib/checkout/billed-figures'
@@ -1896,6 +1897,7 @@ export async function submitCustomerOrder(
       requiredBy: input.required_by ?? null,
       orderType,
       shippingAddress,
+      currencyCode: currencyForRegion(orgRegion),
     })
     await recordAuditEvent(
       {
@@ -2045,6 +2047,7 @@ export async function submitCustomerOrder(
           inHandDate: input.required_by ?? null,
           notes: input.notes ?? null,
           totalAmount,
+          currency: currencyForRegion(orgRegion),
           lines,
           deliveryAddress: formattedShippingAddress,
         },
@@ -2472,6 +2475,7 @@ export async function submitCustomerOrder(
           customerName: emailCustomerName,
           orderId: order_id,
           orderRef: order_ref,
+          currency: currencyForRegion(orgRegion),
           totalAmount: fallbackTotal,
           // Both 0 on the fallback path (quote fetch failed): fallbackTotal is
           // the goods sum, so the order over-quotes rather than under-quotes —
@@ -2561,6 +2565,7 @@ export async function submitCustomerOrder(
           orderRef: order_ref,
           customerName: emailCustomerName,
           orderType,
+          currency: currencyForRegion(orgRegion),
           totalAmount: notifyTotal,
           orderUrl: notifyOrderUrl,
           ordererName: input.context.fullName,
