@@ -40,6 +40,7 @@ function customer(over: Partial<B2BCustomerAccess> = {}): B2BCustomerAccess {
     hasTrackedInventory: true,
     defaultStoreId: null,
     tenantType: 'franchise',
+    region: 'NZ',
     allowsMultiStoreOrdering: false,
     ...over,
   }
