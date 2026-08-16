@@ -437,7 +437,11 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
         </div>
       )}
 
-      <CurrencyDisplayPreferenceSection fetchedAt={ratesFetchedAt} />
+      {/* AU Stage 1: an AU org has nothing to choose — their prices ARE AUD, not
+          conversions of an NZD base, and the provider is pinned. */}
+      {access?.region !== 'AU' && (
+        <CurrencyDisplayPreferenceSection fetchedAt={ratesFetchedAt} />
+      )}
 
       {/* Password Change */}
       <div className="card-elevated p-6">

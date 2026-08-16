@@ -20,7 +20,11 @@ export default async function PortalLayout({ children }: { children: React.React
     <AuthProvider initialUser={user}>
       <CompanyProvider initialAccess={access} initialUserId={user?.id ?? null}>
         <PreviewBanner />
-        <CurrencyProvider initialRates={exchangeRates.rates} initialCurrency={initialCurrency}>
+        <CurrencyProvider
+          initialRates={exchangeRates.rates}
+          initialCurrency={access?.region === 'AU' ? 'AUD' : initialCurrency}
+          billingCurrency={access?.region === 'AU' ? 'AUD' : null}
+        >
           <CartProvider>
             <PortalShell>{children}</PortalShell>
           </CartProvider>
