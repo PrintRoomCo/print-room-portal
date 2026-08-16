@@ -1,6 +1,6 @@
 // lib/xero/__tests__/config.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { isXeroEnabled, getXeroConfig } from '../config'
+import { isXeroEnabled, getXeroConfig, isXeroConfiguredForRegion } from '../config'
 
 const SAVED = { ...process.env }
 beforeEach(() => {
@@ -59,5 +59,52 @@ describe('getXeroConfig', () => {
       salesAccountCode: '260', taxType: 'OUTPUT', lineAmountTypes: 'Inclusive',
       tenantId: 'tid', brandingThemeId: 'bt-1',
     })
+  })
+})
+
+describe('getXeroConfig("AU") (AU Stage 1)', () => {
+  it('maps the XERO_AU_* env surface with AU defaults', () => {
+    process.env.XERO_AU_CLIENT_ID = 'au-id'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    const cfg = getXeroConfig('AU')
+    expect(cfg.clientId).toBe('au-id')
+    expect(cfg.clientSecret).toBe('au-secret')
+    expect(cfg.taxType).toBe('OUTPUT')       // AU 10% GST on Income
+    expect(cfg.currency).toBe('AUD')
+    expect(cfg.salesAccountCode).toBe('200') // default; env-overridable per HITL check
+    expect(cfg.tenantId).toBeNull()          // custom connection = single-org token
+  })
+  it('reads AU overrides from env', () => {
+    process.env.XERO_AU_CLIENT_ID = 'au-id'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    process.env.XERO_AU_SALES_ACCOUNT_CODE = '210'
+    process.env.XERO_AU_TAX_TYPE = 'OUTPUT2'
+    process.env.XERO_AU_CURRENCY = 'NZD'
+    process.env.XERO_AU_BRANDING_THEME_ID = 'au-bt'
+    expect(getXeroConfig('AU')).toMatchObject({
+      salesAccountCode: '210', taxType: 'OUTPUT2', currency: 'NZD', brandingThemeId: 'au-bt',
+    })
+  })
+  it('throws when AU creds are absent', () => {
+    expect(() => getXeroConfig('AU')).toThrow(/XERO_AU_CLIENT_ID/)
+  })
+  it('isXeroConfiguredForRegion mirrors cred presence per region', () => {
+    expect(isXeroConfiguredForRegion('AU')).toBe(false)
+    expect(isXeroConfiguredForRegion('NZ')).toBe(false)
+    process.env.XERO_AU_CLIENT_ID = 'au-id'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    expect(isXeroConfiguredForRegion('AU')).toBe(true)
+    expect(isXeroConfiguredForRegion('NZ')).toBe(false) // AU creds never satisfy NZ
+    process.env.XERO_CLIENT_ID = 'nz-id'
+    process.env.XERO_CLIENT_SECRET = 'nz-secret'
+    expect(isXeroConfiguredForRegion('NZ')).toBe(true)
+  })
+  it('getXeroConfig() with no arg is the NZ config (back-compat)', () => {
+    process.env.XERO_CLIENT_ID = 'cid'
+    process.env.XERO_CLIENT_SECRET = 'secret'
+    process.env.XERO_AU_CLIENT_ID = 'au-id'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    // No arg must resolve NZ even with AU creds present.
+    expect(getXeroConfig()).toMatchObject({ clientId: 'cid', taxType: 'OUTPUT2', currency: 'NZD' })
   })
 })

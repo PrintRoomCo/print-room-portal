@@ -1,5 +1,5 @@
 // lib/xero/client.ts
-import { getXeroConfig } from './config'
+import { getXeroConfig, type XeroRegion } from './config'
 
 const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
 const XERO_API_BASE = 'https://api.xero.com/api.xro/2.0'
@@ -8,19 +8,23 @@ interface CachedToken {
   accessToken: string
   expiresAt: number // epoch ms
 }
-let cached: CachedToken | null = null
+// Cached PER clientId — an NZ token must never serve an AU call (they are
+// different Xero organisations). NEVER logged.
+const cachedByClientId = new Map<string, CachedToken>()
 
 /** Test-only: clear the module-scope token cache. */
 export function __resetXeroTokenCacheForTests(): void {
-  cached = null
+  cachedByClientId.clear()
 }
 
-/** Get a valid access token, refreshing when within 60s of expiry. */
-export async function getXeroToken(): Promise<string> {
+/** Get a valid access token for the region's connection, refreshing within 60s
+ *  of expiry. Cached PER clientId — an NZ token must never serve an AU call. */
+export async function getXeroToken(region: XeroRegion = 'NZ'): Promise<string> {
+  const cfg = getXeroConfig(region)
   const now = Date.now()
+  const cached = cachedByClientId.get(cfg.clientId)
   if (cached && cached.expiresAt - 60_000 > now) return cached.accessToken
 
-  const cfg = getXeroConfig()
   const basic = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString('base64')
   const body = new URLSearchParams({ grant_type: 'client_credentials', scope: cfg.scopes })
 
@@ -39,24 +43,26 @@ export async function getXeroToken(): Promise<string> {
   const json = (await res.json()) as { access_token?: string; expires_in?: number }
   if (!json.access_token) throw new Error('Xero token response missing access_token')
 
-  cached = {
+  cachedByClientId.set(cfg.clientId, {
     accessToken: json.access_token,
     expiresAt: now + (json.expires_in ?? 1800) * 1000,
-  }
-  return cached.accessToken
+  })
+  return json.access_token
 }
 
 export interface XeroFetchInit extends Omit<RequestInit, 'headers'> {
   headers?: Record<string, string>
   /** Sent as the Xero `Idempotency-Key` header on writes. */
   idempotencyKey?: string
+  /** AU Stage 1 — which Xero connection to authenticate against. Default NZ. */
+  region?: XeroRegion
 }
 
 /** Authenticated JSON fetch against the Xero Accounting API. Throws on non-2xx. */
 export async function xeroFetch<T = unknown>(path: string, init: XeroFetchInit = {}): Promise<T> {
-  const { idempotencyKey, headers: extraHeaders, ...rest } = init
-  const cfg = getXeroConfig()
-  const token = await getXeroToken()
+  const { idempotencyKey, headers: extraHeaders, region, ...rest } = init
+  const cfg = getXeroConfig(region ?? 'NZ')
+  const token = await getXeroToken(region ?? 'NZ')
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,

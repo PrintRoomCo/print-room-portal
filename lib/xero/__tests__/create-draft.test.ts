@@ -54,6 +54,7 @@ const args: CreateDraftInvoiceArgs = {
   ordererEmail: 'buyer@acme.test',
   paymentTerms: 'net20',
   isTestOrg: false,
+  orgRegion: 'NZ',
   pickingFee: 0,
   prepaidDrawnLineKeys: new Set<string>(),
   existingInvoiceId: null,
@@ -65,6 +66,8 @@ beforeEach(() => {
   process.env.XERO_ENABLED = 'true'
   process.env.XERO_CLIENT_ID = 'cid'
   process.env.XERO_CLIENT_SECRET = 'secret'
+  delete process.env.XERO_AU_CLIENT_ID
+  delete process.env.XERO_AU_CLIENT_SECRET
 })
 
 describe('createDraftInvoiceForOrder — eligible', () => {
@@ -246,5 +249,42 @@ describe('createDraftInvoiceForOrder — Xero failure propagates', () => {
     mockFetch.mockRejectedValueOnce(new Error('Xero API 400 on /Quotes: ValidationException'))
     const { admin } = fakeAdmin({ cachedContactId: 'c-1', quoteItems: [] })
     await expect(createDraftInvoiceForOrder(admin, args)).rejects.toThrow(/ValidationException/)
+  })
+})
+
+describe('createDraftInvoiceForOrder — AU region (AU Stage 1)', () => {
+  it('AU org with NO XERO_AU_* creds: skips au_not_configured, audits, zero HTTP', async () => {
+    const { admin, updates } = fakeAdmin({ cachedContactId: 'contact-1', quoteItems: [] })
+    const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: 'AU' })
+
+    expect(res).toEqual({ status: 'skipped', reason: 'au_not_configured' })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_status: 'skipped' } })
+    expect(mockAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'order.xero_draft_skipped',
+        targetId: 'order-1',
+        metadata: expect.objectContaining({ reason: 'au_not_configured' }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('AU org WITH creds proceeds to the Xero calls against the AU connection', async () => {
+    process.env.XERO_AU_CLIENT_ID = 'au-cid'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    const { admin } = fakeAdmin({ cachedContactId: 'contact-1', quoteItems: [] })
+    mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'q-au', QuoteNumber: 'QU-1' }] })
+
+    const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: 'AU' })
+
+    expect(res.status).toBe('drafted')
+    // Every Xero call must carry region: 'AU' so the AU connection is used.
+    for (const call of mockFetch.mock.calls) {
+      expect((call[1] as { region?: string } | undefined)?.region).toBe('AU')
+    }
+    // AUD + OUTPUT come from the AU config, not the NZ one.
+    const payload = JSON.parse((mockFetch.mock.calls.at(-1)![1] as { body: string }).body)
+    expect(payload.Quotes[0].CurrencyCode).toBe('AUD')
   })
 })

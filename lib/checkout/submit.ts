@@ -2270,6 +2270,7 @@ export async function submitCustomerOrder(
         ordererEmail: input.context.email ?? null,
         paymentTerms: input.context.paymentTerms ?? null,
         isTestOrg: xeroIsTestOrg,
+        orgRegion,
         pickingFee: pickFee,
         prepaidDrawnLineKeys,
         existingInvoiceId: null, // fresh order — no prior draft

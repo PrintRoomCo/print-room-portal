@@ -3,7 +3,7 @@ import { xeroFetch } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
-import { getXeroConfig, isXeroEnabled } from './config'
+import { getXeroConfig, isXeroEnabled, isXeroConfiguredForRegion, type XeroRegion } from './config'
 import { evaluateXeroEligibility } from './eligibility'
 
 export interface XeroQuoteLineInput {
@@ -195,6 +195,9 @@ export interface XeroContactDetails {
 }
 
 export interface ResolveContactArgs {
+  /** AU Stage 1 — which Xero connection to resolve the contact against. Xero
+   *  contacts are PER organisation, so this must match the draft's region. */
+  region: XeroRegion
   /** stores/organizations .xero_contact_id, if already cached. */
   cachedContactId: string | null
   /** Contact name — the ship-to store's name, or the org name as fallback. */
@@ -239,7 +242,7 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
   if (args.cachedContactId) return { contactId: args.cachedContactId, created: false }
 
   const where = contactNameWhere(args.name)
-  const found = await xeroFetch<XeroContactsResponse>(where)
+  const found = await xeroFetch<XeroContactsResponse>(where, { region: args.region })
   if (found.Contacts && found.Contacts.length === 1) {
     return { contactId: found.Contacts[0].ContactID, created: false }
   }
@@ -247,6 +250,7 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
   try {
     const created = await xeroFetch<XeroContactsResponse>('/Contacts', {
       method: 'POST',
+      region: args.region,
       body: JSON.stringify({
         Contacts: [
           {
@@ -265,7 +269,7 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
     return { contactId: id, created: true }
   } catch (e) {
     // Unique-name collision (race or pre-existing dup) — re-query and reuse.
-    const retry = await xeroFetch<XeroContactsResponse>(where)
+    const retry = await xeroFetch<XeroContactsResponse>(where, { region: args.region })
     if (retry.Contacts && retry.Contacts.length >= 1) {
       return { contactId: retry.Contacts[0].ContactID, created: false }
     }
@@ -292,6 +296,9 @@ export interface CreateDraftInvoiceArgs {
   ordererEmail: string | null
   paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
   isTestOrg: boolean
+  /** organizations.region — selects the Xero connection (NZ org vs The Print
+   *  Room Australia). AU without XERO_AU_* creds skips (au_not_configured). */
+  orgRegion: XeroRegion
   /** NZ picking fee for this order (0 when none applies). Added as a separate
    *  Xero line. Computed in submit.ts step 5c (stock-on-hand + NZ, region-gated). */
   pickingFee: number
@@ -338,7 +345,25 @@ export async function createDraftInvoiceForOrder(
     return { status: 'skipped', reason: elig.reason }
   }
 
-  const cfg = getXeroConfig()
+  // AU dark-until-secrets: same pattern as XERO_ENABLED, scoped to the AU
+  // connection. Audited so the skipped drafts are discoverable once creds land.
+  if (args.orgRegion === 'AU' && !isXeroConfiguredForRegion('AU')) {
+    await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
+    await recordAuditEvent(
+      {
+        orgId: args.organizationId,
+        actorUserId: args.actorUserId,
+        action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_SKIPPED,
+        targetType: 'order',
+        targetId: args.orderId,
+        metadata: { order_ref: args.orderRef, reason: 'au_not_configured' },
+      },
+      admin,
+    )
+    return { status: 'skipped', reason: 'au_not_configured' }
+  }
+
+  const cfg = getXeroConfig(args.orgRegion)
 
   // Contact — the quote is made out to the ship-to LOCATION (store): its own
   // cached id, its name (e.g. "Reburger Takapuna"), and its address/phone/email
@@ -364,6 +389,7 @@ export async function createDraftInvoiceForOrder(
     } | null
     if (store?.name) {
       const resolved = await resolveXeroContactId({
+        region: args.orgRegion,
         cachedContactId: store.xero_contact_id,
         name: store.name,
         email: store.email ?? args.ordererEmail,
@@ -396,6 +422,7 @@ export async function createDraftInvoiceForOrder(
       .maybeSingle()
     const cachedContactId = (orgRow as { xero_contact_id: string | null } | null)?.xero_contact_id ?? null
     resolvedContact = await resolveXeroContactId({
+      region: args.orgRegion,
       cachedContactId,
       name: args.organizationName,
       email: args.ordererEmail,
@@ -450,6 +477,7 @@ export async function createDraftInvoiceForOrder(
   // the same key returns the already-created draft instead of a duplicate.
   const res = await xeroFetch<XeroQuotesResponse>('/Quotes', {
     method: 'POST',
+    region: args.orgRegion,
     idempotencyKey: args.orderId,
     body: JSON.stringify({ Quotes: [payload] }),
   })

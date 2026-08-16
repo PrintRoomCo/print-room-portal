@@ -18,8 +18,38 @@ export function isXeroEnabled(): boolean {
   return v === '1' || v === 'true' || v === 'on' || v === 'yes'
 }
 
-/** Read + validate Xero config from the environment. Throws if creds are absent. */
-export function getXeroConfig(): XeroConfig {
+export type XeroRegion = 'NZ' | 'AU'
+
+/** True when the region's credentials exist (getXeroConfig would not throw). */
+export function isXeroConfiguredForRegion(region: XeroRegion): boolean {
+  if (region === 'AU') return Boolean(process.env.XERO_AU_CLIENT_ID && process.env.XERO_AU_CLIENT_SECRET)
+  return Boolean(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET)
+}
+
+/** Read + validate Xero config from the environment. Throws if creds are absent.
+ *  Each region is a separate Xero CUSTOM CONNECTION (client_credentials is bound
+ *  to exactly one Xero organisation): NZ = the original app, AU = "The Print Room
+ *  Australia" via the XERO_AU_* surface. */
+export function getXeroConfig(region: XeroRegion = 'NZ'): XeroConfig {
+  if (region === 'AU') {
+    const clientId = process.env.XERO_AU_CLIENT_ID ?? ''
+    const clientSecret = process.env.XERO_AU_CLIENT_SECRET ?? ''
+    if (!clientId || !clientSecret) {
+      throw new Error('XERO_AU_CLIENT_ID / XERO_AU_CLIENT_SECRET are not configured')
+    }
+    return {
+      clientId,
+      clientSecret,
+      scopes: process.env.XERO_SCOPES ?? 'accounting.transactions accounting.contacts',
+      tenantId: null,
+      salesAccountCode: process.env.XERO_AU_SALES_ACCOUNT_CODE ?? '200',
+      taxType: process.env.XERO_AU_TAX_TYPE ?? 'OUTPUT',
+      currency: process.env.XERO_AU_CURRENCY ?? 'AUD',
+      lineAmountTypes: process.env.XERO_LINE_AMOUNT_TYPES ?? 'Exclusive',
+      brandingThemeId: process.env.XERO_AU_BRANDING_THEME_ID || null,
+    }
+  }
+  // NZ branch: byte-identical to the pre-AU function body.
   const clientId = process.env.XERO_CLIENT_ID ?? ''
   const clientSecret = process.env.XERO_CLIENT_SECRET ?? ''
   if (!clientId || !clientSecret) {

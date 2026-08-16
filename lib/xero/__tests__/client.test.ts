@@ -51,6 +51,32 @@ describe('getXeroToken', () => {
     vi.stubGlobal('fetch', mockFetchOnce(401, {}, 'unauthorized_client'))
     await expect(getXeroToken()).rejects.toThrow(/Xero token HTTP 401/)
   })
+
+  // AU Stage 1: the cache is keyed by clientId. An NZ token must NEVER be served
+  // to an AU call — they are different Xero organisations.
+  it('does not serve an NZ token to an AU call, and caches AU separately', async () => {
+    process.env.XERO_AU_CLIENT_ID = 'au-cid'
+    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'nz-tok', expires_in: 1800 }), text: async () => '' })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'au-tok', expires_in: 1800 }), text: async () => '' })
+    vi.stubGlobal('fetch', f)
+
+    expect(await getXeroToken('NZ')).toBe('nz-tok')
+    expect(f).toHaveBeenCalledTimes(1)
+
+    // AU must issue its OWN token request, authenticated with the AU client id.
+    expect(await getXeroToken('AU')).toBe('au-tok')
+    expect(f).toHaveBeenCalledTimes(2)
+    const auBasic = f.mock.calls[1][1].headers.Authorization.replace('Basic ', '')
+    expect(Buffer.from(auBasic, 'base64').toString()).toBe('au-cid:au-secret')
+
+    // Repeat AU hits the cache; NZ still returns its own token.
+    expect(await getXeroToken('AU')).toBe('au-tok')
+    expect(await getXeroToken('NZ')).toBe('nz-tok')
+    expect(f).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('xeroFetch', () => {
