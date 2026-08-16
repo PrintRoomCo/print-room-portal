@@ -13,12 +13,14 @@ import {
   type CustomAddress,
 } from './checkoutReviewState'
 import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import { gstRateForRegion } from '@/lib/pricing/gst'
 import { resolveShipCountry } from '@/lib/checkout/ship-country'
 import { useFreshBillingModes } from './useFreshBillingModes'
 import { BilledOrderSummary } from './BilledOrderSummary'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useCompany } from '@/contexts/CompanyContext'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -62,6 +64,7 @@ export function CheckoutClient({
   const cart = useCart()
   const router = useRouter()
   const { format } = useCurrency()
+  const { access } = useCompany()
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   const idempotencyKey = useRef<string>(crypto.randomUUID())
@@ -164,10 +167,10 @@ export function CheckoutClient({
           // reading and can be days stale. Absent ⇒ null ⇒ billed (fail closed).
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
-        gstRate: 0.15,
+        gstRate: gstRateForRegion(access?.region),
         shipCountry,
       }),
-    [cart.lines, modeByVariantId, shipCountry],
+    [cart.lines, modeByVariantId, shipCountry, access?.region],
   )
 
   const lineById = useMemo(

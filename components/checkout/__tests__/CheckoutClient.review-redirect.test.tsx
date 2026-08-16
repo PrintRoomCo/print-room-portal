@@ -38,6 +38,13 @@ vi.mock('@/contexts/CurrencyContext', () => ({
     format: (n: number) => `$${n.toFixed(2)}`,
   }),
 }))
+// AU Stage 1: the PDP/checkout now read the org's billing region for the GST
+// rate. access: null → gstRateForRegion(undefined) → 0.15, i.e. today's NZ
+// behaviour, so every assertion below is unchanged. (House idiom — same shape
+// as the CheckoutReviewClient tests.)
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: () => ({ access: null, loading: false }),
+}))
 
 beforeEach(() => {
   sessionStorage.clear()

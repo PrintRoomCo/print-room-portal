@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { estimateCartPickingFee, stockedGoodsValue } from '@/lib/pricing/order-picking-fee'
+import { gstRateForRegion } from '@/lib/pricing/gst'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PickingFeeInfo } from '@/components/pricing/PickingFeeInfo'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
@@ -48,10 +49,10 @@ export function CartDrawer() {
           unitEffective: line.unitPrice,
           decorationPerUnit: decorationPerUnit(line),
         })),
-        gstRate: 0.15,
+        gstRate: gstRateForRegion(access?.region),
         pickingFee: estimateCartPickingFee(cart.lines),
       }),
-    [cart.lines],
+    [cart.lines, access?.region],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
   const canCheckout = cart.lines.length > 0 && !oversell && !moqShort

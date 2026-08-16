@@ -9,6 +9,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
 import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import { gstRateForRegion } from '@/lib/pricing/gst'
 import { resolveShipCountry } from '@/lib/checkout/ship-country'
 import { useFreshBillingModes } from './useFreshBillingModes'
 import { BilledOrderSummary } from './BilledOrderSummary'
@@ -124,10 +125,10 @@ export function CheckoutReviewClient({
           // FRESH mode only — never the cart's PDP-time snapshot.
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
-        gstRate: 0.15,
+        gstRate: gstRateForRegion(access?.region),
         shipCountry,
       }),
-    [cart.lines, modeByVariantId, shipCountry],
+    [cart.lines, modeByVariantId, shipCountry, access?.region],
   )
 
   const lineById = useMemo(
@@ -733,7 +734,7 @@ export function CheckoutReviewClient({
         </div>
       </div>
 
-      {termsOpen && <TermsModal onClose={() => setTermsOpen(false)} />}
+      {termsOpen && <TermsModal onClose={() => setTermsOpen(false)} region={access?.region ?? 'NZ'} />}
 
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}

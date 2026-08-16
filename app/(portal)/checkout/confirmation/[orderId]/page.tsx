@@ -14,8 +14,7 @@ import {
   pickCatalogueFrontImage,
   type CatalogueFrontImageRow,
 } from '@/lib/shop/catalogue-front-image'
-
-const GST_RATE = 0.15
+import { gstRateForRegion } from '@/lib/pricing/gst'
 
 interface OrderRow {
   id: string
@@ -144,6 +143,16 @@ export default async function ConfirmationPage({
     return notFound()
   }
 
+  // AU Stage 1: quotes.tax is never written (always 0), so this fallback rate is
+  // the effective GST path. Region-aware; NZ output is bit-identical to the old
+  // hardcoded 0.15 constant this replaced.
+  const { data: orgRegionRow } = await admin
+    .from('organizations')
+    .select('region')
+    .eq('id', order.quotes.organization_id!)
+    .maybeSingle()
+  const gstRate = gstRateForRegion((orgRegionRow as { region?: string | null } | null)?.region)
+
   const orderRef = order.quotes.order_ref ?? '—'
   const awaitingApproval = order.status === 'awaiting-approval'
   const mondaySynced = Boolean(order.quotes.monday_item_id)
@@ -165,7 +174,7 @@ export default async function ConfirmationPage({
   const gst =
     prepaidGoodsValue === 0 && storedTax > 0
       ? storedTax
-      : Math.round(billedExGst * GST_RATE * 100) / 100
+      : Math.round(billedExGst * gstRate * 100) / 100
   const totalIncGst = Math.round((billedExGst + gst) * 100) / 100
 
   // Line items live on the joined quote. We surface them on the confirmation
@@ -315,7 +324,7 @@ export default async function ConfirmationPage({
           prepaidGoodsValue={prepaidGoodsValue}
           gst={gst}
           totalIncGst={totalIncGst}
-          gstRate={GST_RATE}
+          gstRate={gstRate}
         />
       </div>
     </div>

@@ -6,7 +6,7 @@ import { TERMS_VERSION } from '@/lib/checkout/terms'
  * record. Jon reviews this wording before merge; final legal copy is a later
  * edit here. Bump TERMS_VERSION in lib/checkout/terms.ts on substantive change.
  */
-export function TermsContent() {
+export function TermsContent({ region = 'NZ' }: { region?: 'NZ' | 'AU' }) {
   return (
     <div className="space-y-4 text-sm leading-relaxed text-gray-700">
       <p className="text-xs text-gray-500">
@@ -17,8 +17,9 @@ export function TermsContent() {
         <h3 className="font-medium text-gray-900">1. Quotes &amp; pricing</h3>
         <p>
           Prices shown at checkout are valid for 30 days unless stated otherwise.
-          All prices are in New Zealand dollars and exclude GST, which is added
-          at the prevailing rate on your invoice.
+          {region === 'AU'
+            ? ' All prices are in Australian dollars and exclude GST, which is added at the prevailing Australian rate on your invoice.'
+            : ' All prices are in New Zealand dollars and exclude GST, which is added at the prevailing rate on your invoice.'}
         </p>
       </section>
 

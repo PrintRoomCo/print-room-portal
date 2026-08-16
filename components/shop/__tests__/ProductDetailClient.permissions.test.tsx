@@ -10,6 +10,13 @@ vi.mock('@/components/cart/useCart', () => ({ useCart: () => ({ addLine: vi.fn()
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ format: (n: number) => `$${n}` }),
 }))
+// AU Stage 1: the PDP/checkout now read the org's billing region for the GST
+// rate. access: null → gstRateForRegion(undefined) → 0.15, i.e. today's NZ
+// behaviour, so every assertion below is unchanged. (House idiom — same shape
+// as the CheckoutReviewClient tests.)
+vi.mock('@/contexts/CompanyContext', () => ({
+  useCompany: () => ({ access: null, loading: false }),
+}))
 // CatalogueTopBar (rendered by the PDP) calls useRouter() from next/navigation,
 // which has no router mounted under jsdom — stub it.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ back: vi.fn() }) }))

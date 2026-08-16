@@ -26,6 +26,8 @@ import { pickBracket, type CartLineBracket, type CartLineDecoration } from '@/li
 import { sanitiseCustomName } from '@/lib/cart/custom-name'
 import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useCompany } from '@/contexts/CompanyContext'
+import { gstRateForRegion } from '@/lib/pricing/gst'
 import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
 import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
 import {
@@ -242,6 +244,8 @@ export function ProductDetailClient({
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
+  const { access } = useCompany()
+  const gstRate = gstRateForRegion(access?.region)
 
   const firstVariant = variants[0] ?? null
   // Deep-link preselect: honour `?color=` when it names a colour this product
@@ -1913,7 +1917,7 @@ export function ProductDetailClient({
                           decorationPerUnit,
                         },
                       ],
-                      gstRate: 0.15,
+                      gstRate,
                     })}
                     variant="pdp"
                     format={format}
