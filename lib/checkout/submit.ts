@@ -2340,6 +2340,7 @@ export async function submitCustomerOrder(
         trigger: 'placement',
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
+        region: orgRegion,
         isStockOnHand: isStockOnHandOrder,
         customerEmail: input.context.email ?? null,
         shippingAddress,

@@ -20,6 +20,9 @@ export interface PushOrderToStarshipitArgs {
   trigger: StarshipitPushTrigger
   intent: 'customer' | 'inventory'
   isTestOrg: boolean
+  /** organizations.region — AU orgs skip Starshipit entirely (AU Stage 1).
+   *  Null/unknown = NZ. */
+  region: string | null | undefined
   /** Spec A stock/production axis — gates the PLACEMENT trigger only. */
   isStockOnHand: boolean
   customerEmail: string | null
@@ -81,6 +84,7 @@ export async function pushOrderToStarshipit(
     isStockOnHand: args.isStockOnHand,
     hasDeliveryAddress,
     orderType: args.orderType ?? null,
+    region: args.region,
   })
   if (!elig.eligible) return { status: 'skipped', reason: elig.reason }
 

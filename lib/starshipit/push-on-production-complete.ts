@@ -63,7 +63,7 @@ export async function pushOrderOnProductionComplete(
 
     const { data: orgData } = await admin
       .from('organizations')
-      .select('is_test')
+      .select('is_test, region')
       .eq('id', quote.organization_id)
       .maybeSingle()
 
@@ -77,6 +77,7 @@ export async function pushOrderOnProductionComplete(
         trigger: 'production_complete',
         intent: order.intent === 'inventory' ? 'inventory' : 'customer',
         isTestOrg: Boolean((orgData as { is_test?: boolean } | null)?.is_test),
+        region: (orgData as { region?: string | null } | null)?.region ?? null,
         isStockOnHand: order.order_type === 'stock_on_hand',
         customerEmail: quote.customer_email ?? null,
         shippingAddress: order.shipping_address ?? quote.shipping_address ?? null,

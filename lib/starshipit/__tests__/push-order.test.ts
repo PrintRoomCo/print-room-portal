@@ -47,6 +47,7 @@ const baseArgs = {
   trigger: 'placement' as const,
   intent: 'customer' as const,
   isTestOrg: false,
+  region: 'NZ',
   isStockOnHand: true,
   customerEmail: 'jamie@theprint-room.co.nz',
   shippingAddress: { name: 'AF', street: '12 Example St', city: 'Auckland', postcode: '1023', country: 'New Zealand' },
