@@ -50,7 +50,7 @@ export function CartDrawer() {
           decorationPerUnit: decorationPerUnit(line),
         })),
         gstRate: gstRateForRegion(access?.region),
-        pickingFee: estimateCartPickingFee(cart.lines),
+        pickingFee: estimateCartPickingFee(cart.lines, access?.region),
       }),
     [cart.lines, access?.region],
   )

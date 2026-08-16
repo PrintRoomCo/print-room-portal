@@ -22,7 +22,12 @@ export function orderPickingFee(input: {
   isStockOnHand: boolean
   shipCountry: string | null | undefined
   goodsSubtotal: number
+  /** organizations.region — an AU org NEVER pays the NZ picking fee, even when
+   *  shipping to NZ (the fee is NZD; the order bills AUD). Null/unknown = NZ.
+   *  Required so no caller can silently skip the gate. */
+  orgRegion: string | null | undefined
 }): number {
+  if ((input.orgRegion ?? 'NZ') === 'AU') return 0
   if (!input.isStockOnHand || !isNewZealandShipTo(input.shipCountry)) return 0
   return pickingFeeForGoods(input.goodsSubtotal)
 }
@@ -46,7 +51,8 @@ export function stockedGoodsValue(lines: CartLine[]): number {
  * address yet; checkout recomputes with the real one). 0 when the cart has no
  * stocked goods — the drawer then shows no fee row.
  */
-export function estimateCartPickingFee(lines: CartLine[]): number {
+export function estimateCartPickingFee(lines: CartLine[], orgRegion?: string | null): number {
+  if ((orgRegion ?? 'NZ') === 'AU') return 0
   const goods = stockedGoodsValue(lines)
   if (goods <= 0) return 0
   return pickingFeeForGoods(goods)

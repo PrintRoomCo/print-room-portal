@@ -96,6 +96,8 @@ export function billedOrderShape(input: {
   lines: BilledLineInput[]
   gstRate: number
   shipCountry: string | null | undefined
+  /** organizations.region — threaded to the picking-fee gate. Null/unknown = NZ. */
+  orgRegion?: string | null
 }): BilledOrderShape {
   const partitions = partitionByFulfilment(
     input.lines,
@@ -124,6 +126,7 @@ export function billedOrderShape(input: {
       isStockOnHand: orderType === 'stock_on_hand',
       shipCountry: input.shipCountry,
       goodsSubtotal: goodsValueForBand,
+      orgRegion: input.orgRegion ?? null,
     })
     const gst = round2((billedSubtotal + pickingFee) * input.gstRate)
 

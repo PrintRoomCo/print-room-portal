@@ -127,6 +127,7 @@ export function CheckoutReviewClient({
         })),
         gstRate: gstRateForRegion(access?.region),
         shipCountry,
+        orgRegion: access?.region ?? null,
       }),
     [cart.lines, modeByVariantId, shipCountry, access?.region],
   )

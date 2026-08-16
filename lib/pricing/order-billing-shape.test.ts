@@ -15,6 +15,36 @@ function line(over: Partial<BilledLineInput> = {}): BilledLineInput {
 
 const NZ = { gstRate: 0.15, shipCountry: 'NZ' as string | null }
 
+// AU Stage 1 (spec §10 oracle): an AU org bills AUD at 10% GST and NEVER carries
+// the NZD picking fee — even on an NZ ship-to. GST computes on billed goods + a
+// zero fee at the AU rate.
+const AU = { gstRate: 0.1, shipCountry: 'NZ' as string | null, orgRegion: 'AU' as string | null }
+
+describe('billedOrderShape — AU org (AU Stage 1)', () => {
+  it('drops the picking fee and computes GST at 0.10 on an NZ-ship-to stocked order', () => {
+    const shape = billedOrderShape({
+      lines: [line({ billingMode: 'invoice_on_dispatch' })],
+      ...AU,
+    })
+    const p = shape.partitions[0]
+    expect(p.orderType).toBe('stock_on_hand')
+    expect(p.billedSubtotal).toBe(1465.2)
+    expect(p.pickingFee).toBe(0)
+    expect(p.gst).toBe(146.52) // round2(1465.2 * 0.10), no fee in the base
+    expect(p.total).toBe(1611.72)
+  })
+
+  it('the same order as an NZ org keeps the fee and 15% (parity control)', () => {
+    const shape = billedOrderShape({
+      lines: [line({ billingMode: 'invoice_on_dispatch' })],
+      ...NZ,
+    })
+    const p = shape.partitions[0]
+    expect(p.pickingFee).toBe(15)
+    expect(p.gst).toBe(222.03) // round2((1465.2 + 15) * 0.15)
+  })
+})
+
 describe('billedOrderShape — zeroing', () => {
   // Chris's exact case: 120 x Staple Tee @ $12.21 drawn from prepaid stock.
   it('zeroes a prepaid stock draw and bills only the picking fee', () => {

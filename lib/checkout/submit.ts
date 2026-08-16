@@ -1631,10 +1631,23 @@ export async function submitCustomerOrder(
   // fee quoted at a $100/$200/$300/$400 boundary.
   const goodsSubtotal =
     repriced.reduce((t, l) => t + l.unit_price * l.qty, 0) + totalDecorationRevenue
+  // AU Stage 1 — the org's billing region, fetched ONCE and reused by the
+  // picking-fee gate, Starshipit gate, Xero region config, Monday currency
+  // suffix, job-tracker stamp and email currency below. Unknown/missing → NZ
+  // (identical to pre-region behavior for every existing org).
+  const { data: orgRegionRow } = await admin
+    .from('organizations')
+    .select('region')
+    .eq('id', input.context.organizationId)
+    .maybeSingle()
+  const orgRegion: 'NZ' | 'AU' =
+    (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
+
   const pickFee = orderPickingFee({
     isStockOnHand: isStockOnHandOrder,
     shipCountry: (shippingAddress as { country?: unknown }).country as string | null | undefined,
     goodsSubtotal,
+    orgRegion,
   })
 
   // Record decoration revenue separately on the quote so finance can split
