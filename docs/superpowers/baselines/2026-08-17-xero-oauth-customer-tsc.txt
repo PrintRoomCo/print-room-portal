@@ -1,0 +1,14 @@
+lib/__tests__/next-config-redirects.test.ts(2,1): error TS2578: Unused '@ts-expect-error' directive.
+lib/email/__tests__/tracker-notification.test.ts(12,45): error TS2554: Expected 0 arguments, but got 1.
+lib/email/__tests__/tracker-notification.test.ts(29,13): error TS2339: Property 'html' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(29,19): error TS2339: Property 'text' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(29,52): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+lib/email/__tests__/tracker-notification.test.ts(45,13): error TS2339: Property 'subject' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(45,22): error TS2339: Property 'html' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(45,55): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+lib/email/__tests__/tracker-notification.test.ts(61,13): error TS2339: Property 'subject' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(61,22): error TS2339: Property 'html' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(61,55): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+lib/email/__tests__/tracker-notification.test.ts(76,13): error TS2339: Property 'html' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(76,19): error TS2339: Property 'text' does not exist on type 'undefined'.
+lib/email/__tests__/tracker-notification.test.ts(76,52): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
