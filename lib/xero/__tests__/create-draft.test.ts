@@ -4,13 +4,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 vi.mock('../client', () => ({ xeroFetch: vi.fn() }))
 vi.mock('@/lib/audit/recordEvent', () => ({ recordAuditEvent: vi.fn() }))
+vi.mock('../token-store', () => ({ isXeroConnectedForRegion: vi.fn() }))
 
 import { xeroFetch } from '../client'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
+import { isXeroConnectedForRegion } from '../token-store'
 import { createDraftInvoiceForOrder, type CreateDraftInvoiceArgs } from '../draft-invoice'
 
 const mockFetch = vi.mocked(xeroFetch)
 const mockAudit = vi.mocked(recordAuditEvent)
+const mockConnected = vi.mocked(isXeroConnectedForRegion)
 
 /** Minimal chainable Supabase stub covering exactly the calls the orchestrator makes. */
 function fakeAdmin(opts: {
@@ -63,6 +66,7 @@ const args: CreateDraftInvoiceArgs = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mockConnected.mockResolvedValue(true)
   process.env.XERO_ENABLED = 'true'
   process.env.XERO_CLIENT_ID = 'cid'
   process.env.XERO_CLIENT_SECRET = 'secret'
@@ -252,27 +256,28 @@ describe('createDraftInvoiceForOrder — Xero failure propagates', () => {
   })
 })
 
-describe('createDraftInvoiceForOrder — AU region (AU Stage 1)', () => {
-  it('AU org with NO XERO_AU_* creds: skips au_not_configured, audits, zero HTTP', async () => {
-    const { admin, updates } = fakeAdmin({ cachedContactId: 'contact-1', quoteItems: [] })
-    const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: 'AU' })
+describe('createDraftInvoiceForOrder — region routing + not_connected gate', () => {
+  it.each(['NZ', 'AU'] as const)(
+    '%s org while Xero is NOT connected: skips not_connected, audits with region, zero HTTP',
+    async (region) => {
+      mockConnected.mockResolvedValue(false)
+      const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })
+      const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: region })
+      expect(res).toEqual({ status: 'skipped', reason: 'not_connected' })
+      expect(mockConnected).toHaveBeenCalledWith(region)
+      expect(updates).toEqual([{ table: 'orders', payload: { xero_invoice_status: 'skipped' } }])
+      expect(mockAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'order.xero_draft_skipped',
+          metadata: expect.objectContaining({ reason: 'not_connected', region }),
+        }),
+        admin,
+      )
+      expect(mockFetch).not.toHaveBeenCalled()
+    },
+  )
 
-    expect(res).toEqual({ status: 'skipped', reason: 'au_not_configured' })
-    expect(mockFetch).not.toHaveBeenCalled()
-    expect(updates).toContainEqual({ table: 'orders', payload: { xero_invoice_status: 'skipped' } })
-    expect(mockAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'order.xero_draft_skipped',
-        targetId: 'order-1',
-        metadata: expect.objectContaining({ reason: 'au_not_configured' }),
-      }),
-      expect.anything(),
-    )
-  })
-
-  it('AU org WITH creds proceeds to the Xero calls against the AU connection', async () => {
-    process.env.XERO_AU_CLIENT_ID = 'au-cid'
-    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
+  it('AU org, connected: proceeds to the Xero calls against the AU tenant', async () => {
     const { admin } = fakeAdmin({ cachedContactId: 'contact-1', quoteItems: [] })
     mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'q-au', QuoteNumber: 'QU-1' }] })
 

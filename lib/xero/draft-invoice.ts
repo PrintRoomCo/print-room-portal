@@ -3,7 +3,8 @@ import { xeroFetch } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
-import { getXeroConfig, isXeroEnabled, isXeroConfiguredForRegion, type XeroRegion } from './config'
+import { getXeroConfig, isXeroEnabled, type XeroRegion } from './config'
+import { isXeroConnectedForRegion } from './token-store'
 import { evaluateXeroEligibility } from './eligibility'
 
 export interface XeroQuoteLineInput {
@@ -296,8 +297,8 @@ export interface CreateDraftInvoiceArgs {
   ordererEmail: string | null
   paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
   isTestOrg: boolean
-  /** organizations.region — selects the Xero connection (NZ org vs The Print
-   *  Room Australia). AU without XERO_AU_* creds skips (au_not_configured). */
+  /** organizations.region — selects the Xero organisation (tenant header +
+   *  payload config). Not-connected regions skip with reason not_connected. */
   orgRegion: XeroRegion
   /** NZ picking fee for this order (0 when none applies). Added as a separate
    *  Xero line. Computed in submit.ts step 5c (stock-on-hand + NZ, region-gated). */
@@ -345,9 +346,10 @@ export async function createDraftInvoiceForOrder(
     return { status: 'skipped', reason: elig.reason }
   }
 
-  // AU dark-until-secrets: same pattern as XERO_ENABLED, scoped to the AU
-  // connection. Audited so the skipped drafts are discoverable once creds land.
-  if (args.orgRegion === 'AU' && !isXeroConfiguredForRegion('AU')) {
+  // Not-connected gate, BOTH regions (spec §6): no token row, or this region's
+  // tenant unassigned → skip + audit; the order proceeds. Supersedes the AU
+  // dark-until-secrets gate — auth state is DB state now.
+  if (!(await isXeroConnectedForRegion(args.orgRegion))) {
     await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
     await recordAuditEvent(
       {
@@ -356,11 +358,11 @@ export async function createDraftInvoiceForOrder(
         action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_SKIPPED,
         targetType: 'order',
         targetId: args.orderId,
-        metadata: { order_ref: args.orderRef, reason: 'au_not_configured' },
+        metadata: { order_ref: args.orderRef, reason: 'not_connected', region: args.orgRegion },
       },
       admin,
     )
-    return { status: 'skipped', reason: 'au_not_configured' }
+    return { status: 'skipped', reason: 'not_connected' }
   }
 
   const cfg = getXeroConfig(args.orgRegion)
