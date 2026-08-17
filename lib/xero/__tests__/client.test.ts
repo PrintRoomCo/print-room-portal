@@ -1,114 +1,72 @@
 // lib/xero/__tests__/client.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { getXeroToken, xeroFetch, __resetXeroTokenCacheForTests } from '../client'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const SAVED = { ...process.env }
+const mocks = vi.hoisted(() => ({
+  getXeroAccessToken: vi.fn(),
+  xeroTenantIdForRegion: vi.fn(),
+}))
+vi.mock('../token-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../token-store')>()),
+  getXeroAccessToken: mocks.getXeroAccessToken,
+  xeroTenantIdForRegion: mocks.xeroTenantIdForRegion,
+}))
+
+import { getXeroToken, xeroFetch } from '../client'
+
 beforeEach(() => {
-  __resetXeroTokenCacheForTests()
   vi.restoreAllMocks()
-  process.env.XERO_CLIENT_ID = 'cid'
-  process.env.XERO_CLIENT_SECRET = 'secret'
-  delete process.env.XERO_TENANT_ID
+  mocks.getXeroAccessToken.mockReset().mockResolvedValue('tok')
+  mocks.xeroTenantIdForRegion.mockReset().mockResolvedValue('tenant-nz')
 })
-afterEach(() => {
-  process.env = { ...SAVED }
-})
-
-function mockFetchOnce(status: number, jsonBody: unknown, textBody = '') {
-  return vi.fn().mockResolvedValueOnce({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => jsonBody,
-    text: async () => textBody,
-    headers: new Map(),
-  })
-}
 
 describe('getXeroToken', () => {
-  it('POSTs client_credentials and returns access_token', async () => {
-    const f = mockFetchOnce(200, { access_token: 'tok-1', expires_in: 1800 })
-    vi.stubGlobal('fetch', f)
-
-    const token = await getXeroToken()
-    expect(token).toBe('tok-1')
-
-    const [url, init] = f.mock.calls[0]
-    expect(url).toBe('https://identity.xero.com/connect/token')
-    expect(init.method).toBe('POST')
-    expect(init.headers.Authorization).toMatch(/^Basic /)
-    expect(init.body).toContain('grant_type=client_credentials')
-  })
-
-  it('caches the token across calls (no second network hit)', async () => {
-    const f = mockFetchOnce(200, { access_token: 'tok-cache', expires_in: 1800 })
-    vi.stubGlobal('fetch', f)
-    await getXeroToken()
-    await getXeroToken()
-    expect(f).toHaveBeenCalledTimes(1)
-  })
-
-  it('throws on non-2xx token response', async () => {
-    vi.stubGlobal('fetch', mockFetchOnce(401, {}, 'unauthorized_client'))
-    await expect(getXeroToken()).rejects.toThrow(/Xero token HTTP 401/)
-  })
-
-  // AU Stage 1: the cache is keyed by clientId. An NZ token must NEVER be served
-  // to an AU call — they are different Xero organisations.
-  it('does not serve an NZ token to an AU call, and caches AU separately', async () => {
-    process.env.XERO_AU_CLIENT_ID = 'au-cid'
-    process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
-    const f = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'nz-tok', expires_in: 1800 }), text: async () => '' })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'au-tok', expires_in: 1800 }), text: async () => '' })
-    vi.stubGlobal('fetch', f)
-
-    expect(await getXeroToken('NZ')).toBe('nz-tok')
-    expect(f).toHaveBeenCalledTimes(1)
-
-    // AU must issue its OWN token request, authenticated with the AU client id.
-    expect(await getXeroToken('AU')).toBe('au-tok')
-    expect(f).toHaveBeenCalledTimes(2)
-    const auBasic = f.mock.calls[1][1].headers.Authorization.replace('Basic ', '')
-    expect(Buffer.from(auBasic, 'base64').toString()).toBe('au-cid:au-secret')
-
-    // Repeat AU hits the cache; NZ still returns its own token.
-    expect(await getXeroToken('AU')).toBe('au-tok')
-    expect(await getXeroToken('NZ')).toBe('nz-tok')
-    expect(f).toHaveBeenCalledTimes(2)
+  it('delegates to the shared store (one app — region no longer selects credentials)', async () => {
+    expect(await getXeroToken()).toBe('tok')
+    expect(await getXeroToken('AU')).toBe('tok')
+    expect(mocks.getXeroAccessToken).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('xeroFetch', () => {
-  it('sends Bearer token, JSON accept, and Idempotency-Key when provided', async () => {
-    const f = vi
-      .fn()
-      // 1st call: token
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 1800 }), text: async () => '', headers: new Map() })
-      // 2nd call: the API request
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ Quotes: [{ QuoteID: 'quote-1' }] }), text: async () => '', headers: new Map() })
-    vi.stubGlobal('fetch', f)
-
-    const res = await xeroFetch<{ Quotes: Array<{ QuoteID: string }> }>('/Quotes', {
-      method: 'POST',
-      idempotencyKey: 'order-1',
-      body: JSON.stringify({ Quotes: [] }),
+  function mockApiFetch(status = 200, jsonBody: unknown = { Quotes: [{ QuoteID: 'quote-1' }] }, textBody = '') {
+    const f = vi.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300, status,
+      json: async () => jsonBody, text: async () => textBody, headers: new Map(),
     })
-    expect(res.Quotes[0].QuoteID).toBe('quote-1')
+    vi.stubGlobal('fetch', f)
+    return f
+  }
 
-    const [url, init] = f.mock.calls[1]
+  it('sends Bearer token and ALWAYS sends Xero-tenant-id (resolved per region)', async () => {
+    const f = mockApiFetch()
+    await xeroFetch('/Quotes', { method: 'POST', idempotencyKey: 'order-1', body: '{}' })
+    expect(mocks.xeroTenantIdForRegion).toHaveBeenCalledWith('NZ') // default region
+    const [url, init] = f.mock.calls[0]
     expect(url).toBe('https://api.xero.com/api.xro/2.0/Quotes')
     expect(init.headers.Authorization).toBe('Bearer tok')
-    expect(init.headers.Accept).toBe('application/json')
+    expect(init.headers['Xero-tenant-id']).toBe('tenant-nz')
     expect(init.headers['Idempotency-Key']).toBe('order-1')
   })
 
-  it('throws with body text on non-2xx', async () => {
-    const f = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 1800 }), text: async () => '', headers: new Map() })
-      .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({}), text: async () => 'ValidationException', headers: new Map() })
-    vi.stubGlobal('fetch', f)
-    await expect(xeroFetch('/Quotes', { method: 'POST' })).rejects.toThrow(/Xero API 400 on \/Quotes: ValidationException/)
+  it('resolves the AU tenant for region AU', async () => {
+    mocks.xeroTenantIdForRegion.mockResolvedValue('tenant-au')
+    const f = mockApiFetch()
+    await xeroFetch('/Contacts', { region: 'AU' })
+    expect(mocks.xeroTenantIdForRegion).toHaveBeenCalledWith('AU')
+    expect(f.mock.calls[0][1].headers['Xero-tenant-id']).toBe('tenant-au')
+  })
+
+  it('throws with body text on non-2xx (unchanged contract)', async () => {
+    mockApiFetch(400, {}, 'ValidationException')
+    await expect(xeroFetch('/Quotes', { method: 'POST' })).rejects.toThrow(
+      /Xero API 400 on \/Quotes: ValidationException/,
+    )
+  })
+
+  it('propagates XeroNotConnectedError from tenant resolution (caught upstream as draft_failed)', async () => {
+    const { XeroNotConnectedError } = await import('../token-store')
+    mocks.xeroTenantIdForRegion.mockRejectedValue(new XeroNotConnectedError())
+    mockApiFetch()
+    await expect(xeroFetch('/Quotes')).rejects.toBeInstanceOf(XeroNotConnectedError)
   })
 })
