@@ -55,14 +55,14 @@ describe('golden payloads — byte-identical across the auth swap', () => {
         "LineAmountTypes": "Exclusive",
         "LineItems": [
           {
-            "AccountCode": "200",
+            "AccountCode": "191",
             "Description": "Tee — M",
             "Quantity": 100,
             "TaxType": "OUTPUT2",
             "UnitAmount": 10,
           },
           {
-            "AccountCode": "200",
+            "AccountCode": "191",
             "Description": "Hoodie — L",
             "Quantity": 40,
             "TaxType": "OUTPUT2",
@@ -101,21 +101,21 @@ describe('golden payloads — byte-identical across the auth swap', () => {
         "LineAmountTypes": "Exclusive",
         "LineItems": [
           {
-            "AccountCode": "200",
+            "AccountCode": "191",
             "Description": "Tee — M",
             "Quantity": 100,
             "TaxType": "OUTPUT2",
             "UnitAmount": 10,
           },
           {
-            "AccountCode": "200",
+            "AccountCode": "191",
             "Description": "Hoodie — L (prepaid stock — drawn down, no charge)",
             "Quantity": 40,
             "TaxType": "OUTPUT2",
             "UnitAmount": 0,
           },
           {
-            "AccountCode": "200",
+            "AccountCode": "191",
             "Description": "Picking fee",
             "Quantity": 1,
             "TaxType": "OUTPUT2",

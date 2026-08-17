@@ -23,7 +23,7 @@ describe('isXeroEnabled', () => {
 describe('getXeroConfig — payload-only (auth moved to token-store)', () => {
   it('needs NO credentials and applies NZ defaults', () => {
     expect(getXeroConfig()).toEqual({
-      salesAccountCode: '200',
+      salesAccountCode: '191',
       taxType: 'OUTPUT2',
       currency: 'NZD',
       lineAmountTypes: 'Exclusive',

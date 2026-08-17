@@ -33,7 +33,7 @@ export function getXeroConfig(region: XeroRegion = 'NZ'): XeroConfig {
     }
   }
   return {
-    salesAccountCode: process.env.XERO_SALES_ACCOUNT_CODE ?? '200',
+    salesAccountCode: process.env.XERO_SALES_ACCOUNT_CODE ?? '191',
     taxType: process.env.XERO_TAX_TYPE ?? 'OUTPUT2',
     currency: process.env.XERO_CURRENCY ?? 'NZD',
     lineAmountTypes: process.env.XERO_LINE_AMOUNT_TYPES ?? 'Exclusive',
