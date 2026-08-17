@@ -15,6 +15,7 @@ export interface XeroQuoteLineInput {
 
 export interface BuildPayloadArgs {
   contactId: string
+  contactName?: string | null
   orderRef: string
   today: string // 'YYYY-MM-DD'
   paymentTerms: string | null
@@ -37,7 +38,7 @@ interface XeroLineItem {
 
 export interface XeroQuotePayload {
   Status: 'DRAFT'
-  Contact: { ContactID: string }
+  Contact: { ContactID: string; ContactName?: string }
   LineAmountTypes: string
   Reference: string
   Date: string
@@ -57,19 +58,26 @@ export function addDaysUTC(iso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** ExpiryDate from payment terms. net20→+20d, net30→+30d, else none. */
+/** ExpiryDate from payment terms. */
 export function expiryDateFor(paymentTerms: string | null, today: string): string | undefined {
   if (paymentTerms === 'net20') return addDaysUTC(today, 20)
   if (paymentTerms === 'net30') return addDaysUTC(today, 30)
+  if (paymentTerms === '20th of month') {
+    const issued = new Date(`${today}T00:00:00Z`)
+    return new Date(Date.UTC(issued.getUTCFullYear(), issued.getUTCMonth() + 1, 20))
+      .toISOString()
+      .slice(0, 10)
+  }
   return undefined
 }
 
 /** Build the Xero DRAFT quote object (one entry of a POST /Quotes batch). */
 export function buildDraftQuotePayload(args: BuildPayloadArgs): XeroQuotePayload {
   const expiryDate = expiryDateFor(args.paymentTerms, args.today)
+  const contactName = args.contactName?.trim()
   const payload: XeroQuotePayload = {
     Status: 'DRAFT',
-    Contact: { ContactID: args.contactId },
+    Contact: { ContactID: args.contactId, ...(contactName ? { ContactName: contactName } : {}) },
     LineAmountTypes: args.lineAmountTypes,
     Reference: args.orderRef,
     Date: args.today,
@@ -278,6 +286,37 @@ export async function resolveXeroContactId(args: ResolveContactArgs): Promise<Re
   }
 }
 
+/** Resolve the person who placed the order without changing the shared Xero
+ * organization/store contact. The profile must belong to this organization. */
+async function resolveOrdererContactName(
+  admin: SupabaseClient,
+  organizationId: string,
+  email: string | null,
+): Promise<string | null> {
+  const normalizedEmail = email?.trim().toLowerCase()
+  if (!normalizedEmail) return null
+
+  const { data: membershipRows, error: membershipError } = await admin
+    .from('user_organizations')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+  if (membershipError || !membershipRows?.length) return null
+
+  const memberIds = membershipRows.map((row) => (row as { user_id: string }).user_id)
+  const { data: profileRows, error: profileError } = await admin
+    .from('profiles')
+    .select('id, email, full_name, auth_display_name')
+    .in('id', memberIds)
+  if (profileError) return null
+
+  const profile = (profileRows as Array<{
+    email: string | null
+    full_name: string | null
+    auth_display_name: string | null
+  }> | null)?.find((row) => row.email?.trim().toLowerCase() === normalizedEmail)
+  return profile?.full_name?.trim() || profile?.auth_display_name?.trim() || null
+}
+
 // --- orchestrator --------------------------------------------------------------
 
 interface XeroQuotesResponse {
@@ -295,7 +334,7 @@ export interface CreateDraftInvoiceArgs {
   shipToStoreId?: string | null
   actorUserId: string | null
   ordererEmail: string | null
-  paymentTerms: string | null // 'prepay' | 'net20' | 'net30' | null
+  paymentTerms: string | null // includes legacy account-specific terms such as '20th of month'
   isTestOrg: boolean
   /** organizations.region — selects the Xero organisation (tenant header +
    *  payload config). Not-connected regions skip with reason not_connected. */
@@ -437,6 +476,11 @@ export async function createDraftInvoiceForOrder(
     }
   }
   const { contactId } = resolvedContact
+  const contactName = await resolveOrdererContactName(
+    admin,
+    args.organizationId,
+    args.ordererEmail,
+  )
 
   // Lines — read the persisted quote_items (canonical, decoration already folded).
   const { data: itemRows } = await admin
@@ -463,6 +507,7 @@ export async function createDraftInvoiceForOrder(
 
   const payload = buildDraftQuotePayload({
     contactId,
+    contactName,
     orderRef: args.orderRef,
     today: args.today,
     paymentTerms: args.paymentTerms,

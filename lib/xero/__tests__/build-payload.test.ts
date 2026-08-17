@@ -28,6 +28,10 @@ const baseArgs: BuildPayloadArgs = {
 describe('expiryDateFor', () => {
   it('adds 20 days for net20', () => expect(expiryDateFor('net20', '2026-07-02')).toBe('2026-07-22'))
   it('adds 30 days for net30 (crossing a month)', () => expect(expiryDateFor('net30', '2026-07-02')).toBe('2026-08-01'))
+  it('sets 20th-of-month terms to the 20th of the following month', () => {
+    expect(expiryDateFor('20th of month', '2026-08-18')).toBe('2026-09-20')
+    expect(expiryDateFor('20th of month', '2026-12-02')).toBe('2027-01-20')
+  })
   it('returns undefined for prepay/null/unknown', () => {
     expect(expiryDateFor('prepay', '2026-07-02')).toBeUndefined()
     expect(expiryDateFor(null, '2026-07-02')).toBeUndefined()
@@ -61,6 +65,11 @@ describe('buildDraftInvoicePayload', () => {
   it('includes BrandingThemeID when set', () => {
     const p = buildDraftInvoicePayload({ ...baseArgs, brandingThemeId: 'bt-9' })
     expect(p.BrandingThemeID).toBe('bt-9')
+  })
+
+  it('adds the orderer as the quote contact name without replacing the organization contact', () => {
+    const p = buildDraftInvoicePayload({ ...baseArgs, contactName: 'Nipun Kalra' })
+    expect(p.Contact).toEqual({ ContactID: 'contact-1', ContactName: 'Nipun Kalra' })
   })
 })
 
