@@ -19,6 +19,10 @@ export type PdpCatalogueItem = {
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
    *  widget (display only). Empty = show the full ladder. */
   volume_display_hidden_bands: number[]
+  /** Staff-authored order for the Volume-pricing widget: an ordered list of band
+   *  min_quantity values. Bands absent from it follow, ascending. Empty = ascending
+   *  (today's behaviour). Display only — cart brackets and MOQ are untouched. */
+  volume_display_band_order: number[]
   /** Explicit ex-GST stock sell price (Stock-on-hand). NULL = not set. When set,
    *  it is THE price for stock draws (no volume ladder) — display + charge. */
   stock_unit_price: number | null
@@ -46,7 +50,7 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, volume_display_band_order, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
 
 /**
  * Flatten the embedded catalogue row onto the item. PostgREST returns a

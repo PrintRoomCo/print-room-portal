@@ -24,7 +24,10 @@ import {
 } from '@/lib/shop/decoration-filter'
 import { pickBracket, type CartLineBracket, type CartLineDecoration } from '@/lib/cart/types'
 import { sanitiseCustomName } from '@/lib/cart/custom-name'
-import { hideVolumeDisplayBands } from '@/lib/shop/volume-display-bands'
+import {
+  hideVolumeDisplayBands,
+  orderVolumeDisplayBands,
+} from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCompany } from '@/contexts/CompanyContext'
 import { gstRateForRegion } from '@/lib/pricing/gst'
@@ -205,6 +208,8 @@ interface Props {
    * Empty = show the full ladder.
    */
   volumeDisplayHiddenBands?: number[]
+  /** Staff-dragged band order (From qty list) for the Volume-pricing widget. */
+  volumeDisplayBandOrder?: number[]
   /** Feature 1 — org location dropdown options. Empty = no location dropdown. */
   locationOptions?: LocationOption[]
   /** Feature 2 — per-product custom-name cap. null/absent = no custom-name input. */
@@ -238,6 +243,7 @@ export function ProductDetailClient({
   preOrderClosed = false,
   initialColorSwatchId = null,
   volumeDisplayHiddenBands = [],
+  volumeDisplayBandOrder = [],
   locationOptions = [],
   customNameMaxLength = null,
   preOrderDemand = null,
@@ -940,20 +946,29 @@ export function ProductDetailClient({
   )
 
   // Customer Volume-pricing widget rows: combine each garment band with its
-  // decoration figure, then drop the staff-hidden bands. Display only —
+  // decoration figure, drop the staff-hidden bands, then apply the order staff
+  // dragged the bands into in the item editor. Display only —
   // the cart's `brackets` snapshot stays the full ladder, so the price paid at
   // any qty (and the MOQ) are unchanged; this just changes what's advertised.
   const displayVolumeBrackets = useMemo(
     () =>
-      hideVolumeDisplayBands(
-        brackets.map((b, i) => ({
-          min_quantity: b.min_quantity,
-          max_quantity: b.max_quantity,
-          unit_price: Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0),
-        })),
-        volumeDisplayHiddenBands,
+      orderVolumeDisplayBands(
+        hideVolumeDisplayBands(
+          brackets.map((b, i) => ({
+            min_quantity: b.min_quantity,
+            max_quantity: b.max_quantity,
+            unit_price: Number(b.unit_price) + (decorationPerUnitAtBracket[i] ?? 0),
+          })),
+          volumeDisplayHiddenBands,
+        ),
+        volumeDisplayBandOrder,
       ),
-    [brackets, decorationPerUnitAtBracket, volumeDisplayHiddenBands],
+    [
+      brackets,
+      decorationPerUnitAtBracket,
+      volumeDisplayHiddenBands,
+      volumeDisplayBandOrder,
+    ],
   )
 
   function handleAddToCart() {

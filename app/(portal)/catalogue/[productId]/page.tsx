@@ -121,9 +121,47 @@ const loadProductDetailPageData = cache(async (
   // misleadingly-cheap "1-23" band into the Volume pricing widget for
   // markup-ladder products. 24 is the actual B2B floor for printed gear.
   const CANONICAL_BREAKPOINTS: number[] = [24, 50, 100, 250, 500, 1000]
+
+  // Manual-final items have an explicitly staff-authored ladder in
+  // b2b_catalogue_item_pricing_tiers, and `effective_unit_price_for_item` reads
+  // exactly that ladder for them (tier multiplier forced to 1.0). So probing the
+  // canonical breakpoints misrepresents them: a band the staff authored outside
+  // the canonical list (a 1-23 band, say) never surfaced, and band edges came
+  // from probe spacing rather than from the authored max_quantity. Read the
+  // authored bands instead and use THEIR From qty values as the probe points.
+  //
+  // Computed items are untouched: their ladder is derived, they have no rows in
+  // that table, and qty 1 must stay unprobed there (it returns base_cost x the
+  // 1-23 markup tier — wholesale, which leaked a misleadingly-cheap band).
+  const authoredBands: Array<{
+    min_quantity: number
+    max_quantity: number | null
+  }> =
+    catItem.price_mode === 'manual_final'
+      ? (
+          (
+            await admin
+              .from('b2b_catalogue_item_pricing_tiers')
+              .select('min_quantity, max_quantity')
+              .eq('catalogue_item_id', catItem.id)
+              .order('min_quantity', { ascending: true })
+          ).data ?? []
+        ).map((b) => ({
+          min_quantity: Number(b.min_quantity),
+          max_quantity: b.max_quantity == null ? null : Number(b.max_quantity),
+        }))
+      : []
+
+  // The qty points every server-side pricing probe on this page samples. Kept as
+  // one list so the garment ladder and the decoration seed can never disagree.
+  const BREAKPOINTS: number[] =
+    authoredBands.length > 0
+      ? authoredBands.map((b) => b.min_quantity)
+      : CANONICAL_BREAKPOINTS
+
   const bracketsQuery = (async () => {
     const probes: Array<{ qty: number; price: number | null }> = await Promise.all(
-      CANONICAL_BREAKPOINTS.map(async (qty) => {
+      BREAKPOINTS.map(async (qty) => {
         // Item-keyed (Phase 1): the loader already resolved catItem.id, so we
         // price the specific skin rather than re-resolving the product via the
         // legacy LIMIT 1 lookup. Identical output for single-skin products;
@@ -147,6 +185,21 @@ const loadProductDetailPageData = cache(async (
     )
     if (points.length === 0) {
       return { data: [] as Array<{ min_quantity: number; max_quantity: number | null; unit_price: number }> }
+    }
+    // Authored ladder: the staff decided these bands, so render them as authored
+    // — no run-collapsing, and max_quantity straight off the row rather than
+    // inferred from the next probe. Bands whose price failed to resolve drop out.
+    if (authoredBands.length > 0) {
+      const priceByMin = new Map(points.map((p) => [p.qty, p.price]))
+      return {
+        data: authoredBands
+          .filter((b) => priceByMin.has(b.min_quantity))
+          .map((b) => ({
+            min_quantity: b.min_quantity,
+            max_quantity: b.max_quantity,
+            unit_price: priceByMin.get(b.min_quantity) as number,
+          })),
+      }
     }
     // First pass: drop runs where price equals the previous kept point. Each
     // remaining "interesting" point is the start of a band.
@@ -175,7 +228,7 @@ const loadProductDetailPageData = cache(async (
     if (catItem.price_mode !== 'manual_final') return {}
     const seed: Record<number, number> = {}
     await Promise.all(
-      CANONICAL_BREAKPOINTS.map(async (qty) => {
+      BREAKPOINTS.map(async (qty) => {
         try {
           const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
             p_catalogue_item_id: catItem.id,
@@ -608,6 +661,9 @@ const loadProductDetailPageData = cache(async (
       // Display-only: hide these bands from the Volume-pricing widget
       // (cart/checkout brackets are untouched, so price & MOQ unchanged).
       volumeDisplayHiddenBands: catItem.volume_display_hidden_bands ?? [],
+      // Display-only: the order staff dragged these bands into. Applied after
+      // the hide filter; cart brackets stay ascending, so price & MOQ unchanged.
+      volumeDisplayBandOrder: catItem.volume_display_band_order ?? [],
       // Feature 1 — org location dropdown options. Empty = no location dropdown.
       locationOptions,
       // Feature 2 — per-product custom-name cap. null = no custom-name input.
