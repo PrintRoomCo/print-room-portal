@@ -969,9 +969,11 @@ describe('pickCatalogueGridThumbnail — Merchandised cards', () => {
         kind: 'collapsed',
         layout: 'merchandised_gallery',
         fallbackUrl: '/fallback.png',
+        // Re-coloured off the lead so it has no customs — masters stay visible.
         rows: catalogueRows.map((row) => ({
           ...row,
           gallery_position: 1,
+          color_swatch_id: 'other',
         })),
         masterImages: masterRows,
         selectedColorSwatchId: 'lead',

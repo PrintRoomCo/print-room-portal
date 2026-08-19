@@ -58,4 +58,20 @@ describe('deriveCardImageUrl — shared vector', () => {
     ]
     expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv, layout: 'merchandised_gallery' })).toBe('NEUTRAL')
   })
+
+  it('H: Merchandised hides master photos when the lead colour has a catalogue image', () => {
+    const images = [
+      { id: 'master-first', scope: 'master' as const, color_swatch_id: null, view: 'front', source: null, position: 0, gallery_position: 0, image_url: 'MASTER_FIRST' },
+      { id: 'catalogue-second', scope: 'catalogue' as const, color_swatch_id: 'lead', view: 'front', source: 'staff_upload', position: 0, gallery_position: 1, image_url: 'CATALOGUE_SECOND' },
+    ]
+    expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv, layout: 'merchandised_gallery' })).toBe('CATALOGUE_SECOND')
+  })
+
+  it('I: Merchandised keeps master photos when only another colour has catalogue images', () => {
+    const images = [
+      { id: 'master-own', scope: 'master' as const, color_swatch_id: 'lead', view: 'front', source: null, position: 0, gallery_position: 0, image_url: 'MASTER_OWN' },
+      { id: 'catalogue-other', scope: 'catalogue' as const, color_swatch_id: 'other', view: 'front', source: 'staff_upload', position: 0, gallery_position: 1, image_url: 'CATALOGUE_OTHER' },
+    ]
+    expect(deriveCardImageUrl({ images, leadColorSwatchId: 'lead', masterImageUrl: 'MASTER', normalizeView: nv, layout: 'merchandised_gallery' })).toBe('MASTER_OWN')
+  })
 })

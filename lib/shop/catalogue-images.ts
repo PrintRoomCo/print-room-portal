@@ -69,15 +69,22 @@ export function deriveCardImageUrl(args: {
     layout = 'standard_views',
   } = args
   if (layout === 'merchandised_gallery') {
-    return images
-      .filter(
-        (image) =>
-          image.image_url
-          && (
-            image.color_swatch_id == null
-            || image.color_swatch_id === leadColorSwatchId
-          ),
-      )
+    const colourVisible = images.filter(
+      (image) =>
+        image.image_url
+        && (
+          image.color_swatch_id == null
+          || image.color_swatch_id === leadColorSwatchId
+        ),
+    )
+    // A catalogue image visible for the lead colour replaces the master
+    // photos — the same suppression the merchandised PDP gallery applies.
+    const candidates = colourVisible.some(
+      (image) => image.scope === 'catalogue',
+    )
+      ? colourVisible.filter((image) => image.scope === 'catalogue')
+      : colourVisible
+    return candidates
       .slice()
       .sort(compareMerchandisedCardImages)[0]?.image_url
       ?? masterImageUrl
