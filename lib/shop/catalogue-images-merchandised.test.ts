@@ -19,6 +19,12 @@ const image = (
   ...over,
 })
 
+const custom = (
+  id: string,
+  over: Partial<CatalogueAwareGalleryImage> = {},
+): CatalogueAwareGalleryImage =>
+  image(id, { scope: 'catalogue', source: 'staff_upload', ...over })
+
 const resolve = (
   images: CatalogueAwareGalleryImage[],
   colour: string | null = 'blue',
@@ -31,25 +37,17 @@ const resolve = (
 )
 
 describe('Merchandised gallery resolution', () => {
-  it('keeps same-view multiples and cross-source union order', () => {
+  it('keeps same-view multiples and explicit union order for a colour without customs', () => {
     const resolved = resolve([
       image('master-second', { gallery_position: 1 }),
-      image('catalogue-first', {
-        scope: 'catalogue',
-        source: 'staff_upload',
-        gallery_position: 0,
-      }),
-      image('catalogue-third', {
-        scope: 'catalogue',
-        source: 'designer_snapshot',
-        gallery_position: 2,
-      }),
+      image('master-first', { gallery_position: 0 }),
+      image('master-appended', { position: 2 }),
     ])
 
     expect(resolved.map((row) => row.id)).toEqual([
-      'catalogue-first',
+      'master-first',
       'master-second',
-      'catalogue-third',
+      'master-appended',
     ])
   })
 
@@ -72,18 +70,73 @@ describe('Merchandised gallery resolution', () => {
     ], 'blue', new Set(['back'])).map((row) => row.id)).toEqual(['untagged'])
   })
 
-  it('appends missing order rows deterministically by native position, scope, and id', () => {
+  it('appends missing order rows deterministically by native position and id', () => {
     expect(resolve([
-      image('catalogue-b', { scope: 'catalogue', position: 1 }),
+      image('master-b', { position: 1 }),
       image('master-a', { position: 1 }),
       image('explicit', { gallery_position: 0, position: 99 }),
-      image('catalogue-a', { scope: 'catalogue', position: 1 }),
     ]).map((row) => row.id)).toEqual([
       'explicit',
       'master-a',
-      'catalogue-a',
-      'catalogue-b',
+      'master-b',
     ])
+  })
+
+  it('hides every master photo when the colour has a custom image, colour-tagged ones included', () => {
+    expect(resolve([
+      image('master-neutral', { gallery_position: 0 }),
+      image('master-own', { color_swatch_id: 'blue', gallery_position: 1 }),
+      custom('custom-own', { color_swatch_id: 'blue', gallery_position: 2 }),
+    ]).map((row) => row.id)).toEqual(['custom-own'])
+  })
+
+  it('keeps masters for a colour without customs even when another colour has them', () => {
+    expect(resolve([
+      image('master-neutral', { gallery_position: 0 }),
+      custom('custom-red', { color_swatch_id: 'red', gallery_position: 1 }),
+    ]).map((row) => row.id)).toEqual(['master-neutral'])
+  })
+
+  it('lets an all-colours custom hide masters for every colour and the neutral selection', () => {
+    const rows = [
+      image('master-neutral', { gallery_position: 0 }),
+      custom('custom-neutral', { gallery_position: 1 }),
+    ]
+
+    expect(resolve(rows, 'blue').map((row) => row.id)).toEqual(['custom-neutral'])
+    expect(resolve(rows, null).map((row) => row.id)).toEqual(['custom-neutral'])
+  })
+
+  it('keeps curated relative order among the surviving customs', () => {
+    expect(resolve([
+      custom('custom-late', { gallery_position: 3 }),
+      image('master-a', { gallery_position: 0 }),
+      custom('custom-early', { gallery_position: 1 }),
+      image('master-b', { gallery_position: 2 }),
+    ]).map((row) => row.id)).toEqual(['custom-early', 'custom-late'])
+  })
+
+  it('restores masters in curated order when the customs are removed', () => {
+    const masters = [
+      image('master-second', { gallery_position: 1 }),
+      image('master-first', { gallery_position: 0 }),
+    ]
+
+    expect(
+      resolve([...masters, custom('custom-own', { gallery_position: 2 })])
+        .map((row) => row.id),
+    ).toEqual(['custom-own'])
+    expect(resolve(masters).map((row) => row.id)).toEqual([
+      'master-first',
+      'master-second',
+    ])
+  })
+
+  it('ignores hidden-view customs when deciding whether to hide masters', () => {
+    expect(resolve([
+      image('master-front', { view: 'front', gallery_position: 0 }),
+      custom('custom-back', { view: 'back', gallery_position: 1 }),
+    ], 'blue', new Set(['back'])).map((row) => row.id)).toEqual(['master-front'])
   })
 
   it('uses a selected swatch synthetic only when no persisted image survives', () => {
@@ -99,13 +152,8 @@ describe('Merchandised gallery resolution', () => {
 
   it('derives the hero from the first ordered row without snapshot preference', () => {
     const images = [
-      image('staff-first', {
-        scope: 'catalogue',
-        source: 'staff_upload',
-        gallery_position: 0,
-      }),
-      image('snapshot-second', {
-        scope: 'catalogue',
+      custom('staff-first', { gallery_position: 0 }),
+      custom('snapshot-second', {
         source: 'designer_snapshot',
         gallery_position: 1,
       }),
@@ -119,5 +167,19 @@ describe('Merchandised gallery resolution', () => {
         'merchandised_gallery',
       )?.id,
     ).toBe('staff-first')
+  })
+
+  it('picks the hero from the customs once masters are hidden', () => {
+    expect(
+      pickPreferredGalleryImage(
+        [
+          image('master-first', { gallery_position: 0 }),
+          custom('custom-second', { gallery_position: 1 }),
+        ],
+        'blue',
+        undefined,
+        'merchandised_gallery',
+      )?.id,
+    ).toBe('custom-second')
   })
 })

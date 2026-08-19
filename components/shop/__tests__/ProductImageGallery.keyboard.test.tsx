@@ -144,7 +144,7 @@ describe('ProductImageGallery keyboard navigation', () => {
         position: 0,
         gallery_position: 2,
         color_swatch_id: 'red',
-        scope: 'catalogue',
+        scope: 'master',
       },
       {
         id: 'neutral-first',
@@ -162,7 +162,7 @@ describe('ProductImageGallery keyboard navigation', () => {
         position: 1,
         gallery_position: 1,
         color_swatch_id: 'blue',
-        scope: 'catalogue',
+        scope: 'master',
       },
     ]
     const { rerender } = render(

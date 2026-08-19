@@ -462,8 +462,15 @@ function resolveMerchandisedGalleryImages(
   const persisted = eligible.filter(
     (image) => !image.synthetic && !image.id.startsWith('swatch:'),
   )
-  const kept = persisted.length > 0
-    ? persisted
+  // A catalogue image visible for this colour replaces the master photos:
+  // colours with customs show only the customs, colours without keep the
+  // full curated master set. Synthetic swatch fallbacks never trigger this,
+  // and they still apply only when no persisted image survives at all.
+  const suppressed = persisted.some((image) => image.scope === 'catalogue')
+    ? persisted.filter((image) => image.scope === 'catalogue')
+    : persisted
+  const kept = suppressed.length > 0
+    ? suppressed
     : eligible.filter(
         (image) =>
           image.synthetic === true
