@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   lineFulfilment,
   lineIsOrderable,
+  routeForFulfilmentType,
   type LineFulfilmentContext,
 } from '../fulfilment-mode'
 
@@ -12,7 +13,6 @@ function ctx(overrides: Partial<LineFulfilmentContext> = {}): LineFulfilmentCont
     orderIntent: 'inventory',
     tracked: true,
     available: 10,
-    backorderable: false,
     lineQty: 5,
     ...overrides,
   }
@@ -45,9 +45,6 @@ describe('lineFulfilment', () => {
   })
 
   // Drawable product, per-cell routing — unchanged behaviour.
-  it('drawable + backorderable → made_to_order', () => {
-    expect(lineFulfilment(ctx({ backorderable: true }))).toBe('made_to_order')
-  })
   it('drawable + tracked + qty within stock → stocked', () => {
     expect(lineFulfilment(ctx({ tracked: true, available: 10, lineQty: 5 }))).toBe('stocked')
   })
@@ -69,7 +66,7 @@ describe('lineIsOrderable', () => {
   // A stock_only member (canReorder === false) can only take a genuine stock
   // draw. This mirrors submit_b2b_order, which coerces such a member's line to
   // 'stocked' and then raises NO_INVENTORY / PERMISSION_DENIED when the cell is
-  // untracked, backorderable, or over-stock. Blocking client-side turns the
+  // untracked or over-stock. Blocking client-side turns the
   // opaque "not stocked for your account" 409 into an up-front unavailable cell.
 
   // THE BUG: mixed product, stock_only member, colourway with no inventory row.
@@ -84,12 +81,6 @@ describe('lineIsOrderable', () => {
     expect(
       lineIsOrderable(ctx({ tracked: true, available: 10, lineQty: 5 }), false),
     ).toBe(true)
-  })
-
-  // Server rejects a stock_only member on a backorderable variant
-  // (member_cannot_produce), so the client must not offer it either.
-  it('stock_only + backorderable cell → NOT orderable', () => {
-    expect(lineIsOrderable(ctx({ backorderable: true }), false)).toBe(false)
   })
 
   it('stock_only + tracked but qty over stock → NOT orderable', () => {
@@ -110,5 +101,41 @@ describe('lineIsOrderable', () => {
     expect(
       lineIsOrderable(ctx({ canDrawStock: false, tracked: false, available: 0 }), true),
     ).toBe(true)
+  })
+})
+
+describe('routeForFulfilmentType', () => {
+  it('maps the two claims to the two DB routes', () => {
+    expect(routeForFulfilmentType('stocked')).toBe('stock_draw')
+    expect(routeForFulfilmentType('made_to_order')).toBe('purchase_order')
+  })
+
+  it('sends nothing for a legacy line that made no claim', () => {
+    // NULL means "nobody said", which the RPC answers with the item's own mode
+    // — the same MOQ-conservative treatment partitionCheckoutLines applies.
+    expect(routeForFulfilmentType(undefined)).toBeNull()
+    expect(routeForFulfilmentType(null)).toBeNull()
+  })
+})
+
+describe('lineFulfilment without the retired backorder flag', () => {
+  it('an out-of-stock tracked cell is a production run, not a bypass', () => {
+    // The flag used to short-circuit to made_to_order here. It is retired; the
+    // over-stock comparison already reaches the same answer.
+    expect(
+      lineFulfilment({
+        canDrawStock: true, canChooseOrderIntent: false, orderIntent: 'inventory',
+        tracked: true, available: 0, lineQty: 5,
+      }),
+    ).toBe('made_to_order')
+  })
+
+  it('still draws stock when there is enough of it', () => {
+    expect(
+      lineFulfilment({
+        canDrawStock: true, canChooseOrderIntent: false, orderIntent: 'inventory',
+        tracked: true, available: 10, lineQty: 5,
+      }),
+    ).toBe('stocked')
   })
 })

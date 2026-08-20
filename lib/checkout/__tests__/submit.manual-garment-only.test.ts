@@ -260,6 +260,10 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
         size_label: null,
         catalogue_item_id: CAT_ITEM_ID,
         ship_to_store_id: null,
+        // No products row is stubbed, so the nature falls through to
+        // made_to_order and the line's 'stocked' claim is coerced before the
+        // route is derived from it.
+        fulfilment_route: 'purchase_order',
       },
     ])
   })

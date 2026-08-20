@@ -271,7 +271,7 @@ const loadProductDetailPageData = cache(async (
       .order('order_index', { ascending: true }),
     bracketsQuery,
     admin.from('variant_availability')
-      .select('variant_id, size_id, available_qty, allow_order_without_stock')
+      .select('variant_id, size_id, available_qty')
       .eq('organization_id', context.organizationId),
     admin.from('product_images')
       .select('id, file_url, view, alt_text, position, color_swatch_id')
@@ -385,11 +385,9 @@ const loadProductDetailPageData = cache(async (
     variant_id: string
     size_id: number | null
     available_qty: number
-    allow_order_without_stock: boolean | null
   }>) {
     availability[`${r.variant_id}::${r.size_id ?? ''}`] = {
       available_qty: r.available_qty,
-      allow_order_without_stock: r.allow_order_without_stock === true,
     }
   }
 

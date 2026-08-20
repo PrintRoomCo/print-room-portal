@@ -117,8 +117,6 @@ export interface LineFulfilmentContext {
   tracked: boolean
   /** Available qty for the cell; 0 when untracked. */
   available: number
-  /** allow_order_without_stock for the cell. */
-  backorderable: boolean
   /** Requested quantity for this line. */
   lineQty: number
 }
@@ -139,7 +137,6 @@ export function lineFulfilment(ctx: LineFulfilmentContext): 'stocked' | 'made_to
     return ctx.orderIntent === 'bulk' ? 'made_to_order' : 'stocked'
   }
   if (!ctx.canDrawStock) return 'made_to_order'
-  if (ctx.backorderable) return 'made_to_order'
   if (ctx.tracked) return ctx.lineQty > ctx.available ? 'made_to_order' : 'stocked'
   return 'made_to_order'
 }
@@ -149,17 +146,37 @@ export function lineFulfilment(ctx: LineFulfilmentContext): 'stocked' | 'made_to
  *
  * `lineFulfilment` resolves a line to a stock draw or a production run, but its
  * two-value return can't say "no valid path" — so a stock_only member (a viewer
- * who cannot reorder) got an untracked/backorderable/over-stock cell silently
+ * who cannot reorder) got an untracked or over-stock cell silently
  * tagged `made_to_order`, added at full price, and only rejected at the final
  * checkout click with "not stocked for your account" (submit_b2b_order coerces
  * their line to `stocked` and raises NO_INVENTORY / PERMISSION_DENIED).
  *
  * The rule: a viewer who can't reorder may only take a genuine `stocked` draw.
- * This mirrors the server one-to-one (stock_only + backorderable/made_to_order →
+ * This mirrors the server one-to-one (stock_only + made_to_order →
  * member_cannot_produce), so the cell is blocked up front instead of failing
  * late. Viewers who CAN reorder are unaffected — a production run is valid for
  * them.
  */
 export function lineIsOrderable(ctx: LineFulfilmentContext, canReorder: boolean): boolean {
   return lineFulfilment(ctx) === 'stocked' || canReorder
+}
+
+/**
+ * The `quote_items.fulfilment_route` value for a line's fulfilment claim.
+ *
+ * The claim and the route are the same fact under two names: this repo's cart
+ * and pricing code has said 'stocked' / 'made_to_order' since long before the
+ * column existed. Converting HERE, at the RPC boundary, keeps one name in the
+ * cart and one in the database without a second field to drift.
+ *
+ * null when the line made no claim at all (legacy carts), which the RPC answers
+ * with the item's own mode — the same conservative treatment
+ * partitionCheckoutLines gives an absent fulfilment_type.
+ */
+export function routeForFulfilmentType(
+  t: 'stocked' | 'made_to_order' | null | undefined,
+): 'stock_draw' | 'purchase_order' | null {
+  if (t === 'stocked') return 'stock_draw'
+  if (t === 'made_to_order') return 'purchase_order'
+  return null
 }

@@ -78,7 +78,7 @@ export async function GET(
 
   const { data: rows } = await admin
     .from('variant_availability')
-    .select('variant_id, size_id, available_qty, allow_order_without_stock')
+    .select('variant_id, size_id, available_qty')
     .eq('organization_id', context.organizationId)
     .in('variant_id', variantIds)
 
@@ -88,7 +88,6 @@ export async function GET(
   for (const r of rows ?? []) {
     availability[availabilityKey(r.variant_id, r.size_id)] = {
       available_qty: r.available_qty,
-      allow_order_without_stock: r.allow_order_without_stock === true,
     }
   }
   return NextResponse.json({ availability, effectiveMoq, effectiveMaxQty })

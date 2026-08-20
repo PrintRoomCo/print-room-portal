@@ -11,6 +11,7 @@ import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 import { getEffectiveMoq } from '@/lib/shop/effective-moq'
 import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
+import { routeForFulfilmentType } from '@/lib/shop/fulfilment-mode'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
@@ -1530,6 +1531,10 @@ export async function submitCustomerOrder(
         // DOC region-quota: the RPC reads this per line to enforce the per-store
         // cap. `repriced` spreads `...l`, so ship_to_store_id survives repricing.
         ship_to_store_id: l.ship_to_store_id ?? null,
+        // The route the customer picked. Read AFTER the nature coercion above
+        // (L751-760), so a line that claimed a stock draw on an item that does
+        // not offer one arrives demoted rather than trusted.
+        fulfilment_route: routeForFulfilmentType(l.fulfilment_type),
       }
     }),
     p_intent: input.intent ?? 'customer',

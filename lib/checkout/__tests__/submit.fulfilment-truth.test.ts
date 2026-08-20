@@ -395,7 +395,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
   })
 
   it('coerced made_to_order line → purchase order → no picking fee', async () => {
-    const { admin } = makeSupabaseStub({
+    const { admin, rpcCalls } = makeSupabaseStub({
       // qty meets MOQ so the order commits and reaches step 5c.
       selects: baseSelects({ productNature: 'made_to_order' }),
       rpc: happyRpc,
@@ -410,6 +410,12 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(createDraftInvoiceForOrder).toHaveBeenCalledTimes(1)
     // claim coerced away → purchase order → no picking fee (was drawsStock=false).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(0)
+
+    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+    const lines = submitCall?.args?.p_lines as Array<{ fulfilment_route: string | null }>
+    // A stocked claim on a made_to_order item is coerced, and the coerced value
+    // is what travels — the route is derived after coercion, not before.
+    expect(lines[0].fulfilment_route).toBe('purchase_order')
   })
 
   it('genuine stock draw (mixed nature) → stock-on-hand order → picking fee applies', async () => {
