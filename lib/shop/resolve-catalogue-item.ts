@@ -15,6 +15,9 @@ export type PdpCatalogueItem = {
   /** Feature #9 — soft per-order cap override (nullable). NULL = inherit master. */
   max_order_qty_override: number | null
   fulfilment_type_override: 'stocked' | 'made_to_order' | 'mixed' | null
+  /** Whether a stock draw caps at available (true) or the server splits it into
+   *  a draw plus a production run (false). */
+  limit_to_available_stock: boolean | null
   price_mode: 'computed' | 'manual_final' | null
   /** Staff-set min_quantity of each band HIDDEN from the customer Volume-pricing
    *  widget (display only). Empty = show the full ladder. */
@@ -50,7 +53,7 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, price_mode, volume_display_hidden_bands, volume_display_band_order, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, limit_to_available_stock, price_mode, volume_display_hidden_bands, volume_display_band_order, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
 
 /**
  * Flatten the embedded catalogue row onto the item. PostgREST returns a

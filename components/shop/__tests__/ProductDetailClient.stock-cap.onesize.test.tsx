@@ -94,7 +94,7 @@ describe('PDP Stock-on-hand cap — one_size', () => {
       target: { value: '28' },
     })
     expect(
-      screen.getByText(/Only 4 available for selected variant/i),
+      screen.getByText(/4 available\. Order the other 24 as a purchase order\?/i),
     ).toBeInTheDocument()
     expect(screen.queryByText(/to be made/i)).not.toBeInTheDocument()
   })

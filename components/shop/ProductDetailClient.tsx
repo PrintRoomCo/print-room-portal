@@ -84,6 +84,10 @@ interface ProductData {
   garment_name?: string | null
   default_sizes: string[] | null
   fulfilment_type: FulfilmentType
+  /** Whether a stock draw caps at available (true) or the server splits it into
+   *  a draw plus a production run (false). Optional so an absent value reads as
+   *  the column default rather than forcing every fixture to state it. */
+  limitToAvailableStock?: boolean
   brand_name: string | null
   category_name: string | null
   // Phase 2 — catalogue-item identity (named to avoid colliding with the
@@ -971,7 +975,13 @@ export function ProductDetailClient({
     ],
   )
 
-  function handleAddToCart() {
+  /**
+   * @param opts.splitOverStock The customer accepted the over-stock offer: any
+   *   cell asking for more than is on hand becomes TWO lines — a stock draw for
+   *   what exists and a production run for the balance. Per-cell by design; a
+   *   single global cap would mis-size every other cell in the selection.
+   */
+  function handleAddToCart(opts?: { splitOverStock?: boolean }) {
     if (!pricing || pricing.status !== 'ok') return
     if (pendingPricingDecorations.length > 0) return
     const selectedDecorations = decorations.filter((d) => selectedLinkIds.has(d.linkId))
@@ -1164,15 +1174,28 @@ export function ProductDetailClient({
           // drawable product (nature × permission) + tracked cell with enough
           // stock. Untracked cells of made_to_order products are production
           // runs, NOT 'stocked' (fix 2026-07-06; see lineFulfilment).
-          const fulfilmentType = lineFulfilment({
-            canDrawStock: options.canDrawStock,
-            canChooseOrderIntent: orderIntentUsable,
-            orderIntent,
-            tracked,
-            available,
-            lineQty,
-          })
-          cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
+          const drawable = Math.min(lineQty, available)
+          if (opts?.splitOverStock && tracked && lineQty > drawable && drawable > 0) {
+            // Two lines, two routes: the cap is what makes them separate orders
+            // at checkout (partitionCheckoutLines), and the customer chose both
+            // explicitly. The server re-checks availability and re-prices.
+            cart.addLine({ ...baseLine, qty: drawable, fulfilmentType: 'stocked' })
+            cart.addLine({
+              ...baseLine,
+              qty: lineQty - drawable,
+              fulfilmentType: 'made_to_order',
+            })
+          } else {
+            const fulfilmentType = lineFulfilment({
+              canDrawStock: options.canDrawStock,
+              canChooseOrderIntent: orderIntentUsable,
+              orderIntent,
+              tracked,
+              available,
+              lineQty,
+            })
+            cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
+          }
           added += lineQty
         }
       }
@@ -1234,7 +1257,7 @@ export function ProductDetailClient({
       available: availableQty ?? 0,
       lineQty: qty,
     })
-    cart.addLine({
+    const oneSizeBaseLine = {
       productId: product.id,
       productName: product.name,
       // one_size still has a colourway variant (SKUCOLLAPSE: a variant IS a
@@ -1247,11 +1270,9 @@ export function ProductDetailClient({
       variantLabel: selectedVariant?.color_label ?? '—',
       sizeId,
       sizeLabel: oneSizeSizeLabel,
-      qty,
       unitPrice: pricing.unit_price,
       imageUrl: cartImageForSwatch(colorSwatchId),
       decorations: cartDecorationsForSwatch(colorSwatchId),
-      fulfilmentType: oneSizeFulfilment,
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       catalogueId: product.catalogueId ?? null,
@@ -1262,8 +1283,31 @@ export function ProductDetailClient({
       nature: product.fulfilment_type,
       manualDecorationPerUnit: manualDecorationPerUnitSnapshot,
       manualDecorationBrackets: manualDecorationBracketsSnapshot,
-    })
+    }
+    const oneSizeDrawable = Math.min(qty, availableQty ?? 0)
+    if (
+      opts?.splitOverStock &&
+      tracksThisVariant &&
+      qty > oneSizeDrawable &&
+      oneSizeDrawable > 0
+    ) {
+      cart.addLine({ ...oneSizeBaseLine, qty: oneSizeDrawable, fulfilmentType: 'stocked' })
+      cart.addLine({
+        ...oneSizeBaseLine,
+        qty: qty - oneSizeDrawable,
+        fulfilmentType: 'made_to_order',
+      })
+    } else {
+      cart.addLine({ ...oneSizeBaseLine, qty, fulfilmentType: oneSizeFulfilment })
+    }
     warnIfOverCap(qty)
+  }
+
+  // The customer accepted the offer, so place both halves in one action. No
+  // setOrderIntent here: the split passes an explicit fulfilmentType per line,
+  // and a state write would not be visible to this same call anyway.
+  function addShortfallAsPurchaseOrder() {
+    handleAddToCart({ splitOverStock: true })
   }
 
   const priceMissing = pricing != null && pricing.status === 'missing'
@@ -1280,11 +1324,16 @@ export function ProductDetailClient({
   let inventoryIntentShortfall: {
     label: string
     available: number
+    /** How many units are left over once the draw is capped. Only meaningful
+     *  while the item caps; a splitting item has no remainder to place. */
+    remainder: number
   } | null = null
   // Hard cap: a stock-on-hand order can never exceed available stock. When a
   // buyer wants more than is in stock they must switch to the Purchase Order
   // (Re-order) pill, which places a production run subject to the product MOQ.
-  if (isInventoryMode) {
+  // A splitting item ('mixed' with the cap off) has no shortfall: the server
+  // draws what exists and produces the rest on the same line.
+  if (isInventoryMode && product.limitToAvailableStock !== false) {
     if (sizingMode === 'multi_size_with_variants') {
       const cells = variants.flatMap((variant) => sizes.map((s) => ({ variant, s })))
       for (const { variant, s } of cells) {
@@ -1298,6 +1347,7 @@ export function ProductDetailClient({
               [variant.color_label, s.size_label].filter(Boolean).join(' / ') ||
               'selected variant',
             available,
+            remainder: requested - available,
           }
           break
         }
@@ -1306,6 +1356,7 @@ export function ProductDetailClient({
       inventoryIntentShortfall = {
         label: 'selected variant',
         available: availableQty ?? 0,
+        remainder: qty - (availableQty ?? 0),
       }
     }
   }
@@ -1989,7 +2040,7 @@ export function ProductDetailClient({
 
             <button
               type="button"
-              onClick={handleAddToCart}
+              onClick={() => handleAddToCart()}
               disabled={!canSubmitSelection || pricingLoading}
               className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3 text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -2008,13 +2059,22 @@ export function ProductDetailClient({
               </p>
             )}
             {inventoryIntentShortfall && (
-              <p className="mt-3 text-xs text-amber-700">
-                {`Only ${inventoryIntentShortfall.available} available for ${inventoryIntentShortfall.label}. ${
-                  canChooseOrderIntent
-                    ? 'Switch to Purchase order or reduce quantity.'
-                    : 'Reduce quantity to order from stock.'
-                }`}
-              </p>
+              <div className="mt-3 text-xs text-amber-700">
+                <p>
+                  {canChooseOrderIntent
+                    ? `${inventoryIntentShortfall.available} available. Order the other ${inventoryIntentShortfall.remainder} as a purchase order?`
+                    : `${inventoryIntentShortfall.available} available. Reduce quantity to order from stock.`}
+                </p>
+                {canChooseOrderIntent && (
+                  <button
+                    type="button"
+                    onClick={addShortfallAsPurchaseOrder}
+                    className="mt-2 rounded-full bg-amber-100 px-3 py-1.5 text-amber-800 transition-colors hover:bg-amber-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                  >
+                    Add {inventoryIntentShortfall.remainder} as a purchase order
+                  </button>
+                )}
+              </div>
             )}
             {selectionBlockedByPermission && inventoryIntentShortfall == null && (
               <p className="mt-3 text-xs text-amber-700">

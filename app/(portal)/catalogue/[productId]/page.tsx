@@ -525,6 +525,7 @@ const loadProductDetailPageData = cache(async (
     moq_override: number | null
     max_order_qty_override: number | null
     fulfilment_type_override: FulfilmentType | null
+    limit_to_available_stock: boolean | null
   } | null
   // Views staff hid from the customer PDP (b2b_catalogue_item_hidden_views),
   // scoped per (catalogue item, colour). Threaded to the client so the gallery
@@ -614,6 +615,10 @@ const loadProductDetailPageData = cache(async (
           catItemForked?.fulfilment_type_override ?? null,
           displayProduct.fulfilment_type,
         ),
+        // Whether a stock draw caps at available (true) or the server splits it
+        // into a draw plus a production run (false). Absent on an un-upgraded
+        // server reads as true, matching the column default.
+        limitToAvailableStock: catItemForked?.limit_to_available_stock !== false,
         brand_name: brandName,
         category_name: categoryName,
         // Phase 2 — catalogue-item identity threaded to the client so it can ride
