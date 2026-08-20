@@ -1989,166 +1989,187 @@ export async function submitCustomerOrder(
     //   Stage 4 deliberately kept the duplicate to avoid re-touching submit.ts.
     let mondayItemId: string | null = null
     const subitemIdByQuoteItemId: Record<string, string> = {}
-    try {
-      const { data: dealLines } = await admin
-        .from('quote_items')
-        .select(`
-          id, product_id, product_name, quantity, unit_price, decorations, size_label, line_location_label, line_custom_name,
-          product_variants ( product_color_swatches(label) )
-        `)
-        .eq('quote_id', quote_id)
-
-      const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
-        id: string
-        product_id: string
-        product_name: string
-        quantity: number
-        unit_price: number
-        decorations: Array<{ name: string }> | null
-        size_label: string | null
-        line_location_label: string | null
-        line_custom_name: string | null
-        product_variants: {
-          product_color_swatches: { label: string | null } | { label: string | null }[] | null
-        } | null
-      }>).map((row) => {
-        const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
-        const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
-        const designName = row.decorations?.[0]?.name ?? 'No decoration'
-        return {
-          quoteItemId: row.id,
-          productId: row.product_id,
-          productName: row.product_name,
-          variantLabel,
-          colorName: swatch?.label ?? null,
-          sizeLabel: row.size_label,
-          designName,
-          location: row.line_location_label ?? null,
-          customName: row.line_custom_name ?? null,
-          quantity: row.quantity,
-        }
+    // Item 4 (board 5026203696 — "Orders page changes"): stock-on-hand orders
+    // never reach Monday. They are picked from stock and shipped by Starshipit,
+    // so a Monday card for one is a work instruction for goods that already
+    // exist — phantom work in front of the floor. Their state is tracked by the
+    // Starshipit webhook onto orders.fulfillment_status instead.
+    //
+    // Skipping the whole block (not just the pushOrderDeal call) is deliberate:
+    // the billing note, the subitem-id writeback and the job_trackers
+    // monday_item_id stamp below all describe a card that will not exist.
+    // `mondayItemId` stays null, which the only downstream reader — the Xero
+    // manual-review note at step 5c — already guards on.
+    //
+    // The staff portal enforces the same rule on its own push surfaces; the twin
+    // lives at print-room-staff-portal/src/lib/orders/monday-push.ts.
+    if (isStockOnHandOrder) {
+      console.info('[Checkout] Monday push skipped — stock on hand', {
+        orderId: order_id,
+        order_ref,
       })
-
-      // emailTotalAmount is declared AFTER step 5 in this file, so it's not in
-      // scope here. Compute directly from repriced.
-      const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
-
-      // Demo orgs route their Monday deal to the Demo group (same board) so
-      // production's New Deals stays clean while the tracking round-trip
-      // (monday_item_id → tracker-status webhook) keeps working.
-      const { data: orgFlagRow } = await admin
-        .from('organizations')
-        .select('is_test')
-        .eq('id', input.context.organizationId)
-        .maybeSingle()
-      const isTestOrg = Boolean((orgFlagRow as { is_test?: boolean } | null)?.is_test)
-
-      const { itemId, subitemIds } = await pushOrderDeal(
-        {
-          customerEmail: input.context.email ?? '',
-          customerName: input.context.organizationName,
-          customerCompany: input.context.organizationName,
-          orderRef: order_ref,
-          inHandDate: input.required_by ?? null,
-          notes: input.notes ?? null,
-          totalAmount,
-          currency: currencyForRegion(orgRegion),
-          lines,
-          deliveryAddress: formattedShippingAddress,
-        },
-        { demo: isTestOrg },
-      )
-
-      mondayItemId = itemId
-      Object.assign(subitemIdByQuoteItemId, subitemIds)
-
-      // Persist back. Order row gets monday_item_id; each quote_items row gets
-      // its monday_subitem_id so the existing tracker-status webhook can match
-      // inbound Monday updates to portal-side lines.
-      await admin.from('orders').update({ monday_item_id: itemId }).eq('id', order_id)
-      for (const [quoteItemId, subitemId] of Object.entries(subitemIds)) {
-        await admin
-          .from('quote_items')
-          .update({ monday_subitem_id: subitemId })
-          .eq('id', quoteItemId)
-      }
-
-      // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
-      // Monday card so the floor pulls from stock instead of producing. Purchase
-      // orders get no note. Own try/catch so a note failure never marks the whole
-      // Monday push as failed (mirrors the Xero manual-review note in step 5c).
-      // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
-      // billing note stating whether goods need invoicing (not-paid) or are
-      // prepaid, plus the pick fee. Purchase orders still get no note.
-      const billingNote = isStockOnHandOrder
-        ? orderBillingNote({ needsInvoicing, pickFee })
-        : null
-      if (billingNote) {
-        try {
-          await postItemUpdate(itemId, billingNote)
-        } catch (noteErr) {
-          console.error('[Checkout] billing note failed (swallowed)', {
-            orderId: order_id,
-            err: noteErr instanceof Error ? noteErr.message : String(noteErr),
-          })
-        }
-      }
-
-      // Stamp the same Monday item id onto the job_trackers shell created in
-      // step 4c. Webhook-driven status updates from Monday already key off
-      // monday_item_id (job_tracker_webhook_logs) so this enables inbound
-      // status sync. Best-effort: failure audits but does NOT roll back.
+    } else {
       try {
-        const { error: tErr } = await admin
-          .from('job_trackers')
-          .update({
-            monday_item_id: Number(itemId),
-            // Orders now land on the Production board — stamp it so tracker-based
-            // Monday deep links resolve there, not a dead Deals URL.
-            monday_board_id: PRODUCTION_BOARD_ID,
-            last_synced_at: new Date().toISOString(),
-          })
+        const { data: dealLines } = await admin
+          .from('quote_items')
+          .select(`
+            id, product_id, product_name, quantity, unit_price, decorations, size_label, line_location_label, line_custom_name,
+            product_variants ( product_color_swatches(label) )
+          `)
           .eq('quote_id', quote_id)
-        if (tErr) throw new Error(tErr.message)
-      } catch (tErr) {
-        const tMsg = tErr instanceof Error ? tErr.message : String(tErr)
-        console.error('[Checkout] job tracker monday_item_id stamp failed (swallowed)', {
-          orderId: order_id,
-          err: tMsg,
+
+        const lines: OrderLineForMonday[] = ((dealLines ?? []) as unknown as Array<{
+          id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          unit_price: number
+          decorations: Array<{ name: string }> | null
+          size_label: string | null
+          line_location_label: string | null
+          line_custom_name: string | null
+          product_variants: {
+            product_color_swatches: { label: string | null } | { label: string | null }[] | null
+          } | null
+        }>).map((row) => {
+          const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
+          const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
+          const designName = row.decorations?.[0]?.name ?? 'No decoration'
+          return {
+            quoteItemId: row.id,
+            productId: row.product_id,
+            productName: row.product_name,
+            variantLabel,
+            colorName: swatch?.label ?? null,
+            sizeLabel: row.size_label,
+            designName,
+            location: row.line_location_label ?? null,
+            customName: row.line_custom_name ?? null,
+            quantity: row.quantity,
+          }
         })
+
+        // emailTotalAmount is declared AFTER step 5 in this file, so it's not in
+        // scope here. Compute directly from repriced.
+        const totalAmount = repriced.reduce((t, l) => t + l.unit_price * l.qty, 0)
+
+        // Demo orgs route their Monday deal to the Demo group (same board) so
+        // production's New Deals stays clean while the tracking round-trip
+        // (monday_item_id → tracker-status webhook) keeps working.
+        const { data: orgFlagRow } = await admin
+          .from('organizations')
+          .select('is_test')
+          .eq('id', input.context.organizationId)
+          .maybeSingle()
+        const isTestOrg = Boolean((orgFlagRow as { is_test?: boolean } | null)?.is_test)
+
+        const { itemId, subitemIds } = await pushOrderDeal(
+          {
+            customerEmail: input.context.email ?? '',
+            customerName: input.context.organizationName,
+            customerCompany: input.context.organizationName,
+            orderRef: order_ref,
+            inHandDate: input.required_by ?? null,
+            notes: input.notes ?? null,
+            totalAmount,
+            currency: currencyForRegion(orgRegion),
+            lines,
+            deliveryAddress: formattedShippingAddress,
+          },
+          { demo: isTestOrg },
+        )
+
+        mondayItemId = itemId
+        Object.assign(subitemIdByQuoteItemId, subitemIds)
+
+        // Persist back. Order row gets monday_item_id; each quote_items row gets
+        // its monday_subitem_id so the existing tracker-status webhook can match
+        // inbound Monday updates to portal-side lines.
+        await admin.from('orders').update({ monday_item_id: itemId }).eq('id', order_id)
+        for (const [quoteItemId, subitemId] of Object.entries(subitemIds)) {
+          await admin
+            .from('quote_items')
+            .update({ monday_subitem_id: subitemId })
+            .eq('id', quoteItemId)
+        }
+
+        // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
+        // Monday card so the floor pulls from stock instead of producing. Purchase
+        // orders get no note. Own try/catch so a note failure never marks the whole
+        // Monday push as failed (mirrors the Xero manual-review note in step 5c).
+        // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
+        // billing note stating whether goods need invoicing (not-paid) or are
+        // prepaid, plus the pick fee. Purchase orders still get no note.
+        const billingNote = isStockOnHandOrder
+          ? orderBillingNote({ needsInvoicing, pickFee })
+          : null
+        if (billingNote) {
+          try {
+            await postItemUpdate(itemId, billingNote)
+          } catch (noteErr) {
+            console.error('[Checkout] billing note failed (swallowed)', {
+              orderId: order_id,
+              err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+            })
+          }
+        }
+
+        // Stamp the same Monday item id onto the job_trackers shell created in
+        // step 4c. Webhook-driven status updates from Monday already key off
+        // monday_item_id (job_tracker_webhook_logs) so this enables inbound
+        // status sync. Best-effort: failure audits but does NOT roll back.
+        try {
+          const { error: tErr } = await admin
+            .from('job_trackers')
+            .update({
+              monday_item_id: Number(itemId),
+              // Orders now land on the Production board — stamp it so tracker-based
+              // Monday deep links resolve there, not a dead Deals URL.
+              monday_board_id: PRODUCTION_BOARD_ID,
+              last_synced_at: new Date().toISOString(),
+            })
+            .eq('quote_id', quote_id)
+          if (tErr) throw new Error(tErr.message)
+        } catch (tErr) {
+          const tMsg = tErr instanceof Error ? tErr.message : String(tErr)
+          console.error('[Checkout] job tracker monday_item_id stamp failed (swallowed)', {
+            orderId: order_id,
+            err: tMsg,
+          })
+          try {
+            await recordAuditEvent(
+              {
+                orgId: input.context.organizationId,
+                actorUserId: input.context.userId,
+                action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_MONDAY_LINK_FAILED,
+                targetType: 'order',
+                targetId: order_id,
+                metadata: { order_ref, quote_id, monday_item_id: itemId, error: tMsg },
+              },
+              admin,
+            )
+          } catch {
+            // truly best-effort
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.error('[Checkout] Monday push failed (swallowed)', { orderId: order_id, err: message })
         try {
           await recordAuditEvent(
             {
               orgId: input.context.organizationId,
               actorUserId: input.context.userId,
-              action: AUDIT_ACTIONS.ORDER_JOB_TRACKER_MONDAY_LINK_FAILED,
+              action: AUDIT_ACTIONS.ORDER_MONDAY_PUSH_FAILED,
               targetType: 'order',
               targetId: order_id,
-              metadata: { order_ref, quote_id, monday_item_id: itemId, error: tMsg },
+              metadata: { order_ref, quote_id, error: message },
             },
             admin,
           )
         } catch {
           // truly best-effort
         }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[Checkout] Monday push failed (swallowed)', { orderId: order_id, err: message })
-      try {
-        await recordAuditEvent(
-          {
-            orgId: input.context.organizationId,
-            actorUserId: input.context.userId,
-            action: AUDIT_ACTIONS.ORDER_MONDAY_PUSH_FAILED,
-            targetType: 'order',
-            targetId: order_id,
-            metadata: { order_ref, quote_id, error: message },
-          },
-          admin,
-        )
-      } catch {
-        // truly best-effort
       }
     }
 
