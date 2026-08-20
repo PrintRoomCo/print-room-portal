@@ -39,7 +39,7 @@ function renderPDP(opts: { order?: number[]; hidden?: number[] } = {}) {
       }]}
       sizes={[{ size_id: 1, size_label: 'S', size_order: 0 }]}
       brackets={brackets}
-      availability={{ 'v1::1': { available_qty: 5, allow_order_without_stock: false } }}
+      availability={{ 'v1::1': { available_qty: 5 } }}
       organizationId="o1"
       customerRole="org_admin"
       orderingPermission="both"

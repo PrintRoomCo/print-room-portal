@@ -51,7 +51,7 @@ const variants = [
 ]
 // SKUCOLLAPSE: sizeless colourway → keyed `${variantId}::`.
 const availability = {
-  'visor-black::': { available_qty: 6, allow_order_without_stock: false },
+  'visor-black::': { available_qty: 6 },
 } as never
 
 function renderPDP(opts: { stockUnitPrice?: number | null } = {}) {

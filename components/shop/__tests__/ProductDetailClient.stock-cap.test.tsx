@@ -62,8 +62,8 @@ const variants = [
 ]
 // SKUCOLLAPSE: availability keyed `${colourwayVariantId}::${sizeId}` → 'red-s'.
 const availability = {
-  'red-s::1': { available_qty: 4, allow_order_without_stock: false },
-  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 4 },
+  'red-s::2': { available_qty: 0 },
 } as never
 
 const SIZES = [

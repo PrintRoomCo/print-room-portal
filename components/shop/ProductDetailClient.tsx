@@ -132,10 +132,9 @@ interface Props {
   sizes: SizeOption[]
   brackets: Bracket[]
   /**
-   * variant_id → { available_qty, allow_order_without_stock }. Only populated
-   * for variants the org tracks; key presence still signals "tracked". The
-   * flag lets a zero-stock variant remain orderable (line becomes
-   * made_to_order, surfaces an "Available to order" chip on the size grid).
+   * variant_id → { available_qty }. Only populated for variants the org
+   * tracks; key presence still signals "tracked". An untracked cell is a
+   * production run, and surfaces an "Available to order" chip on the size grid.
    */
   availability: Record<string, VariantAvailability>
   organizationId: string
@@ -382,8 +381,6 @@ export function ProductDetailClient({
     selectedCellVariant != null ? cellKey(selectedCellVariant.variant_id, sizeId) : null
   const tracksThisVariant = availKey != null && availability[availKey] !== undefined
   const availableQty = availKey ? availability[availKey]?.available_qty : undefined
-  const selectedVariantBackorderable =
-    availKey != null && availability[availKey]?.allow_order_without_stock === true
   const isOutOfStock = tracksThisVariant && (availableQty ?? 0) === 0
 
   // Total in-stock across every size for the currently selected colour.
@@ -421,26 +418,23 @@ export function ProductDetailClient({
             sizeLabel: s.size_label ?? '',
             sizeOrder: s.size_order,
             available: tracked ? a.available_qty : null,
-            allowOrderWithoutStock: tracked ? a.allow_order_without_stock : false,
           },
         ]
       })
       .sort((a, b) => a.sizeOrder - b.sizeOrder)
   }, [sizes, variantsForSelectedColour.length, variantForSize, availability])
 
-  // Backorderable variants count as "has inventory" for the gate that
-  // unlocks the From-Stock vs Made-to-Order toggle and lets the customer
-  // proceed past stock guards — even though zero stock is on hand.
+  // "Has inventory" now means exactly what it says: stock on hand for the
+  // current selection. The backorder flag that used to widen it is retired — a
+  // customer who wants to go beyond stock picks Purchase order instead.
   const currentSelectionHasInventory = useMemo(() => {
     if (sizingMode === 'multi_size_with_variants') {
-      return sizeRowsForColour.some(
-        (row) => (row.available ?? 0) > 0 || row.allowOrderWithoutStock,
-      )
+      return sizeRowsForColour.some((row) => (row.available ?? 0) > 0)
     }
     if (!availKey) return false
     const a = availability[availKey]
     if (!a) return false
-    return a.available_qty > 0 || a.allow_order_without_stock
+    return a.available_qty > 0
   }, [sizingMode, sizeRowsForColour, availKey, availability])
 
   // The order-mode toggle is offered to an org_admin looking at a product that
@@ -461,13 +455,31 @@ export function ProductDetailClient({
   const permission = effectivePermission(customerRole, orderingPermission)
   const options = orderingOptions(product.fulfilment_type, permission)
 
-  // Offer the From-inventory / Reorder choice only when BOTH paths are open to this
-  // viewer AND there's stock to draw AND tiers to reorder against.
-  const canChooseOrderIntent =
-    options.canDrawStock &&
-    options.canReorder &&
-    currentSelectionHasInventory &&
-    brackets.length > 0
+  // Each pill is gated on its OWN precondition and says why when it fails, rather
+  // than the whole toggle disappearing and the item silently collapsing into one
+  // mode with no explanation (the 2026-06-03 inert-pill bug class).
+  //
+  // Permission is a different kind of "no": a route this viewer may never take is
+  // not shown at all, mirroring submit_b2b_order's member_cannot_* raises. Only a
+  // route they COULD take but can't right now earns a reason.
+  const pillReasons: Partial<Record<'inventory' | 'bulk', string>> = {}
+  if (options.canDrawStock && !currentSelectionHasInventory) {
+    pillReasons.inventory = 'No stock on hand for this selection'
+  }
+  if (options.canReorder && brackets.length === 0) {
+    // A production run cannot be priced without tiers.
+    pillReasons.bulk = 'No volume pricing set for this product'
+  }
+  const availablePills = {
+    inventory: options.canDrawStock,
+    bulk: options.canReorder,
+  }
+  // The toggle renders whenever the viewer may take BOTH routes, even if one is
+  // currently unavailable — that is the case the reason exists to explain.
+  const canChooseOrderIntent = availablePills.inventory && availablePills.bulk
+  // ...but the choice is only LIVE when the chosen side has no blocking reason.
+  const orderIntentUsable =
+    canChooseOrderIntent && !pillReasons[orderIntent === 'bulk' ? 'bulk' : 'inventory']
 
   // True whenever this order will be fulfilled from existing stock rather than
   // a new production run: a buyer (stock-only by role), a stocked product with
@@ -477,7 +489,7 @@ export function ProductDetailClient({
   const isInventoryMode =
     (options.canDrawStock && !options.canReorder) ||
     (currentSelectionHasInventory && brackets.length === 0) ||
-    (canChooseOrderIntent && orderIntent === 'inventory')
+    (orderIntentUsable && orderIntent === 'inventory')
 
   // Item 6: the stock "Available" column and the header AvailabilityBadge are
   // meaningful only when drawing from existing stock (Stock-on-hand mode). In
@@ -490,17 +502,10 @@ export function ProductDetailClient({
   // and drop the "Available" status column below. Reorder/MTO mode is
   // unchanged; CartTable remains the oversell net.
   const visibleSizeRows = isInventoryMode
-    ? sizeRowsForColour.filter(
-        (row) =>
-          row.available !== null &&
-          (row.available > 0 || row.allowOrderWithoutStock),
-      )
+    ? sizeRowsForColour.filter((row) => row.available !== null && row.available > 0)
     : sizeRowsForColour
 
-  const hasBackorderableOrderPath = sizeRowsForColour.some(
-    (row) => row.allowOrderWithoutStock,
-  )
-  const isUnavailableToOrder = options.deadZone && !hasBackorderableOrderPath
+  const isUnavailableToOrder = options.deadZone
 
   // MOQ exists to make a new production run economical — it does not apply when
   // drawing down stock that has already been made. In inventory mode the only
@@ -562,12 +567,7 @@ export function ProductDetailClient({
         const a = availability[cellKey(v.variant_id, s.size_id)]
         const tracked = a !== undefined
         const stocked = tracked ? a.available_qty : 0
-        const backorderable = tracked && a.allow_order_without_stock
-        const forceBulkOrder = canChooseOrderIntent && orderIntent === 'bulk'
-        // Backorderable variant behaves like the bulk path at line level —
-        // entire qty goes to production, none drawn from stock — even though
-        // it's a tracked SKU. Matches the "made_to_order" cart fulfilment.
-        const treatAsBulk = forceBulkOrder || backorderable
+        const treatAsBulk = canChooseOrderIntent && orderIntent === 'bulk'
         const inStock = treatAsBulk ? 0 : tracked ? Math.min(qtyLine, stocked) : 0
         const toBeMade = treatAsBulk
           ? qtyLine
@@ -1137,7 +1137,6 @@ export function ProductDetailClient({
           const a = availability[cellKey(variant.variant_id, s.size_id)]
           const tracked = a !== undefined
           const available = tracked ? a.available_qty : 0
-          const backorderable = tracked && a.allow_order_without_stock
           const baseLine = {
             productId: product.id,
             productName: product.name,
@@ -1167,11 +1166,10 @@ export function ProductDetailClient({
           // runs, NOT 'stocked' (fix 2026-07-06; see lineFulfilment).
           const fulfilmentType = lineFulfilment({
             canDrawStock: options.canDrawStock,
-            canChooseOrderIntent,
+            canChooseOrderIntent: orderIntentUsable,
             orderIntent,
             tracked,
             available,
-            backorderable,
             lineQty,
           })
           cart.addLine({ ...baseLine, qty: lineQty, fulfilmentType })
@@ -1225,16 +1223,15 @@ export function ProductDetailClient({
     }
 
     // Mode 3: one_size — single cart line, no variant. Same fulfilment
-    // decision as multi-size: toggle choice wins when present (PDP shortfall
-    // already enforced From-Stock vs zero-stock); buyer flow auto-routes
-    // backorderable to made_to_order.
+    // decision as multi-size: toggle choice wins when it is live (PDP shortfall
+    // already enforced From-Stock vs zero-stock), otherwise the line claims a
+    // stock draw only when one is actually possible.
     const oneSizeFulfilment = lineFulfilment({
       canDrawStock: options.canDrawStock,
-      canChooseOrderIntent,
+      canChooseOrderIntent: orderIntentUsable,
       orderIntent,
       tracked: tracksThisVariant,
       available: availableQty ?? 0,
-      backorderable: selectedVariantBackorderable,
       lineQty: qty,
     })
     cart.addLine({
@@ -1283,7 +1280,6 @@ export function ProductDetailClient({
   let inventoryIntentShortfall: {
     label: string
     available: number
-    backorderable: boolean
   } | null = null
   // Hard cap: a stock-on-hand order can never exceed available stock. When a
   // buyer wants more than is in stock they must switch to the Purchase Order
@@ -1295,12 +1291,6 @@ export function ProductDetailClient({
         const requested = variantQuantities[cellKey(variant.variant_id, s.size_id)] ?? 0
         if (requested <= 0) continue
         const a = availability[cellKey(variant.variant_id, s.size_id)]
-        const backorderable = a?.allow_order_without_stock === true
-        // Buyer / no toggle: backorderable variants auto-route to
-        // made_to_order at submit, so there's no useful prompt to surface
-        // (customer has no choice to switch). Org_admin with toggle: let
-        // the shortfall message fire so they can switch to Made to Order.
-        if (backorderable && !canChooseOrderIntent) continue
         const available = a?.available_qty ?? 0
         if (requested > available) {
           inventoryIntentShortfall = {
@@ -1308,26 +1298,21 @@ export function ProductDetailClient({
               [variant.color_label, s.size_label].filter(Boolean).join(' / ') ||
               'selected variant',
             available,
-            backorderable,
           }
           break
         }
       }
     } else if (selectedVariant && qty > (availableQty ?? 0)) {
-      // Same rule as multi-size: skip only when the buyer has no toggle.
-      if (!(selectedVariantBackorderable && !canChooseOrderIntent)) {
-        inventoryIntentShortfall = {
-          label: 'selected variant',
-          available: availableQty ?? 0,
-          backorderable: selectedVariantBackorderable,
-        }
+      inventoryIntentShortfall = {
+        label: 'selected variant',
+        available: availableQty ?? 0,
       }
     }
   }
 
   // A viewer who cannot reorder (a stock_only member) may only take a genuine
   // stock draw. submit_b2b_order coerces their line to `stocked` and then
-  // rejects it (member_cannot_produce for backorderable/made_to_order, or
+  // rejects it (member_cannot_produce for a made_to_order line, or
   // NO_INVENTORY for an untracked cell) — surfaced as the opaque "not stocked
   // for your account" at the final confirm. Mirror that rule up front so an
   // un-drawable selection is blocked at the PDP instead. `lineIsOrderable`
@@ -1346,11 +1331,10 @@ export function ProductDetailClient({
           if (
             blocked({
               canDrawStock: options.canDrawStock,
-              canChooseOrderIntent,
+              canChooseOrderIntent: orderIntentUsable,
               orderIntent,
               tracked,
               available: tracked ? a.available_qty : 0,
-              backorderable: tracked && a.allow_order_without_stock,
               lineQty,
             })
           )
@@ -1367,11 +1351,10 @@ export function ProductDetailClient({
     if (qty <= 0) return false
     return blocked({
       canDrawStock: options.canDrawStock,
-      canChooseOrderIntent,
+      canChooseOrderIntent: orderIntentUsable,
       orderIntent,
       tracked: tracksThisVariant,
       available: availableQty ?? 0,
-      backorderable: selectedVariantBackorderable,
       lineQty: qty,
     })
   }, [
@@ -1388,7 +1371,6 @@ export function ProductDetailClient({
     qty,
     tracksThisVariant,
     availableQty,
-    selectedVariantBackorderable,
   ])
 
   // Feature 1 — a product with a location dataset cannot be added until a
@@ -1401,7 +1383,7 @@ export function ProductDetailClient({
     meetsLocation &&
     inventoryIntentShortfall == null &&
     // A viewer who can't reorder may only take a genuine stock draw; an
-    // un-drawable cell (backorderable / made-to-order / over-stock) is blocked
+    // un-drawable cell (untracked / made-to-order / over-stock) is blocked
     // up front to mirror submit_b2b_order, not left to fail late at checkout.
     // (Re-added after a merge dropped it from this expression — the memo and its
     // warning message survived, but the button gate did not; see TEST-000080.)
@@ -1446,9 +1428,6 @@ export function ProductDetailClient({
                 {showAvailability && (
                   <AvailabilityBadge
                     availableQty={multiSize ? colourTotalAvailable : availableQty}
-                    availableToOrder={
-                      multiSize ? hasBackorderableOrderPath : selectedVariantBackorderable
-                    }
                   />
                 )}
                 {showsPrepaidStockBadge(product.fulfilment_type, selectedColourPrepaid ? 'prepaid' : 'invoice_on_dispatch') && (
@@ -1624,7 +1603,11 @@ export function ProductDetailClient({
           )}
 
           {canChooseOrderIntent && (
-            <OrderIntentToggle value={orderIntent} onChange={setOrderIntent} />
+            <OrderIntentToggle
+              value={orderIntent}
+              onChange={setOrderIntent}
+              disabledPills={pillReasons}
+            />
           )}
 
           {multiSize && visibleSizeRows.length > 0 && (
@@ -1644,15 +1627,12 @@ export function ProductDetailClient({
                     const trackedRow = row.available !== null
                     const stocked = trackedRow ? (row.available ?? 0) : 0
                     const value = variantQuantities[cellKey(row.variantId, row.sizeId)] ?? 0
-                    const showBackorderableChip =
-                      trackedRow && row.allowOrderWithoutStock && stocked === 0
                     // Untracked rows (no inventory record) only ever reach this
                     // table on the production path — isInventoryMode filters them
                     // out (visibleSizeRows requires available !== null) — so a
-                    // made-to-order/in-house size is genuinely available to order,
-                    // exactly like a backorderable row. Surface the same pill
-                    // rather than a bare "—".
-                    const showAvailableToOrderChip = showBackorderableChip || !trackedRow
+                    // made-to-order/in-house size is genuinely available to
+                    // order. Surface the pill rather than a bare "—".
+                    const showAvailableToOrderChip = !trackedRow
                     return (
                       <tr key={cellKey(row.variantId, row.sizeId)} className="border-t border-gray-100">
                         <td className="px-5 py-3 font-medium text-gray-900">
@@ -1780,7 +1760,7 @@ export function ProductDetailClient({
                 <tbody>
                   <tr>
                     <td className="px-5 py-3 text-xs text-gray-600">
-                      {!tracksThisVariant || (isOutOfStock && selectedVariantBackorderable) ? (
+                      {!tracksThisVariant ? (
                         <span className="inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
                           Available to order
                         </span>
@@ -2029,13 +2009,11 @@ export function ProductDetailClient({
             )}
             {inventoryIntentShortfall && (
               <p className="mt-3 text-xs text-amber-700">
-                {inventoryIntentShortfall.backorderable && canChooseOrderIntent
-                  ? `No available stock for ${inventoryIntentShortfall.label} — select Purchase order to order this.`
-                  : `Only ${inventoryIntentShortfall.available} available for ${inventoryIntentShortfall.label}. ${
-                      canChooseOrderIntent
-                        ? 'Switch to Purchase order or reduce quantity.'
-                        : 'Reduce quantity to order from stock.'
-                    }`}
+                {`Only ${inventoryIntentShortfall.available} available for ${inventoryIntentShortfall.label}. ${
+                  canChooseOrderIntent
+                    ? 'Switch to Purchase order or reduce quantity.'
+                    : 'Reduce quantity to order from stock.'
+                }`}
               </p>
             )}
             {selectionBlockedByPermission && inventoryIntentShortfall == null && (
@@ -2057,34 +2035,57 @@ export function ProductDetailClient({
 function OrderIntentToggle({
   value,
   onChange,
+  disabledPills = {},
 }: {
   value: OrderIntent
   onChange: (value: OrderIntent) => void
+  /** Pill → why it can't be picked right now. A pill with a reason stays
+   *  visible and readable but does not switch: the point is to explain the
+   *  restriction, not to hide that the route exists. */
+  disabledPills?: Partial<Record<OrderIntent, string>>
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Order mode"
-      className="grid h-9 w-full grid-cols-2 overflow-hidden rounded-full border border-gray-300 bg-white text-xs font-medium text-gray-700 sm:w-[200px]"
-    >
-      {(['inventory', 'bulk'] as const).map((mode) => {
-        const selected = value === mode
-        return (
-          <button
-            key={mode}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChange(mode)}
-            className={`min-w-0 px-3 transition-colors ${
-              selected
-                ? 'bg-gray-100 text-gray-950'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-950'
-            } ${mode === 'bulk' ? 'border-l border-gray-300' : ''}`}
-          >
-            {mode === 'inventory' ? PILL_LABELS.from_inventory : PILL_LABELS.reorder}
-          </button>
-        )
-      })}
+    <div>
+      <div
+        role="group"
+        aria-label="Order mode"
+        className="grid h-9 w-full grid-cols-2 overflow-hidden rounded-full border border-gray-300 bg-white text-xs font-medium text-gray-700 sm:w-[200px]"
+      >
+        {(['inventory', 'bulk'] as const).map((mode) => {
+          const selected = value === mode
+          const reason = disabledPills[mode]
+          return (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={selected}
+              aria-disabled={reason ? 'true' : undefined}
+              title={reason}
+              onClick={() => {
+                // Read-only rather than natively disabled: a disabled button
+                // swallows hover, so the title explaining the restriction would
+                // never be reachable.
+                if (reason) return
+                onChange(mode)
+              }}
+              className={`min-w-0 px-3 transition-colors ${
+                selected
+                  ? 'bg-gray-100 text-gray-950'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-950'
+              } ${mode === 'bulk' ? 'border-l border-gray-300' : ''}`}
+            >
+              {mode === 'inventory' ? PILL_LABELS.from_inventory : PILL_LABELS.reorder}
+            </button>
+          )
+        })}
+      </div>
+      {Object.values(disabledPills)
+        .filter(Boolean)
+        .map((reason) => (
+          <p key={reason} className="mt-2 text-xs text-amber-700">
+            {reason}
+          </p>
+        ))}
     </div>
   )
 }

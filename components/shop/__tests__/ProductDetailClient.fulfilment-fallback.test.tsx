@@ -57,7 +57,7 @@ function renderPDP(
   orderingPermission: 'stock_only' | 'reorder_only' | 'both' = 'both',
   opts: {
     fulfilmentType?: 'stocked' | 'made_to_order' | 'mixed'
-    availability?: Record<string, { available_qty: number; allow_order_without_stock: boolean }>
+    availability?: Record<string, { available_qty: number }>
   } = {},
 ) {
   return render(
@@ -126,7 +126,7 @@ describe('one_size colour product — variant identity on the cart line', () => 
         ]}
         sizes={[]} // no sizes → one_size mode
         brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
-        availability={{ 'white::': { available_qty: 250, allow_order_without_stock: false } } as never}
+        availability={{ 'white::': { available_qty: 250 } } as never}
         organizationId="o1"
         customerRole="org_admin"
         orderingPermission="both"
@@ -169,14 +169,17 @@ describe('PDP fulfilment fallback — untracked made_to_order product', () => {
     )
   })
 
-  it('stock_only member CANNOT add a backorderable variant (server would PERMISSION_DENIED)', async () => {
-    // Mixed product, backorderable cell (zero stock, allow_order_without_stock).
-    // submit_b2b_order rejects a stock_only member here (member_cannot_produce),
-    // so the PDP must not let it into the cart. Before the fix the inventory
-    // shortfall guard SKIPPED backorderable cells → Add-to-cart stayed enabled.
+  it('stock_only member CANNOT add beyond available stock (server would PERMISSION_DENIED)', async () => {
+    // Mixed product, 4 on hand, 5 requested. The line resolves to made_to_order
+    // (over stock), which submit_b2b_order refuses for a stock_only member
+    // (member_cannot_produce) — so the PDP must not let it into the cart.
+    //
+    // This used to be expressed with a zero-stock backorderable cell. That flag
+    // is retired, and a zero-stock row no longer renders in inventory mode at
+    // all, so the over-stock case is what still carries the rule.
     renderPDP('staff', 'stock_only', {
       fulfilmentType: 'mixed',
-      availability: { 'red-s::1': { available_qty: 0, allow_order_without_stock: true } },
+      availability: { 'red-s::1': { available_qty: 4 } },
     })
     fireEvent.change(screen.getByLabelText('Quantity for size S'), { target: { value: '5' } })
 

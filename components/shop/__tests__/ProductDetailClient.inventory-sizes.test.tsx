@@ -64,21 +64,21 @@ const variants = [
 // SKUCOLLAPSE: availability keyed `${colourwayVariantId}::${sizeId}`. The
 // component elects the first variant of a colour as the colourway → 'red-s'.
 const availability = {
-  'red-s::1': { available_qty: 4, allow_order_without_stock: false },
-  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 4 },
+  'red-s::2': { available_qty: 0 },
 } as never
 
 // All-out-of-stock variant of `availability`: with no inventory on the current
 // selection, canChooseOrderIntent is false, so an org_admin lands in reorder
 // (made-to-order) mode by default — the canonical bulk-order case.
 const noStock = {
-  'red-s::1': { available_qty: 0, allow_order_without_stock: false },
-  'red-s::2': { available_qty: 0, allow_order_without_stock: false },
+  'red-s::1': { available_qty: 0 },
+  'red-s::2': { available_qty: 0 },
 } as never
 
 const backorderable = {
-  'red-s::1': { available_qty: 0, allow_order_without_stock: true },
-  'red-m::2': { available_qty: 0, allow_order_without_stock: true },
+  'red-s::1': { available_qty: 0 },
+  'red-m::2': { available_qty: 0 },
 } as never
 
 const SIZES = [

@@ -53,7 +53,7 @@ const variants = [
 ]
 // SKUCOLLAPSE: one_size colourway → stock keyed `${variantId}::` (size_id null).
 const availability = {
-  'os::': { available_qty: 4, allow_order_without_stock: false },
+  'os::': { available_qty: 4 },
 } as never
 
 function renderPDP() {

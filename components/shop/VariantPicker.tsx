@@ -178,12 +178,7 @@ export function VariantPicker({
               const tracked = avail !== undefined
               const qty = tracked ? avail.available_qty : null
               const outOfStock = tracked && (qty ?? 0) === 0
-              const backorderable = tracked && avail.allow_order_without_stock
-              const showBackorderableChip = outOfStock && backorderable
-              // Backorderable cells should still feel interactive even when
-              // stocked === 0 — don't apply the muted/gray treatment that
-              // signals "unorderable" in the stocked-only path.
-              const mutedOutOfStock = outOfStock && !backorderable
+              const mutedOutOfStock = outOfStock
               return (
                 <ToggleGroup.Item
                   key={s.id}
@@ -198,25 +193,19 @@ export function VariantPicker({
                 >
                   <span>{s.label}</span>
                   {!inStockOnly && tracked && (
-                    showBackorderableChip ? (
-                      <span className="mt-0.5 inline-flex rounded-full bg-[rgb(var(--accent-mint))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--accent-mint-ink))]">
-                        Available to order
-                      </span>
-                    ) : (
-                      <span
-                        className={`mt-0.5 text-[10px] font-normal ${
-                          isSelected
-                            ? 'text-white/80'
-                            : mutedOutOfStock
-                              ? 'text-gray-400'
-                              : (qty ?? 0) <= 5
-                                ? 'text-amber-600'
-                                : 'text-gray-500'
-                        }`}
-                      >
-                        {outOfStock ? '0 in stock' : `${qty} in stock`}
-                      </span>
-                    )
+                    <span
+                      className={`mt-0.5 text-[10px] font-normal ${
+                        isSelected
+                          ? 'text-white/80'
+                          : mutedOutOfStock
+                            ? 'text-gray-400'
+                            : (qty ?? 0) <= 5
+                              ? 'text-amber-600'
+                              : 'text-gray-500'
+                      }`}
+                    >
+                      {outOfStock ? '0 in stock' : `${qty} in stock`}
+                    </span>
                   )}
                 </ToggleGroup.Item>
               )

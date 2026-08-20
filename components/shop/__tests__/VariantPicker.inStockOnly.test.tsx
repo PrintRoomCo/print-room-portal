@@ -10,8 +10,8 @@ const variants: VariantRow[] = [
 // keyed by variant_id; red-l deliberately ABSENT (untracked). Cast avoids
 // importing the VariantAvailability type into the fixture.
 const availability = {
-  'red-s': { available_qty: 4, allow_order_without_stock: false },
-  'red-m': { available_qty: 0, allow_order_without_stock: false },
+  'red-s': { available_qty: 4 },
+  'red-m': { available_qty: 0 },
 } as never
 
 describe('VariantPicker inStockOnly', () => {

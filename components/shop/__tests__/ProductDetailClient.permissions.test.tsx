@@ -49,7 +49,7 @@ function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order' | 'mixed'
   role: 'org_admin' | 'staff'
   orderingPermission: MemberPermission
-  availability?: Record<string, { available_qty: number; allow_order_without_stock: boolean }>
+  availability?: Record<string, { available_qty: number }>
 }) {
   return render(
     <ProductDetailClient
@@ -70,7 +70,7 @@ function renderPDP(opts: {
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
       availability={
         opts.availability ?? {
-          'v1::1': { available_qty: 5, allow_order_without_stock: false },
+          'v1::1': { available_qty: 5 },
         }
       }
       organizationId="o1"
@@ -101,26 +101,6 @@ describe('PDP ordering permissions (dead-zone + member cap)', () => {
     expect(
       screen.queryByRole('group', { name: /order mode/i }),
     ).not.toBeInTheDocument()
-  })
-
-  it('made_to_order × staff × stock_only with order-without-stock rows → orderable, no dead-zone', () => {
-    renderPDP({
-      fulfilment_type: 'made_to_order',
-      role: 'staff',
-      orderingPermission: 'stock_only',
-      availability: {
-        'v1::1': { available_qty: 0, allow_order_without_stock: true },
-      },
-    })
-    expect(
-      screen.queryByText(
-        /unavailable to order right now\. contact the print room/i,
-      ),
-    ).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Quantity for size S')).toBeInTheDocument()
-    // Orderability is proven by the Qty input above; Item 6 hides the
-    // Available column in purchase-order mode, so the chip no longer renders.
-    expect(screen.queryByText(/Available to order/i)).not.toBeInTheDocument()
   })
 
   // stocked product × reorder_only member: product offers only draw, member may

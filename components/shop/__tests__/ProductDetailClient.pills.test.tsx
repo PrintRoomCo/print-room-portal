@@ -49,6 +49,8 @@ function renderPDP(opts: {
   fulfilment_type: 'stocked' | 'made_to_order' | 'mixed'
   role: 'org_admin' | 'staff'
   orderingPermission?: 'stock_only' | 'reorder_only' | 'both'
+  brackets?: Array<{ min_quantity: number; max_quantity: number | null; unit_price: number }>
+  availability?: Record<string, { available_qty: number }>
 }) {
   return render(
     <ProductDetailClient
@@ -66,8 +68,8 @@ function renderPDP(opts: {
         },
       ]}
       sizes={[{ size_id: 1, size_label: 'S', size_order: 0 }]}
-      brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
-      availability={{ 'v1::1': { available_qty: 5, allow_order_without_stock: false } }}
+      brackets={opts.brackets ?? [{ min_quantity: 1, max_quantity: null, unit_price: 10 }]}
+      availability={opts.availability ?? { 'v1::1': { available_qty: 5 } }}
       organizationId="o1"
       customerRole={opts.role}
       orderingPermission={opts.orderingPermission ?? 'both'}
@@ -125,5 +127,44 @@ describe('PDP ordering-mode pills', () => {
     expect(
       screen.queryByRole('group', { name: /order mode/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('keeps the Stock on hand pill when there are no volume tiers, and says why', () => {
+    // Previously the whole toggle vanished and the item silently became
+    // inventory-only with no explanation (regression class, 2026-06-03).
+    const { container } = renderPDP({
+      fulfilment_type: 'mixed', role: 'org_admin', brackets: [],
+    })
+    const text = container.textContent ?? ''
+    expect(text).toContain('Stock on hand')
+    expect(text).toContain('Purchase order')
+    expect(text).toContain('No volume pricing set for this product')
+  })
+
+  it('keeps the Purchase order pill when the selection has no stock, and says why', () => {
+    const { container } = renderPDP({
+      fulfilment_type: 'mixed', role: 'org_admin', availability: {},
+    })
+    const text = container.textContent ?? ''
+    expect(text).toContain('Purchase order')
+    expect(text).toContain('No stock on hand for this selection')
+  })
+
+  it('never shows Purchase order to a stock_only member', () => {
+    const { container } = renderPDP({
+      fulfilment_type: 'mixed', role: 'staff', orderingPermission: 'stock_only',
+    })
+    // Only one route is open to this viewer, so no toggle renders at all — and
+    // certainly no pill for a route submit_b2b_order would refuse
+    // (member_cannot_produce). Do NOT also assert the other label is present:
+    // with a single open route there is no toggle to carry it.
+    expect(container.textContent ?? '').not.toContain('Purchase order')
+  })
+
+  it('never shows Stock on hand to a reorder_only member', () => {
+    const { container } = renderPDP({
+      fulfilment_type: 'mixed', role: 'staff', orderingPermission: 'reorder_only',
+    })
+    expect(container.textContent ?? '').not.toContain('Stock on hand')
   })
 })
