@@ -27,6 +27,7 @@ import {
 } from '@/lib/pricing/period-brackets'
 import { getPreOrderDemandForItem } from '@/lib/pricing/preorder-demand'
 import type { ImageLayout } from '@/lib/shop/image-layout'
+import { loadAuthoredPricingBands } from '@/lib/shop/authored-pricing-bands'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -138,18 +139,7 @@ const loadProductDetailPageData = cache(async (
     max_quantity: number | null
   }> =
     catItem.price_mode === 'manual_final'
-      ? (
-          (
-            await admin
-              .from('b2b_catalogue_item_pricing_tiers')
-              .select('min_quantity, max_quantity')
-              .eq('catalogue_item_id', catItem.id)
-              .order('min_quantity', { ascending: true })
-          ).data ?? []
-        ).map((b) => ({
-          min_quantity: Number(b.min_quantity),
-          max_quantity: b.max_quantity == null ? null : Number(b.max_quantity),
-        }))
+      ? await loadAuthoredPricingBands(admin, catItem.id)
       : []
 
   // The qty points every server-side pricing probe on this page samples. Kept as
