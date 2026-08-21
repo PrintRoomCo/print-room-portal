@@ -479,6 +479,80 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
   })
 
+  // Subitem 2839478386 (board 5026203696): the billing note orphaned by Item 4
+  // rehomes onto the quote's internal notes — the field the staff order
+  // detail's notes card reads (quotes.internal_notes) — instead of the Monday
+  // card that no longer exists.
+  it('rehomes the prepaid billing note onto the quote internal notes for stock-on-hand', async () => {
+    resolveLineBillingModes.mockResolvedValue(
+      new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'prepaid']]),
+    )
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }),
+      rpc: happyCatalogueItemRpc,
+    })
+
+    await submitCustomerOrder(admin, buildInput({ catalogueItemId: CAT_ITEM_ID }))
+    await flushAfter()
+
+    const noteWrites = writes.filter(
+      (w) => w.table === 'quotes' && w.op === 'update' && 'internal_notes' in (w.payload as AnyRow),
+    )
+    expect(noteWrites).toHaveLength(1)
+    expect(noteWrites[0].filters).toContainEqual({ column: 'id', value: QUOTE_ID })
+    expect((noteWrites[0].payload as AnyRow).internal_notes).toBe(
+      '[Billing] Prepaid — no Xero invoice required (pick fee $30.00 only).',
+    )
+  })
+
+  it('appends the billing note below existing internal notes rather than clobbering', async () => {
+    resolveLineBillingModes.mockResolvedValue(
+      new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'invoice_on_dispatch']]),
+    )
+    // baseSelects already carries a quotes matcher (proof-shell/email reads);
+    // extend it — the stub matches the FIRST entry per table.
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'mixed' }).map((m) =>
+        m.table === 'quotes'
+          ? {
+              table: 'quotes',
+              response: {
+                data: { ...(m.response.data as AnyRow), internal_notes: 'Fragile — call the store first.' },
+                error: null,
+              },
+            }
+          : m,
+      ),
+      rpc: happyCatalogueItemRpc,
+    })
+
+    await submitCustomerOrder(admin, buildInput({ catalogueItemId: CAT_ITEM_ID }))
+    await flushAfter()
+
+    const noteWrites = writes.filter(
+      (w) => w.table === 'quotes' && w.op === 'update' && 'internal_notes' in (w.payload as AnyRow),
+    )
+    expect(noteWrites).toHaveLength(1)
+    expect((noteWrites[0].payload as AnyRow).internal_notes).toBe(
+      'Fragile — call the store first.\n\n[Billing] Not paid — draft quote raised, invoice before dispatch. Pick fee $30.00.',
+    )
+  })
+
+  it('writes no billing note for purchase orders', async () => {
+    const { admin, writes } = makeSupabaseStub({
+      selects: baseSelects({ productNature: 'made_to_order' }),
+      rpc: happyRpc,
+    })
+
+    await submitCustomerOrder(admin, buildInput({ qty: 24 }))
+    await flushAfter()
+
+    const noteWrites = writes.filter(
+      (w) => w.table === 'quotes' && w.op === 'update' && 'internal_notes' in (w.payload as AnyRow),
+    )
+    expect(noteWrites).toHaveLength(0)
+  })
+
   it('catalogue-item fulfilment override beats the product base (override mixed on a made_to_order base)', async () => {
     const { admin } = makeSupabaseStub({
       selects: baseSelects({

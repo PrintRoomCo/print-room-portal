@@ -2008,6 +2008,38 @@ export async function submitCustomerOrder(
         orderId: order_id,
         order_ref,
       })
+
+      // Subitem 2839478386 (board 5026203696) — the billing note used to ride
+      // on the Monday card this branch no longer creates. Staff still need the
+      // prepaid/not-paid reading, so it lands where they already look: the
+      // quote's internal notes, which the staff order detail's notes card
+      // renders (staff portal reads quotes.internal_notes). Append-only with a
+      // [Billing] marker — checkout stored buyer-supplied internal notes
+      // moments ago, and staff amendments write this field too, so clobbering
+      // is never acceptable. Best-effort: a note failure must not fail the
+      // order (same stance as the old Monday-note post).
+      try {
+        const billingNote = `[Billing] ${orderBillingNote({ needsInvoicing, pickFee })}`
+        const { data: quoteNotesRow } = await admin
+          .from('quotes')
+          .select('internal_notes')
+          .eq('id', quote_id)
+          .maybeSingle()
+        const existingNotes =
+          (quoteNotesRow as { internal_notes?: string | null } | null)?.internal_notes ??
+          input.internal_notes ??
+          null
+        const { error: noteError } = await admin
+          .from('quotes')
+          .update({ internal_notes: [existingNotes, billingNote].filter(Boolean).join('\n\n') })
+          .eq('id', quote_id)
+        if (noteError) throw new Error(noteError.message)
+      } catch (noteErr) {
+        console.error('[Checkout] billing note → internal notes failed (swallowed)', {
+          orderId: order_id,
+          err: noteErr instanceof Error ? noteErr.message : String(noteErr),
+        })
+      }
     } else {
       try {
         const { data: dealLines } = await admin
@@ -2093,26 +2125,10 @@ export async function submitCustomerOrder(
             .eq('id', quoteItemId)
         }
 
-        // Item 11 — stock-on-hand orders carry a fixed production-hold note on their
-        // Monday card so the floor pulls from stock instead of producing. Purchase
-        // orders get no note. Own try/catch so a note failure never marks the whole
-        // Monday push as failed (mirrors the Xero manual-review note in step 5c).
-        // Spec B supersedes the flat Spec A note: stock-on-hand orders carry a
-        // billing note stating whether goods need invoicing (not-paid) or are
-        // prepaid, plus the pick fee. Purchase orders still get no note.
-        const billingNote = isStockOnHandOrder
-          ? orderBillingNote({ needsInvoicing, pickFee })
-          : null
-        if (billingNote) {
-          try {
-            await postItemUpdate(itemId, billingNote)
-          } catch (noteErr) {
-            console.error('[Checkout] billing note failed (swallowed)', {
-              orderId: order_id,
-              err: noteErr instanceof Error ? noteErr.message : String(noteErr),
-            })
-          }
-        }
+        // The billing note that used to post here (Item 11) was only ever
+        // computed for stock-on-hand orders, which no longer enter this branch
+        // — it now lands on quotes.internal_notes in the skip branch above
+        // (subitem 2839478386). Purchase orders never carried a note.
 
         // Stamp the same Monday item id onto the job_trackers shell created in
         // step 4c. Webhook-driven status updates from Monday already key off
