@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import {
+  AddressAutocompleteInput,
+  type AddressPlace,
+} from '@/components/account/AddressAutocompleteInput'
+import type { EnabledCountry } from '@/lib/account/org-countries'
 import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import {
@@ -49,6 +54,8 @@ interface CheckoutClientProps {
   isBuyer: boolean
   /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
+  /** SP1: the org's enabled countries — the only values the one-time address may carry. */
+  enabledCountries: EnabledCountry[]
 }
 
 export function CheckoutClient({
@@ -60,6 +67,7 @@ export function CheckoutClient({
   defaultStoreId: buyerDefaultStoreId,
   isBuyer,
   tenantType,
+  enabledCountries,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
@@ -85,7 +93,10 @@ export function CheckoutClient({
     return m
   })
 
-  const [customAddress, setCustomAddress] = useState<CustomAddress>(EMPTY_CUSTOM_ADDRESS)
+  const [customAddress, setCustomAddress] = useState<CustomAddress>({
+    ...EMPTY_CUSTOM_ADDRESS,
+    country: enabledCountries.find((c) => c.isDefault)?.code ?? enabledCountries[0]?.code ?? '',
+  })
   const [requiredBy, setRequiredBy] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'review'>(false)
@@ -352,12 +363,24 @@ export function CheckoutClient({
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
             />
             <div>
-              <input
+              <AddressAutocompleteInput
                 id="custom-shipping-address"
                 placeholder="Street address"
                 value={customAddress.address}
-                onChange={(e) => setCustomAddress({ ...customAddress, address: e.target.value })}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                onChange={(address) => setCustomAddress((a) => ({ ...a, address }))}
+                onPlace={(place: AddressPlace) =>
+                  setCustomAddress((a) => ({
+                    ...a,
+                    address: place.address ?? a.address,
+                    city: place.city ?? a.city,
+                    postal_code: place.postal_code ?? a.postal_code,
+                    country:
+                      place.country && enabledCountries.some((c) => c.code === place.country)
+                        ? place.country
+                        : a.country,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                 aria-invalid={customAddressErrors.address ? true : undefined}
                 aria-describedby={
                   customAddressErrors.address ? 'custom-shipping-address-error' : undefined
@@ -405,9 +428,8 @@ export function CheckoutClient({
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
             />
             <div>
-              <input
+              <select
                 id="custom-shipping-country"
-                placeholder="Country"
                 value={customAddress.country}
                 onChange={(e) =>
                   setCustomAddress({ ...customAddress, country: e.target.value })
@@ -417,7 +439,14 @@ export function CheckoutClient({
                 aria-describedby={
                   customAddressErrors.country ? 'custom-shipping-country-error' : undefined
                 }
-              />
+              >
+                {!customAddress.country && <option value="">Select country…</option>}
+                {enabledCountries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
               {customAddressErrors.country && (
                 <p
                   id="custom-shipping-country-error"

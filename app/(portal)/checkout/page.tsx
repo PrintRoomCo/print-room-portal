@@ -3,6 +3,7 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutClient } from '@/components/checkout/CheckoutClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
+import { getOrgEnabledCountries } from '@/lib/account/org-countries'
 
 export const metadata: Metadata = {
   title: 'Checkout',
@@ -23,6 +24,7 @@ export default async function CheckoutPage() {
     .order('name')
 
   const stores = ((rawStores ?? []) as StoreOption[]) ?? []
+  const enabledCountries = await getOrgEnabledCountries(admin, context.organizationId)
 
   return (
     <CheckoutClient
@@ -34,6 +36,7 @@ export default async function CheckoutPage() {
       defaultStoreId={context.defaultStoreId}
       isBuyer={context.role === 'staff'}
       tenantType={context.tenantType}
+      enabledCountries={enabledCountries}
     />
   )
 }

@@ -38,7 +38,7 @@ import {
   pooledQtyByDecoration,
   type PoolingLine,
 } from '@/lib/pricing/decoration-pooling'
-import { formatShippingAddress } from '@/lib/checkout/shipping-address'
+import { formatShippingAddress, isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
 import { staffOrderUrl } from '@/lib/config/staff-portal-url'
@@ -407,6 +407,13 @@ export class MixedShippingAddressError extends Error {
   }
 }
 
+export class DisabledCountryError extends Error {
+  constructor(public readonly country: string) {
+    super(`Shipping country ${country || '(none)'} is not enabled for this organisation`)
+    this.name = 'DisabledCountryError'
+  }
+}
+
 interface SubmitB2BOrderRow {
   quote_id: string
   order_id: string
@@ -595,6 +602,22 @@ export async function submitCustomerOrder(
   const allOneTimeLines = shipToStoreIds.every((sid) => sid === null)
   if ((hasOneTimeLine || input.custom_shipping_address) && !allOneTimeLines) {
     throw new MixedShippingAddressError()
+  }
+
+  // SP1 address hard floor: a one-time address must name a country the org has
+  // enabled. Store-bound lines need no check here — stores.country is FK-bound
+  // to enabled countries at write time.
+  if (input.custom_shipping_address) {
+    const raw = (input.custom_shipping_address as Record<string, unknown>).country
+    const iso = isoCountryOrNull(typeof raw === 'string' ? raw : null)
+    const { data: enabledRows } = await admin
+      .from('organization_countries')
+      .select('country_code')
+      .eq('organization_id', input.context.organizationId)
+    const enabled = new Set((enabledRows ?? []).map((r) => r.country_code as string))
+    if (!iso || !enabled.has(iso)) {
+      throw new DisabledCountryError(typeof raw === 'string' ? raw : '')
+    }
   }
 
   // 0. Buyer-scope guard: plain staff (zero grants) are locked to their

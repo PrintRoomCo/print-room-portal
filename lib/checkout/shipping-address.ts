@@ -56,3 +56,23 @@ export function formatShippingAddress(
 
   return lines.length > 0 ? lines.join('\n') : null
 }
+
+const FREE_TEXT_COUNTRY: Record<string, string> = {
+  'NEW ZEALAND': 'NZ',
+  NEWZEALAND: 'NZ',
+  NZL: 'NZ',
+  AUSTRALIA: 'AU',
+  AUS: 'AU',
+}
+
+/**
+ * ISO 3166-1 alpha-2 code for a submitted country, tolerating the free-text
+ * variants that existed before SP1 (same mapping as the stores.country
+ * backfill migration). Null when unrecognisable — callers decide the failure.
+ */
+export function isoCountryOrNull(raw: string | null | undefined): string | null {
+  const value = (raw ?? '').trim().toUpperCase()
+  if (!value) return null
+  if (/^[A-Z]{2}$/.test(value)) return value
+  return FREE_TEXT_COUNTRY[value] ?? null
+}

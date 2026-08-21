@@ -74,6 +74,10 @@ beforeEach(() => {
   )
 })
 
+// SP1: CheckoutClient now requires the org's enabled countries. These tests
+// are all single-country (NZ) orgs, so the select renders hidden-equivalent.
+const ENABLED_COUNTRIES = [{ code: 'NZ', name: 'New Zealand', isDefault: true }]
+
 describe('CheckoutClient review step', () => {
   it('navigates to checkout review on submit and does not post the order', async () => {
     const user = userEvent.setup()
@@ -87,6 +91,7 @@ describe('CheckoutClient review step', () => {
         defaultStoreId={null}
         isBuyer={false}
         tenantType="studio"
+        enabledCountries={ENABLED_COUNTRIES}
       />,
     )
 
@@ -120,6 +125,7 @@ describe('CheckoutClient review step', () => {
         defaultStoreId={null}
         isBuyer={false}
         tenantType="franchise"
+        enabledCountries={ENABLED_COUNTRIES}
       />,
     )
 
@@ -151,6 +157,7 @@ describe('CheckoutClient review step', () => {
         defaultStoreId={null}
         isBuyer={false}
         tenantType="franchise"
+        enabledCountries={ENABLED_COUNTRIES}
       />,
     )
 
@@ -181,6 +188,7 @@ describe('CheckoutClient review step', () => {
         defaultStoreId="store-1"
         isBuyer={true}
         tenantType="studio"
+        enabledCountries={ENABLED_COUNTRIES}
       />,
     )
 
@@ -193,8 +201,10 @@ describe('CheckoutClient review step', () => {
     await user.type(screen.getByPlaceholderText(/recipient name/i), 'Sam Buyer')
     await user.type(screen.getByPlaceholderText(/street address/i), '12 Queen St')
     await user.type(screen.getByPlaceholderText(/^city$/i), 'Auckland')
-    await user.clear(screen.getByPlaceholderText(/^country$/i))
-    await user.type(screen.getByPlaceholderText(/^country$/i), 'NZ')
+    // SP1: country is a select over the org's enabled countries, pre-set to the
+    // org default — free text is no longer possible, so nothing is typed here.
+    const countrySelect = document.getElementById('custom-shipping-country') as HTMLSelectElement
+    expect(countrySelect.value).toBe('NZ')
 
     await user.click(screen.getByRole('button', { name: /review order/i }))
 
@@ -220,6 +230,7 @@ describe('CheckoutClient review step', () => {
       defaultStoreId: null,
       isBuyer: false,
       tenantType: 'studio' as const,
+      enabledCountries: ENABLED_COUNTRIES,
     }
 
     const { rerender } = render(<CheckoutClient {...bannerProps} isTest={false} />)
