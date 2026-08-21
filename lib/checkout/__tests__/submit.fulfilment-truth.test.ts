@@ -51,6 +51,7 @@ import {
   type CheckoutInput,
 } from '../submit'
 import { postItemUpdate } from '@/lib/monday/updates'
+import { pushOrderDeal } from '@/lib/monday/deal-item'
 
 type AnyRow = Record<string, unknown>
 
@@ -434,7 +435,13 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
   })
 
-  it('posts the prepaid billing note to Monday when every stocked line is prepaid', async () => {
+  // Item 4 (board 5026203696 — "Orders page changes"): a stock-on-hand order
+  // never creates a Monday card, so it also never gets the billing note that
+  // used to ride on that card. These two cases previously asserted the note was
+  // POSTED (prepaid / not-paid wording); they now pin the opposite, because the
+  // note's only consumer was the stock-on-hand branch. The pick fee itself is
+  // unaffected — it still reaches the Xero draft, which is its source of truth.
+  it('pushes nothing to Monday for a prepaid stock-on-hand order', async () => {
     // Spec 3a: prepaid is the VARIANT's class now, not the catalogue item's.
     resolveLineBillingModes.mockResolvedValue(
       new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'prepaid']]),
@@ -450,13 +457,11 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     )
     await flushAfter()
 
-    expect(postItemUpdate).toHaveBeenCalledWith(
-      'mky-1',
-      'Prepaid — no Xero invoice required (pick fee $30.00 only).',
-    )
+    expect(pushOrderDeal).not.toHaveBeenCalled()
+    expect(postItemUpdate).not.toHaveBeenCalled()
   })
 
-  it('posts the not-paid billing note to Monday when a stocked line needs invoicing', async () => {
+  it('pushes nothing to Monday for a not-paid stock-on-hand order', async () => {
     resolveLineBillingModes.mockResolvedValue(
       new Map<string, 'invoice_on_dispatch' | 'prepaid'>([[VARIANT_ID, 'invoice_on_dispatch']]),
     )
@@ -471,10 +476,10 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     )
     await flushAfter()
 
-    expect(postItemUpdate).toHaveBeenCalledWith(
-      'mky-1',
-      'Not paid — draft quote raised, invoice before dispatch. Pick fee $30.00.',
-    )
+    expect(pushOrderDeal).not.toHaveBeenCalled()
+    expect(postItemUpdate).not.toHaveBeenCalled()
+    // The fee still reaches Xero — only the Monday-side note is gone.
+    expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBeGreaterThan(0)
   })
 
   it('catalogue-item fulfilment override beats the product base (override mixed on a made_to_order base)', async () => {
