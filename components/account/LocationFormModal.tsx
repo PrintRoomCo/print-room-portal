@@ -7,7 +7,12 @@ import {
   updateLocationAction,
   type ActionResult,
 } from '@/app/(portal)/account/actions'
-import { NZ_REGIONS, regionCodeFromState } from '@/lib/nz-regions'
+import { NZ_REGIONS } from '@/lib/nz-regions'
+import {
+  AddressAutocompleteInput,
+  type AddressPlace,
+} from '@/components/account/AddressAutocompleteInput'
+import type { EnabledCountry } from '@/lib/account/org-countries'
 
 // Just the fields the form reads/writes. A full Store passes structurally.
 export interface LocationFormStore {
@@ -17,6 +22,7 @@ export interface LocationFormStore {
   location: string | null
   city: string | null
   state: string | null
+  country: string | null
   postal_code: string | null
   phone: string | null
 }
@@ -25,6 +31,8 @@ interface LocationFormModalProps {
   mode: 'add' | 'edit'
   /** Required in edit mode; ignored in add mode. */
   store?: LocationFormStore | null
+  /** The org's enabled countries — the only values this form may write. */
+  enabledCountries: EnabledCountry[]
   onClose: () => void
   /** Fired after a successful save so the parent can refetch. */
   onSaved: () => void
@@ -36,18 +44,37 @@ interface LocationFormModalProps {
  * updateLocationAction. Rendered only while open (parent conditionally mounts
  * it), so each open starts with fresh state.
  */
-export function LocationFormModal({ mode, store, onClose, onSaved }: LocationFormModalProps) {
+export function LocationFormModal({
+  mode,
+  store,
+  enabledCountries,
+  onClose,
+  onSaved,
+}: LocationFormModalProps) {
   const [result, setResult] = useState<ActionResult | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const isEdit = mode === 'edit'
 
-  // Pre-select the region from the stored state name. If it maps to nothing
-  // known (legacy/free-text data), keep the raw value as a pass-through option
-  // so saving round-trips it instead of nulling it out.
-  const matchedRegionCode = isEdit ? regionCodeFromState(store?.state) : ''
-  const unmatchedState = isEdit && store?.state && !matchedRegionCode ? store.state : null
-  const defaultRegion = matchedRegionCode || unmatchedState || ''
+  // The four address fields are controlled because Geoapify writes into them;
+  // their `name` attributes are unchanged, so FormData submission is the same.
+  const [address1, setAddress1] = useState(isEdit ? store?.address ?? '' : '')
+  const [city, setCity] = useState(isEdit ? store?.city ?? '' : '')
+  const [stateField, setStateField] = useState(isEdit ? store?.state ?? '' : '')
+  const [zip, setZip] = useState(isEdit ? store?.postal_code ?? '' : '')
+  const defaultCountry = enabledCountries.find((c) => c.isDefault)?.code ?? enabledCountries[0]?.code ?? 'NZ'
+  const [country, setCountry] = useState(isEdit ? store?.country ?? defaultCountry : defaultCountry)
+  const singleCountry = enabledCountries.length <= 1
+
+  function handlePlace(place: AddressPlace) {
+    if (place.address) setAddress1(place.address)
+    if (place.city) setCity(place.city)
+    if (place.state) setStateField(place.state)
+    if (place.postal_code) setZip(place.postal_code)
+    if (place.country && enabledCountries.some((c) => c.code === place.country)) {
+      setCountry(place.country)
+    }
+  }
 
   // On success, show the confirmation briefly, then refetch + close.
   useEffect(() => {
@@ -156,13 +183,13 @@ export function LocationFormModal({ mode, store, onClose, onSaved }: LocationFor
                     <label htmlFor="address1" className="block text-sm font-medium text-gray-700 mb-1">
                       Street Address
                     </label>
-                    <input
-                      type="text"
+                    <AddressAutocompleteInput
                       id="address1"
                       name="address1"
-                      defaultValue={isEdit ? store?.address ?? '' : ''}
+                      value={address1}
+                      onChange={setAddress1}
+                      onPlace={handlePlace}
                       placeholder="123 Main Street"
-                      className="input-glass"
                     />
                   </div>
 
@@ -189,30 +216,34 @@ export function LocationFormModal({ mode, store, onClose, onSaved }: LocationFor
                         type="text"
                         id="city"
                         name="city"
-                        defaultValue={isEdit ? store?.city ?? '' : ''}
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
                         placeholder="Auckland"
                         className="input-glass"
                       />
                     </div>
 
                     <div>
-                      <label htmlFor="regionCode" className="block text-sm font-medium text-gray-700 mb-1">
-                        Region
+                      <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
+                        Region / State
                       </label>
-                      <select
-                        id="regionCode"
-                        name="regionCode"
-                        defaultValue={defaultRegion}
+                      <input
+                        type="text"
+                        id="state"
+                        name="state"
+                        value={stateField}
+                        onChange={(e) => setStateField(e.target.value)}
+                        list={country === 'NZ' ? 'nz-region-suggestions' : undefined}
+                        placeholder={country === 'NZ' ? 'e.g. Auckland' : ''}
                         className="input-glass"
-                      >
-                        <option value="">Select region...</option>
-                        {unmatchedState && <option value={unmatchedState}>{unmatchedState}</option>}
-                        {NZ_REGIONS.map((region) => (
-                          <option key={region.code} value={region.code}>
-                            {region.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
+                      {country === 'NZ' && (
+                        <datalist id="nz-region-suggestions">
+                          {NZ_REGIONS.map((region) => (
+                            <option key={region.code} value={region.name} />
+                          ))}
+                        </datalist>
+                      )}
                     </div>
                   </div>
 
@@ -224,11 +255,36 @@ export function LocationFormModal({ mode, store, onClose, onSaved }: LocationFor
                       type="text"
                       id="zip"
                       name="zip"
-                      defaultValue={isEdit ? store?.postal_code ?? '' : ''}
+                      value={zip}
+                      onChange={(e) => setZip(e.target.value)}
                       placeholder="1010"
                       className="input-glass"
                     />
                   </div>
+
+                  {singleCountry ? (
+                    <input type="hidden" name="country" value={country} />
+                  ) : (
+                    <div>
+                      <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">
+                        Country
+                      </label>
+                      <select
+                        id="country"
+                        name="country"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className="input-glass"
+                      >
+                        {enabledCountries.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.name}
+                            {c.isDefault ? ' (default)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
 

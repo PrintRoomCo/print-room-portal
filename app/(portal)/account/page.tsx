@@ -3,6 +3,7 @@ import { AccountClient } from './AccountClient'
 import { getServerExchangeRate } from '@/lib/currency/server-exchange-rates'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { getPortalAccountData } from '@/lib/portal-data'
+import { getEnabledCountriesForCurrentOrg } from '@/lib/account/org-countries'
 
 export const metadata: Metadata = {
   title: 'Account',
@@ -13,10 +14,11 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<{ reason?: string }>
 }) {
-  const [sp, result, accountData] = await Promise.all([
+  const [sp, result, accountData, enabledCountries] = await Promise.all([
     searchParams,
     getServerExchangeRate('AUD'),
     getPortalAccountData(),
+    getEnabledCountriesForCurrentOrg(),
   ])
 
   return (
@@ -35,6 +37,7 @@ export default async function AccountPage({
         <AccountClient
           ratesFetchedAt={result.fetchedAt}
           initialData={accountData}
+          enabledCountries={enabledCountries}
         />
       </div>
     </div>

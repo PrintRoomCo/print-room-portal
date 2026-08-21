@@ -25,6 +25,9 @@ type AnyRow = Record<string, unknown>
  * - stores: `.insert()` records the call and resolves `{ error }`.
  * - stores: `.update().eq().eq()` records `{ payload, filters }` (the two eq
  *   filters that scope the write) and resolves `{ error }`.
+ * - organization_countries: `.select().eq()` is awaited directly (no .single()),
+ *   so the builder itself is thenable — SP1's enabled-countries lookup runs
+ *   before either location write.
  */
 function makeAdmin(opts: {
   membership: { data: unknown; error: unknown }
@@ -32,6 +35,7 @@ function makeAdmin(opts: {
   updateResult?: { error: unknown }
   storesInsert?: ReturnType<typeof vi.fn>
   storesUpdate?: ReturnType<typeof vi.fn>
+  orgCountries?: unknown[]
 }) {
   function builder(table: string): AnyRow {
     const b: AnyRow = {
@@ -39,6 +43,21 @@ function makeAdmin(opts: {
       eq: () => b,
       single: async () =>
         table === 'user_organizations' ? opts.membership : { data: null, error: null },
+      then: (
+        resolve: (v: { data: unknown; error: unknown }) => unknown,
+        reject: (e: unknown) => unknown,
+      ) =>
+        Promise.resolve(
+          table === 'organization_countries'
+            ? {
+                data:
+                  opts.orgCountries ?? [
+                    { country_code: 'NZ', is_default: true, countries: { name: 'New Zealand' } },
+                  ],
+                error: null,
+              }
+            : { data: null, error: null },
+        ).then(resolve, reject),
       insert: (payload: unknown) => {
         if (table === 'stores') opts.storesInsert?.(payload)
         return Promise.resolve(opts.insertResult ?? { error: null })
@@ -214,7 +233,14 @@ describe('updateLocationAction — org_admin guard + org scoping', () => {
     )
 
     const result = await updateLocationAction(
-      formData({ storeId: 's-1', storeName: 'Warehouse', city: 'Auckland', regionCode: 'AUK' }),
+      formData({
+        storeId: 's-1',
+        storeName: 'Warehouse',
+        city: 'Auckland',
+        // SP1 form contract: free-text `state` + ISO `country` replace `regionCode`.
+        state: 'Auckland',
+        country: 'NZ',
+      }),
     )
 
     expect(result.success).toBe(true)
@@ -222,7 +248,12 @@ describe('updateLocationAction — org_admin guard + org scoping', () => {
     const { payload, filters } = storesUpdate.mock.calls[0][0]
     // The two .eq() filters are the security boundary against cross-org edits.
     expect(filters).toEqual({ id: 's-1', organization_id: 'org-1' })
-    expect(payload).toMatchObject({ name: 'Warehouse', city: 'Auckland', state: 'Auckland' })
+    expect(payload).toMatchObject({
+      name: 'Warehouse',
+      city: 'Auckland',
+      state: 'Auckland',
+      country: 'NZ',
+    })
   })
 })
 
