@@ -6,7 +6,8 @@ import { getSupabaseServer } from '@/lib/supabase'
 import { changePassword } from '@/lib/supabase-auth'
 import { cacheTags } from '@/lib/cache/tags'
 import { isPreviewRequest } from '@/lib/preview/guard'
-import { NZ_REGIONS } from '@/lib/nz-regions'
+import { getOrgEnabledCountries } from '@/lib/account/org-countries'
+import { resolveLocationCountry } from '@/lib/account/location-country'
 
 function formatPhoneE164(phone: string): string | null {
   if (!phone) return null
@@ -136,11 +137,17 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
   const address1 = (formData.get('address1') as string)?.trim() || ''
   const address2 = (formData.get('address2') as string)?.trim() || ''
   const city = (formData.get('city') as string)?.trim() || ''
-  const regionCode = formData.get('regionCode') as string
+  const stateInput = (formData.get('state') as string)?.trim() || ''
+  const countryInput = (formData.get('country') as string) ?? ''
   const zip = (formData.get('zip') as string)?.trim() || ''
 
   const formattedPhone = formatPhoneE164(phone)
-  const region = NZ_REGIONS.find((r) => r.code === regionCode)
+
+  const enabledCountries = await getOrgEnabledCountries(adminClient, membership.organization_id)
+  const country = resolveLocationCountry(countryInput, enabledCountries)
+  if (!country) {
+    return { success: false, errors: ['No shipping country is enabled for your organisation. Contact your account manager.'] }
+  }
 
   const { error } = await adminClient.from('stores').insert({
     organization_id: membership.organization_id,
@@ -148,8 +155,8 @@ export async function createLocationAction(formData: FormData): Promise<ActionRe
     address: address1 || null,
     location: address2 || null,
     city: city || null,
-    state: region?.name || regionCode || null,
-    country: 'New Zealand',
+    state: stateInput || null,
+    country,
     postal_code: zip || null,
     phone: formattedPhone || phone || null,
     created_by: user.id,
@@ -208,11 +215,17 @@ export async function updateLocationAction(formData: FormData): Promise<ActionRe
   const address1 = (formData.get('address1') as string)?.trim() || ''
   const address2 = (formData.get('address2') as string)?.trim() || ''
   const city = (formData.get('city') as string)?.trim() || ''
-  const regionCode = formData.get('regionCode') as string
+  const stateInput = (formData.get('state') as string)?.trim() || ''
+  const countryInput = (formData.get('country') as string) ?? ''
   const zip = (formData.get('zip') as string)?.trim() || ''
 
   const formattedPhone = formatPhoneE164(phone)
-  const region = NZ_REGIONS.find((r) => r.code === regionCode)
+
+  const enabledCountries = await getOrgEnabledCountries(adminClient, membership.organization_id)
+  const country = resolveLocationCountry(countryInput, enabledCountries)
+  if (!country) {
+    return { success: false, errors: ['No shipping country is enabled for your organisation. Contact your account manager.'] }
+  }
 
   // Scope the update to BOTH the store id and the caller's organisation. The
   // service-role client bypasses RLS, so this second .eq() is the security
@@ -224,8 +237,8 @@ export async function updateLocationAction(formData: FormData): Promise<ActionRe
       address: address1 || null,
       location: address2 || null,
       city: city || null,
-      state: region?.name || regionCode || null,
-      country: 'New Zealand',
+      state: stateInput || null,
+      country,
       postal_code: zip || null,
       phone: formattedPhone || phone || null,
     })

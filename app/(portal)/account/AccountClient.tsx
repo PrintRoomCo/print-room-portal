@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useCompany } from '@/contexts/CompanyContext'
 import { CurrencyDisplayPreferenceSection } from '@/components/account/CurrencyDisplayPreferenceSection'
 import { LocationFormModal } from '@/components/account/LocationFormModal'
+import type { EnabledCountry } from '@/lib/account/org-countries'
 import {
   updateProfile,
   changePasswordAction,
@@ -44,9 +45,10 @@ interface Quote {
 interface AccountClientProps {
   ratesFetchedAt: string | null
   initialData: PortalAccountData
+  enabledCountries: EnabledCountry[]
 }
 
-export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProps) {
+export function AccountClient({ ratesFetchedAt, initialData, enabledCountries }: AccountClientProps) {
   const { access, loading: companyLoading } = useCompany()
   const currentOwnerKey = getPortalOwnerKey(access)
 
@@ -583,8 +585,14 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
           admin-only order tracker the "View orders" link points to) */}
       {access.canViewLocations && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Locations</h2>
+          <div className="mb-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Locations</h2>
+            </div>
+            <p className="text-sm text-gray-500">
+              Operating countries:{' '}
+              {enabledCountries.map((c) => `${c.name}${c.isDefault ? ' (default)' : ''}`).join(' · ')}
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {stores.map((store) => (
@@ -657,6 +665,7 @@ export function AccountClient({ ratesFetchedAt, initialData }: AccountClientProp
         <LocationFormModal
           mode={locationModal.mode}
           store={locationModal.mode === 'edit' ? locationModal.store : null}
+          enabledCountries={enabledCountries}
           onClose={() => setLocationModal(null)}
           onSaved={() => fetchAccountData()}
         />

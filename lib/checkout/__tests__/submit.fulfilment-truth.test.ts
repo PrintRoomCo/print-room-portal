@@ -232,6 +232,9 @@ function baseSelects(opts: {
 }): SelectMatcher[] {
   return [
     { table: 'user_organizations', response: { data: { role: 'org_admin' }, error: null } },
+    // SP1: the one-time-address guard reads the org's enabled countries. These
+    // fixtures are NZ orgs, so NZ must be enabled or every submit is rejected.
+    { table: 'organization_countries', response: { data: [{ country_code: 'NZ' }], error: null } },
     {
       table: 'b2b_catalogue_items',
       response: {

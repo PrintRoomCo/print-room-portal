@@ -7,6 +7,7 @@ import {
   DecorationDriftError,
   MemberAccessDriftError,
   MixedShippingAddressError,
+  DisabledCountryError,
   MoqViolationError,
   StockShortfallError,
   UnitPriceDriftError,
@@ -239,6 +240,12 @@ export async function POST(request: Request) {
           },
         },
         { status: 409 },
+      )
+    }
+    if (e instanceof DisabledCountryError) {
+      return NextResponse.json(
+        { error: 'The shipping address country is not enabled for your organisation.' },
+        { status: 400 },
       )
     }
     if (e instanceof MixedShippingAddressError) {
