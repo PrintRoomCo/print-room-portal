@@ -17,6 +17,13 @@ import {
 import { cacheTags } from '@/lib/cache/tags'
 import { partitionCheckoutLines, type CheckoutOrderType } from '@/lib/checkout/partition'
 import { sanitiseCustomName } from '@/lib/cart/custom-name'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgEnabledCountries } from '@/lib/account/org-countries'
+import { buildCheckoutExecutionPlan } from '@/lib/checkout/execution-plan'
+import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
+import { CountryPriceUnavailableError } from '@/lib/checkout/errors'
+import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
+import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 
 interface CheckoutRequestBody {
   idempotency_key?: string
@@ -34,6 +41,113 @@ interface CheckoutRequestBody {
    */
   terms_accepted?: boolean
   terms_version?: string
+}
+
+export type CheckoutPartitionOutcome =
+  | {
+      ok: true
+      partitionKey: string
+      countryCode: string
+      currency: string
+      orderType: CheckoutOrderType
+      orderId: string
+      orderRef: string
+    }
+  | {
+      ok: false
+      partitionKey: string
+      countryCode: string
+      currency: string
+      orderType: CheckoutOrderType
+      code: string
+      error: string
+      detail?: unknown
+    }
+
+function partitionFailureOutcome(input: {
+  error: unknown
+  partitionKey: string
+  countryCode: string
+  currency: string
+  orderType: CheckoutOrderType
+}): CheckoutPartitionOutcome {
+  const base = {
+    ok: false as const,
+    partitionKey: input.partitionKey,
+    countryCode: input.countryCode,
+    currency: input.currency,
+    orderType: input.orderType,
+  }
+  const error = input.error
+  if (error instanceof CountryPriceUnavailableError) {
+    return { ...base, code: error.code, error: error.message, detail: error.detail }
+  }
+  if (error instanceof DecorationDriftError) {
+    return {
+      ...base,
+      code: 'decoration_price_drift',
+      error: error.message,
+      detail: error.drift,
+    }
+  }
+  if (error instanceof UnitPriceDriftError) {
+    return { ...base, code: 'unit_price_drift', error: error.message, detail: error.drift }
+  }
+  if (error instanceof BillingModeDriftError) {
+    return {
+      ...base,
+      code: 'billing_mode_drift',
+      error: error.message,
+      detail: error.drift,
+    }
+  }
+  if (error instanceof MemberAccessDriftError) {
+    return { ...base, code: 'member_access_drift', error: error.message, detail: error.drift }
+  }
+  if (error instanceof MoqViolationError) {
+    return { ...base, code: 'moq_violation', error: error.message, detail: error.violations }
+  }
+  if (error instanceof BuyerScopeError) {
+    return {
+      ...base,
+      code: 'buyer_ship_to_mismatch',
+      error: error.message,
+      detail: {
+        mismatched_store_ids: error.mismatchedStoreIds,
+        default_store_id: error.defaultStoreId,
+      },
+    }
+  }
+  if (error instanceof DisabledCountryError) {
+    return { ...base, code: 'disabled_country', error: error.message }
+  }
+  if (error instanceof MixedShippingAddressError) {
+    return { ...base, code: 'mixed_shipping_address', error: error.message }
+  }
+  if (error instanceof StockShortfallError) {
+    return { ...base, code: error.detail.code, error: error.message, detail: error.detail }
+  }
+  const message = error instanceof Error ? error.message : ''
+  if (message.includes('OUT_OF_STOCK')) {
+    return { ...base, code: 'OUT_OF_STOCK', error: 'OUT_OF_STOCK' }
+  }
+  if (message.includes('PERMISSION_DENIED')) {
+    return {
+      ...base,
+      code: 'PERMISSION_DENIED',
+      error: "Your account isn't permitted to place this type of order. Contact your organisation admin.",
+    }
+  }
+  console.error('[Checkout] country partition failed', {
+    partitionKey: input.partitionKey,
+    countryCode: input.countryCode,
+    orderType: input.orderType,
+  })
+  return {
+    ...base,
+    code: 'order_submit_failed',
+    error: 'This order group could not be submitted. Please try again.',
+  }
 }
 
 export async function POST(request: Request) {
@@ -157,6 +271,142 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (isCheckoutCountryPartitionEnabled()) {
+      if (auth.context.role === 'staff') {
+        const branchScope = checkStaffBranchScope({
+          shipToStoreIds: body.lines.map((line) => line.ship_to_store_id ?? null),
+          allowedBranches: resolveBranchStoreIds(
+            auth.context.branchStoreIds,
+            auth.context.defaultStoreId,
+          ),
+          allOneTimeLines: allNullShipTo,
+          hasCustomShippingAddress: Boolean(body.custom_shipping_address),
+        })
+        if (!branchScope.ok && branchScope.kind === 'out_of_scope') {
+          throw new BuyerScopeError(
+            branchScope.mismatched,
+            auth.context.defaultStoreId,
+          )
+        }
+        if (!branchScope.ok && branchScope.kind === 'mixed_branch') {
+          throw new MixedShippingAddressError()
+        }
+      }
+
+      const countries = await getOrgEnabledCountries(
+        auth.admin,
+        auth.context.organizationId,
+      )
+      const countryByCode = new Map(countries.map((country) => [country.code, country]))
+      const uniqueStoreIds = Array.from(new Set(storeIds))
+      const countryByStoreId = new Map<string, string>()
+
+      if (uniqueStoreIds.length > 0) {
+        const { data: storeRows, error: storeError } = await auth.admin
+          .from('stores')
+          .select('id, country')
+          .eq('organization_id', auth.context.organizationId)
+          .in('id', uniqueStoreIds)
+        if (storeError || (storeRows ?? []).length !== uniqueStoreIds.length) {
+          throw new DisabledCountryError('')
+        }
+        for (const row of storeRows ?? []) {
+          const countryCode =
+            typeof row.country === 'string' && /^[A-Z]{2}$/.test(row.country)
+              ? row.country
+              : null
+          if (!countryCode || !countryByCode.has(countryCode)) {
+            throw new DisabledCountryError(countryCode ?? '')
+          }
+          countryByStoreId.set(row.id as string, countryCode)
+        }
+      }
+
+      let customCountry: string | null = null
+      if (allNullShipTo) {
+        const rawCountry = body.custom_shipping_address?.country
+        customCountry = isoCountryOrNull(
+          typeof rawCountry === 'string' ? rawCountry : null,
+        )
+        if (!customCountry || !countryByCode.has(customCountry)) {
+          throw new DisabledCountryError(customCountry ?? '')
+        }
+        body.custom_shipping_address!.country = customCountry
+      }
+
+      const lines = body.lines.map((line) => ({
+        ...line,
+        ship_country: line.ship_to_store_id
+          ? countryByStoreId.get(line.ship_to_store_id)
+          : customCountry ?? undefined,
+      }))
+      const executionPlan = buildCheckoutExecutionPlan(
+        {
+          idempotencyKey: body.idempotency_key,
+          lines,
+          countryOrder: countries.map((country) => country.code),
+        },
+        true,
+      )
+      const outcomes: CheckoutPartitionOutcome[] = []
+      for (const partition of executionPlan.partitions) {
+        const countryCode = partition.countryCode!
+        const country = countryByCode.get(countryCode)!
+        try {
+          const result = await submitCustomerOrder(
+            auth.admin,
+            {
+              context: auth.context,
+              idempotency_key: partition.idempotencyKey,
+              required_by: body.required_by ?? null,
+              notes: body.notes ?? null,
+              internal_notes: null,
+              lines: partition.lines,
+              pricing_pool_lines: lines,
+              custom_shipping_address: body.custom_shipping_address ?? null,
+              intent,
+              terms_accepted: body.terms_accepted,
+              terms_version: body.terms_version,
+            },
+            {
+              countryPartitionEnabled: true,
+              partitionKey: partition.key,
+              country,
+            },
+          )
+          outcomes.push({
+            ok: true,
+            partitionKey: partition.key,
+            countryCode,
+            currency: country.currency,
+            orderType: partition.orderType,
+            orderId: result.order_id,
+            orderRef: result.order_ref,
+          })
+        } catch (error) {
+          outcomes.push(
+            partitionFailureOutcome({
+              error,
+              partitionKey: partition.key,
+              countryCode,
+              currency: country.currency,
+              orderType: partition.orderType,
+            }),
+          )
+        }
+      }
+      revalidateTag(cacheTags.accountData, { expire: 0 })
+      revalidateTag(cacheTags.orderTracker, { expire: 0 })
+      const primary = outcomes.find(
+        (outcome): outcome is Extract<CheckoutPartitionOutcome, { ok: true }> =>
+          outcome.ok,
+      )
+      return NextResponse.json(
+        { outcomes, ...(primary ? { primary } : {}) },
+        { status: outcomes.every((outcome) => outcome.ok) ? 200 : 207 },
+      )
+    }
+
     // F1 (spec B): split a mixed cart into TWO backend orders — the
     // made_to_order lines become a purchase_order (Monday/tracker path); the
     // stocked lines become order_type='stock_on_hand' (Spec A push-with-note +

@@ -25,6 +25,8 @@ import {
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import type { CheckoutLineInput } from '@/lib/checkout/submit'
+import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
+import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 
 interface PreviewRequestBody {
   idempotency_key?: string
@@ -236,6 +238,39 @@ export async function POST(request: Request) {
     intent = 'inventory'
   }
 
+  if (auth.context.role === 'staff') {
+    const branchScope = checkStaffBranchScope({
+      shipToStoreIds: body.lines.map((line) => line.ship_to_store_id ?? null),
+      allowedBranches: resolveBranchStoreIds(
+        auth.context.branchStoreIds,
+        auth.context.defaultStoreId,
+      ),
+      allOneTimeLines: allNullShipTo,
+      hasCustomShippingAddress: Boolean(body.custom_shipping_address),
+    })
+    if (!branchScope.ok && branchScope.kind === 'out_of_scope') {
+      return NextResponse.json(
+        {
+          error: 'buyer_ship_to_mismatch',
+          detail: {
+            mismatched_store_ids: branchScope.mismatched,
+            default_store_id: auth.context.defaultStoreId,
+          },
+        },
+        { status: 409 },
+      )
+    }
+    if (!branchScope.ok && branchScope.kind === 'mixed_branch') {
+      return NextResponse.json(
+        {
+          error:
+            'Mixed per-line custom ship-to addresses not supported in v1. Save each address as a store first.',
+        },
+        { status: 400 },
+      )
+    }
+  }
+
   const countries = await getOrgEnabledCountries(
     auth.admin,
     auth.context.organizationId,
@@ -252,7 +287,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'One or more stores are unavailable' }, { status: 400 })
     }
     for (const row of storeRows ?? []) {
-      const countryCode = isoCountryOrNull(row.country as string | null)
+      const countryCode =
+        typeof row.country === 'string' && /^[A-Z]{2}$/.test(row.country)
+          ? row.country
+          : null
       if (!countryCode || !countryByCode.has(countryCode)) {
         return NextResponse.json(
           { error: 'The shipping address country is not enabled for your organisation.' },

@@ -44,6 +44,7 @@ const VALID_BODY = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
   vi.mocked(requireB2BCustomerApi).mockResolvedValue({
     admin: {} as never,
     context: { storeIds: [], role: 'org_admin', tenantType: 'franchise', organizationId: 'o1' } as never,

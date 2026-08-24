@@ -229,4 +229,42 @@ describe('POST /api/checkout/preview', () => {
     })
     expect(stub.writeCalls).toEqual([])
   })
+
+  it('rejects a non-ISO store country before preparing any group', async () => {
+    process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED = 'true'
+    const stub = makeFanoutStub(
+      previewConfig({
+        stores: [
+          {
+            id: 'store-au',
+            name: 'Legacy store',
+            address: '1 Queen Street',
+            city: 'Auckland',
+            country: 'New Zealand',
+            postalCode: '1010',
+          },
+        ],
+      }),
+    )
+    authMocks.requireB2BCustomerApi.mockResolvedValue({
+      admin: stub.admin,
+      context: {
+        ...makeContext('org-1'),
+        storeIds: ['store-au'],
+      },
+    })
+    const requested = requestBody()
+    requested.lines = [requested.lines[0]]
+
+    const response = await POST(
+      new Request('http://localhost/api/checkout/preview', {
+        method: 'POST',
+        body: JSON.stringify(requested),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(stub.rpcCalls).toEqual([])
+    expect(stub.writeCalls).toEqual([])
+  })
 })

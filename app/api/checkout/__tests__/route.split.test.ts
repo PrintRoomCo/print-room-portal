@@ -11,10 +11,12 @@ vi.mock('@/lib/checkout/submit', () => {
   class BuyerScopeError extends Error {}
   class MixedShippingAddressError extends Error {}
   class DisabledCountryError extends Error {}
+  class BillingModeDriftError extends Error {}
   return {
     DecorationDriftError, UnitPriceDriftError, MemberAccessDriftError,
     MoqViolationError, StockShortfallError, BuyerScopeError, MixedShippingAddressError,
     DisabledCountryError,
+    BillingModeDriftError,
     submitCustomerOrder: vi.fn(),
   }
 })
@@ -29,6 +31,7 @@ function req(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
   vi.mocked(requireB2BCustomerApi).mockResolvedValue({
     admin: {} as never,
     context: { storeIds: ['s1'], role: 'org_admin', tenantType: 'franchise', organizationId: 'o1' } as never,
