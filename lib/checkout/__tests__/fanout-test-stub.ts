@@ -10,6 +10,7 @@
  */
 import { vi } from 'vitest'
 import type { submitCustomerOrder } from '../submit'
+import type { BillingCountryConfig } from '@/lib/account/org-countries'
 
 type AnyRow = Record<string, unknown>
 
@@ -58,6 +59,7 @@ export interface StubItem {
   /** Pooled decoration pricing — the owning catalogue and its opt-in flag. */
   catalogueId?: string
   poolingEnabled?: boolean
+  stockUnitPrice?: number | null
 }
 
 export interface StubProduct {
@@ -77,12 +79,46 @@ export interface StubConfig {
   /** Return value for catalogue_item_decoration_price, keyed by catalogue_item_id. */
   manualCombinedPrice?: (catalogueItemId: string, qty: number) => number | null
   garmentUnitPrice?: number
+  garmentUnitPriceForCurrency?: (
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  stockUnitPriceForCurrency?: (catalogueItemId: string, currency: string) => number | null
+  decorationPriceForCurrency?: (
+    orgDecorationId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  manualCombinedPriceForCurrency?: (
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  periodUnitPriceForCurrency?: (
+    periodId: string,
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  openPeriod?: { id: string; closesAt: string } | null
   /** Inject an error for a table's select (message → PostgREST-style error). */
   selectErrorFor?: Record<string, string>
   /** Legacy organization billing facts used by checkout's flag-off path. */
   organization?: { region: 'NZ' | 'AU'; isTest?: boolean }
   /** ISO countries enabled for one-time-address validation. */
   enabledCountryCodes?: string[]
+  enabledCountries?: BillingCountryConfig[]
+  stores?: Array<{
+    id: string
+    name: string
+    address: string
+    city: string
+    state?: string | null
+    country: string
+    postalCode: string
+    organizationId?: string
+  }>
   /** Stable committed row returned by the submit system boundary. */
   submitResult?: { quoteId: string; orderId: string; orderRef: string }
 }
@@ -99,7 +135,13 @@ export function makeFanoutStub(config: StubConfig) {
     moq_override: i.moqOverride ?? null,
     fulfilment_type_override: i.fulfilmentTypeOverride ?? null,
     catalogue_id: i.catalogueId ?? 'cat-stub',
+    stock_unit_price: i.stockUnitPrice ?? null,
     b2b_catalogues: { decoration_pooling_enabled: i.poolingEnabled === true },
+    products: {
+      fulfilment_type:
+        config.products.find((product) => product.id === i.sourceProductId)?.fulfilmentType ??
+        'made_to_order',
+    },
   }))
 
   // org_decorations, as read by loadPoolableDecorationIds. Deduped by id: one
@@ -235,10 +277,55 @@ export function makeFanoutStub(config: StubConfig) {
       }
     }
     if (table === 'organization_countries') {
+      if (config.enabledCountries) {
+        return {
+          data: config.enabledCountries.map((country) => ({
+            country_code: country.code,
+            is_default: country.isDefault,
+            countries: {
+              name: country.name,
+              currency: country.currency,
+              tax_rate: country.taxRate,
+              tax_label: country.taxLabel,
+            },
+          })),
+          error: null,
+        }
+      }
       return {
         data: (config.enabledCountryCodes ?? ['NZ']).map((countryCode) => ({
           country_code: countryCode,
         })),
+        error: null,
+      }
+    }
+    if (table === 'stores') {
+      let rows = (config.stores ?? []).map((store) => ({
+        id: store.id,
+        name: store.name,
+        address: store.address,
+        city: store.city,
+        state: store.state ?? null,
+        country: store.country,
+        postal_code: store.postalCode,
+        organization_id: store.organizationId ?? 'org-1',
+      }))
+      for (const f of filters) {
+        if (f.op === 'in' && f.column === 'id') {
+          const ids = new Set(f.value as string[])
+          rows = rows.filter((row) => ids.has(row.id))
+        }
+        if (f.op === 'eq' && f.column === 'organization_id') {
+          rows = rows.filter((row) => row.organization_id === f.value)
+        }
+      }
+      return { data: rows, error: null }
+    }
+    if (table === 'b2b_ordering_periods') {
+      return {
+        data: config.openPeriod
+          ? [{ id: config.openPeriod.id, closes_at: config.openPeriod.closesAt }]
+          : [],
         error: null,
       }
     }
@@ -317,6 +404,27 @@ export function makeFanoutStub(config: StubConfig) {
       if (name === 'effective_unit_price_for_item' || name === 'effective_unit_price') {
         return { data: config.garmentUnitPrice ?? 12.5, error: null }
       }
+      if (name === 'effective_unit_price_for_item_currency') {
+        return {
+          data:
+            config.garmentUnitPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
+      if (name === 'catalogue_stock_unit_price_for_currency') {
+        return {
+          data:
+            config.stockUnitPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
       if (name === 'effective_decoration_unit_price') {
         const v = config.decorationRpcPrice?.(
           args?.p_org_decoration_id as string,
@@ -324,12 +432,46 @@ export function makeFanoutStub(config: StubConfig) {
         )
         return { data: v ?? null, error: null }
       }
+      if (name === 'effective_decoration_unit_price_for_currency') {
+        return {
+          data:
+            config.decorationPriceForCurrency?.(
+              args?.p_org_decoration_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
       if (name === 'catalogue_item_decoration_price') {
         const v = config.manualCombinedPrice?.(
           args?.p_catalogue_item_id as string,
           args?.p_qty as number,
         )
         return { data: v ?? null, error: null }
+      }
+      if (name === 'catalogue_item_decoration_price_for_currency') {
+        return {
+          data:
+            config.manualCombinedPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
+      if (name === 'period_unit_price_for_currency') {
+        return {
+          data:
+            config.periodUnitPriceForCurrency?.(
+              args?.p_period_id as string,
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
       }
       if (name === 'submit_b2b_order') {
         const result = config.submitResult ?? {

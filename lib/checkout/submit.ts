@@ -1,44 +1,24 @@
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
-import { effectiveDecorationPrice, loadTierMultiplier } from '@/lib/checkout/decoration-effective-price'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
 import { resolveOrderEmailRecipient } from './order-email-recipient'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
-import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
-import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
-import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
-import { getEffectiveMoq } from '@/lib/shop/effective-moq'
-import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { routeForFulfilmentType } from '@/lib/shop/fulfilment-mode'
 import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
-import { classifyOrderType } from '@/lib/orders/order-type'
-import { getOpenPeriodForOrg, getPreOrderItemIds } from '@/lib/pricing/period-brackets'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { orderBillingNote } from '@/lib/monday/billing-note'
-import { orderNeedsInvoicing } from './order-billing'
-import { resolveLineBillingModes } from './resolve-line-billing-modes'
-import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
 import { currencyForRegion } from '@/lib/pricing/gst'
 import { round2 } from '@/lib/pricing/pricingMath'
-import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import { billedFigures } from '@/lib/checkout/billed-figures'
 import type { BillingMode } from '@/lib/shop/billing-mode'
-import {
-  garmentBandQty,
-  isPoolingLine,
-  pooledDecorationQty,
-  pooledQtyByDecoration,
-  type PoolingLine,
-} from '@/lib/pricing/decoration-pooling'
-import { formatShippingAddress, isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { sendOrderPlacedDispatch } from '@/lib/email/order-placed-dispatch'
 import { staffOrderUrl } from '@/lib/config/staff-portal-url'
@@ -46,6 +26,56 @@ import {
   resolveDispatchNotificationRecipient,
   isTestOrgFailClosed,
 } from '@/lib/checkout/dispatch-notification-recipient'
+import {
+  prepareCustomerOrderPartition,
+  preparedCheckoutInternalsFor,
+  type PrepareCustomerOrderOptions,
+} from '@/lib/checkout/prepare'
+
+export {
+  billedOrderTotal,
+  buildBillingModeDrift,
+  garmentUnitPriceForLine,
+  tierAggregationKey,
+} from '@/lib/checkout/prepare'
+export type { BilledTotalLine } from '@/lib/checkout/prepare'
+import {
+  BillingModeDriftError,
+  BuyerScopeError,
+  DecorationDriftError,
+  DisabledCountryError,
+  MemberAccessDriftError,
+  MixedShippingAddressError,
+  MoqViolationError,
+  StockShortfallError,
+  UnitPriceDriftError,
+  type AccessDrift,
+  type BillingModeDrift,
+  type DecorationDrift,
+  type MoqViolation,
+  type StockShortfallDetail,
+  type UnitPriceDrift,
+} from '@/lib/checkout/errors'
+
+export {
+  BillingModeDriftError,
+  BuyerScopeError,
+  DecorationDriftError,
+  DisabledCountryError,
+  MemberAccessDriftError,
+  MixedShippingAddressError,
+  MoqViolationError,
+  StockShortfallError,
+  UnitPriceDriftError,
+}
+export type {
+  AccessDrift,
+  BillingModeDrift,
+  DecorationDrift,
+  MoqViolation,
+  StockShortfallDetail,
+  UnitPriceDrift,
+}
 
 export interface CheckoutLineDecorationInput {
   linkId: string
@@ -78,6 +108,12 @@ export interface CheckoutLineInput {
    * pre-2026-05-15 behaviour).
    */
   claimed_unit_price?: number
+  /** Currency of the cart-drawer snapshot; a different destination currency is repriced at review. */
+  priceCurrency?: string
+  /** Destination-currency values last reviewed by the customer. */
+  reviewed_unit_price?: number
+  reviewed_decoration_price?: number
+  reviewed_currency?: string
   /** True iff the cart carried a brackets snapshot for this line. */
   has_brackets?: boolean
   /**
@@ -154,211 +190,6 @@ export interface CheckoutResult {
   order_ref: string
 }
 
-export interface DecorationDrift {
-  cartLineId: string | null
-  productId: string
-  linkId: string
-  decorationName: string
-  was: number
-  now: number
-  reason: 'price_drift' | 'detached' | 'cross_org' | 'inactive' | 'wrong_item'
-}
-
-export class DecorationDriftError extends Error {
-  readonly drift: DecorationDrift[]
-  constructor(drift: DecorationDrift[]) {
-    super('decoration_price_drift')
-    this.name = 'DecorationDriftError'
-    this.drift = drift
-  }
-}
-
-export interface UnitPriceDrift {
-  cartLineId: string | null
-  productId: string
-  productName: string
-  qty: number
-  claimedUnitPrice: number
-  canonicalUnitPrice: number
-}
-
-export class UnitPriceDriftError extends Error {
-  readonly drift: UnitPriceDrift[]
-  constructor(drift: UnitPriceDrift[]) {
-    super('unit_price_drift')
-    this.name = 'UnitPriceDriftError'
-    this.drift = drift
-  }
-}
-
-export interface BillingModeDrift {
-  cartLineId: string | null
-  productId: string
-  productName: string
-  claimedBillingMode: BillingMode
-  canonicalBillingMode: BillingMode
-}
-
-export class BillingModeDriftError extends Error {
-  readonly drift: BillingModeDrift[]
-  constructor(drift: BillingModeDrift[]) {
-    super('billing_mode_drift')
-    this.name = 'BillingModeDriftError'
-    this.drift = drift
-  }
-}
-
-/**
- * Compare each line's claimed billing mode against the canonical one. Pure, so
- * the both-directions rule is testable without a database.
- *
- * A line with no claim is skipped (legacy cart — mirrors the has_brackets gate
- * on unit_price_drift). An unknown variant, or no variant at all, resolves to
- * invoice_on_dispatch — the same fail-closed rule as resolve-line-billing-modes.
- */
-export interface BilledTotalLine {
-  /** fulfilment_type === 'stocked' — this line DREW stock. */
-  stocked: boolean
-  billingMode: BillingMode
-  /** qty × repriced garment unit price, ex decoration. */
-  goodsValue: number
-  /** qty × per-unit decoration for this line. */
-  decorationRevenue: number
-}
-
-/**
- * The ex-GST figure we actually invoice: goods + decoration for every line that
- * is NOT a prepaid stock draw, plus the picking fee.
- *
- * Decoration on a prepaid draw is excluded too — it was paid for along with the
- * stock. Handled per line rather than folded into goodsValue because decoration
- * revenue is tracked separately for finance (quotes.decoration_cost).
- *
- * Uses the same isPrepaidDrawn predicate as the customer-facing shape, so the
- * server and the checkout page cannot disagree about which lines are free.
- */
-export function billedOrderTotal(lines: BilledTotalLine[], pickFee: number): number {
-  const billedGoods = lines.reduce((total, line) => {
-    if (isPrepaidDrawn(line.stocked ? 'stocked' : 'made_to_order', line.billingMode)) {
-      return total
-    }
-    return total + line.goodsValue + line.decorationRevenue
-  }, 0)
-  return round2(billedGoods + pickFee)
-}
-
-/**
- * The garment unit price the checkout charges + drift-checks for a line.
- *
- * A stock DRAW (fulfilment_type === 'stocked') on a catalogue item with an
- * explicit stock_unit_price uses that flat price — Stock-on-hand shows/charges
- * ONE price, not the volume ladder. Every other line (made_to_order, or a
- * stocked line whose item has no explicit price) uses the ladder-derived
- * canonical price. Applied per line (not in the shared ladder helper) so a
- * 'mixed' item's made-to-order lines stay on the ladder. This must feed BOTH
- * the billed price and the drift canonical, or the two disagree and checkout
- * either mischarges or throws UnitPriceDriftError against the honest cart.
- */
-export function garmentUnitPriceForLine(
-  line: Pick<CheckoutLineInput, 'fulfilment_type' | 'catalogueItemId'>,
-  ladderUnitPrice: number,
-  stockUnitPriceByItem: Map<string, number>,
-): number {
-  if (line.fulfilment_type === 'stocked' && line.catalogueItemId) {
-    const explicit = stockUnitPriceByItem.get(line.catalogueItemId)
-    if (explicit != null) return explicit
-  }
-  return ladderUnitPrice
-}
-
-export function buildBillingModeDrift(
-  lines: Array<
-    Pick<
-      CheckoutLineInput,
-      'product_id' | 'product_name' | 'variant_id' | 'cart_line_id' | 'claimed_billing_mode'
-    >
-  >,
-  canonicalByVariant: Map<string, BillingMode>,
-): BillingModeDrift[] {
-  const drift: BillingModeDrift[] = []
-  for (const line of lines) {
-    if (line.claimed_billing_mode == null) continue
-    const canonical: BillingMode = line.variant_id
-      ? canonicalByVariant.get(line.variant_id) ?? 'invoice_on_dispatch'
-      : 'invoice_on_dispatch'
-    if (line.claimed_billing_mode !== canonical) {
-      drift.push({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        productName: line.product_name,
-        claimedBillingMode: line.claimed_billing_mode,
-        canonicalBillingMode: canonical,
-      })
-    }
-  }
-  return drift
-}
-
-export interface AccessDrift {
-  cartLineId: string | null
-  productId: string
-  productName: string
-}
-
-export class MemberAccessDriftError extends Error {
-  readonly drift: AccessDrift[]
-  constructor(drift: AccessDrift[]) {
-    super('member_access_drift')
-    this.name = 'MemberAccessDriftError'
-    this.drift = drift
-  }
-}
-
-export interface StockShortfallDetail {
-  code: 'insufficient_stock' | 'no_inventory'
-  product_id: string | null
-  variant_id: string | null
-  available?: number
-  requested?: number
-}
-
-export class StockShortfallError extends Error {
-  readonly detail: StockShortfallDetail
-  constructor(detail: StockShortfallDetail) {
-    super(detail.code)
-    this.name = 'StockShortfallError'
-    this.detail = detail
-  }
-}
-
-export interface MoqViolation {
-  cartLineId: string | null
-  productId: string
-  productName: string
-  effectiveMoq: number
-  totalQty: number
-}
-
-export class MoqViolationError extends Error {
-  readonly violations: MoqViolation[]
-  constructor(violations: MoqViolation[]) {
-    super('moq_violation')
-    this.name = 'MoqViolationError'
-    this.violations = violations
-  }
-}
-
-export class BuyerScopeError extends Error {
-  readonly mismatchedStoreIds: Array<string | null>
-  readonly defaultStoreId: string | null
-  constructor(mismatchedStoreIds: Array<string | null>, defaultStoreId: string | null) {
-    super('buyer_ship_to_mismatch')
-    this.name = 'BuyerScopeError'
-    this.mismatchedStoreIds = mismatchedStoreIds
-    this.defaultStoreId = defaultStoreId
-  }
-}
-
 export interface RegionQuotaDetails {
   store_id: string
   catalogue_item_id: string
@@ -397,20 +228,6 @@ export function parseRegionQuotaError(
       store_id: '', catalogue_item_id: '', region_quota: 0,
       already_ordered: 0, requested: 0, remaining: 0,
     })
-  }
-}
-
-export class MixedShippingAddressError extends Error {
-  constructor() {
-    super('mixed_shipping_address')
-    this.name = 'MixedShippingAddressError'
-  }
-}
-
-export class DisabledCountryError extends Error {
-  constructor(public readonly country: string) {
-    super(`Shipping country ${country || '(none)'} is not enabled for this organisation`)
-    this.name = 'DisabledCountryError'
   }
 }
 
@@ -486,101 +303,6 @@ export function buildLineSnapshotUpdate(
   return update
 }
 
-/**
- * Aggregation key for cart-tier band lookup — mirrors recomputeProductTierPrices
- * in lib/cart/types.ts so submit and cart agree on what qty pools. Variant +
- * fulfilmentType are intentionally excluded (different sizes / fulfilment of
- * the same product+signature still pool); decoration signature splits product
- * lines that share product_id but differ in decoration methods/artworks.
- *
- * Keyed on `decorationId` (org_decorations.id), not `linkId`
- * (b2b_catalogue_item_decorations.id). A single decoration that's wired onto
- * multiple swatches has one decorationId but one link row per swatch — keying
- * on linkId would split per-colour-variant lines into separate tier buckets.
- */
-export function tierAggregationKey(
-  productId: string,
-  decorations: CheckoutLineDecorationInput[] | undefined,
-): string {
-  return `${productId}::${decorationAggregationSignature(decorations)}`
-}
-
-function decorationAggregationSignature(
-  decorations: CheckoutLineDecorationInput[] | undefined,
-): string {
-  return !decorations || decorations.length === 0
-    ? ''
-    : decorations
-        .map((d) => d.decorationId)
-        .slice()
-        .sort()
-        .join('|')
-}
-
-/**
- * Pooled decoration pricing (spec 2026-08-13) — the band-selection quantity a
- * garment price group prices at, appended to the group key so that every line in
- * a group provably shares one band. With pooling off this is always the group's
- * own total, so the suffix is constant per group and the grouping (and therefore
- * the RPC budget) is byte-identical to before.
- */
-function garmentPriceKey(line: CheckoutLineInput, bandQty: number): string {
-  return `${garmentPriceAggregationKey(line)}::q${bandQty}`
-}
-
-function garmentPriceAggregationKey(line: CheckoutLineInput): string {
-  const itemOrProduct = line.catalogueItemId
-    ? `item:${line.catalogueItemId}`
-    : `product:${line.product_id}`
-  return `${itemOrProduct}::${decorationAggregationSignature(line.decorations)}`
-}
-
-/**
- * Which of the cart's decorations may pool, resolved SERVER-SIDE from
- * org_decorations. Never taken from the client: a tampered `poolable` flag would
- * let a cart pool the $0 'custom' placeholder and drag a whole catalogue into one
- * band. Same rule as the PDP loader and the staff ladder route — real artwork,
- * real method — plus an org check, so a decoration id from another organization
- * can never enter a pool.
- */
-async function loadPoolableDecorationIds(
-  admin: SupabaseClient,
-  lines: readonly CheckoutLineInput[],
-  organizationId: string,
-): Promise<Set<string>> {
-  const ids = Array.from(
-    new Set(
-      lines.flatMap((l) => (l.decorations ?? []).map((d) => d.decorationId)).filter(Boolean),
-    ),
-  )
-  const poolable = new Set<string>()
-  if (ids.length === 0) return poolable
-
-  for (let i = 0; i < ids.length; i += 100) {
-    const { data, error } = await admin
-      .from('org_decorations')
-      .select('id, artwork_id, decoration_method, organization_id')
-      .in('id', ids.slice(i, i + 100))
-    // Fail closed: an unreadable decoration table means nothing pools, which is
-    // today's pricing, not a wrong price.
-    if (error) return new Set()
-    for (const r of (data ?? []) as Array<{
-      id: string
-      artwork_id: string | null
-      decoration_method: string | null
-      organization_id: string
-    }>) {
-      if (
-        r.organization_id === organizationId &&
-        r.artwork_id != null &&
-        r.decoration_method !== 'custom'
-      ) {
-        poolable.add(r.id)
-      }
-    }
-  }
-  return poolable
-}
 
 // b2b_accounts.payment_terms CHECK constraint allows only 'prepay' | 'net20' | 'net30'.
 // Plan default was 'net_20' which fails; use 'net20' instead.
@@ -588,920 +310,42 @@ const PAYMENT_TERMS_FALLBACK = 'net20'
 
 export async function submitCustomerOrder(
   admin: SupabaseClient,
-  input: CheckoutInput
+  input: CheckoutInput,
+  options?: PrepareCustomerOrderOptions,
 ): Promise<CheckoutResult> {
-  // Preview is read-only — block the order RPC as belt-and-braces (the API
-  // route already rejects preview at the write gate). No CheckoutResult error
-  // variant exists, so throw.
-  if (input.context.isPreview) {
-    throw new Error('Preview only — nothing was saved.')
-  }
-
-  const shipToStoreIds = input.lines.map((l) => l.ship_to_store_id ?? null)
-  const hasOneTimeLine = shipToStoreIds.some((sid) => sid === null)
-  const allOneTimeLines = shipToStoreIds.every((sid) => sid === null)
-  if ((hasOneTimeLine || input.custom_shipping_address) && !allOneTimeLines) {
-    throw new MixedShippingAddressError()
-  }
-
-  // SP1 address hard floor: a one-time address must name a country the org has
-  // enabled. Store-bound lines need no check here — stores.country is FK-bound
-  // to enabled countries at write time.
-  if (input.custom_shipping_address) {
-    const raw = (input.custom_shipping_address as Record<string, unknown>).country
-    const iso = isoCountryOrNull(typeof raw === 'string' ? raw : null)
-    const { data: enabledRows } = await admin
-      .from('organization_countries')
-      .select('country_code')
-      .eq('organization_id', input.context.organizationId)
-    const enabled = new Set((enabledRows ?? []).map((r) => r.country_code as string))
-    if (!iso || !enabled.has(iso)) {
-      throw new DisabledCountryError(typeof raw === 'string' ? raw : '')
+  const preparationOptions: PrepareCustomerOrderOptions =
+    options ?? {
+      countryPartitionEnabled: false,
+      partitionKey: 'legacy',
+      country: {
+        code: 'NZ',
+        name: 'New Zealand',
+        currency: 'NZD',
+        taxRate: 0.15,
+        taxLabel: 'GST 15%',
+        isDefault: true,
+      },
     }
-  }
-
-  // 0. Buyer-scope guard: plain staff (zero grants) are locked to their
-  //    defaultStoreId — resolveBranchStoreIds([], default) === [default], today's
-  //    single-branch lock. A manager (≥1 b2b_member_store_grants row) may pick any
-  //    granted branch, but the order stays one-destination (mixed_branch → error).
-  //    One-time shared address lines stay exempt via allOneTimeLines.
-  if (input.context.role === 'staff') {
-    const allowedBranches = resolveBranchStoreIds(
-      input.context.branchStoreIds,
-      input.context.defaultStoreId,
-    )
-    const res = checkStaffBranchScope({
-      shipToStoreIds,
-      allowedBranches,
-      allOneTimeLines,
-      hasCustomShippingAddress: Boolean(input.custom_shipping_address),
-    })
-    if (!res.ok && res.kind === 'out_of_scope') {
-      throw new BuyerScopeError(res.mismatched, input.context.defaultStoreId)
-    }
-    if (!res.ok && res.kind === 'mixed_branch') {
-      throw new MixedShippingAddressError()
-    }
-  }
-
-  // 1. Resolve shipping_address — either the custom JSON or the first line's store.
-  let shippingAddress: Record<string, unknown> = input.custom_shipping_address ?? {}
-  if (!input.custom_shipping_address && input.lines[0]?.ship_to_store_id) {
-    const { data: firstStore } = await admin
-      .from('stores')
-      .select('id, name, address, city, state, country, postal_code')
-      .eq('id', input.lines[0].ship_to_store_id)
-      .single()
-    if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
-  }
-  const formattedShippingAddress = formatShippingAddress(shippingAddress)
-
-  // 1b. Per-member access re-verify. Mid-flight: if staff revoked a catalogue
-  //     or item grant between cart load and checkout, we MUST reject before
-  //     submit_b2b_order touches anything.
-  const grantedItemIds = new Set(
-    await getGrantedCatalogueItemIds(
-      admin,
-      input.context.membershipId,
-      input.context.organizationId,
-    ),
-  )
-  if (grantedItemIds.size > 0) {
-    // Map each line.product_id to a catalogue_item the member can still see.
-    // submit_b2b_order keys on product_id (matching /shop/[productId]), so it's
-    // enough to confirm at least one granted catalogue item exists for the product.
-    const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
-    const { data: visibleItems } = await admin
-      .from('b2b_catalogue_items')
-      .select('source_product_id')
-      .in('source_product_id', productIds)
-      .in('id', Array.from(grantedItemIds))
-    const visibleProductIds = new Set(
-      ((visibleItems ?? []) as Array<{ source_product_id: string }>).map(
-        (r) => r.source_product_id,
-      ),
-    )
-    const accessDrift: AccessDrift[] = []
-    for (const line of input.lines) {
-      if (!visibleProductIds.has(line.product_id)) {
-        accessDrift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          productName: line.product_name,
-        })
-      }
-    }
-    if (accessDrift.length > 0) throw new MemberAccessDriftError(accessDrift)
-  } else {
-    // No grants at all — every line is unavailable.
-    throw new MemberAccessDriftError(
-      input.lines.map((line) => ({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        productName: line.product_name,
-      })),
-    )
-  }
-
-  // 1c. MOQ guard. Resolves effective MOQ server-side from a fresh join of
-  //     products + b2b_catalogue_items (within the customer's granted item
-  //     set) — the client's payload doesn't carry MOQ and is not trusted
-  //     here either. MOQ is per-product, summed across every line that
-  //     shares productId (mirrors the PDP multi-size rule).
-  const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
-
-  // Total qty per product across all lines — shared by MOQ enforcement (below)
-  // and per-product re-pricing (further down). Multi-size orders are one print
-  // run; pricing tier sums across sizes.
-  const totalQtyByProductId = new Map<string, number>()
-  for (const line of input.lines) {
-    totalQtyByProductId.set(
-      line.product_id,
-      (totalQtyByProductId.get(line.product_id) ?? 0) + line.qty,
-    )
-  }
-
-  const [{ data: productMoqRows }, { data: catItemMoqRows }] = await Promise.all([
-    admin
-      .from('products')
-      .select('id, moq, fulfilment_type')
-      .in('id', productIds),
-    admin
-      .from('b2b_catalogue_items')
-      .select('id, source_product_id, moq_override, fulfilment_type_override')
-      .in('source_product_id', productIds)
-      .in('id', Array.from(grantedItemIds)),
-  ])
-  const productRows = (productMoqRows ?? []) as Array<{
-    id: string
-    moq: number | null
-    fulfilment_type: string | null
-  }>
-  const catItemRows = (catItemMoqRows ?? []) as Array<{
-    id: string
-    source_product_id: string
-    moq_override: number | null
-    fulfilment_type_override: string | null
-  }>
-  const productMoqById = new Map(productRows.map((r) => [r.id, r.moq]))
-  const overrideByProductId = new Map(
-    catItemRows.map((r) => [r.source_product_id, r.moq_override]),
-  )
-
-  // Server-side fulfilment truth (2026-07-06). 'stocked' is a stock-DRAW claim
-  // that exempts a line from MOQ (below) — so it may only stand when the
-  // product's effective nature actually allows a draw. (Spec A no longer gates
-  // Xero on stock-draw; the coercion still matters for MOQ + Spec B.)
-  // submit_b2b_order resolves fulfilment the same way
-  // (catalogue override ?? product base) and never draws on-hand stock for
-  // made_to_order/pre_order natures, so a 'stocked' claim there is always
-  // wrong — the old PDP fallback bug, stale persisted carts, or a hostile
-  // client. Coerce in place so every downstream reader of input.lines sees
-  // the truth. Absent claims (legacy carts) stay absent: MOQ-conservative.
-  const natureByProductId = new Map(productRows.map((r) => [r.id, r.fulfilment_type]))
-  const natureOverrideByCatItemId = new Map(
-    catItemRows.map((r) => [r.id, r.fulfilment_type_override]),
-  )
-  const natureOverrideByProductId = new Map<string, string>()
-  for (const r of catItemRows) {
-    if (
-      r.fulfilment_type_override != null &&
-      !natureOverrideByProductId.has(r.source_product_id)
-    ) {
-      natureOverrideByProductId.set(r.source_product_id, r.fulfilment_type_override)
-    }
-  }
-  for (const line of input.lines) {
-    if (line.fulfilment_type !== 'stocked') continue
-    const effectiveNature =
-      (line.catalogueItemId != null
-        ? natureOverrideByCatItemId.get(line.catalogueItemId)
-        : null) ??
-      natureOverrideByProductId.get(line.product_id) ??
-      natureByProductId.get(line.product_id) ??
-      'made_to_order'
-    if (effectiveNature !== 'stocked' && effectiveNature !== 'mixed') {
-      line.fulfilment_type = 'made_to_order'
-    }
-  }
-
-  // Qty per product destined for a NEW production run — i.e. excluding lines
-  // fulfilled from existing stock. MOQ is checked against this, not the grand
-  // total: stock that has already been made carries no minimum. A line only
-  // escapes MOQ when it declares fulfilment_type 'stocked' AND the claim
-  // survived the nature coercion above; an absent value (legacy carts)
-  // conservatively still counts toward MOQ. Built AFTER coercion on purpose.
-  const productionQtyByProductId = new Map<string, number>()
-  for (const line of input.lines) {
-    if (line.fulfilment_type === 'stocked') continue
-    productionQtyByProductId.set(
-      line.product_id,
-      (productionQtyByProductId.get(line.product_id) ?? 0) + line.qty,
-    )
-  }
-  const moqViolations: MoqViolation[] = []
-  // Report a violation per offending line (not per product) so the cart UI
-  // can highlight every row affected, consistent with DecorationDriftError.
-  // Stock-fulfilled lines are skipped — already-made stock has no MOQ.
-  for (const line of input.lines) {
-    if (line.fulfilment_type === 'stocked') continue
-    const effectiveMoq = getEffectiveMoq(
-      { moq: productMoqById.get(line.product_id) ?? null },
-      overrideByProductId.has(line.product_id)
-        ? { moq_override: overrideByProductId.get(line.product_id) ?? null }
-        : null,
-      { orgMoqExempt: input.context.moqExempt },
-    )
-    const totalQty = productionQtyByProductId.get(line.product_id) ?? line.qty
-    if (effectiveMoq > 1 && totalQty < effectiveMoq) {
-      moqViolations.push({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        productName: line.product_name,
-        effectiveMoq,
-        totalQty,
-      })
-    }
-  }
-  if (moqViolations.length > 0) throw new MoqViolationError(moqViolations)
-
-  // 2. Re-price every line on the server — ignore any client-sent prices.
-  // Catalogue item lines use the exact b2b_catalogue_items.id from the cart so
-  // two skins on the same source product never collapse into one product-level
-  // price bucket. Legacy/global lines keep the product-level effective price.
-  //
-  // Garment pricing still includes the decoration signature in its key, matching
-  // the cart's historical tier behavior for decorated runs. Decoration pricing
-  // below keeps its own product+decoration aggregation, so item-aware garment
-  // pricing does not silently alter decoration-tier pooling.
-  // Pooling seeds from the FULL cart when the route split it into partitions
-  // (pricing_pool_lines), so a product spanning both partitions still prices
-  // at the tier the whole cart earned — identical to a single submit call.
-  const poolLines = input.pricing_pool_lines ?? input.lines
-  const totalQtyByDecorationTierKey = new Map<string, number>()
-  for (const line of poolLines) {
-    const k = tierAggregationKey(line.product_id, line.decorations)
-    totalQtyByDecorationTierKey.set(
-      k,
-      (totalQtyByDecorationTierKey.get(k) ?? 0) + line.qty,
-    )
-  }
-
-  // ── Pooled decoration pricing (spec 2026-08-13) ──────────────────────────
-  // Resolved here, above the garment price loop, because the per-catalogue flag
-  // decides that loop's band quantity. This is the SAME once-per-checkout
-  // b2b_catalogue_items read that already resolves price_mode for manual-final
-  // lines (it used to sit further down) — widened with catalogue_id + the flag,
-  // and widened to poolLines so a partitioned submit still sees the whole cart's
-  // items. Extra rows are inert: isManualCheckoutLine only ever asks about this
-  // partition's own lines.
-  const catalogueItemIdsForPricing = Array.from(
-    new Set(
-      [...input.lines, ...poolLines]
-        .map((l) => l.catalogueItemId)
-        .filter((x): x is string => !!x),
-    ),
-  )
-  const manualItemIds = new Set<string>()
-  const catalogueIdByItemId = new Map<string, string>()
-  const poolingEnabledItemIds = new Set<string>()
-  if (catalogueItemIdsForPricing.length > 0) {
-    const { data: pmRows } = await admin
-      .from('b2b_catalogue_items')
-      .select('id, price_mode, catalogue_id, b2b_catalogues(decoration_pooling_enabled)')
-      .in('id', catalogueItemIdsForPricing)
-    for (const r of (pmRows ?? []) as Array<{
-      id: string
-      price_mode: string | null
-      catalogue_id?: string | null
-      b2b_catalogues?:
-        | { decoration_pooling_enabled?: boolean | null }
-        | { decoration_pooling_enabled?: boolean | null }[]
-        | null
-    }>) {
-      if (r.price_mode === 'manual_final') manualItemIds.add(r.id)
-      if (r.catalogue_id) catalogueIdByItemId.set(r.id, r.catalogue_id)
-      const cat = Array.isArray(r.b2b_catalogues) ? r.b2b_catalogues[0] : r.b2b_catalogues
-      if (cat?.decoration_pooling_enabled === true) poolingEnabledItemIds.add(r.id)
-    }
-  }
-
-  // With every catalogue's flag false — the default and the ship-time state —
-  // this is false and every pooled branch below is skipped entirely, including
-  // the decoration read. Flag-off costs exactly one widened select and nothing else.
-  const poolingActive = poolingEnabledItemIds.size > 0
-  const poolableDecorationIds = poolingActive
-    ? await loadPoolableDecorationIds(admin, poolLines, input.context.organizationId)
-    : new Set<string>()
-
-  /** Checkout's snake_case line adapted to the shared module's shape. */
-  const toPoolingLine = (l: CheckoutLineInput): PoolingLine => ({
-    catalogueId: l.catalogueItemId
-      ? catalogueIdByItemId.get(l.catalogueItemId) ?? null
-      : null,
-    poolingEnabled: !!l.catalogueItemId && poolingEnabledItemIds.has(l.catalogueItemId),
-    qty: l.qty,
-    fulfilmentType: l.fulfilment_type ?? null,
-    decorations: (l.decorations ?? []).map((d) => ({
-      decorationId: d.decorationId,
-      poolable: poolableDecorationIds.has(d.decorationId),
-    })),
-  })
-
-  // Seeded from poolLines — the FULL unpartitioned cart on every partition's
-  // submit call — so the shared module's stocked-line filter is load-bearing here,
-  // not incidental.
-  const poolQtyByDecorationId = poolingActive
-    ? pooledQtyByDecoration(poolLines.map(toPoolingLine))
-    : new Map<string, number>()
-
-  // Two passes, mirroring the cart: today's group totals first, then each line's
-  // band quantity from them. `totalQty` stays the REAL, un-inflated group total —
-  // it is what ordering-period pricing keeps reading. `bandQty` is the pooled
-  // max-rule quantity and is only ever an RPC qty argument.
-  const totalQtyByGarmentKey = new Map<string, number>()
-  for (const line of poolLines) {
-    const k = garmentPriceAggregationKey(line)
-    totalQtyByGarmentKey.set(k, (totalQtyByGarmentKey.get(k) ?? 0) + line.qty)
-  }
-  const garmentBandQtyForLine = (line: CheckoutLineInput): number => {
-    const own = totalQtyByGarmentKey.get(garmentPriceAggregationKey(line)) ?? line.qty
-    if (!poolingActive) return own
-    return garmentBandQty(toPoolingLine(line), poolQtyByDecorationId, own)
-  }
-
-  const garmentPriceGroups = new Map<
-    string,
-    {
-      productId: string
-      catalogueItemId: string | null
-      totalQty: number
-      bandQty: number
-    }
-  >()
-  for (const line of poolLines) {
-    const bandQty = garmentBandQtyForLine(line)
-    const k = garmentPriceKey(line, bandQty)
-    if (garmentPriceGroups.has(k)) continue
-    garmentPriceGroups.set(k, {
-      productId: line.product_id,
-      catalogueItemId: line.catalogueItemId ?? null,
-      totalQty: totalQtyByGarmentKey.get(garmentPriceAggregationKey(line)) ?? line.qty,
-      bandQty,
-    })
-  }
-
-  // PRE-ORDER: lines on pre_order items price from the period snapshot
-  // (worst case = own qty band; the close worker can only lower it).
-  // Pool-wide so a shared price group prices via the correct path even when
-  // the pre_order line itself sits in the other partition.
-  const cartCatalogueItemIds = Array.from(
-    new Set(
-      poolLines
-        .map((l) => l.catalogueItemId)
-        .filter((v): v is string => Boolean(v)),
-    ),
-  )
-  const openPeriod = await getOpenPeriodForOrg(admin, input.context.organizationId)
-  const preOrderItemIds = openPeriod
-    ? await getPreOrderItemIds(admin, cartCatalogueItemIds)
-    : new Set<string>()
-
-  const garmentPriceByKey = new Map<string, number>()
-  await Promise.all(
-    Array.from(garmentPriceGroups.entries()).map(async ([priceKey, group]) => {
-      if (
-        group.catalogueItemId &&
-        openPeriod &&
-        preOrderItemIds.has(group.catalogueItemId)
-      ) {
-        // Ordering-period pricing is spec-excluded from pooling (§5): periods
-        // pool per-item across orders on their own frozen-price system. It keeps
-        // the REAL group quantity, never the pooled band quantity.
-        const { data: unit } = await admin.rpc('period_unit_price', {
-          p_period_id: openPeriod.id,
-          p_catalogue_item_id: group.catalogueItemId,
-          p_qty: group.totalQty,
-        })
-        garmentPriceByKey.set(priceKey, Number(unit ?? 0))
-        return
-      }
-
-      if (group.catalogueItemId) {
-        const unit = await effectiveUnitPriceForItem(
-          admin,
-          group.catalogueItemId,
-          input.context.organizationId,
-          group.bandQty,
-        )
-        garmentPriceByKey.set(priceKey, unit)
-        return
-      }
-
-      // Legacy product-keyed lines carry no catalogueItemId, so they can never
-      // resolve a pooled catalogue and bandQty always equals totalQty here.
-      const { data: unit } = await admin.rpc('effective_unit_price', {
-        p_product_id: group.productId,
-        p_org_id: input.context.organizationId,
-        p_qty: group.bandQty,
-      })
-      garmentPriceByKey.set(priceKey, Number(unit ?? 0))
-    }),
-  )
-
-  // Explicit stock sell prices for the cart's stocked catalogue items. A stock
-  // draw on an item with stock_unit_price set charges that flat price (not the
-  // ladder) — matching the PDP's claimed price so the drift guard below passes.
-  const stockDrawItemIds = Array.from(
-    new Set(
-      input.lines
-        .filter((l) => l.fulfilment_type === 'stocked' && l.catalogueItemId)
-        .map((l) => l.catalogueItemId as string),
-    ),
-  )
-  const stockUnitPriceByItem = new Map<string, number>()
-  if (stockDrawItemIds.length > 0) {
-    const { data: stockPriceRows } = await admin
-      .from('b2b_catalogue_items')
-      .select('id, stock_unit_price')
-      .in('id', stockDrawItemIds)
-    for (const r of (stockPriceRows ?? []) as Array<{
-      id: string
-      stock_unit_price: number | string | null
-    }>) {
-      if (r.stock_unit_price != null) {
-        stockUnitPriceByItem.set(r.id, Number(r.stock_unit_price))
-      }
-    }
-  }
-
-  const repriced = input.lines.map(l => ({
-    ...l,
-    unit_price: garmentUnitPriceForLine(
-      l,
-      garmentPriceByKey.get(garmentPriceKey(l, garmentBandQtyForLine(l))) ?? 0,
-      stockUnitPriceByItem,
-    ),
-  }))
-
-  // 2a. Defensive unit-price drift guard. Only kicks in when the cart carried
-  //     a brackets snapshot (post-2026-05-15) — for legacy carts (no
-  //     has_brackets flag) we keep the historical silent re-price path. The
-  //     cart already re-derives unitPrice from its bracket snapshot on every
-  //     qty edit (CartProvider.updateLine + pickBracket), so a mismatch here
-  //     means the snapshot diverged from the live tier (e.g. AM changed
-  //     pricing while the customer was checking out).
-  const PRICE_DRIFT_TOLERANCE = 0.005
-  const unitPriceDrift: UnitPriceDrift[] = []
-  for (const line of input.lines) {
-    if (!line.has_brackets) continue
-    if (typeof line.claimed_unit_price !== 'number') continue
-    const canonical = garmentUnitPriceForLine(
-      line,
-      garmentPriceByKey.get(garmentPriceKey(line, garmentBandQtyForLine(line))) ?? 0,
-      stockUnitPriceByItem,
-    )
-    if (Math.abs(line.claimed_unit_price - canonical) > PRICE_DRIFT_TOLERANCE) {
-      unitPriceDrift.push({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        productName: line.product_name,
-        qty: line.qty,
-        claimedUnitPrice: line.claimed_unit_price,
-        canonicalUnitPrice: canonical,
-      })
-    }
-  }
-  if (unitPriceDrift.length > 0) {
-    throw new UnitPriceDriftError(unitPriceDrift)
-  }
-
-  // 2c. Per-variant billing modes + the drift guard (spec 2026-07-17 D4).
-  //     MUST run before the RPC at step 3: this throws, and a throw after the
-  //     RPC would leave a committed order behind while still failing the
-  //     customer. The resolved map is reused at step 5c (Xero zeroing), by the
-  //     Monday billing note and by the billed-total snapshot, so there is
-  //     exactly ONE read per submit.
-  const billingVariantIds = Array.from(
-    new Set(input.lines.map((l) => l.variant_id).filter((v): v is string => !!v)),
-  )
-  const billingModeByVariant = await resolveLineBillingModes(
-    admin,
-    input.context.organizationId,
-    billingVariantIds,
-  )
-  const billingModeDrift = buildBillingModeDrift(input.lines, billingModeByVariant)
-  if (billingModeDrift.length > 0) {
-    throw new BillingModeDriftError(billingModeDrift)
-  }
-
-  // 2b. Re-validate every selected decoration on every line. Server-side
-  //     read of the link table + org_decoration; reject on cross-org reuse,
-  //     unattached link, inactive decoration, mismatched catalogue item, or
-  //     price drift greater than zero (per Decision #3 — no tolerance, AM
-  //     edits are explicit). Validated decorations get persisted onto the
-  //     order line as a jsonb snapshot below in step 4.
-  //
-  //     Decoration tier qty uses the same (product_id, decoration_signature)
-  //     aggregate as the garment above — keeps server and cart in lockstep on
-  //     band lookup. Two lines that share product + signature pool qty for the
-  //     engine; subset / different-signature lines don't. The earlier
-  //     by-linkId aggregation was looser and could pool qty across distinct
-  //     signatures that happened to share a linkId.
-
-  const validatedByLineKey = new Map<string, CheckoutLineDecorationInput[]>()
-  // Phase 2 — catalogue_item_id each line's decoration links resolve to, used
-  // only as a drift cross-check against the line's own catalogueItemId.
-  const decoCatalogueItemIdByLineKey = new Map<string, string>()
-  // Manual-final (2026-06-10) — the engine's combined decoration figure per line
-  // key (one number for the whole item). When set it is the authoritative per-unit
-  // decoration cost; the per-placement sum is NOT used. Absent for computed lines.
-  const manualDecorationByLineKey = new Map<string, number>()
-  const drift: DecorationDrift[] = []
-
-  // Manual-final (2026-06-10): a line is manual iff its catalogue item's
-  // price_mode = 'manual_final'. We read it from the DB (authoritative) rather
-  // than inferring from a non-null decoration RPC — a manual item priced below
-  // its lowest decoration band returns NULL but must still bill 0 decoration,
-  // NOT fall through to the per-placement rate-sheet sum.
-  // (manualItemIds is resolved above, in the same widened b2b_catalogue_items
-  // read that resolves each line's catalogue id and pooling flag.)
-
-  type LinkRow = {
-    id: string
-    catalogue_item_id: string
-    unit_price_override: number | string | null
-    snapshot_url: string | null
-    b2b_catalogue_items: { id: string; source_product_id: string }
-    org_decorations: {
-      id: string
-      organization_id: string
-      name: string
-      decoration_method: string
-      unit_price: number | string
-      is_active: boolean
-      width_mm: number | null
-      height_mm: number | null
-      colour_count: number | null
-      organization_artworks: { public_url: string } | { public_url: string }[] | null
-      decoration_locations:
-        | { location: string; placement_key: string | null }
-        | { location: string; placement_key: string | null }[]
-        | null
-    }
-  }
-
-  // One batched link fetch for the whole order (was one select per line — the
-  // checkout round-trip fan-out, see PERF-FINDINGS.md). Chunked to keep the
-  // PostgREST `in` filter bounded. A dec.linkId missing from the map is
-  // 'detached', exactly as it was with the per-line select.
-  const allLinkIds = Array.from(
-    new Set(input.lines.flatMap((l) => (l.decorations ?? []).map((d) => d.linkId))),
-  )
-  const linkRowById = new Map<string, LinkRow>()
-  for (let i = 0; i < allLinkIds.length; i += 100) {
-    const { data: linkRows, error: linkErr } = await admin
-      .from('b2b_catalogue_item_decorations')
-      .select(`
-        id,
-        catalogue_item_id,
-        unit_price_override,
-        snapshot_url,
-        b2b_catalogue_items!inner(id, source_product_id),
-        org_decorations!inner(
-          id,
-          organization_id,
-          name,
-          decoration_method,
-          unit_price,
-          is_active,
-          width_mm,
-          height_mm,
-          colour_count,
-          organization_artworks!org_decorations_artwork_id_fkey(public_url),
-          decoration_locations!org_decorations_decoration_location_id_fkey(location, placement_key)
-        )
-      `)
-      .in('id', allLinkIds.slice(i, i + 100))
-      .eq('is_published', true)
-    if (linkErr) {
-      throw new Error(`decoration lookup failed: ${linkErr.message}`)
-    }
-    for (const r of (linkRows as unknown as LinkRow[]) ?? []) linkRowById.set(r.id, r)
-  }
-
-  // Decoration tier qty for a line — pooled across same product+signature
-  // lines, mirroring the cart (the same aggregate the loop used per line).
-  const decorationQtyForLine = (line: CheckoutLineInput): number =>
-    totalQtyByDecorationTierKey.get(tierAggregationKey(line.product_id, line.decorations)) ??
-    line.qty
-
-  /**
-   * The band quantity ONE decoration of ONE line prices at. Each placement reads
-   * its own pool, so a garment carrying an extra back print picks that print's
-   * smaller band independently — the spec's "sequential difference added on".
-   */
-  const decorationQtyFor = (line: CheckoutLineInput, decorationId: string): number => {
-    const fallback = decorationQtyForLine(line)
-    if (!poolingActive) return fallback
-    return pooledDecorationQty(
-      toPoolingLine(line),
-      { decorationId, poolable: poolableDecorationIds.has(decorationId) },
-      poolQtyByDecorationId,
-      fallback,
-    )
-  }
-
-  const isPooledLine = (line: CheckoutLineInput): boolean =>
-    poolingActive && isPoolingLine(toPoolingLine(line))
-
-  const isManualCheckoutLine = (line: CheckoutLineInput): boolean =>
-    !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
-
-  /**
-   * Manual-final items in a POOLED catalogue stop using the item's combined
-   * per-band decoration figure: one number per garment cannot express a
-   * per-placement delta, which is exactly why pooling moves decoration price onto
-   * per-decoration ladders (spec §3). Those lines take the per-placement path
-   * instead — Sigma effective_decoration_unit_price at each placement's pooled qty —
-   * matching what the cart claims for them.
-   */
-  const isCombinedManualLine = (line: CheckoutLineInput): boolean =>
-    isManualCheckoutLine(line) && !isPooledLine(line)
-
-  // Pre-resolve every decoration price this order needs, concurrently and
-  // deduplicated: manual lines need ONE combined figure per distinct
-  // (catalogue item, pooled qty); computed decorations need one engine price
-  // per distinct (link, pooled qty). Only structurally-valid rows are priced —
-  // rejected placements (detached/cross-org/inactive/wrong-item) never were.
-  const manualPairs = new Map<string, { itemId: string; qty: number }>()
-  const computedPairs = new Map<string, { row: LinkRow; qty: number }>()
-  for (const line of input.lines) {
-    if (isCombinedManualLine(line) && line.catalogueItemId) {
-      const qty = decorationQtyForLine(line)
-      manualPairs.set(`${line.catalogueItemId}::${qty}`, { itemId: line.catalogueItemId, qty })
-      continue
-    }
-    for (const dec of line.decorations ?? []) {
-      const row = linkRowById.get(dec.linkId)
-      if (!row) continue
-      const od = row.org_decorations
-      if (od.organization_id !== input.context.organizationId) continue
-      if (!od.is_active) continue
-      if (row.b2b_catalogue_items.source_product_id !== line.product_id) continue
-      const qty = decorationQtyFor(line, od.id)
-      computedPairs.set(`${row.id}::${qty}`, { row, qty })
-    }
-  }
-
-  // The tier multiplier depends only on the org — resolve it ONCE (it was
-  // re-queried per decoration inside effectiveDecorationPrice), and only when
-  // a computed decoration actually needs pricing.
-  const tierMultiplier =
-    computedPairs.size > 0
-      ? await loadTierMultiplier(admin, input.context.organizationId)
-      : 1
-
-  const manualPriceByPair = new Map<string, number>()
-  const computedPriceByPair = new Map<string, number>()
-  await Promise.all([
-    ...Array.from(manualPairs.entries()).map(async ([key, pair]) => {
-      const { data: mc, error: mcErr } = await admin.rpc('catalogue_item_decoration_price', {
-        p_catalogue_item_id: pair.itemId,
-        p_qty: pair.qty,
-      })
-      const value = !mcErr && mc != null && Number.isFinite(Number(mc)) ? Number(mc) : 0
-      manualPriceByPair.set(key, value)
-    }),
-    ...Array.from(computedPairs.entries()).map(async ([key, pair]) => {
-      const od = pair.row.org_decorations
-      const effective = await effectiveDecorationPrice(
-        admin,
-        {
-          orgDecorationId: od.id,
-          organizationId: input.context.organizationId,
-          unitPriceOverride: pair.row.unit_price_override,
-          baseUnitPrice: od.unit_price,
-        },
-        pair.qty,
-        tierMultiplier,
-      )
-      computedPriceByPair.set(key, effective)
-    }),
-  ])
-
-  function applyManualDecorationForLine(
-    line: CheckoutLineInput,
-    decorationQty: number,
-    driftLinkId: string,
-  ): void {
-    if (!line.catalogueItemId) return
-    const manualCombined =
-      manualPriceByPair.get(`${line.catalogueItemId}::${decorationQty}`) ?? 0
-    const serverR = Number(manualCombined.toFixed(2))
-    const claimedR =
-      line.claimed_manual_decoration == null
-        ? null
-        : Number(Number(line.claimed_manual_decoration).toFixed(2))
-    if (claimedR != null && claimedR !== serverR) {
-      drift.push({
-        cartLineId: line.cart_line_id ?? null,
-        productId: line.product_id,
-        linkId: driftLinkId,
-        decorationName: 'Decoration (combined)',
-        was: claimedR,
-        now: serverR,
-        reason: 'price_drift',
-      })
-    } else {
-      manualDecorationByLineKey.set(
-        makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null),
-        serverR,
-      )
-    }
-  }
-
-  for (const line of input.lines) {
-    const decs = line.decorations ?? []
-    // Pooled manual items take the per-placement path (see isCombinedManualLine).
-    const isManualLine = isCombinedManualLine(line)
-    if (decs.length === 0) {
-      if (isManualLine) {
-        applyManualDecorationForLine(line, decorationQtyForLine(line), '')
-      }
-      validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), [])
-      continue
-    }
-    const byId = linkRowById
-    const validated: CheckoutLineDecorationInput[] = []
-
-    // Line-level decoration tier qty (aggregated across same product+signature
-    // lines, mirroring the cart). Still the qty for the manual-final combined
-    // figure; per-placement prices now resolve their OWN pooled qty via
-    // decorationQtyFor, since two placements on one garment can sit in different
-    // bands when their artworks appear on different numbers of garments.
-    const decorationQty = decorationQtyForLine(line)
-
-    // Manual-final: when the line's catalogue item is manual, resolve the item's
-    // ONE combined decoration figure from the engine (exact, no multiplier).
-    // A NULL band => 0 decoration (the item has no decoration price at this qty);
-    // we still treat the line as manual (keep per-placement VALIDATION, skip
-    // per-placement pricing + drift, bill the combined at the line level).
-
-    for (const dec of decs) {
-      const row = byId.get(dec.linkId)
-      if (!row) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: dec.linkId,
-          decorationName: dec.name,
-          was: dec.unitPrice,
-          now: 0,
-          reason: 'detached',
-        })
-        continue
-      }
-      const od = row.org_decorations
-      if (od.organization_id !== input.context.organizationId) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: dec.linkId,
-          decorationName: od.name,
-          was: dec.unitPrice,
-          now: Number(od.unit_price),
-          reason: 'cross_org',
-        })
-        continue
-      }
-      if (!od.is_active) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: dec.linkId,
-          decorationName: od.name,
-          was: dec.unitPrice,
-          now: Number(od.unit_price),
-          reason: 'inactive',
-        })
-        continue
-      }
-      if (row.b2b_catalogue_items.source_product_id !== line.product_id) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: dec.linkId,
-          decorationName: od.name,
-          was: dec.unitPrice,
-          now: Number(od.unit_price),
-          reason: 'wrong_item',
-        })
-        continue
-      }
-      const loc = pickOne(od.decoration_locations)
-      const art = pickOne(od.organization_artworks)
-
-      // Manual-final: the placement stays on the order as metadata (real name +
-      // artwork) but is NOT individually billed — unitPrice 0; the line's
-      // combined figure (below) is the decoration cost. No per-placement drift.
-      if (isManualLine) {
-        validated.push({
-          linkId: row.id,
-          decorationId: od.id,
-          name: od.name,
-          method: od.decoration_method,
-          positionLabel: loc?.location ?? null,
-          unitPrice: 0,
-          artworkUrl: art?.public_url ?? dec.artworkUrl,
-          snapshotUrl: row.snapshot_url,
-        })
-        continue
-      }
-
-      const effective =
-        computedPriceByPair.get(`${row.id}::${decorationQtyFor(line, od.id)}`) ?? 0
-      if (effective !== dec.unitPrice) {
-        drift.push({
-          cartLineId: line.cart_line_id ?? null,
-          productId: line.product_id,
-          linkId: dec.linkId,
-          decorationName: od.name,
-          was: dec.unitPrice,
-          now: effective,
-          reason: 'price_drift',
-        })
-        continue
-      }
-      validated.push({
-        linkId: row.id,
-        decorationId: od.id,
-        name: od.name,
-        method: od.decoration_method,
-        positionLabel: loc?.location ?? null,
-        unitPrice: effective,
-        artworkUrl: art?.public_url ?? dec.artworkUrl,
-        snapshotUrl: row.snapshot_url,
-      })
-    }
-
-    // Manual-final: the SERVER combined is authoritative and always billed.
-    // When the cart sent a claim, drift-check it (round 2dp then exact, per
-    // Decision #3 — no tolerance) and BLOCK on mismatch so a stale/tampered cart
-    // can't surprise the customer. When the claim is null/absent (unresolved PDP
-    // fetch, reorder rebuild, legacy cart) we silently re-price from the engine —
-    // mirrors the garment "legacy cart" path (UnitPriceDrift only guards carts
-    // that carried a snapshot).
-    if (isManualLine) {
-      applyManualDecorationForLine(
-        line,
-        decorationQty,
-        validated[0]?.linkId ?? decs[0]?.linkId ?? '',
-      )
-    }
-
-    validatedByLineKey.set(makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), validated)
-    if (validated.length > 0) {
-      const decoCatId = byId.get(validated[0].linkId)?.catalogue_item_id
-      if (decoCatId) {
-        decoCatalogueItemIdByLineKey.set(
-          makeLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null),
-          decoCatId,
-        )
-      }
-    }
-  }
-
-  if (drift.length > 0) {
-    throw new DecorationDriftError(drift)
-  }
-
-  // 3. Call the shared submit_b2b_order RPC. We fold the per-unit decoration
-  //    cost into unit_price so the stored subtotal / total_amount / Monday
-  //    subitems / order-confirmation email all match what the cart UI showed
-  //    (cart's PriceBreakdown rolls decoration into the per-unit line).
-  //    Without this, the quote would store garment-only and we'd under-bill
-  //    the customer for the decoration they ordered.
-  const decorationCostByLineKey = new Map<string, number>()
-  // Index-aligned to `repriced` (and therefore to input.lines and
-  // orderBillingLines, both .map over it). The billed-total snapshot below needs
-  // the per-line figure; built in this same loop so it cannot disagree with the
-  // running total.
-  const decorationRevenueByLineIndex: number[] = []
-  let totalDecorationRevenue = 0
-  for (const l of repriced) {
-    const lineKey = makeLineKey(l.product_id, l.variant_id ?? null, l.size_id ?? null)
-    // Manual-final lines bill ONE combined figure (validated entries are $0
-    // metadata); computed lines sum the per-placement prices.
-    const manualDeco = manualDecorationByLineKey.get(lineKey)
-    const validated = validatedByLineKey.get(lineKey) ?? []
-    const perUnit =
-      manualDeco != null ? manualDeco : validated.reduce((s, d) => s + d.unitPrice, 0)
-    decorationCostByLineKey.set(lineKey, perUnit)
-    const lineRevenue = perUnit * l.qty
-    decorationRevenueByLineIndex.push(lineRevenue)
-    totalDecorationRevenue += lineRevenue
-  }
+  const prepared = await prepareCustomerOrderPartition(admin, input, preparationOptions)
+  const {
+    shipToStoreIds,
+    shippingAddress,
+    formattedShippingAddress,
+    repriced,
+    validatedByLineKey,
+    decoCatalogueItemIdByLineKey,
+    decorationCostByLineKey,
+    totalDecorationRevenue,
+    billingModeByVariant,
+    orderType,
+    needsInvoicing,
+    orgRegion,
+    pickFee,
+    billedTotal,
+    openPeriod,
+    preOrderItemIds,
+  } = preparedCheckoutInternalsFor(prepared)
+  const isStockOnHandOrder = orderType === 'stock_on_hand'
 
   // Phase 2 — drift signal only (we never throw): if a line's own catalogue
   // identity disagrees with the one its decoration links resolve to, log once
@@ -1602,7 +446,6 @@ export async function submitCustomerOrder(
   // fail-audit like every other post-commit side-effect in this function: record
   // ORDER_TYPE_STAMP_FAILED (so a mis-typed order is discoverable + re-stampable)
   // and continue. Worst case the order stays 'purchase_order' until re-stamped.
-  const orderType = classifyOrderType(input.lines)
   const { error: orderTypeError } = await admin
     .from('orders')
     .update({ order_type: orderType })
@@ -1645,40 +488,6 @@ export async function submitCustomerOrder(
   // `billingModeByVariant` is resolved once at step 2c, before the RPC — the
   // drift guard there has to be able to throw without stranding a committed
   // order, and one read serves this note, the Xero zeroing and the billed total.
-  const orderBillingLines = input.lines.map((l) => ({
-    stocked: l.fulfilment_type === 'stocked',
-    billingMode: l.variant_id
-      ? billingModeByVariant.get(l.variant_id) ?? 'invoice_on_dispatch'
-      : ('invoice_on_dispatch' as BillingMode),
-  }))
-  const needsInvoicing = orderNeedsInvoicing(orderBillingLines)
-  const isStockOnHandOrder = orderType === 'stock_on_hand'
-  // Deco-inclusive: repriced.unit_price is garment-only (decoration is folded
-  // into unit_price only inside the p_lines RPC payload), but the customer's
-  // checkout estimate bands on allInUnitPrice (garment + decoration), so the
-  // server must band on the same figure or the fee charged diverges from the
-  // fee quoted at a $100/$200/$300/$400 boundary.
-  const goodsSubtotal =
-    repriced.reduce((t, l) => t + l.unit_price * l.qty, 0) + totalDecorationRevenue
-  // AU Stage 1 — the org's billing region, fetched ONCE and reused by the
-  // picking-fee gate, Starshipit gate, Xero region config, Monday currency
-  // suffix, job-tracker stamp and email currency below. Unknown/missing → NZ
-  // (identical to pre-region behavior for every existing org).
-  const { data: orgRegionRow } = await admin
-    .from('organizations')
-    .select('region')
-    .eq('id', input.context.organizationId)
-    .maybeSingle()
-  const orgRegion: 'NZ' | 'AU' =
-    (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
-
-  const pickFee = orderPickingFee({
-    isStockOnHand: isStockOnHandOrder,
-    shipCountry: (shippingAddress as { country?: unknown }).country as string | null | undefined,
-    goodsSubtotal,
-    orgRegion,
-  })
-
   // Record decoration revenue separately on the quote so finance can split
   // garment vs decoration without parsing quote_items.decorations jsonb.
   // total_amount already includes decoration via the folded unit_price above.
@@ -1699,15 +508,6 @@ export async function submitCustomerOrder(
   //
   // Written post-RPC with a plain update, exactly like decoration_cost above —
   // which is why neither needs a submit_b2b_order change.
-  const billedTotal = billedOrderTotal(
-    orderBillingLines.map((billing, index) => ({
-      stocked: billing.stocked,
-      billingMode: billing.billingMode,
-      goodsValue: repriced[index].unit_price * repriced[index].qty,
-      decorationRevenue: decorationRevenueByLineIndex[index] ?? 0,
-    })),
-    pickFee,
-  )
   await admin
     .from('quotes')
     .update({ picking_fee: round2(pickFee), billed_total: billedTotal })
