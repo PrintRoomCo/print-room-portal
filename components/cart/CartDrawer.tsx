@@ -18,7 +18,11 @@ import { useCart } from './useCart'
 
 export function CartDrawer() {
   const cart = useCart()
-  const { access } = useCompany()
+  const {
+    access,
+    countryPartitionEnabled,
+    defaultBillingCountryCode,
+  } = useCompany()
   const isOrgAdmin = access?.role === 'org_admin'
   const drawer = useCartDrawer()
   const pathname = usePathname()
@@ -51,9 +55,18 @@ export function CartDrawer() {
           decorationPerUnit: decorationPerUnit(line),
         })),
         gstRate: gstRateForRegion(access?.region),
-        pickingFee: estimateCartPickingFee(cart.lines, access?.region),
+        pickingFee: estimateCartPickingFee(cart.lines, {
+          countryPartitionEnabled,
+          defaultBillCountry: defaultBillingCountryCode,
+          legacyOrgRegion: access?.region,
+        }),
       }),
-    [cart.lines, access?.region],
+    [
+      cart.lines,
+      access?.region,
+      countryPartitionEnabled,
+      defaultBillingCountryCode,
+    ],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
   const canCheckout = cart.lines.length > 0 && !oversell && !moqShort
@@ -120,7 +133,7 @@ export function CartDrawer() {
               {breakdown.pickingFee > 0 && (
                 <div className="mb-1 flex items-baseline justify-between">
                   <span className="flex items-center gap-1.5 text-sm text-gray-500">
-                    Picking fee
+                    {countryPartitionEnabled ? 'Estimated picking fee' : 'Picking fee'}
                     <PickingFeeInfo
                       goodsBasis={stockedGoods}
                       format={formatCartMoney}

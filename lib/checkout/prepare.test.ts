@@ -565,4 +565,28 @@ describe('prepareCustomerOrderPartition exact destination pricing', () => {
       ],
     })
   })
+
+  it('charges the deliberate AU-org → NZ-stock fee only in enabled preparation', async () => {
+    const canaryConfig = countryConfig({
+      organization: { region: 'AU' },
+      products: [{ id: 'product-1', fulfilmentType: 'stocked', moq: 24 }],
+    })
+    const off = await prepareCustomerOrderPartition(
+      makeFanoutStub(canaryConfig).admin,
+      countryInput([countryLine({ fulfilment_type: 'stocked', qty: 5 })], 'NZ'),
+      {
+        countryPartitionEnabled: false,
+        partitionKey: 'stock_on_hand',
+        country: NZ,
+      },
+    )
+    const on = await prepareEnabled(
+      makeFanoutStub(canaryConfig),
+      countryInput([countryLine({ fulfilment_type: 'stocked', qty: 5 })], 'NZ'),
+      NZ,
+    )
+
+    expect(off.totals.pickingFee).toBe(0)
+    expect(on.totals.pickingFee).toBe(30)
+  })
 })

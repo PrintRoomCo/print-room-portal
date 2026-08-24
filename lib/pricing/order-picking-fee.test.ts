@@ -1,47 +1,65 @@
 import { describe, it, expect } from 'vitest'
 import type { CartLine } from '@/lib/cart/types'
 import {
+  checkoutPickingFee,
   estimateCartPickingFee,
-  isNewZealandShipTo,
   orderPickingFee,
   stockedGoodsValue,
 } from './order-picking-fee'
 
-describe('isNewZealandShipTo', () => {
-  it.each(['NZ', 'nz', 'NZL', 'New Zealand', 'new-zealand', ' NZ '])('%s → true', (c) =>
-    expect(isNewZealandShipTo(c)).toBe(true))
-  it.each(['', 'AU', 'Australia', 'United States'])('%s → false', (c) =>
-    expect(isNewZealandShipTo(c)).toBe(false))
-  it('null/undefined → false', () => {
-    expect(isNewZealandShipTo(null)).toBe(false)
-    expect(isNewZealandShipTo(undefined)).toBe(false)
+describe('orderPickingFee exact bill-country rule', () => {
+  it.each([
+    { orderType: 'stock_on_hand' as const, billCountry: 'NZ', expected: 30 },
+    { orderType: 'stock_on_hand' as const, billCountry: 'AU', expected: 0 },
+    { orderType: 'purchase_order' as const, billCountry: 'NZ', expected: 0 },
+    { orderType: 'purchase_order' as const, billCountry: 'AU', expected: 0 },
+  ])('$orderType / $billCountry → $expected', ({ orderType, billCountry, expected }) => {
+    expect(orderPickingFee({ orderType, billCountry, goodsSubtotal: 100 })).toBe(expected)
   })
-})
 
-describe('orderPickingFee', () => {
-  it('applies the NZ band to a stock-on-hand NZ order', () => {
-    expect(orderPickingFee({ isStockOnHand: true, shipCountry: 'NZ', goodsSubtotal: 100, orgRegion: 'NZ' })).toBe(30)
-  })
-  it('is 0 for a purchase order (not stock-on-hand)', () => {
-    expect(orderPickingFee({ isStockOnHand: false, shipCountry: 'NZ', goodsSubtotal: 100, orgRegion: 'NZ' })).toBe(0)
-  })
-  it('is 0 for an AUS ship-to (region seam)', () => {
-    expect(orderPickingFee({ isStockOnHand: true, shipCountry: 'Australia', goodsSubtotal: 100, orgRegion: 'NZ' })).toBe(0)
-  })
-  it.each([null, undefined, '', 'United States', 'United Kingdom'])(
-    'is 0 for a non-NZ or unknown ship-to (%s)',
-    (shipCountry) => {
-      expect(orderPickingFee({ isStockOnHand: true, shipCountry, goodsSubtotal: 100, orgRegion: 'NZ' })).toBe(0)
+  it.each(['nz', 'NZL', 'New Zealand', '', null, undefined])(
+    'does not fuzzy-match %j',
+    (billCountry) => {
+      expect(
+        orderPickingFee({
+          orderType: 'stock_on_hand',
+          billCountry: billCountry as string,
+          goodsSubtotal: 100,
+        }),
+      ).toBe(0)
     },
   )
+})
 
-  it('is 0 for an AU org even with NZ ship-to (AU Stage 1 — AUD invoice, NZD fee mismatch)', () => {
-    expect(orderPickingFee({ isStockOnHand: true, shipCountry: 'NZ', goodsSubtotal: 100, orgRegion: 'AU' })).toBe(0)
+describe('checkoutPickingFee flag compatibility', () => {
+  it('changes AU-org → NZ-stock only when the country cutover is enabled', () => {
+    const input = {
+      orderType: 'stock_on_hand' as const,
+      billCountry: 'NZ',
+      goodsSubtotal: 100,
+      legacyShipCountry: 'NZ',
+      legacyOrgRegion: 'AU',
+    }
+
+    expect(checkoutPickingFee({ ...input, countryPartitionEnabled: false })).toBe(0)
+    expect(checkoutPickingFee({ ...input, countryPartitionEnabled: true })).toBe(30)
   })
-  it('null/undefined orgRegion behaves as NZ', () => {
-    expect(orderPickingFee({ isStockOnHand: true, shipCountry: 'NZ', goodsSubtotal: 100, orgRegion: null })).toBe(30)
-    expect(orderPickingFee({ isStockOnHand: true, shipCountry: 'NZ', goodsSubtotal: 100, orgRegion: undefined })).toBe(30)
-  })
+
+  it.each(['NZ', 'nz', 'NZL', 'New Zealand', 'new-zealand', ' NZ '])(
+    'retains the old fuzzy NZ result only in the flag-off adapter for %j',
+    (legacyShipCountry) => {
+      expect(
+        checkoutPickingFee({
+          countryPartitionEnabled: false,
+          orderType: 'stock_on_hand',
+          billCountry: '',
+          goodsSubtotal: 100,
+          legacyShipCountry,
+          legacyOrgRegion: 'NZ',
+        }),
+      ).toBe(30)
+    },
+  )
 })
 
 function cartLine(over: Partial<CartLine>): CartLine {
@@ -106,10 +124,28 @@ describe('stockedGoodsValue / estimateCartPickingFee', () => {
     ).toBe(0)
   })
 
-  it('estimateCartPickingFee is 0 for an AU org', () => {
+  it('uses the exact default country when enabled and the frozen region gate when off', () => {
     const lines = [cartLine({ qty: 5, unitPrice: 20 })]
-    expect(estimateCartPickingFee(lines, 'AU')).toBe(0)
-    expect(estimateCartPickingFee(lines, 'NZ')).toBe(30)
-    expect(estimateCartPickingFee(lines)).toBe(30) // no region in scope → NZ default
+    expect(
+      estimateCartPickingFee(lines, {
+        countryPartitionEnabled: true,
+        defaultBillCountry: 'NZ',
+        legacyOrgRegion: 'AU',
+      }),
+    ).toBe(30)
+    expect(
+      estimateCartPickingFee(lines, {
+        countryPartitionEnabled: true,
+        defaultBillCountry: 'AU',
+        legacyOrgRegion: 'NZ',
+      }),
+    ).toBe(0)
+    expect(
+      estimateCartPickingFee(lines, {
+        countryPartitionEnabled: false,
+        defaultBillCountry: 'NZ',
+        legacyOrgRegion: 'AU',
+      }),
+    ).toBe(0)
   })
 })

@@ -35,7 +35,7 @@ import {
 } from '@/lib/pricing/period-brackets'
 import { orderNeedsInvoicing } from '@/lib/checkout/order-billing'
 import { resolveLineBillingModes } from '@/lib/checkout/resolve-line-billing-modes'
-import { orderPickingFee } from '@/lib/pricing/order-picking-fee'
+import { checkoutPickingFee } from '@/lib/pricing/order-picking-fee'
 import { round2 } from '@/lib/pricing/pricingMath'
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
@@ -1340,14 +1340,16 @@ export async function prepareCustomerOrderPartition(
     .maybeSingle()
   const orgRegion: 'NZ' | 'AU' =
     (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
-  const pickFee = orderPickingFee({
-    isStockOnHand: orderType === 'stock_on_hand',
-    shipCountry: (shippingAddress as { country?: unknown }).country as
+  const pickFee = checkoutPickingFee({
+    countryPartitionEnabled: options.countryPartitionEnabled,
+    orderType,
+    billCountry: options.country.code,
+    goodsSubtotal: goodsValueForBand,
+    legacyShipCountry: (shippingAddress as { country?: unknown }).country as
       | string
       | null
       | undefined,
-    goodsSubtotal: goodsValueForBand,
-    orgRegion,
+    legacyOrgRegion: orgRegion,
   })
 
   let billedGoodsSubtotal = 0

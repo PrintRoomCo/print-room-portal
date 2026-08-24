@@ -2,34 +2,65 @@ import { allInUnitPrice, type CartLine } from '@/lib/cart/types'
 import { pickingFeeForGoods } from './picking-fee'
 import { round2 } from './pricingMath'
 
-/** Accept the common free-text/code forms used by saved and one-time addresses. */
-export function isNewZealandShipTo(country: string | null | undefined): boolean {
-  const normalized = (typeof country === 'string' ? country : '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]/g, '')
-  return normalized === 'nz' || normalized === 'nzl' || normalized === 'newzealand'
+/**
+ * Canonical SP3 picking fee. Country normalization has already happened at the
+ * checkout boundary, so billing accepts only the exact ISO bill country.
+ */
+export function orderPickingFee(input: {
+  orderType: 'purchase_order' | 'stock_on_hand'
+  billCountry: string
+  goodsSubtotal: number
+}): number {
+  // SP3 deliberate billing change: the destination partition owns this fee.
+  // Therefore an AU-headquartered org shipping stock to NZ now pays the NZ fee.
+  if (input.orderType !== 'stock_on_hand' || input.billCountry !== 'NZ') return 0
+  return pickingFeeForGoods(input.goodsSubtotal)
 }
 
 /**
- * The NZ picking fee for a whole order. Applies to stock-on-hand orders shipping
- * to NZ; 0 otherwise (purchase orders, non-NZ, or unknown ship-to). `goodsSubtotal` is the
- * ex-GST goods total (incl. any folded decoration). Shared by the server
- * (checkout submit) AND the customer checkout summary so the figure the customer
- * sees on the review page matches the Xero draft and the Monday billing note.
+ * Flag-off compatibility only. Delete with CHECKOUT_COUNTRY_PARTITION_ENABLED.
+ * This freezes the pre-SP3 fuzzy address and AU-region override and is never
+ * reached by enabled preparation.
  */
-export function orderPickingFee(input: {
-  isStockOnHand: boolean
+function legacyPickingFeeWhenCountryPartitionOff(input: {
+  orderType: 'purchase_order' | 'stock_on_hand'
   shipCountry: string | null | undefined
   goodsSubtotal: number
-  /** organizations.region — an AU org NEVER pays the NZ picking fee, even when
-   *  shipping to NZ (the fee is NZD; the order bills AUD). Null/unknown = NZ.
-   *  Required so no caller can silently skip the gate. */
   orgRegion: string | null | undefined
 }): number {
   if ((input.orgRegion ?? 'NZ') === 'AU') return 0
-  if (!input.isStockOnHand || !isNewZealandShipTo(input.shipCountry)) return 0
+  const normalized = (typeof input.shipCountry === 'string' ? input.shipCountry : '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+  const isLegacyNz =
+    normalized === 'nz' || normalized === 'nzl' || normalized === 'newzealand'
+  if (input.orderType !== 'stock_on_hand' || !isLegacyNz) return 0
   return pickingFeeForGoods(input.goodsSubtotal)
+}
+
+/** Selects the frozen dark-deployment path before invoking canonical SP3 billing. */
+export function checkoutPickingFee(input: {
+  countryPartitionEnabled: boolean
+  orderType: 'purchase_order' | 'stock_on_hand'
+  billCountry: string
+  goodsSubtotal: number
+  legacyShipCountry: string | null | undefined
+  legacyOrgRegion: string | null | undefined
+}): number {
+  if (!input.countryPartitionEnabled) {
+    return legacyPickingFeeWhenCountryPartitionOff({
+      orderType: input.orderType,
+      shipCountry: input.legacyShipCountry,
+      goodsSubtotal: input.goodsSubtotal,
+      orgRegion: input.legacyOrgRegion,
+    })
+  }
+  return orderPickingFee({
+    orderType: input.orderType,
+    billCountry: input.billCountry,
+    goodsSubtotal: input.goodsSubtotal,
+  })
 }
 
 /**
@@ -47,13 +78,32 @@ export function stockedGoodsValue(lines: CartLine[]): number {
 }
 
 /**
- * Drawer-side fee estimate. Assumes an NZ ship-to (the drawer cannot know the
- * address yet; checkout recomputes with the real one). 0 when the cart has no
- * stocked goods — the drawer then shows no fee row.
+ * Drawer-side fee estimate. SP3 uses the organization's exact default billing
+ * country until checkout knows the final ship-to; the flag-off path preserves
+ * the legacy assumed-NZ destination. 0 when the cart has no stocked goods.
  */
-export function estimateCartPickingFee(lines: CartLine[], orgRegion?: string | null): number {
-  if ((orgRegion ?? 'NZ') === 'AU') return 0
+export function estimateCartPickingFee(
+  lines: CartLine[],
+  options: {
+    countryPartitionEnabled: boolean
+    defaultBillCountry: string | null
+    legacyOrgRegion: string | null | undefined
+  } = {
+    countryPartitionEnabled: false,
+    defaultBillCountry: null,
+    legacyOrgRegion: null,
+  },
+): number {
   const goods = stockedGoodsValue(lines)
   if (goods <= 0) return 0
-  return pickingFeeForGoods(goods)
+  return checkoutPickingFee({
+    countryPartitionEnabled: options.countryPartitionEnabled,
+    orderType: 'stock_on_hand',
+    billCountry: options.defaultBillCountry ?? '',
+    goodsSubtotal: goods,
+    // The legacy drawer always assumed an NZ destination because it did not yet
+    // know the final ship-to; only the old org-region override could suppress it.
+    legacyShipCountry: 'NZ',
+    legacyOrgRegion: options.legacyOrgRegion,
+  })
 }

@@ -7,6 +7,9 @@ import { PreviewBanner } from '@/components/preview/PreviewBanner'
 import { getPortalCompanyAccess, getPortalUser } from '@/lib/portal-data'
 import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 import { resolveInitialCurrency } from '@/lib/currency/server-currency'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
+import { getSupabaseServer } from '@/lib/supabase'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const [user, access, exchangeRates, initialCurrency] = await Promise.all([
@@ -15,10 +18,20 @@ export default async function PortalLayout({ children }: { children: React.React
     getServerExchangeRates(),
     resolveInitialCurrency(),
   ])
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultBillingCountry =
+    countryPartitionEnabled && access?.companyId
+      ? await getOrgDefaultBillingCountry(getSupabaseServer(), access.companyId)
+      : null
 
   return (
     <AuthProvider initialUser={user}>
-      <CompanyProvider initialAccess={access} initialUserId={user?.id ?? null}>
+      <CompanyProvider
+        initialAccess={access}
+        initialUserId={user?.id ?? null}
+        countryPartitionEnabled={countryPartitionEnabled}
+        defaultBillingCountryCode={defaultBillingCountry?.code ?? null}
+      >
         <PreviewBanner />
         <CurrencyProvider
           initialRates={exchangeRates.rates}

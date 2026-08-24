@@ -2,7 +2,7 @@ import { partitionByFulfilment, type CheckoutOrderType } from '@/lib/checkout/pa
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import type { CartLineFulfilmentType } from '@/lib/cart/types'
-import { orderPickingFee } from './order-picking-fee'
+import { checkoutPickingFee } from './order-picking-fee'
 import { round2 } from './pricingMath'
 
 export interface BilledLineInput {
@@ -96,6 +96,9 @@ export function billedOrderShape(input: {
   lines: BilledLineInput[]
   gstRate: number
   shipCountry: string | null | undefined
+  /** Exact partition country when the SP3 cutover is enabled. */
+  billCountry?: string
+  countryPartitionEnabled?: boolean
   /** organizations.region — threaded to the picking-fee gate. Null/unknown = NZ. */
   orgRegion?: string | null
 }): BilledOrderShape {
@@ -122,11 +125,13 @@ export function billedOrderShape(input: {
       shaped.reduce((total, l) => (l.billed ? total : total + l.goodsValue), 0),
     )
     // Only a stock_on_hand order can carry a fee; a purchase order always gets 0.
-    const pickingFee = orderPickingFee({
-      isStockOnHand: orderType === 'stock_on_hand',
-      shipCountry: input.shipCountry,
+    const pickingFee = checkoutPickingFee({
+      countryPartitionEnabled: input.countryPartitionEnabled === true,
+      orderType,
+      billCountry: input.billCountry ?? '',
       goodsSubtotal: goodsValueForBand,
-      orgRegion: input.orgRegion ?? null,
+      legacyShipCountry: input.shipCountry,
+      legacyOrgRegion: input.orgRegion ?? null,
     })
     const gst = round2((billedSubtotal + pickingFee) * input.gstRate)
 

@@ -13,6 +13,8 @@ import type { B2BCustomerAccess } from '@/types/company'
 interface CompanyContextType {
   access: B2BCustomerAccess | null
   loading: boolean
+  countryPartitionEnabled: boolean
+  defaultBillingCountryCode: string | null
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined)
@@ -25,10 +27,14 @@ export function CompanyProvider({
   children,
   initialAccess = null,
   initialUserId = null,
+  countryPartitionEnabled = false,
+  defaultBillingCountryCode = null,
 }: {
   children: ReactNode
   initialAccess?: B2BCustomerAccess | null
   initialUserId?: string | null
+  countryPartitionEnabled?: boolean
+  defaultBillingCountryCode?: string | null
 }) {
   const { user, loading: authLoading } = useAuth()
   const [access, setAccess] = useState<B2BCustomerAccess | null>(initialAccess)
@@ -81,7 +87,14 @@ export function CompanyProvider({
   }, [user, authLoading, access, accessUserId])
 
   return (
-    <CompanyContext.Provider value={{ access, loading }}>
+    <CompanyContext.Provider
+      value={{
+        access,
+        loading,
+        countryPartitionEnabled,
+        defaultBillingCountryCode,
+      }}
+    >
       {children}
     </CompanyContext.Provider>
   )
