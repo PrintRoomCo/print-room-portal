@@ -18,6 +18,13 @@ export interface RpcCallRecord {
   args: AnyRow | undefined
 }
 
+export interface WriteCallRecord {
+  table: string
+  operation: 'insert' | 'update'
+  value: unknown
+  filters: Array<{ op: string; column: string; value: unknown }>
+}
+
 export interface StubLink {
   id: string
   catalogueItemId: string
@@ -72,10 +79,17 @@ export interface StubConfig {
   garmentUnitPrice?: number
   /** Inject an error for a table's select (message → PostgREST-style error). */
   selectErrorFor?: Record<string, string>
+  /** Legacy organization billing facts used by checkout's flag-off path. */
+  organization?: { region: 'NZ' | 'AU'; isTest?: boolean }
+  /** ISO countries enabled for one-time-address validation. */
+  enabledCountryCodes?: string[]
+  /** Stable committed row returned by the submit system boundary. */
+  submitResult?: { quoteId: string; orderId: string; orderRef: string }
 }
 
 export function makeFanoutStub(config: StubConfig) {
   const rpcCalls: RpcCallRecord[] = []
+  const writeCalls: WriteCallRecord[] = []
   const fromCounts = new Map<string, number>()
 
   const itemRows = config.items.map((i) => ({
@@ -199,14 +213,19 @@ export function makeFanoutStub(config: StubConfig) {
       }
     }
     if (table === 'quotes') {
+      const result = config.submitResult ?? {
+        quoteId: 'quote-1',
+        orderId: 'order-1',
+        orderRef: 'ORD-TEST-1',
+      }
       return {
         data: [
           {
-            id: 'quote-1',
+            id: result.quoteId,
             organization_id: 'org-stub',
             customer_name: 'Acme Co',
             customer_email: 'buyer@acme.test',
-            order_ref: 'ORD-TEST-1',
+            order_ref: result.orderRef,
             total_amount: 125,
             required_by: null,
             payment_terms: 'net20',
@@ -215,7 +234,25 @@ export function makeFanoutStub(config: StubConfig) {
         error: null,
       }
     }
-    if (table === 'organizations') return { data: [{ is_test: true }], error: null }
+    if (table === 'organization_countries') {
+      return {
+        data: (config.enabledCountryCodes ?? ['NZ']).map((countryCode) => ({
+          country_code: countryCode,
+        })),
+        error: null,
+      }
+    }
+    if (table === 'organizations') {
+      return {
+        data: [
+          {
+            is_test: config.organization?.isTest ?? true,
+            region: config.organization?.region ?? 'NZ',
+          },
+        ],
+        error: null,
+      }
+    }
     return { data: [], error: null }
   }
 
@@ -230,12 +267,14 @@ export function makeFanoutStub(config: StubConfig) {
 
     const builder = {
       select: () => builder,
-      insert: () => {
+      insert: (value: unknown) => {
         pendingWrite = true
+        writeCalls.push({ table, operation: 'insert', value, filters })
         return builder
       },
-      update: () => {
+      update: (value: unknown) => {
         pendingWrite = true
+        writeCalls.push({ table, operation: 'update', value, filters })
         return builder
       },
       eq: (column: string, value: unknown) => {
@@ -293,8 +332,19 @@ export function makeFanoutStub(config: StubConfig) {
         return { data: v ?? null, error: null }
       }
       if (name === 'submit_b2b_order') {
+        const result = config.submitResult ?? {
+          quoteId: 'quote-1',
+          orderId: 'order-1',
+          orderRef: 'ORD-TEST-1',
+        }
         return {
-          data: [{ quote_id: 'quote-1', order_id: 'order-1', order_ref: 'ORD-TEST-1' }],
+          data: [
+            {
+              quote_id: result.quoteId,
+              order_id: result.orderId,
+              order_ref: result.orderRef,
+            },
+          ],
           error: null,
         }
       }
@@ -305,7 +355,7 @@ export function makeFanoutStub(config: StubConfig) {
   const rpcCount = (name: string) => rpcCalls.filter((c) => c.name === name).length
   const fromCount = (table: string) => fromCounts.get(table) ?? 0
 
-  return { admin, rpcCalls, rpcCount, fromCount }
+  return { admin, rpcCalls, writeCalls, rpcCount, fromCount }
 }
 
 export function makeContext(orgId: string) {
