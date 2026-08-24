@@ -127,7 +127,9 @@ function parityWorld(fixture: ParityFixture, partitionIndex: number): StubConfig
   }
 }
 
-function parityLines(): CheckoutLineInput[] {
+function parityLines(
+  countryCode: 'NZ' | 'AU',
+): Array<CheckoutLineInput & { ship_country: string }> {
   const decoration = {
     linkId: 'link-logo',
     decorationId: 'decoration-logo',
@@ -146,6 +148,7 @@ function parityLines(): CheckoutLineInput[] {
       catalogueItemId: 'item-tee',
       qty: 40,
       fulfilment_type: 'stocked',
+      ship_country: countryCode,
       decorations: [decoration],
     },
     {
@@ -155,6 +158,7 @@ function parityLines(): CheckoutLineInput[] {
       catalogueItemId: 'item-tee',
       qty: 60,
       fulfilment_type: 'made_to_order',
+      ship_country: countryCode,
       decorations: [decoration],
     },
   ]
@@ -180,7 +184,7 @@ async function executeParityFixture(
   countryPartitionEnabled: boolean,
 ): Promise<CheckoutParityArtifact> {
   vi.clearAllMocks()
-  const lines = parityLines()
+  const lines = parityLines(fixture.countryCode)
   const plan = buildCheckoutExecutionPlan(
     { idempotencyKey: `checkout-${fixture.countryCode.toLowerCase()}`, lines },
     countryPartitionEnabled,
@@ -290,6 +294,7 @@ describe('buildCheckoutExecutionPlan flag-off parity', () => {
       product_name: 'Stock product',
       qty: 10,
       fulfilment_type: 'stocked',
+      ship_country: 'NZ',
     } as CheckoutLineInput
     const purchaseOrder = {
       cart_line_id: 'po-line',
@@ -297,6 +302,7 @@ describe('buildCheckoutExecutionPlan flag-off parity', () => {
       product_name: 'Made-to-order product',
       qty: 24,
       fulfilment_type: 'made_to_order',
+      ship_country: 'NZ',
     } as CheckoutLineInput
     const lines = [stock, purchaseOrder]
     const expectedGroups = legacyPartitionOracle(lines)
@@ -310,7 +316,9 @@ describe('buildCheckoutExecutionPlan flag-off parity', () => {
       true,
     )
 
-    expect(on).toStrictEqual(off)
+    expect(
+      on.partitions.map(({ countryCode: _countryCode, ...partition }) => partition),
+    ).toStrictEqual(off.partitions)
     expect(off.partitions.map((partition) => partition.lines)).toStrictEqual(expectedGroups)
     expect(off.partitions.map((partition) => partition.idempotencyKey)).toStrictEqual([
       'checkout-1:po',
