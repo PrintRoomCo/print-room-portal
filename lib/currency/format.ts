@@ -8,8 +8,8 @@ const LOCALE_MAP: Record<SupportedCurrency, string> = {
   EUR: 'de-DE',
 };
 
-export function formatCurrency(amount: number, currency: SupportedCurrency): string {
-  const locale = LOCALE_MAP[currency] || 'en-NZ';
+export function formatCurrency(amount: number, currency: string): string {
+  const locale = LOCALE_MAP[currency as SupportedCurrency] || 'en-NZ';
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,

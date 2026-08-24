@@ -31,4 +31,22 @@ describe('loadAuthoredPricingBands', () => {
     expect(filters).toContainEqual(['catalogue_item_id', 'item-1'])
     expect(filters).toContainEqual(['currency', 'NZD'])
   })
+
+  it('loads only the independently authored target-currency ladder when enabled', async () => {
+    const filters: Array<[string, unknown]> = []
+    const admin = fakeSupabaseQuery({
+      filters,
+      data: [
+        { min_quantity: 20, max_quantity: 74 },
+        { min_quantity: 75, max_quantity: null },
+      ],
+    })
+
+    await expect(loadAuthoredPricingBands(admin as never, 'item-au', 'AUD', true)).resolves.toEqual([
+      { min_quantity: 20, max_quantity: 74 },
+      { min_quantity: 75, max_quantity: null },
+    ])
+    expect(filters).toContainEqual(['currency', 'AUD'])
+    expect(filters).not.toContainEqual(['currency', 'NZD'])
+  })
 })

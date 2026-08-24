@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { formatCurrency } from '@/lib/currency/format'
 
 interface SummaryItem {
   catalogueItemId: string
@@ -15,6 +16,7 @@ interface SummaryItem {
 interface Summary {
   period: { id: string; closesAt: string } | null
   items: SummaryItem[]
+  currency?: string
 }
 
 interface CartSavingsItem {
@@ -98,6 +100,8 @@ export function PeriodSavingsBar({
     day: 'numeric',
     month: 'long',
   })
+  const formatSummaryMoney = (amount: number) =>
+    summary.currency ? formatCurrency(amount, summary.currency) : format(amount)
 
   return (
     <div
@@ -143,14 +147,14 @@ export function PeriodSavingsBar({
                 <span className="font-medium">
                   {progress.unitsToNextBreak} more units of {cartItem.productName}
                 </span>{' '}
-                by {closes} unlocks {format(progress.nextUnitPrice!)} per unit.
+                by {closes} unlocks {formatSummaryMoney(progress.nextUnitPrice!)} per unit.
               </p>
               <p className="mt-1 text-black/70">
                 Your franchise&apos;s {cartItem.qty}-unit order will save{' '}
                 <span className="font-semibold text-black">
-                  {format(progress.franchiseSavings!)}
+                  {formatSummaryMoney(progress.franchiseSavings!)}
                 </span>{' '}
-                at that tier ({format(progress.perUnitSavings!)} per unit).
+                at that tier ({formatSummaryMoney(progress.perUnitSavings!)} per unit).
                 {progress.aggQty != null
                   ? ` Current Order Quantity for Franchise: ${progress.aggQty + cartItem.qty}.`
                   : ''}

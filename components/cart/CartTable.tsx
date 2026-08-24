@@ -11,6 +11,7 @@ import {
 import { pillsFor, PILL_LABELS } from '@/lib/shop/fulfilment-mode'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { formatCurrency } from '@/lib/currency/format'
 import type { VariantAvailability } from '@/lib/shop/variant-availability'
 import { useCartLineFrontImages } from './useCartLineFrontImages'
 import { SameArtworkSavings } from '@/components/pricing/SameArtworkSavings'
@@ -170,6 +171,8 @@ export function CartTable({
         const isOverMax = maxQty !== undefined && totalForProduct > maxQty
         const unitPrice = allInUnitPrice(line)
         const lineTotal = allInLineTotal(line)
+        const formatLineMoney = (amount: number) =>
+          line.priceCurrency ? formatCurrency(amount, line.priceCurrency) : format(amount)
         const imageUrl = cartLineDisplayImageUrl(line, {
           catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
         })
@@ -307,10 +310,13 @@ export function CartTable({
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-500">
-                  Unit · <span className="tabular-nums text-gray-700">{format(unitPrice)}</span>
+                  Unit ·{' '}
+                  <span className="tabular-nums text-gray-700">
+                    {formatLineMoney(unitPrice)}
+                  </span>
                 </p>
                 <p className="font-dm-sans text-base font-medium text-gray-900 tabular-nums">
-                  {format(lineTotal)}
+                  {formatLineMoney(lineTotal)}
                 </p>
               </div>
             </div>

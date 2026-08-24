@@ -90,18 +90,58 @@ export async function effectiveUnitPricesBulk(
  * product has multiple active skins. Routes through `catalogue_unit_price`
  * server-side (never `get_unit_price`). Throws on RPC error.
  */
+export function effectiveUnitPriceForItem(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+  orgId: string,
+  qty: number,
+): Promise<number>
+export function effectiveUnitPriceForItem(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+  orgId: string,
+  qty: number,
+  targetCurrency: string,
+  countryPartitionEnabled: false,
+): Promise<number>
+export function effectiveUnitPriceForItem(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+  orgId: string,
+  qty: number,
+  targetCurrency: string,
+  countryPartitionEnabled: true,
+): Promise<number | null>
+export function effectiveUnitPriceForItem(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+  orgId: string,
+  qty: number,
+  targetCurrency: string,
+  countryPartitionEnabled: boolean,
+): Promise<number | null>
 export async function effectiveUnitPriceForItem(
   admin: SupabaseClient,
   catalogueItemId: string,
   orgId: string,
   qty: number,
-): Promise<number> {
-  const { data, error } = await admin.rpc('effective_unit_price_for_item', {
-    p_catalogue_item_id: catalogueItemId,
-    p_org_id: orgId,
-    p_qty: qty,
-  })
+  targetCurrency?: string,
+  countryPartitionEnabled = false,
+): Promise<number | null> {
+  const { data, error } = countryPartitionEnabled
+    ? await admin.rpc('effective_unit_price_for_item_currency', {
+        p_catalogue_item_id: catalogueItemId,
+        p_org_id: orgId,
+        p_qty: qty,
+        p_currency: targetCurrency,
+      })
+    : await admin.rpc('effective_unit_price_for_item', {
+        p_catalogue_item_id: catalogueItemId,
+        p_org_id: orgId,
+        p_qty: qty,
+      })
   if (error) throw error
+  if (countryPartitionEnabled && data == null) return null
   return Number(data ?? 0)
 }
 

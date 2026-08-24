@@ -43,6 +43,10 @@ export interface CatalogueDecorationPriceInput {
   entryQty: number
   /** Tier multiplier applied to computed decorations (never to manual). */
   tierMultiplier: number
+  /** Exact authored currency for the SP3 country-partition path. */
+  targetCurrency?: string
+  /** False preserves the byte-identical SP2 bulk/scalar RPC path. */
+  countryPartitionEnabled?: boolean
 }
 
 export interface CatalogueDecorationPrices {
@@ -62,10 +66,29 @@ async function resolveEffectiveRaw(
   admin: SupabaseClient,
   ids: string[],
   qtys: number[],
+  targetCurrency?: string,
+  countryPartitionEnabled = false,
 ): Promise<Map<string, number | null>> {
   const out = new Map<string, number | null>()
   if (ids.length === 0) return out
   const items = ids.flatMap((id) => qtys.map((qty) => ({ org_decoration_id: id, qty })))
+
+  if (countryPartitionEnabled) {
+    await Promise.all(
+      items.map(async ({ org_decoration_id, qty }) => {
+        const { data, error } = await admin.rpc('effective_decoration_unit_price_for_currency', {
+          p_org_decoration_id: org_decoration_id,
+          p_qty: qty,
+          p_currency: targetCurrency,
+        })
+        out.set(
+          key(org_decoration_id, qty),
+          !error && data != null && Number.isFinite(Number(data)) ? Number(data) : null,
+        )
+      }),
+    )
+    return out
+  }
 
   const { data, error } = await admin.rpc('effective_decoration_unit_prices_bulk', {
     p_items: items,
@@ -105,14 +128,32 @@ async function resolveManualRaw(
   admin: SupabaseClient,
   itemIds: string[],
   qtys: number[],
-): Promise<Map<string, number>> {
-  const clean = (raw: number | string | null | undefined): number => {
+  targetCurrency?: string,
+  countryPartitionEnabled = false,
+): Promise<Map<string, number | null>> {
+  const clean = (raw: number | string | null | undefined): number | null => {
+    if (countryPartitionEnabled && raw == null) return null
     const v = raw != null ? Number(raw) : 0
+    if (countryPartitionEnabled) return Number.isFinite(v) && v >= 0 ? v : null
     return Number.isFinite(v) && v > 0 ? v : 0
   }
-  const out = new Map<string, number>()
+  const out = new Map<string, number | null>()
   if (itemIds.length === 0) return out
   const items = itemIds.flatMap((id) => qtys.map((qty) => ({ catalogue_item_id: id, qty })))
+
+  if (countryPartitionEnabled) {
+    await Promise.all(
+      items.map(async ({ catalogue_item_id, qty }) => {
+        const { data, error } = await admin.rpc('catalogue_item_decoration_price_for_currency', {
+          p_catalogue_item_id: catalogue_item_id,
+          p_qty: qty,
+          p_currency: targetCurrency,
+        })
+        out.set(key(catalogue_item_id, qty), clean(!error ? data : null))
+      }),
+    )
+    return out
+  }
 
   const { data, error } = await admin.rpc('catalogue_item_decoration_prices_bulk', {
     p_items: items,
@@ -152,6 +193,8 @@ export async function resolveCatalogueDecorationPrices(
     floorQty,
     entryQty,
     tierMultiplier,
+    targetCurrency,
+    countryPartitionEnabled = false,
   } = input
 
   const decoLowByItem = new Map<string, number>()
@@ -183,8 +226,20 @@ export async function resolveCatalogueDecorationPrices(
 
   // One batched round-trip per source, concurrently.
   const [effectiveByKey, manualByKey] = await Promise.all([
-    resolveEffectiveRaw(admin, Array.from(fallbackById.keys()), bands),
-    resolveManualRaw(admin, manualScopedItemIds, bands),
+    resolveEffectiveRaw(
+      admin,
+      Array.from(fallbackById.keys()),
+      bands,
+      targetCurrency,
+      countryPartitionEnabled,
+    ),
+    resolveManualRaw(
+      admin,
+      manualScopedItemIds,
+      bands,
+      targetCurrency,
+      countryPartitionEnabled,
+    ),
   ])
 
   // Computed: base = scalar price, else the decoration's static fallback; then
@@ -192,8 +247,8 @@ export async function resolveCatalogueDecorationPrices(
   // resolveComputed, just reading the pre-fetched value instead of awaiting.
   const computeBand = (id: string, qty: number): number => {
     const raw = effectiveByKey.get(key(id, qty)) ?? null
-    const base = raw != null ? raw : fallbackById.get(id) ?? null
-    if (base == null || !Number.isFinite(base) || base <= 0) return 0
+    const base = raw != null ? raw : countryPartitionEnabled ? null : fallbackById.get(id) ?? null
+    if (base == null || !Number.isFinite(base) || base < 0) return 0
     return Number((base * tierMultiplier).toFixed(2))
   }
   const computedPriceById = new Map<string, { low: number; high: number }>()
@@ -201,11 +256,11 @@ export async function resolveCatalogueDecorationPrices(
     computedPriceById.set(id, { low: computeBand(id, floorQty), high: computeBand(id, entryQty) })
   }
 
-  const manualPriceById = new Map<string, { low: number; high: number }>()
+  const manualPriceById = new Map<string, { low: number | null; high: number | null }>()
   for (const itemId of manualScopedItemIds) {
     manualPriceById.set(itemId, {
-      low: manualByKey.get(key(itemId, floorQty)) ?? 0,
-      high: manualByKey.get(key(itemId, entryQty)) ?? 0,
+      low: manualByKey.get(key(itemId, floorQty)) ?? null,
+      high: manualByKey.get(key(itemId, entryQty)) ?? null,
     })
   }
 
@@ -221,8 +276,12 @@ export async function resolveCatalogueDecorationPrices(
 
   // Manual: one figure per band, set (not summed), no tier.
   for (const [itemId, price] of manualPriceById) {
-    if (price.low > 0) decoLowByItem.set(itemId, price.low)
-    if (price.high > 0) decoHighByItem.set(itemId, price.high)
+    if (price.low != null && (countryPartitionEnabled || price.low > 0)) {
+      decoLowByItem.set(itemId, price.low)
+    }
+    if (price.high != null && (countryPartitionEnabled || price.high > 0)) {
+      decoHighByItem.set(itemId, price.high)
+    }
   }
 
   return { decoLowByItem, decoHighByItem }

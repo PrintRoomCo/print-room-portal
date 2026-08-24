@@ -73,6 +73,8 @@ export interface CartLine {
   sizeLabel?: string | null
   qty: number
   unitPrice: number
+  /** Canonical authored list currency. Absent only on legacy persisted carts. */
+  priceCurrency?: string
   imageUrl: string | null
   shipToStoreId?: string | null
   /**
@@ -246,8 +248,9 @@ export function lineSignature(
   sizeId: number | null = null,
   locationLabel: string | null = null,
   customName: string | null = null,
+  priceCurrency?: string,
 ): string {
-  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}::${customName ?? ''}`
+  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}::${customName ?? ''}::${priceCurrency ?? ''}`
 }
 
 /**

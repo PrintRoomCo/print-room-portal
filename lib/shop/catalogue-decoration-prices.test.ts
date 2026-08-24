@@ -156,4 +156,59 @@ describe('resolveCatalogueDecorationPrices (characterization)', () => {
     expect(decoXEntries).toHaveLength(2)
     expect(decoXEntries.map((i) => i.qty).sort((a, b) => a - b)).toEqual([24, 1000])
   })
+
+  it('uses only exact target-currency decoration RPCs when country partitioning is enabled', async () => {
+    const rpc = vi.fn(async (fn: string, params: Record<string, unknown>) => {
+      if (fn === 'effective_decoration_unit_price_for_currency') {
+        return { data: params.p_qty === 1000 ? 2 : 4, error: null }
+      }
+      if (fn === 'catalogue_item_decoration_price_for_currency') {
+        return { data: params.p_qty === 1000 ? 20 : 25, error: null }
+      }
+      return { data: null, error: null }
+    })
+
+    await resolveCatalogueDecorationPrices({ rpc } as unknown as SupabaseClient, {
+      ...input,
+      decorationRows: [decorationRows[0]],
+      countryPartitionEnabled: true,
+      targetCurrency: 'AUD',
+    })
+
+    expect(rpc).toHaveBeenCalledWith('effective_decoration_unit_price_for_currency', {
+      p_org_decoration_id: 'decoX',
+      p_qty: 1000,
+      p_currency: 'AUD',
+    })
+    expect(rpc).toHaveBeenCalledWith('catalogue_item_decoration_price_for_currency', {
+      p_catalogue_item_id: 'itemM',
+      p_qty: 24,
+      p_currency: 'AUD',
+    })
+    expect(rpc.mock.calls.some(([fn]) => fn === 'effective_decoration_unit_price')).toBe(false)
+    expect(rpc.mock.calls.some(([fn]) => fn === 'catalogue_item_decoration_price')).toBe(false)
+    expect(rpc.mock.calls.some(([fn]) => String(fn).endsWith('_bulk'))).toBe(false)
+  })
+
+  it('does not use legacy unkeyed fallbacks for missing AUD and preserves an authored zero', async () => {
+    const rpc = vi.fn(async (fn: string) => ({
+      data: fn === 'catalogue_item_decoration_price_for_currency' ? 0 : null,
+      error: null,
+    }))
+
+    const result = await resolveCatalogueDecorationPrices(
+      { rpc } as unknown as SupabaseClient,
+      {
+        ...input,
+        decorationRows: [decorationRows[0]],
+        countryPartitionEnabled: true,
+        targetCurrency: 'AUD',
+      },
+    )
+
+    expect(result.decoLowByItem.has('itemA')).toBe(false)
+    expect(result.decoHighByItem.has('itemA')).toBe(false)
+    expect(result.decoLowByItem.get('itemM')).toBe(0)
+    expect(result.decoHighByItem.get('itemM')).toBe(0)
+  })
 })

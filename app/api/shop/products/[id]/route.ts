@@ -6,6 +6,8 @@ import {
   getPeriodBracketsForItem,
 } from '@/lib/pricing/period-brackets'
 import { sanitizeDescription } from '@/lib/shop/sanitize-description'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 export async function GET(
   _request: Request,
@@ -15,6 +17,19 @@ export async function GET(
   if ('error' in auth) return auth.error
   const { admin, context } = auth
   const { id } = await params
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(admin, context.organizationId)
+    : null
+
+  const legacyBracketsQuery = defaultCountry
+    ? Promise.resolve({ data: [] })
+    : admin
+        .from('product_pricing_tiers')
+        .select('min_quantity, max_quantity, unit_price')
+        .eq('product_id', id)
+        .eq('is_active', true)
+        .order('min_quantity', { ascending: true })
 
   const [{ data: catalogueItem }, { data: product, error: pErr }, { data: variants }, { data: sizeRows }, { data: brackets }] = await Promise.all([
     admin.from('b2b_catalogue_items')
@@ -46,11 +61,7 @@ export async function GET(
       .select('id, label, order_index')
       .eq('product_id', id)
       .order('order_index', { ascending: true }),
-    admin.from('product_pricing_tiers')
-      .select('min_quantity, max_quantity, unit_price')
-      .eq('product_id', id)
-      .eq('is_active', true)
-      .order('min_quantity', { ascending: true }),
+    legacyBracketsQuery,
   ])
 
   interface ProductDetail {
@@ -153,11 +164,22 @@ export async function GET(
     max_quantity: number | null
     unit_price: number
   }>
+  if (defaultCountry) {
+    const { data: exactBrackets } = await admin
+      .from('b2b_catalogue_item_pricing_tiers')
+      .select('min_quantity, max_quantity, unit_price')
+      .eq('catalogue_item_id', catItem.id)
+      .eq('currency', defaultCountry.currency)
+      .order('min_quantity', { ascending: true })
+    finalBrackets = (exactBrackets ?? []) as typeof finalBrackets
+  }
   if (isPreOrderItem && openPeriod) {
     const periodBrackets = await getPeriodBracketsForItem(
       admin,
       openPeriod.id,
       catItem.id,
+      defaultCountry?.currency ?? 'NZD',
+      countryPartitionEnabled,
     )
     if (periodBrackets.length > 0) {
       finalBrackets = periodBrackets.map((b) => ({
@@ -178,5 +200,6 @@ export async function GET(
     variants: mappedVariants,
     sizes: mappedSizes,
     brackets: finalBrackets,
+    ...(defaultCountry ? { currency: defaultCountry.currency } : {}),
   })
 }

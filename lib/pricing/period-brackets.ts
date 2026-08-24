@@ -60,13 +60,16 @@ export async function getPeriodBracketsForItem(
   admin: SupabaseClient,
   periodId: string,
   catalogueItemId: string,
+  currency = 'NZD',
+  countryPartitionEnabled = false,
 ): Promise<CartLineBracket[]> {
-  const { data } = await admin
+  let query = admin
     .from('b2b_ordering_period_item_pricing')
     .select('min_quantity, max_quantity, final_unit_price')
     .eq('period_id', periodId)
     .eq('catalogue_item_id', catalogueItemId)
-    .order('min_quantity', { ascending: true })
+  if (countryPartitionEnabled) query = query.eq('currency', currency)
+  const { data } = await query.order('min_quantity', { ascending: true })
   return ((data ?? []) as Array<{
     min_quantity: number
     max_quantity: number | null

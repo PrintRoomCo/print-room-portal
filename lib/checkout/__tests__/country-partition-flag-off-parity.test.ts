@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 vi.mock('@/lib/monday/deal-item', () => ({
   pushOrderDeal: vi.fn().mockResolvedValue({ itemId: 'monday-1', subitemIds: {} }),
@@ -42,6 +43,11 @@ import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
 import { makeContext, makeFanoutStub, type StubConfig } from './fanout-test-stub'
 import { legacyPartitionOracle } from './legacy-partition-oracle'
+import { normalizePersisted } from '@/lib/cart/normalize'
+import { buildRebuildLines } from '@/lib/reorder/rebuild'
+import { loadAuthoredPricingBands } from '@/lib/shop/authored-pricing-bands'
+import { resolveCatalogueDecorationPrices } from '@/lib/shop/catalogue-decoration-prices'
+import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 
 declare global {
   // Provided by vitest.setup.ts so Next's deferred `after()` effects can be observed.
@@ -262,6 +268,142 @@ async function executeParityFixture(
   }
 }
 
+async function executeCatalogueFlagOffFixture(explicitFalseParameters: boolean) {
+  const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = []
+  const queryFilters: Array<[string, unknown]> = []
+  const query = {
+    select: vi.fn(() => query),
+    eq: vi.fn((key: string, value: unknown) => {
+      queryFilters.push([key, value])
+      return query
+    }),
+    order: vi.fn(async () => ({
+      data: [
+        { min_quantity: 24, max_quantity: 99 },
+        { min_quantity: 100, max_quantity: null },
+      ],
+      error: null,
+    })),
+  }
+  const admin = {
+    from: vi.fn(() => query),
+    rpc: vi.fn(async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ name, args })
+      if (name === 'effective_unit_price_for_item') {
+        return { data: 12.5, error: null }
+      }
+      if (name === 'effective_decoration_unit_prices_bulk') {
+        const items = args.p_items as Array<{ org_decoration_id: string; qty: number }>
+        return {
+          data: items.map(({ org_decoration_id, qty }) => ({
+            org_decoration_id,
+            qty,
+            unit_price: qty === 24 ? 4 : 3,
+          })),
+          error: null,
+        }
+      }
+      if (name === 'catalogue_item_decoration_prices_bulk') {
+        const items = args.p_items as Array<{ catalogue_item_id: string; qty: number }>
+        return {
+          data: items.map(({ catalogue_item_id, qty }) => ({
+            catalogue_item_id,
+            qty,
+            unit_price: qty === 24 ? 8 : 7,
+          })),
+          error: null,
+        }
+      }
+      return { data: null, error: { message: `unexpected RPC ${name}` } }
+    }),
+  } as unknown as SupabaseClient
+
+  const garmentUnitPrice = explicitFalseParameters
+    ? await effectiveUnitPriceForItem(admin, 'item-1', 'org-1', 24, 'AUD', false)
+    : await effectiveUnitPriceForItem(admin, 'item-1', 'org-1', 24)
+  const bands = explicitFalseParameters
+    ? await loadAuthoredPricingBands(admin, 'item-1', 'AUD', false)
+    : await loadAuthoredPricingBands(admin, 'item-1')
+  const decorationInput = {
+    decorationRows: [
+      {
+        catalogue_item_id: 'item-1',
+        org_decoration_id: 'decoration-1',
+        org_decorations: { unit_price: 99 },
+      },
+    ],
+    manualScopedItemIds: ['item-manual'],
+    priceModeByItemId: new Map<string, 'computed' | 'manual_final' | null>([
+      ['item-1', 'computed'],
+      ['item-manual', 'manual_final'],
+    ]),
+    floorQty: 100,
+    entryQty: 24,
+    tierMultiplier: 1,
+  }
+  const decorationPrices = await resolveCatalogueDecorationPrices(
+    admin,
+    explicitFalseParameters
+      ? {
+          ...decorationInput,
+          targetCurrency: 'AUD',
+          countryPartitionEnabled: false,
+        }
+      : decorationInput,
+  )
+  const persisted = normalizePersisted({
+    lines: [
+      {
+        lineId: 'line-stock',
+        productId: 'product-1',
+        productName: 'Stock tee',
+        variantId: 'variant-1',
+        variantLabel: 'Black / M',
+        qty: 24,
+        unitPrice: 9.25,
+        imageUrl: null,
+        shipToStoreId: null,
+        decorations: [],
+        fulfilmentType: 'stocked',
+        catalogueItemId: 'item-1',
+      },
+    ],
+  })
+  const rebuilt = buildRebuildLines([
+    {
+      product_id: 'product-1',
+      variant_id: 'variant-1',
+      product_name: 'Stock tee',
+      quantity: 24,
+      decorations: [],
+      ship_to_store_id: null,
+      catalogue_item_id: 'item-1',
+      qty_from_stock: 24,
+      qty_to_make: 0,
+      colour_label: 'Black',
+      size_label: 'M',
+      image_url: null,
+    },
+  ])
+
+  return normalizeObservable({
+    pdp: {
+      bands,
+      garmentUnitPrice,
+      stockUnitPrice: 9.25,
+      decorationLow: [...decorationPrices.decoLowByItem.entries()],
+      decorationHigh: [...decorationPrices.decoHighByItem.entries()],
+    },
+    persisted,
+    reorder: {
+      ...rebuilt,
+      lines: rebuilt.lines.map((line) => ({ ...line, unitPrice: garmentUnitPrice })),
+    },
+    rpcCalls,
+    queryFilters,
+  })
+}
+
 describe('isCheckoutCountryPartitionEnabled', () => {
   it.each([undefined, '', '0', 'false'])(
     'keeps the country partition cutover dark for %j',
@@ -328,6 +470,36 @@ describe('buildCheckoutExecutionPlan flag-off parity', () => {
 })
 
 describe('executable checkout flag-off parity oracle', () => {
+  it('keeps PDP prices, cart persistence, reorder output, and DB calls byte-identical with explicit false parameters', async () => {
+    const legacy = await executeCatalogueFlagOffFixture(false)
+    const explicitOff = await executeCatalogueFlagOffFixture(true)
+
+    expect(explicitOff).toStrictEqual(legacy)
+    expect(legacy.pdp).toMatchObject({
+      garmentUnitPrice: 12.5,
+      stockUnitPrice: 9.25,
+      decorationLow: [
+        ['item-1', 3],
+        ['item-manual', 7],
+      ],
+      decorationHigh: [
+        ['item-1', 4],
+        ['item-manual', 8],
+      ],
+    })
+    expect(legacy.rpcCalls.map(({ name }) => name)).toStrictEqual([
+      'effective_unit_price_for_item',
+      'effective_decoration_unit_prices_bulk',
+      'catalogue_item_decoration_prices_bulk',
+    ])
+    expect(legacy.queryFilters).toContainEqual(['currency', 'NZD'])
+    expect(legacy.persisted.lines[0].priceCurrency).toBeUndefined()
+    expect(legacy.reorder.lines[0]).toMatchObject({
+      unitPrice: 12.5,
+      fulfilmentType: 'stocked',
+    })
+  })
+
   it.each(parityFixtures)(
     'keeps $name partitions, totals, legacy stamps, RPC input, and fan-out byte-identical',
     async (fixture) => {

@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
-import { effectiveUnitPrice } from '@/lib/shop/effective-price'
+import { effectiveUnitPrice, effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 export async function POST(request: Request) {
   const auth = await requireB2BCustomerApi()
   if ('error' in auth) return auth.error
   const { admin, context } = auth
 
-  let body: { product_id?: string; qty?: number }
+  let body: { product_id?: string; catalogue_item_id?: string; qty?: number }
   try {
     body = await request.json()
   } catch {
@@ -24,6 +26,52 @@ export async function POST(request: Request) {
       { error: 'product_id and positive integer qty required' },
       { status: 400 }
     )
+  }
+
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  if (countryPartitionEnabled) {
+    if (!body.catalogue_item_id) {
+      return NextResponse.json({ error: 'catalogue_item_id required' }, { status: 400 })
+    }
+    const { data: catalogueItem } = await admin
+      .from('b2b_catalogue_items')
+      .select('id, b2b_catalogues!inner(organization_id, is_active)')
+      .eq('id', body.catalogue_item_id)
+      .eq('is_active', true)
+      .eq('b2b_catalogues.organization_id', context.organizationId)
+      .eq('b2b_catalogues.is_active', true)
+      .maybeSingle()
+    if (!catalogueItem) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    }
+
+    const defaultCountry = await getOrgDefaultBillingCountry(admin, context.organizationId)
+    const [unitPrice, { data: bracket }] = await Promise.all([
+      effectiveUnitPriceForItem(
+        admin,
+        body.catalogue_item_id,
+        context.organizationId,
+        body.qty,
+        defaultCountry.currency,
+        true,
+      ),
+      admin
+        .from('b2b_catalogue_item_pricing_tiers')
+        .select('min_quantity, max_quantity')
+        .eq('catalogue_item_id', body.catalogue_item_id)
+        .eq('currency', defaultCountry.currency)
+        .lte('min_quantity', body.qty)
+        .order('min_quantity', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    return NextResponse.json({
+      unit_price: unitPrice ?? 0,
+      total: unitPrice == null ? 0 : Number((unitPrice * body.qty).toFixed(2)),
+      status: unitPrice == null ? 'missing' : 'ok',
+      bracket: bracket ?? null,
+      currency: defaultCountry.currency,
+    })
   }
 
   // Canonical pricing per project_b2b_pricing_canonical.md — never call

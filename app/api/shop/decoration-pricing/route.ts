@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 interface Item {
   linkId: string
@@ -31,6 +33,11 @@ type LinkLookup = {
   /** b2b_catalogue_items.id each link belongs to — used to resolve the item's
    *  manual_final combined decoration price (one figure for the whole item). */
   catalogueItemIdByLink: Map<string, string>
+}
+
+interface CountryPricingOptions {
+  enabled: boolean
+  currency: string
 }
 
 async function loadLinkLookup(admin: SupabaseClient, linkIds: string[]): Promise<LinkLookup> {
@@ -68,6 +75,7 @@ async function resolveManualCombined(
   linkIds: string[],
   qty: number,
   explicitCatalogueItemId: string | null | undefined,
+  countryPricing: CountryPricingOptions,
 ): Promise<number | null> {
   let catalogueItemId = explicitCatalogueItemId ?? null
   if (!catalogueItemId) {
@@ -79,10 +87,16 @@ async function resolveManualCombined(
     if (itemIds.size !== 1) return null
     catalogueItemId = [...itemIds][0]
   }
-  const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
-    p_catalogue_item_id: catalogueItemId,
-    p_qty: qty,
-  })
+  const { data, error } = countryPricing.enabled
+    ? await admin.rpc('catalogue_item_decoration_price_for_currency', {
+        p_catalogue_item_id: catalogueItemId,
+        p_qty: qty,
+        p_currency: countryPricing.currency,
+      })
+    : await admin.rpc('catalogue_item_decoration_price', {
+        p_catalogue_item_id: catalogueItemId,
+        p_qty: qty,
+      })
   if (error || data == null) return null
   const n = Number(data)
   return Number.isFinite(n) ? n : null
@@ -111,17 +125,26 @@ async function priceLink(
   linkId: string,
   lookup: LinkLookup,
   tierMult: number,
+  countryPricing: CountryPricingOptions,
 ): Promise<number | null> {
   const decoId = lookup.decoIdByLink.get(linkId)
   if (!decoId) return null
-  const { data, error } = await admin.rpc('effective_decoration_unit_price', {
-    p_org_decoration_id: decoId,
-    p_qty: qty,
-  })
+  const { data, error } = countryPricing.enabled
+    ? await admin.rpc('effective_decoration_unit_price_for_currency', {
+        p_org_decoration_id: decoId,
+        p_qty: qty,
+        p_currency: countryPricing.currency,
+      })
+    : await admin.rpc('effective_decoration_unit_price', {
+        p_org_decoration_id: decoId,
+        p_qty: qty,
+      })
   const base =
     !error && data != null
       ? Number(data)
-      : (lookup.fallbackByLink.get(linkId) ?? null)
+      : countryPricing.enabled
+        ? null
+        : (lookup.fallbackByLink.get(linkId) ?? null)
   if (base == null || !Number.isFinite(base)) return null
   return Number((base * tierMult).toFixed(2))
 }
@@ -139,6 +162,15 @@ export async function POST(request: Request) {
   }
   if (!Array.isArray(body.items)) {
     return NextResponse.json({ error: 'items required' }, { status: 400 })
+  }
+
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(admin, context.organizationId)
+    : null
+  const countryPricing: CountryPricingOptions = {
+    enabled: countryPartitionEnabled,
+    currency: defaultCountry?.currency ?? 'NZD',
   }
 
   const linkIds = body.items.map((i) => i.linkId)
@@ -161,16 +193,34 @@ export async function POST(request: Request) {
     await Promise.all([
       ...qtys.flatMap((qty) =>
         body.items!.map(async (item) => {
-          const price = await priceLink(admin, qty, item.linkId, lookup, tierMult)
+          const price = await priceLink(
+            admin,
+            qty,
+            item.linkId,
+            lookup,
+            tierMult,
+            countryPricing,
+          )
           if (!pricesByQty[String(qty)]) pricesByQty[String(qty)] = {}
           pricesByQty[String(qty)][item.linkId] = price
         }),
       ),
       ...qtys.map(async (qty) => {
-        manualByQty[String(qty)] = await resolveManualCombined(admin, lookup, linkIds, qty, body.catalogueItemId)
+        manualByQty[String(qty)] = await resolveManualCombined(
+          admin,
+          lookup,
+          linkIds,
+          qty,
+          body.catalogueItemId,
+          countryPricing,
+        )
       }),
     ])
-    return NextResponse.json({ pricesByQty, manualByQty })
+    return NextResponse.json({
+      pricesByQty,
+      manualByQty,
+      ...(countryPartitionEnabled ? { currency: countryPricing.currency } : {}),
+    })
   }
 
   // Single-qty mode (legacy)
@@ -179,10 +229,27 @@ export async function POST(request: Request) {
   }
 
   const results = await Promise.all(
-    body.items.map(async (item) => [item.linkId, await priceLink(admin, body.qty!, item.linkId, lookup, tierMult)] as const),
+    body.items.map(
+      async (item) =>
+        [
+          item.linkId,
+          await priceLink(admin, body.qty!, item.linkId, lookup, tierMult, countryPricing),
+        ] as const,
+    ),
   )
   const prices: Record<string, number | null> = {}
   for (const [linkId, price] of results) prices[linkId] = price
-  const manual = await resolveManualCombined(admin, lookup, linkIds, body.qty, body.catalogueItemId)
-  return NextResponse.json({ prices, manual })
+  const manual = await resolveManualCombined(
+    admin,
+    lookup,
+    linkIds,
+    body.qty,
+    body.catalogueItemId,
+    countryPricing,
+  )
+  return NextResponse.json({
+    prices,
+    manual,
+    ...(countryPartitionEnabled ? { currency: countryPricing.currency } : {}),
+  })
 }
