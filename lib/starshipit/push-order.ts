@@ -23,6 +23,8 @@ export interface PushOrderToStarshipitArgs {
   /** organizations.region — AU orgs skip Starshipit entirely (AU Stage 1).
    *  Null/unknown = NZ. */
   region: string | null | undefined
+  /** Immutable quote billing stamp; unsupported countries skip until SP4. */
+  billCountry?: string
   /** Spec A stock/production axis — gates the PLACEMENT trigger only. */
   isStockOnHand: boolean
   customerEmail: string | null
@@ -55,6 +57,9 @@ export async function pushOrderToStarshipit(
   // Flag first, before any DB read — keeps the path fully inert (and safe to
   // deploy before the starshipit_* columns exist) while dark.
   if (!isStarshipitEnabled()) return { status: 'skipped', reason: 'disabled' }
+  if (args.billCountry && args.billCountry !== 'NZ' && args.billCountry !== 'AU') {
+    return { status: 'skipped', reason: 'unsupported_country' }
+  }
 
   const { data: orderRow, error: orderReadError } = await admin
     .from('orders')

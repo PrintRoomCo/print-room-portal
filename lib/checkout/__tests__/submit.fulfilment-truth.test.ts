@@ -296,7 +296,7 @@ function baseSelects(opts: {
 
 function happyRpc(name: string): { data: unknown; error: { message: string } | null } {
   if (name === 'effective_unit_price') return { data: 10, error: null }
-  if (name === 'submit_b2b_order') {
+  if (name === 'submit_b2b_order_for_country') {
     return {
       data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-FULFIL-1' }],
       error: null,
@@ -415,7 +415,7 @@ describe('submitCustomerOrder — server-side fulfilment truth', () => {
     // claim coerced away → purchase order → no picking fee (was drawsStock=false).
     expect(vi.mocked(createDraftInvoiceForOrder).mock.calls[0][1].pickingFee).toBe(0)
 
-    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')
     const lines = submitCall?.args?.p_lines as Array<{ fulfilment_route: string | null }>
     // A stocked claim on a made_to_order item is coerced, and the coerced value
     // is what travels — the route is derived after coercion, not before.

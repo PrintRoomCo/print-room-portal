@@ -126,6 +126,11 @@ export interface StubConfig {
 export function makeFanoutStub(config: StubConfig) {
   const rpcCalls: RpcCallRecord[] = []
   const writeCalls: WriteCallRecord[] = []
+  const persistedQuotes: Array<{
+    id: string
+    bill_country: string
+    currency: string
+  }> = []
   const fromCounts = new Map<string, number>()
 
   const itemRows = config.items.map((i) => ({
@@ -473,11 +478,24 @@ export function makeFanoutStub(config: StubConfig) {
           error: null,
         }
       }
-      if (name === 'submit_b2b_order') {
+      if (name === 'submit_b2b_order' || name === 'submit_b2b_order_for_country') {
         const result = config.submitResult ?? {
           quoteId: 'quote-1',
           orderId: 'order-1',
           orderRef: 'ORD-TEST-1',
+        }
+        if (name === 'submit_b2b_order_for_country') {
+          const billCountry = args?.p_bill_country as string
+          const currency = config.enabledCountries?.find(
+            (country) => country.code === billCountry,
+          )?.currency
+          if (currency) {
+            persistedQuotes.push({
+              id: result.quoteId,
+              bill_country: billCountry,
+              currency,
+            })
+          }
         }
         return {
           data: [
@@ -497,7 +515,7 @@ export function makeFanoutStub(config: StubConfig) {
   const rpcCount = (name: string) => rpcCalls.filter((c) => c.name === name).length
   const fromCount = (table: string) => fromCounts.get(table) ?? 0
 
-  return { admin, rpcCalls, writeCalls, rpcCount, fromCount }
+  return { admin, rpcCalls, writeCalls, persistedQuotes, rpcCount, fromCount }
 }
 
 export function makeContext(orgId: string) {

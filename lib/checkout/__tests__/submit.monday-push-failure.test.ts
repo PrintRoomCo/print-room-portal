@@ -214,7 +214,7 @@ describe('submitCustomerOrder — Monday push failure', () => {
       membershipRole: 'org_admin',
       rpcResponses: {
         effective_unit_price: { data: 10, error: null },
-        submit_b2b_order: {
+        submit_b2b_order_for_country: {
           data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }],
           error: null,
         },

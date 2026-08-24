@@ -5,6 +5,7 @@
  * Pure build + thin send; best-effort is handled at the call site (submit.ts).
  */
 import { sendEmail, type SendEmailResult } from '@/lib/email/client'
+import { formatCurrency } from '@/lib/utils'
 import {
   wrapBrandedEmail,
   escapeHtml,
@@ -51,9 +52,8 @@ export interface OrderPlacedDispatchParams {
     quantity: number
     unitPrice: number
   }>
-  /** Billing currency. AUD renders every money figure with an A$ prefix so staff
-   *  and customers can never misread an AUD figure as NZD. Default NZD. */
-  currency?: 'NZD' | 'AUD'
+  /** Immutable ISO-4217 billing currency stamped on the quote. Default NZD. */
+  currency?: string
 }
 
 const ORDER_TYPE_LABEL: Record<OrderPlacedDispatchParams['orderType'], string> = {
@@ -61,8 +61,8 @@ const ORDER_TYPE_LABEL: Record<OrderPlacedDispatchParams['orderType'], string> =
   purchase_order: 'Purchase order',
 }
 
-function formatMoney(n: number, currency: 'NZD' | 'AUD' = 'NZD'): string {
-  return `${currency === 'AUD' ? 'A$' : '$'}${n.toFixed(2)}`
+function formatMoney(n: number, currency = 'NZD'): string {
+  return formatCurrency(n, currency)
 }
 
 function hasVariant(label: string): boolean {

@@ -122,6 +122,20 @@ describe('pushOrderToStarshipit', () => {
     expect(r).toEqual({ status: 'skipped', reason: 'not_stock_on_hand' })
   })
 
+  it('skips an unsupported exact bill country instead of treating it as NZ', async () => {
+    createMock.mockResolvedValue('should-not-push')
+    const { admin } = makeAdmin()
+
+    const r = await pushOrderToStarshipit(admin, {
+      ...baseArgs,
+      region: null,
+      billCountry: 'GB',
+    } as typeof baseArgs & { region: null; billCountry: string })
+
+    expect(r).toEqual({ status: 'skipped', reason: 'unsupported_country' })
+    expect(createStarshipitOrder).not.toHaveBeenCalled()
+  })
+
   it('production_complete trigger pushes a made-to-order order', async () => {
     createMock.mockResolvedValue('987')
     const { admin } = makeAdmin()

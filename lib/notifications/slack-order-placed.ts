@@ -7,6 +7,8 @@
  * order must not care whether Slack is wired up yet.
  */
 
+import { formatCurrency } from '@/lib/utils'
+
 export interface OrderPlacedSummaryLine {
   productName: string
   variantLabel: string
@@ -19,6 +21,8 @@ export interface OrderPlacedNotification {
   customerName: string
   orderType: 'stock_on_hand' | 'purchase_order'
   totalAmount: number
+  /** Immutable ISO-4217 billing currency stamped on the quote. Default NZD. */
+  currency?: string
   /** Absolute portal deep link to the order. */
   orderUrl: string
   lines: OrderPlacedSummaryLine[]
@@ -29,8 +33,8 @@ const ORDER_TYPE_LABEL: Record<OrderPlacedNotification['orderType'], string> = {
   purchase_order: 'Purchase order',
 }
 
-function formatMoney(n: number): string {
-  return `$${n.toFixed(2)}`
+function formatMoney(n: number, currency = 'NZD'): string {
+  return formatCurrency(n, currency)
 }
 
 function hasVariant(label: string): boolean {
@@ -49,7 +53,7 @@ export function summariseOrderLines(lines: OrderPlacedSummaryLine[]): string {
 export function buildOrderPlacedSlackMessage(
   n: OrderPlacedNotification,
 ): { text: string; blocks: unknown[] } {
-  const text = `New order ${n.orderRef} — ${n.customerName} — ${formatMoney(n.totalAmount)}`
+  const text = `New order ${n.orderRef} — ${n.customerName} — ${formatMoney(n.totalAmount, n.currency)}`
   const blocks: unknown[] = [
     {
       type: 'header',
@@ -60,7 +64,7 @@ export function buildOrderPlacedSlackMessage(
       fields: [
         { type: 'mrkdwn', text: `*Customer:*\n${n.customerName}` },
         { type: 'mrkdwn', text: `*Type:*\n${ORDER_TYPE_LABEL[n.orderType]}` },
-        { type: 'mrkdwn', text: `*Total:*\n${formatMoney(n.totalAmount)}` },
+        { type: 'mrkdwn', text: `*Total:*\n${formatMoney(n.totalAmount, n.currency)}` },
       ],
     },
     {

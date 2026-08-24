@@ -184,7 +184,7 @@ function baseSelects(): SelectMatcher[] {
 
 const rpc = (name: string) => {
   if (name === 'effective_unit_price') return { data: 10, error: null }
-  if (name === 'submit_b2b_order') {
+  if (name === 'submit_b2b_order_for_country') {
     return { data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }], error: null }
   }
   return { data: null, error: null }

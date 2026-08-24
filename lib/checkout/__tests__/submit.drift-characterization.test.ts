@@ -117,7 +117,7 @@ describe('computed path — pricing resolution ladder', () => {
         line({ decorations: [dec('link-c1', 'dec-c1', 'Left chest', 5), dec('link-c2', 'dec-c2', 'Sleeve', 3.5)] }),
       ]),
     )
-    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')
     expect(submitCall?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 5 + 3.5, catalogue_item_id: ITEM_C }),
     ])
@@ -132,7 +132,7 @@ describe('computed path — pricing resolution ladder', () => {
       admin,
       buildInput([line({ decorations: [dec('link-c1', 'dec-c1', 'Left chest', 14)] })]),
     )
-    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')
     expect(submitCall?.args?.p_lines).toEqual([expect.objectContaining({ unit_price: 12.5 + 14 })])
   })
 
@@ -145,7 +145,7 @@ describe('computed path — pricing resolution ladder', () => {
       admin,
       buildInput([line({ decorations: [dec('link-c1', 'dec-c1', 'Left chest', 4.5)] })]),
     )
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 4.5 }),
     ])
   })
@@ -158,7 +158,7 @@ describe('computed path — pricing resolution ladder', () => {
       admin,
       buildInput([line({ decorations: [dec('link-c1', 'dec-c1', 'Left chest', 4)] })]),
     )
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 4 }),
     ])
   })
@@ -205,7 +205,7 @@ describe('computed path — pricing resolution ladder', () => {
         }),
       ]),
     )
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 6.8 }),
     ])
     // The stitch ladder IS consulted for embroidery now.
@@ -286,7 +286,7 @@ describe('computed path — pricing resolution ladder', () => {
         line({ catalogueItemId: undefined, decorations: [dec('link-c1', 'dec-c1', 'Left chest', 5)] }),
       ]),
     )
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 5, catalogue_item_id: null }),
     ])
   })
@@ -314,7 +314,7 @@ describe('computed path — drift and structural rejections', () => {
         reason: 'price_drift',
       },
     ])
-    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order')).toHaveLength(0)
+    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order_for_country')).toHaveLength(0)
   })
 
   it('reports structural failures in decoration order: detached, cross_org, inactive, wrong_item', async () => {
@@ -392,7 +392,7 @@ describe('manual_final path', () => {
     const { admin, rpcCalls } = makeFanoutStub(baseConfig())
     await submitCustomerOrder(admin, buildInput([manualLine({ claimed_manual_decoration: 7.5 })]))
     // combined figure billed once at line level, on top of the garment price
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 7.5 }),
     ])
     // the per-placement engine was never consulted for a manual line
@@ -402,7 +402,7 @@ describe('manual_final path', () => {
   it('re-prices silently when the claim is null/absent (legacy carts)', async () => {
     const { admin, rpcCalls } = makeFanoutStub(baseConfig())
     await submitCustomerOrder(admin, buildInput([manualLine({ claimed_manual_decoration: null })]))
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 7.5 }),
     ])
   })
@@ -426,7 +426,7 @@ describe('manual_final path', () => {
         reason: 'price_drift',
       }),
     ])
-    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order')).toHaveLength(0)
+    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order_for_country')).toHaveLength(0)
   })
 
   it('bills the combined figure for a manual line with NO decorations at all', async () => {
@@ -435,7 +435,7 @@ describe('manual_final path', () => {
       admin,
       buildInput([manualLine({ decorations: [], claimed_manual_decoration: 7.5 })]),
     )
-    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines).toEqual([
+    expect(rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 7.5 }),
     ])
   })

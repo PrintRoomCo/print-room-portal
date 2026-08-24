@@ -249,7 +249,7 @@ describe('submitCustomerOrder — pre-approved inventory write-through', () => {
       selects: baseSelects(),
       rpc: (name) => {
         if (name === 'effective_unit_price') return { data: 10, error: null }
-        if (name === 'submit_b2b_order') {
+        if (name === 'submit_b2b_order_for_country') {
           return {
             data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }],
             error: null,
@@ -311,7 +311,7 @@ describe('submitCustomerOrder — pre-approved inventory write-through', () => {
       selects: baseSelects(),
       rpc: (name) => {
         if (name === 'effective_unit_price') return { data: 10, error: null }
-        if (name === 'submit_b2b_order') {
+        if (name === 'submit_b2b_order_for_country') {
           return {
             data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }],
             error: null,
@@ -358,7 +358,7 @@ describe('submitCustomerOrder — pre-approved inventory write-through', () => {
       selects: baseSelects(),
       rpc: (name) => {
         if (name === 'effective_unit_price') return { data: 10, error: null }
-        if (name === 'submit_b2b_order') {
+        if (name === 'submit_b2b_order_for_country') {
           return {
             data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }],
             error: null,

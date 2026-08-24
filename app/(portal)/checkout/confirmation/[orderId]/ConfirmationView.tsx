@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useCurrency } from '@/contexts/CurrencyContext'
 import { cartLineDisplayImageUrl, isGenericCustomDecorationName } from '@/lib/cart/types'
+import { formatCurrency } from '@/lib/utils'
 
 const LABEL_CAP =
   'text-[11px] font-medium tracking-[0.12em] text-gray-500'
@@ -67,6 +67,11 @@ interface ConfirmationViewProps {
   gst: number
   totalIncGst: number
   gstRate: number
+  /** Immutable quote currency. Optional only for historical pre-SP3 quotes. */
+  currency?: string
+  /** Current display label for the immutable bill-country identity. */
+  taxLabel?: string
+  countryName?: string | null
 }
 
 function formatRequiredBy(value: string | null): string | null {
@@ -93,7 +98,6 @@ function formatAddress(addr: ConfirmationAddress | null): string[] {
 }
 
 export function ConfirmationView(props: ConfirmationViewProps) {
-  const { format } = useCurrency()
   const {
     orderId,
     orderRef,
@@ -111,7 +115,11 @@ export function ConfirmationView(props: ConfirmationViewProps) {
     gst,
     totalIncGst,
     gstRate,
+    currency = 'NZD',
+    taxLabel,
+    countryName,
   } = props
+  const format = (amount: number) => formatCurrency(amount, currency)
 
   const addressLines = formatAddress(shippingAddress)
   const eta = formatRequiredBy(requiredBy)
@@ -321,7 +329,13 @@ export function ConfirmationView(props: ConfirmationViewProps) {
         {/* Right column — sticky totals */}
         <aside className="lg:sticky lg:top-[100px] lg:h-fit">
           <div className="rounded-[32px] bg-white p-6 md:p-8">
-            <h2 className={`mb-5 ${LABEL_CAP}`}>Order total</h2>
+            <h2 className={LABEL_CAP}>Order total</h2>
+            {countryName && (
+              <p className="mb-5 mt-1 text-xs text-black/55">
+                {countryName} · {currency}
+              </p>
+            )}
+            {!countryName && <div className="mb-5" />}
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">
@@ -361,7 +375,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
               )}
               <div className="flex justify-between">
                 <span className="text-gray-600">
-                  GST ({Math.round(gstRate * 100)}%)
+                  {taxLabel ?? `GST (${Math.round(gstRate * 100)}%)`}
                 </span>
                 <span className="tabular-nums text-gray-900">{format(gst)}</span>
               </div>

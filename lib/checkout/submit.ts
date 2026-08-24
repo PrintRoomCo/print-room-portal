@@ -11,6 +11,7 @@ import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
+import { xeroRegionForBillCountry } from '@/lib/xero/config'
 import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
@@ -124,7 +125,7 @@ export interface CheckoutLineInput {
   fulfilment_type?: 'stocked' | 'made_to_order'
   /**
    * Phase 2 — catalogue-item identity carried from the cart line. Threaded into
-   * submit_b2b_order's p_lines so the order records which skin sold. camelCase
+   * submit_b2b_order_for_country's p_lines so the order records which skin sold. camelCase
    * to match the cart line; the RPC payload maps it to snake_case
    * catalogue_item_id. Null/absent for legacy/non-catalogue lines.
    */
@@ -286,7 +287,7 @@ function makeLineKey(productId: string, variantId: string | null, sizeId: number
 /**
  * Build the post-RPC follow-up UPDATE for one order line's snapshot columns.
  * The RPC creates quote_items without ship-to / decorations / location; we set
- * them here (submit_b2b_order stays unchanged). Each field is only written when
+ * them here (the country wrapper keeps the legacy line contract). Each field is only written when
  * the input line actually carried it (undefined → column left untouched), so a
  * legacy line never clobbers an existing value. `line_location_label` is the
  * feature-1 frozen label snapshot (Task 2 column).
@@ -346,13 +347,19 @@ export async function submitCustomerOrder(
     preOrderItemIds,
   } = preparedCheckoutInternalsFor(prepared)
   const isStockOnHandOrder = orderType === 'stock_on_hand'
+  const billCountry = preparationOptions.countryPartitionEnabled
+    ? prepared.country.code
+    : orgRegion
+  const billingCurrency = preparationOptions.countryPartitionEnabled
+    ? prepared.country.currency
+    : currencyForRegion(orgRegion)
 
   // Phase 2 — drift signal only (we never throw): if a line's own catalogue
   // identity disagrees with the one its decoration links resolve to, log once
   // and trust the line's id (it is the authoritative line identity).
   let warnedCatalogueDrift = false
 
-  const { data, error } = await admin.rpc('submit_b2b_order', {
+  const { data, error } = await admin.rpc('submit_b2b_order_for_country', {
     p_idempotency_key: input.idempotency_key,
     p_organization_id: input.context.organizationId,
     p_customer_code: input.context.customerCode!,
@@ -381,7 +388,7 @@ export async function submitCustomerOrder(
       ) {
         warnedCatalogueDrift = true
         console.warn(
-          `[submit_b2b_order] catalogue_item_id drift on line ` +
+          `[submit_b2b_order_for_country] catalogue_item_id drift on line ` +
             `${l.cart_line_id ?? l.product_id}: line carries ${lineCatalogueItemId} but ` +
             `its decoration links resolve to ${decoCatalogueItemId}; trusting the line id.`,
         )
@@ -406,6 +413,7 @@ export async function submitCustomerOrder(
     }),
     p_intent: input.intent ?? 'customer',
     p_member_permission: input.context.orderingPermission ?? 'both',
+    p_bill_country: billCountry,
   })
   if (error) {
     if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {
@@ -430,7 +438,7 @@ export async function submitCustomerOrder(
 
   const rowRaw = Array.isArray(data) ? data[0] : data
   const row = rowRaw as SubmitB2BOrderRow | null
-  if (!row) throw new Error('submit_b2b_order returned no row')
+  if (!row) throw new Error('submit_b2b_order_for_country returned no row')
   const { quote_id, order_id, order_ref } = row
 
   // Foundation F-1 — classify and stamp order_type from the (already
@@ -483,7 +491,7 @@ export async function submitCustomerOrder(
   // billing note; `pickFee` feeds BOTH that note and the Xero draft (single
   // source of truth). Fee applies to stock-on-hand orders only
   // (order_type === 'stock_on_hand') and is NZD-only — AUS ship-to orders are
-  // excluded here (region seam) pending the AUD/10%-GST AUS epic.
+  // excluded here by the exact bill-country stamp.
   //
   // `billingModeByVariant` is resolved once at step 2c, before the RPC — the
   // drift guard there has to be able to throw without stranding a committed
@@ -507,7 +515,7 @@ export async function submitCustomerOrder(
   // was billed.
   //
   // Written post-RPC with a plain update, exactly like decoration_cost above —
-  // which is why neither needs a submit_b2b_order change.
+  // which is why neither needs a submit RPC line-contract change.
   await admin
     .from('quotes')
     .update({ picking_fee: round2(pickFee), billed_total: billedTotal })
@@ -563,7 +571,7 @@ export async function submitCustomerOrder(
 
   // 4. Apply per-line ship_to_store_id, location label, and the decorations
   //    snapshot. The RPC creates quote_items without any of these; we set them
-  //    here (submit_b2b_order unchanged) — see buildLineSnapshotUpdate.
+  //    here (the country wrapper keeps the legacy line contract) — see buildLineSnapshotUpdate.
   const { data: newLines } = await admin
     .from('quote_items')
     .select('id, product_id, variant_id, size_id, product_name')
@@ -599,7 +607,7 @@ export async function submitCustomerOrder(
   }
 
   // 4a. Denormalise the order's single ship-to branch onto the quote header
-  //     (location-manager feature, Option A 2026-07-27). submit_b2b_order never
+  //     (location-manager feature, Option A 2026-07-27). The submit wrapper never
   //     stamps quote_items.ship_to_store_id (set post-RPC in step 4 above), so the
   //     header must be stamped here too. The buyer-scope guard (step 0) guarantees
   //     the lines are single-branch, so the first non-null store id is the whole
@@ -725,7 +733,7 @@ export async function submitCustomerOrder(
       requiredBy: input.required_by ?? null,
       orderType,
       shippingAddress,
-      currencyCode: currencyForRegion(orgRegion),
+      currencyCode: billingCurrency,
     })
     await recordAuditEvent(
       {
@@ -895,7 +903,7 @@ export async function submitCustomerOrder(
             inHandDate: input.required_by ?? null,
             notes: input.notes ?? null,
             totalAmount,
-            currency: currencyForRegion(orgRegion),
+            currency: billingCurrency,
             lines,
             deliveryAddress: formattedShippingAddress,
           },
@@ -1122,7 +1130,8 @@ export async function submitCustomerOrder(
         ordererEmail: input.context.email ?? null,
         paymentTerms: input.context.paymentTerms ?? null,
         isTestOrg: xeroIsTestOrg,
-        orgRegion,
+        orgRegion: xeroRegionForBillCountry(billCountry),
+        billCountry,
         pickingFee: pickFee,
         prepaidDrawnLineKeys,
         existingInvoiceId: null, // fresh order — no prior draft
@@ -1193,7 +1202,8 @@ export async function submitCustomerOrder(
         trigger: 'placement',
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
-        region: orgRegion,
+        region: xeroRegionForBillCountry(billCountry),
+        billCountry,
         isStockOnHand: isStockOnHandOrder,
         customerEmail: input.context.email ?? null,
         shippingAddress,
@@ -1210,7 +1220,7 @@ export async function submitCustomerOrder(
             action: AUDIT_ACTIONS.ORDER_STARSHIPIT_SKIPPED,
             targetType: 'order',
             targetId: order_id,
-            metadata: { order_ref, reason: ssResult.reason },
+            metadata: { order_ref, billCountry, reason: ssResult.reason },
           },
           admin,
         )
@@ -1324,7 +1334,7 @@ export async function submitCustomerOrder(
           customerName: emailCustomerName,
           orderId: order_id,
           orderRef: order_ref,
-          currency: currencyForRegion(orgRegion),
+          currency: billingCurrency,
           totalAmount: fallbackTotal,
           // Both 0 on the fallback path (quote fetch failed): fallbackTotal is
           // the goods sum, so the order over-quotes rather than under-quotes —
@@ -1393,6 +1403,7 @@ export async function submitCustomerOrder(
         customerName: emailCustomerName,
         orderType,
         totalAmount: notifyTotal,
+        currency: billingCurrency,
         orderUrl: notifyOrderUrl,
         lines: notifyLines.map((l) => ({
           productName: l.productName,
@@ -1414,7 +1425,7 @@ export async function submitCustomerOrder(
           orderRef: order_ref,
           customerName: emailCustomerName,
           orderType,
-          currency: currencyForRegion(orgRegion),
+          currency: billingCurrency,
           totalAmount: notifyTotal,
           orderUrl: notifyOrderUrl,
           ordererName: input.context.fullName,

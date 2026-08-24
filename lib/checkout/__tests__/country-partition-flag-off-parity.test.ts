@@ -41,6 +41,7 @@ import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
 import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { postOrderPlacedSlack } from '@/lib/notifications/slack-order-placed'
+import { autofillProofForOrder } from '@/lib/proofs/autofill-for-order'
 import { makeContext, makeFanoutStub, type StubConfig } from './fanout-test-stub'
 import { legacyPartitionOracle } from './legacy-partition-oracle'
 import { normalizePersisted } from '@/lib/cart/normalize'
@@ -87,6 +88,7 @@ interface ParityFixture {
   countryCode: 'NZ' | 'AU'
   orgRegion: 'NZ' | 'AU'
   currency: 'NZD' | 'AUD'
+  isTest?: boolean
 }
 
 const parityFixtures: ParityFixture[] = [
@@ -122,9 +124,20 @@ function parityWorld(fixture: ParityFixture, partitionIndex: number): StubConfig
     ],
     tier: null,
     garmentUnitPrice: 12.5,
+    garmentUnitPriceForCurrency: () => 12.5,
     decorationRpcPrice: () => 6,
-    organization: { region: fixture.orgRegion, isTest: true },
-    enabledCountryCodes: [fixture.countryCode],
+    decorationPriceForCurrency: () => 6,
+    organization: { region: fixture.orgRegion, isTest: fixture.isTest ?? true },
+    enabledCountries: [
+      {
+        code: fixture.countryCode,
+        name: fixture.countryCode === 'AU' ? 'Australia' : 'New Zealand',
+        currency: fixture.currency,
+        taxRate: fixture.countryCode === 'AU' ? 0.1 : 0.15,
+        taxLabel: fixture.countryCode === 'AU' ? 'GST 10%' : 'GST 15%',
+        isDefault: true,
+      },
+    ],
     submitResult: {
       quoteId: `quote-${partitionIndex + 1}`,
       orderId: `order-${partitionIndex + 1}`,
@@ -212,12 +225,29 @@ async function executeParityFixture(
         country: fixture.countryCode,
       },
     }
-    await submitCustomerOrder(stub.admin, input)
+    await submitCustomerOrder(
+      stub.admin,
+      input,
+      countryPartitionEnabled
+        ? {
+            countryPartitionEnabled: true,
+            partitionKey: partition.key,
+            country: {
+              code: fixture.countryCode,
+              name: fixture.countryCode === 'AU' ? 'Australia' : 'New Zealand',
+              currency: fixture.currency,
+              taxRate: fixture.countryCode === 'AU' ? 0.1 : 0.15,
+              taxLabel: fixture.countryCode === 'AU' ? 'GST 10%' : 'GST 15%',
+              isDefault: true,
+            },
+          }
+        : undefined,
+    )
     await globalThis.flushAfter()
 
     submitRpcArgs.push(
       ...stub.rpcCalls
-        .filter((call) => call.name === 'submit_b2b_order')
+        .filter((call) => call.name === 'submit_b2b_order_for_country')
         .map((call) =>
           normalizeObservable({
             ...call.args,
@@ -226,6 +256,9 @@ async function executeParityFixture(
         ),
     )
     quoteUpdates.push(
+      ...stub.persistedQuotes.map((value) =>
+        normalizeObservable({ operation: 'wrapper_stamp', value, filters: [] }),
+      ),
       ...stub.writeCalls
         .filter((call) => call.table === 'quotes')
         .map(({ operation, value, filters }) =>
@@ -548,6 +581,14 @@ describe('executable checkout flag-off parity oracle', () => {
           : { picking_fee: 0, billed_total: 740 },
       ])
 
+      const countryStamps = (off.quoteUpdates as Array<Record<string, unknown>>)
+        .filter((call) => call.operation === 'wrapper_stamp')
+        .map((call) => call.value)
+      expect(countryStamps).toStrictEqual([
+        { id: 'quote-1', bill_country: fixture.countryCode, currency: fixture.currency },
+        { id: 'quote-2', bill_country: fixture.countryCode, currency: fixture.currency },
+      ])
+
       const orderTypeStamps = (off.orderUpdates as Array<Record<string, unknown>>)
         .map((call) => call.value as Record<string, unknown>)
         .filter((value) => 'order_type' in value)
@@ -579,4 +620,210 @@ describe('executable checkout flag-off parity oracle', () => {
       expect(off.slackCalls).toHaveLength(2)
     },
   )
+
+  it('uses the destination currency for tracker shells in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.trackerCalls as Array<Record<string, unknown>>).map(
+        (call) => call.currencyCode,
+      ),
+    ).toStrictEqual(['NZD', 'NZD'])
+  })
+
+  it('uses the destination currency for Monday in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.mondayCalls as Array<Record<string, unknown>>).map(
+        (call) => call.currency,
+      ),
+    ).toStrictEqual(['NZD'])
+  })
+
+  it('routes Xero from the exact destination stamp in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.xeroCalls as Array<Record<string, unknown>>).map((call) => ({
+        billCountry: call.billCountry,
+        orgRegion: call.orgRegion,
+      })),
+    ).toStrictEqual([
+      { billCountry: 'NZ', orgRegion: 'NZ' },
+      { billCountry: 'NZ', orgRegion: 'NZ' },
+    ])
+  })
+
+  it('routes Starshipit from the exact destination stamp in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.starshipitCalls as Array<Record<string, unknown>>).map(
+        (call) => call.region,
+      ),
+    ).toStrictEqual(['NZ', 'NZ'])
+  })
+
+  it('uses the destination currency for email money in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.emailCalls as Array<{ call: Record<string, unknown> }>).map(
+        ({ call }) => call.currency,
+      ),
+    ).toStrictEqual(['NZD', 'NZD'])
+  })
+
+  it('includes the destination currency in Slack fan-out for the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+      },
+      true,
+    )
+
+    expect(
+      (artifact.slackCalls as Array<Record<string, unknown>>).map(
+        (call) => call.currency,
+      ),
+    ).toStrictEqual(['NZD', 'NZD'])
+  })
+
+  it('uses the destination currency for dispatch email in the AU-org to NZ canary', async () => {
+    const artifact = await executeParityFixture(
+      {
+        name: 'AU organization shipping to NZ',
+        countryCode: 'NZ',
+        orgRegion: 'AU',
+        currency: 'NZD',
+        isTest: false,
+      },
+      true,
+    )
+
+    expect(
+      (artifact.emailCalls as Array<{ kind: string; call: Record<string, unknown> }>)
+        .filter(({ kind }) => kind === 'dispatch')
+        .map(({ call }) => call.currency),
+    ).toStrictEqual(['NZD', 'NZD'])
+  })
+
+  it('fans out all three committed country/fulfilment orders despite one Xero failure', async () => {
+    vi.mocked(createDraftInvoiceForOrder)
+      .mockResolvedValueOnce({ status: 'skipped', reason: 'test' })
+      .mockRejectedValueOnce(new Error('AU Xero unavailable'))
+      .mockResolvedValueOnce({ status: 'skipped', reason: 'test' })
+
+    const cases = [
+      {
+        fixture: parityFixtures[1],
+        line: parityLines('AU')[1],
+        key: 'AU:purchase_order',
+      },
+      {
+        fixture: parityFixtures[1],
+        line: parityLines('AU')[0],
+        key: 'AU:stock_on_hand',
+      },
+      {
+        fixture: parityFixtures[0],
+        line: parityLines('NZ')[0],
+        key: 'NZ:stock_on_hand',
+      },
+    ] as const
+    const submitCalls: Array<{ name: string; billCountry: unknown }> = []
+
+    for (const [index, entry] of cases.entries()) {
+      const stub = makeFanoutStub(parityWorld(entry.fixture, index))
+      await submitCustomerOrder(
+        stub.admin,
+        {
+          context: makeContext('org-1'),
+          idempotency_key: `whitefox:${entry.key}`,
+          lines: [entry.line],
+          pricing_pool_lines: cases.map(({ line }) => line),
+          custom_shipping_address: {
+            street: '1 Test Street',
+            city: entry.fixture.countryCode === 'AU' ? 'Melbourne' : 'Auckland',
+            country: entry.fixture.countryCode,
+          },
+        },
+        {
+          countryPartitionEnabled: true,
+          partitionKey: entry.key,
+          country: {
+            code: entry.fixture.countryCode,
+            name: entry.fixture.countryCode === 'AU' ? 'Australia' : 'New Zealand',
+            currency: entry.fixture.currency,
+            taxRate: entry.fixture.countryCode === 'AU' ? 0.1 : 0.15,
+            taxLabel: entry.fixture.countryCode === 'AU' ? 'GST 10%' : 'GST 15%',
+            isDefault: entry.fixture.countryCode === 'AU',
+          },
+        },
+      )
+      await globalThis.flushAfter()
+      submitCalls.push(
+        ...stub.rpcCalls
+          .filter(({ name }) => name === 'submit_b2b_order_for_country')
+          .map(({ name, args }) => ({ name, billCountry: args?.p_bill_country })),
+      )
+    }
+
+    expect(submitCalls).toStrictEqual([
+      { name: 'submit_b2b_order_for_country', billCountry: 'AU' },
+      { name: 'submit_b2b_order_for_country', billCountry: 'AU' },
+      { name: 'submit_b2b_order_for_country', billCountry: 'NZ' },
+    ])
+    expect(createJobTrackerShellForOrder).toHaveBeenCalledTimes(3)
+    expect(autofillProofForOrder).toHaveBeenCalledTimes(3)
+    expect(createDraftInvoiceForOrder).toHaveBeenCalledTimes(3)
+    expect(pushOrderToStarshipit).toHaveBeenCalledTimes(3)
+    expect(sendOrderConfirmation).toHaveBeenCalledTimes(3)
+    expect(postOrderPlacedSlack).toHaveBeenCalledTimes(3)
+    expect(pushOrderDeal).toHaveBeenCalledTimes(1)
+  })
 })

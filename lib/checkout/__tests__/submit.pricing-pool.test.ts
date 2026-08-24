@@ -163,7 +163,7 @@ function buildInput(over: Partial<CheckoutInput> = {}): CheckoutInput {
 
 const happyRpc = (name: string) => {
   if (name === 'effective_unit_price_for_item') return { data: 8, error: null }
-  if (name === 'submit_b2b_order') {
+  if (name === 'submit_b2b_order_for_country') {
     return {
       data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-POOL-1' }],
       error: null,

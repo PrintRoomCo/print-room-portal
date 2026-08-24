@@ -47,4 +47,13 @@ describe('order emails — AUD currency prefix (AU Stage 1)', () => {
       expect(body).not.toMatch(/(^|[^A])\$\d/)
     }
   })
+
+  it('formats an arbitrary stamped ISO currency without treating it as NZD', () => {
+    expect(
+      buildOrderConfirmationEmail({ ...confirmationBase, currency: 'GBP' } as never).text,
+    ).toContain('£100.00')
+    expect(
+      buildOrderPlacedDispatchEmail({ ...dispatchBase, currency: 'GBP' } as never).text,
+    ).toContain('£100.00')
+  })
 })

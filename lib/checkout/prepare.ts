@@ -311,18 +311,45 @@ export async function prepareCustomerOrderPartition(
   // 1. Resolve shipping_address — either the custom JSON or the first line's store.
   let shippingAddress: Record<string, unknown> = input.custom_shipping_address ?? {}
   if (!input.custom_shipping_address && input.lines[0]?.ship_to_store_id) {
-    const { data: firstStore } = await admin
-      .from('stores')
-      .select('id, name, address, city, state, country, postal_code')
-      .eq('id', input.lines[0].ship_to_store_id)
-      .single()
-    if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
+    if (options.countryPartitionEnabled) {
+      const partitionStoreIds = Array.from(
+        new Set(input.lines.map((line) => line.ship_to_store_id).filter(Boolean)),
+      ) as string[]
+      const { data: partitionStores, error: partitionStoresError } = await admin
+        .from('stores')
+        .select('id, name, address, city, state, country, postal_code')
+        .in('id', partitionStoreIds)
+      if (partitionStoresError) {
+        throw new Error(`Checkout partition store lookup failed: ${partitionStoresError.message}`)
+      }
+      const storesById = new Map(
+        ((partitionStores ?? []) as Array<Record<string, unknown>>).map((store) => [
+          store.id as string,
+          store,
+        ]),
+      )
+      for (const storeId of partitionStoreIds) {
+        const store = storesById.get(storeId)
+        if (store?.country !== options.country.code) {
+          throw new Error('Checkout partition country mismatch')
+        }
+      }
+      const firstStore = storesById.get(input.lines[0].ship_to_store_id)
+      if (firstStore) shippingAddress = firstStore
+    } else {
+      const { data: firstStore } = await admin
+        .from('stores')
+        .select('id, name, address, city, state, country, postal_code')
+        .eq('id', input.lines[0].ship_to_store_id)
+        .single()
+      if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
+    }
   }
   const formattedShippingAddress = formatShippingAddress(shippingAddress)
 
   // 1b. Per-member access re-verify. Mid-flight: if staff revoked a catalogue
   //     or item grant between cart load and checkout, we MUST reject before
-  //     submit_b2b_order touches anything.
+  //     the submit RPC touches anything.
   const grantedItemIds = new Set(
     await getGrantedCatalogueItemIds(
       admin,
@@ -332,7 +359,7 @@ export async function prepareCustomerOrderPartition(
   )
   if (grantedItemIds.size > 0) {
     // Map each line.product_id to a catalogue_item the member can still see.
-    // submit_b2b_order keys on product_id (matching /shop/[productId]), so it's
+    // The submit RPC keys on product_id (matching /shop/[productId]), so it's
     // enough to confirm at least one granted catalogue item exists for the product.
     const productIds = Array.from(new Set(input.lines.map((l) => l.product_id)))
     const { data: visibleItems } = await admin
@@ -416,7 +443,7 @@ export async function prepareCustomerOrderPartition(
   // that exempts a line from MOQ (below) — so it may only stand when the
   // product's effective nature actually allows a draw. (Spec A no longer gates
   // Xero on stock-draw; the coercion still matters for MOQ + Spec B.)
-  // submit_b2b_order resolves fulfilment the same way
+  // The submit RPC resolves fulfilment the same way
   // (catalogue override ?? product base) and never draws on-hand stock for
   // made_to_order/pre_order natures, so a 'stocked' claim there is always
   // wrong — the old PDP fallback bug, stale persisted carts, or a hostile
@@ -1333,13 +1360,16 @@ export async function prepareCustomerOrderPartition(
     repriced.reduce((total, line) => total + line.unit_price * line.qty, 0),
   )
   const goodsValueForBand = round2(garmentSubtotal + totalDecorationRevenue)
-  const { data: orgRegionRow } = await admin
-    .from('organizations')
-    .select('region')
-    .eq('id', input.context.organizationId)
-    .maybeSingle()
-  const orgRegion: 'NZ' | 'AU' =
-    (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
+  let orgRegion: 'NZ' | 'AU' = 'NZ'
+  if (!options.countryPartitionEnabled) {
+    const { data: orgRegionRow } = await admin
+      .from('organizations')
+      .select('region')
+      .eq('id', input.context.organizationId)
+      .maybeSingle()
+    orgRegion =
+      (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
+  }
   const pickFee = checkoutPickingFee({
     countryPartitionEnabled: options.countryPartitionEnabled,
     orderType,
