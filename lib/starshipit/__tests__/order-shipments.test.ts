@@ -20,6 +20,7 @@ function makeDb(opts: {
   shipmentByKey?: Record<string, Row>
   shipmentByTracking?: Record<string, Row>
   insertError?: { message: string } | null
+  rpcError?: { message: string } | null
 } = {}) {
   const inserts: Array<{ table: string; values: Row }> = []
   const updates: Array<{ table: string; values: Row; id: unknown }> = []
@@ -74,7 +75,7 @@ function makeDb(opts: {
     },
     rpc(fn: string, args: Row) {
       rpcs.push({ fn, args })
-      return Promise.resolve({ data: null, error: null })
+      return Promise.resolve({ data: null, error: opts.rpcError ?? null })
     },
   }
   return { supabase: supabase as unknown as SupabaseClient, inserts, updates, rpcs }
@@ -86,7 +87,7 @@ const MATCH = {
 }
 
 describe('applyStarshipitOrderShipment', () => {
-  it('inserts a parcel and latches fulfilled on the first Dispatched event', async () => {
+  it('inserts a parcel and atomically transitions fulfilment on the first Dispatched event', async () => {
     const db = makeDb(MATCH)
     const result = await applyStarshipitOrderShipment(db.supabase, {
       order_number: 'PO-123',
@@ -110,13 +111,12 @@ describe('applyStarshipitOrderShipment', () => {
       tracking_url: 'https://track.example/TN1',
       shipped_at: '2026-08-12T01:00:00Z',
     })
-    expect(db.updates).toContainEqual({
-      table: 'orders',
-      values: { fulfillment_status: 'fulfilled' },
-      id: 'o1',
-    })
+    expect(db.updates.filter((u) => u.table === 'orders')).toHaveLength(0)
     expect(db.rpcs).toEqual([
-      { fn: 'recompute_order_fulfillment_status', args: { p_order_id: 'o1' } },
+      {
+        fn: 'transition_order_fulfillment',
+        args: { p_order_id: 'o1', p_action: 'system_shipped' },
+      },
     ])
   })
 
@@ -131,7 +131,9 @@ describe('applyStarshipitOrderShipment', () => {
     expect(db.inserts[0].values).toMatchObject({ status: 'label_printed' })
     expect(db.inserts[0].values.shipped_at).toBeUndefined()
     expect(db.updates.filter((u) => u.table === 'orders')).toHaveLength(0)
-    expect(db.rpcs).toHaveLength(1)
+    expect(db.rpcs).toEqual([
+      { fn: 'recompute_order_fulfillment_status', args: { p_order_id: 'o1' } },
+    ])
   })
 
   it('a second event for the same tracking number updates the row (no duplicate)', async () => {
@@ -229,8 +231,13 @@ describe('applyStarshipitOrderShipment', () => {
     })
     expect(result.parcelWritten).toBe(true)
     expect(db.updates.filter((u) => u.table === 'orders')).toHaveLength(0)
-    // recompute still runs; the SQL preserves the cancelled latch.
-    expect(db.rpcs).toHaveLength(1)
+    // The system action is idempotent and the SQL preserves the cancelled latch.
+    expect(db.rpcs).toEqual([
+      {
+        fn: 'transition_order_fulfillment',
+        args: { p_order_id: 'o1', p_action: 'system_shipped' },
+      },
+    ])
   })
 
   it('surfaces an insert failure in error without throwing', async () => {
@@ -241,5 +248,26 @@ describe('applyStarshipitOrderShipment', () => {
       tracking_status: 'Dispatched',
     })
     expect(result).toMatchObject({ matchedOrderId: 'o1', parcelWritten: false, error: 'duplicate key value' })
+  })
+
+  it('keeps the parcel durable and surfaces an atomic transition failure for reconciliation', async () => {
+    const db = makeDb({ ...MATCH, rpcError: { message: 'SHIP_QUOTE_LINE_INVENTORY_MISMATCH' } })
+    const result = await applyStarshipitOrderShipment(db.supabase, {
+      order_number: 'PO-123',
+      tracking_number: 'TN1',
+      tracking_status: 'Dispatched',
+    })
+
+    expect(result).toMatchObject({
+      matchedOrderId: 'o1',
+      parcelWritten: true,
+      error: 'SHIP_QUOTE_LINE_INVENTORY_MISMATCH',
+    })
+    expect(db.rpcs).toEqual([
+      {
+        fn: 'transition_order_fulfillment',
+        args: { p_order_id: 'o1', p_action: 'system_shipped' },
+      },
+    ])
   })
 })

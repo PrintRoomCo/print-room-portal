@@ -2,9 +2,8 @@
 // Staff-order extension of the Starshipit webhook (staff-portal spec
 // 2026-08-12-order-detail-cleanup-and-starshipit-fulfillment-design.md §4).
 // Matches the payload to a staff order, upserts the parcel into
-// order_shipments, latches orders.fulfillment_status to 'fulfilled' on the
-// first shipped event (spec D6 — the manual "Mark fully shipped" is gone),
-// and recomputes the rollup via the canonical security-definer RPC.
+// order_shipments, then asks the canonical security-definer RPC to transition
+// fulfilment and inventory together on shipped events.
 //
 // Injection rationale (same as the tracker match in the route): the payload is
 // attacker-influencable, so ONLY sequential .eq() filters — never
@@ -37,7 +36,6 @@ export interface OrderShipmentResult {
 
 interface OrderRow {
   id: string
-  fulfillment_status: string
 }
 
 interface ExistingParcel {
@@ -63,7 +61,7 @@ export async function applyStarshipitOrderShipment(
     if (quote) {
       const { data } = await supabase
         .from('orders')
-        .select('id, fulfillment_status')
+        .select('id')
         .eq('quote_id', quote.id)
         .limit(1)
         .maybeSingle()
@@ -94,7 +92,7 @@ export async function applyStarshipitOrderShipment(
       existing = { id: data.id, shipped_at: data.shipped_at, delivered_at: data.delivered_at }
       const { data: orderData } = await supabase
         .from('orders')
-        .select('id, fulfillment_status')
+        .select('id')
         .eq('id', data.order_id)
         .limit(1)
         .maybeSingle()
@@ -149,25 +147,18 @@ export async function applyStarshipitOrderShipment(
     return { matchedOrderId: order.id, parcelWritten: false, skipReason: null, error }
   }
 
-  // 4. Latch (spec D6): first shipped event stands in for the removed manual
-  //    "Mark fully shipped". fulfilled/delivered/cancelled are left alone —
-  //    the recompute preserves those latches.
-  if (
-    SHIPPED_PARCEL_STATUSES.includes(status) &&
-    (order.fulfillment_status === 'unfulfilled' ||
-      order.fulfillment_status === 'partially_fulfilled')
-  ) {
-    const { error: latchError } = await supabase
-      .from('orders')
-      .update({ fulfillment_status: 'fulfilled' })
-      .eq('id', order.id)
-    if (latchError) error = latchError.message
-  }
-
-  // 5. Canonical rollup writer (derives 'delivered', keeps latches).
-  const { error: rpcError } = await supabase.rpc('recompute_order_fulfillment_status', {
-    p_order_id: order.id,
-  })
+  // 4. Shipped events use the idempotent system action so status, stock and the
+  //    order_ship ledger commit together. Non-shipped parcel updates only need
+  //    the compatibility rollup. The database lock is authoritative; this
+  //    handler intentionally does not read-then-write fulfillment_status.
+  const { error: rpcError } = SHIPPED_PARCEL_STATUSES.includes(status)
+    ? await supabase.rpc('transition_order_fulfillment', {
+        p_order_id: order.id,
+        p_action: 'system_shipped',
+      })
+    : await supabase.rpc('recompute_order_fulfillment_status', {
+        p_order_id: order.id,
+      })
   if (rpcError) error = error ? `${error} | ${rpcError.message}` : rpcError.message
 
   return { matchedOrderId: order.id, parcelWritten: true, skipReason: null, error }
