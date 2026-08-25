@@ -8,6 +8,7 @@ import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
+import { CustomerCodeNotice } from './CustomerCodeNotice'
 import {
   billedOrderShape,
   checkoutBillingShape,
@@ -755,12 +756,7 @@ export function CheckoutReviewClient({
         </div>
       )}
 
-      {!customerCode && (
-        <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Your account is pending setup - contact staff to assign your customer code before
-          placing an order.
-        </div>
-      )}
+      {!customerCode && <CustomerCodeNotice />}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
         {countryPartitionEnabled ? (

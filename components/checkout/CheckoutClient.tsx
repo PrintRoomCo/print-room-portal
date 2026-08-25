@@ -12,6 +12,7 @@ import {
 import type { EnabledCountry } from '@/lib/account/org-countries'
 import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
+import { CustomerCodeNotice } from './CustomerCodeNotice'
 import {
   EMPTY_CUSTOM_ADDRESS,
   writeCheckoutReviewState,
@@ -376,12 +377,7 @@ export function CheckoutClient({
         </div>
       )}
 
-      {customerCodeMissing && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Your account is pending setup. Contact staff to assign your customer code before
-          submitting an order.
-        </div>
-      )}
+      {customerCodeMissing && <CustomerCodeNotice />}
 
       {buyerMisconfigured && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
