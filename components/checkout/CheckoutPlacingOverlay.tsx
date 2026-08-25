@@ -33,7 +33,7 @@ export function CheckoutPlacingOverlay({ show }: { show: boolean }) {
             </svg>
             <p className="text-sm font-medium text-gray-900">Placing your order…</p>
             <p className="text-xs text-gray-500">
-              Reserving stock and confirming pricing — this can take a moment for large orders.
+              Reserving stock and confirming pricing. This can take a moment for large orders.
             </p>
           </motion.div>
         </motion.div>

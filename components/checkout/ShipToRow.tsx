@@ -13,7 +13,7 @@ export interface StoreOption {
   id: string
   name: string | null
   city: string | null
-  /** Free-text ship-to country. Loaded by BOTH checkout pages — it region-gates
+  /** Free-text ship-to country. Loaded by BOTH checkout pages; it region-gates
    *  the NZ picking fee, so a page that omits it would quote a $0 fee while the
    *  other quotes $15. */
   country?: string | null
@@ -35,7 +35,7 @@ interface ShipToRowProps {
   catalogueFrontImageUrl?: string | null
   /**
    * When true, hide the per-line ship-to control. Used by CheckoutClient when the
-   * whole order routes to inventory (order-level "Add all to my inventory") —
+   * whole order routes to inventory (order-level "Add all to my inventory");
    * there is no per-line destination in that mode.
    */
   hideShipTo?: boolean
@@ -104,7 +104,7 @@ export function ShipToRow({
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name ?? 'Store'}
-                  {s.city ? ` — ${s.city}` : ''}
+                  {s.city ? `, ${s.city}` : ''}
                 </option>
               ))}
               {allowCustom && <option value={CUSTOM_SHIP_TO}>Pick a one-time address</option>}

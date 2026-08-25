@@ -3,7 +3,7 @@
  * /checkout/review cannot render it differently.
  *
  * `billed` must come from the billed shape (lib/pricing/order-billing-shape),
- * never from a local guess — the badge and the money are the same predicate by
+ * never from a local guess; the badge and the money are the same predicate by
  * construction (isPrepaidDrawn), and that is the point.
  */
 export function PrepaidBadge() {
@@ -20,7 +20,7 @@ export function PrepaidLinePrice({
   format,
   oemPresentation = false,
 }: {
-  /** Full goods value at current catalogue price — always shown. */
+  /** Full goods value at current catalogue price, always shown. */
   goodsValue: number
   /** false ⇒ prepaid stock draw: struck through, invoiced at $0. */
   billed: boolean
@@ -46,7 +46,7 @@ export function PrepaidLinePrice({
       <span className={`font-semibold tabular-nums ${oemPresentation ? 'text-black' : 'text-gray-900'}`}>
         {format(0)}
       </span>
-      <span className="sr-only">— drawn from pre-paid stock, no charge</span>
+      <span className="sr-only">drawn from pre-paid stock, no charge</span>
     </span>
   )
 }

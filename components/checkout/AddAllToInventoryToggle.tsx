@@ -9,7 +9,7 @@ interface Props {
 /**
  * Compact "Add all to my inventory" pill rendered bottom-right of the
  * items section on the checkout page. The whole pill is one big
- * role="switch" button — clicking anywhere on the chip flips state.
+ * role="switch" button: clicking anywhere on the chip flips state.
  */
 export function AddAllToInventoryToggle({ checked, onChange, disabled }: Props) {
   return (

@@ -80,7 +80,7 @@ const clickPlaceOrder = () =>
     screen.getByRole('button', { name: /confirm & place order/i }),
   )
 
-describe('CheckoutReviewClient — Terms & Conditions', () => {
+describe('CheckoutReviewClient: Terms & Conditions', () => {
   it('shows an error banner and does NOT POST when the box is unticked', async () => {
     renderReview()
     await screen.findAllByText('Test tee')

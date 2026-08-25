@@ -19,7 +19,7 @@ export type FreshBillingModesStatus = 'loading' | 'ready' | 'error'
  * `claimed_billing_mode` 409 catches genuine drift either way.
  *
  * `status` lets callers hold the total back for the sub-second fetch rather than
- * flashing a wrong number. 'error' is still a usable, fail-closed answer — hence
+ * flashing a wrong number. 'error' is still a usable, fail-closed answer, hence
  * separate from 'loading'.
  */
 export function useFreshBillingModes(

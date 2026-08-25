@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react'
 import { TermsContent } from './TermsContent'
 
 interface TermsModalProps {
-  /** AU Stage 1 — org billing region; drives the currency sentence in §1. */
+  /** AU Stage 1: org billing region; drives the currency sentence in §1. */
   region?: 'NZ' | 'AU'
   onClose: () => void
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Side-effects are irrelevant to the per-line snapshot batching under test;
+// Side-effects are irrelevant to the atomic per-line snapshot plan under test;
 // stub the same graph the sibling submit tests do so we don't drag in Monday,
 // email or proof assembly.
 vi.mock('@/lib/monday/deal-item', () => ({
@@ -24,17 +24,13 @@ const P3 = '00000000-0000-0000-0000-000000000003'
 const ORG_ID = '00000000-0000-0000-0000-0000000000ff'
 
 /**
- * Minimal chainable Supabase stub focused on the step-4 per-line snapshot loop.
- * Every `quote_items` UPDATE is recorded, and — crucially — each update's
- * resolution is deferred to a later microtask so we can observe *dispatch
- * order*: a sequential `await` loop resolves update[i] before update[i+1] is
- * started (so update[i+1] sees i prior resolutions), whereas a single
- * `Promise.all` dispatches every update before any resolves (all see 0).
+ * Minimal chainable Supabase stub focused on the submit RPC boundary. Any
+ * post-commit `quote_items` UPDATE is recorded so the test can prove artwork
+ * provenance no longer depends on one.
  */
 function makeStub() {
   const updates: Array<{ id: unknown; payload: Record<string, unknown> }> = []
-  const resolvedBeforeStart: number[] = []
-  let resolvedCount = 0
+  const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = []
 
   const selects: Record<string, { data: unknown; error: null }> = {
     user_organizations: { data: { role: 'org_admin' }, error: null },
@@ -124,13 +120,7 @@ function makeStub() {
         if (write?.op === 'update' && table === 'quote_items') {
           const idFilter = filters.find((f) => f.column === 'id')
           updates.push({ id: idFilter?.value, payload: write.payload })
-          resolvedBeforeStart.push(resolvedCount)
-          return Promise.resolve()
-            .then(() => {
-              resolvedCount++
-            })
-            .then(() => ({ data: null, error: null }))
-            .then(resolve, reject)
+          return Promise.resolve({ data: null, error: null }).then(resolve, reject)
         }
         return Promise.resolve(settle()).then(resolve, reject)
       },
@@ -140,7 +130,8 @@ function makeStub() {
 
   const admin = {
     from: vi.fn((table: string) => builderFor(table)),
-    rpc: vi.fn(async (name: string) => {
+    rpc: vi.fn(async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ name, args })
       if (name === 'effective_unit_price' || name === 'effective_unit_price_for_item') {
         return { data: 10, error: null }
       }
@@ -154,7 +145,7 @@ function makeStub() {
     },
   } as unknown as Parameters<typeof submitCustomerOrder>[0]
 
-  return { admin, updates, resolvedBeforeStart }
+  return { admin, updates, rpcCalls }
 }
 
 function line(productId: string, name: string, cartLineId: string): CheckoutInput['lines'][number] {
@@ -207,21 +198,22 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('submitCustomerOrder — per-line snapshot batching', () => {
-  it('writes one quote_items UPDATE per line, dispatched concurrently (not awaited serially)', async () => {
-    const { admin, updates, resolvedBeforeStart } = makeStub()
+describe('submitCustomerOrder — atomic rendition snapshot plan', () => {
+  it('sends every line to the transactional RPC and performs no post-commit artwork update', async () => {
+    const { admin, updates, rpcCalls } = makeStub()
     await submitCustomerOrder(admin, buildInput())
 
-    // Correctness: exactly one snapshot update per input line.
-    expect(updates).toHaveLength(3)
-    expect(updates.map((u) => u.id).sort()).toEqual(['qi-1', 'qi-2', 'qi-3'])
-    for (const u of updates) {
-      expect(u.payload).toMatchObject({ decorations: [] })
-    }
-
-    // Concurrency: with Promise.all every update is dispatched before any
-    // resolves, so none observes a prior update as already-resolved. A
-    // sequential `await` loop would record 0, 1, 2.
-    expect(Math.max(...resolvedBeforeStart)).toBe(0)
+    expect(updates).toEqual([])
+    expect(
+      rpcCalls.find(({ name }) => name === 'submit_b2b_order_for_country')?.args
+        .p_rendition_snapshot_plan,
+    ).toEqual({
+      mode: 'provided',
+      lines: [
+        { line_ordinal: 1, decorations: [] },
+        { line_ordinal: 2, decorations: [] },
+        { line_ordinal: 3, decorations: [] },
+      ],
+    })
   })
 })

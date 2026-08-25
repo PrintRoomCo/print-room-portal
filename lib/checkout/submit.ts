@@ -294,22 +294,20 @@ function makeLineKey(productId: string, variantId: string | null, sizeId: number
 }
 
 /**
- * Build the post-RPC follow-up UPDATE for one order line's snapshot columns.
- * The RPC creates quote_items without ship-to / decorations / location; we set
- * them here (the country wrapper keeps the legacy line contract). Each field is only written when
+ * Build the post-RPC follow-up UPDATE for one order line's location metadata.
+ * Renditions are committed atomically by the RPC; these older location fields
+ * remain post-commit compatibility writes. Each field is only written when
  * the input line actually carried it (undefined → column left untouched), so a
  * legacy line never clobbers an existing value. `line_location_label` is the
  * feature-1 frozen label snapshot (Task 2 column).
  */
 export function buildLineSnapshotUpdate(
   inLine: Pick<CheckoutLineInput, 'ship_to_store_id' | 'location_label' | 'custom_name'>,
-  validatedDecorations: CheckoutLineDecorationInput[],
 ): Record<string, unknown> {
   const update: Record<string, unknown> = {}
   if (inLine.ship_to_store_id !== undefined) update.ship_to_store_id = inLine.ship_to_store_id ?? null
   if (inLine.location_label !== undefined) update.line_location_label = inLine.location_label ?? null
   if (inLine.custom_name !== undefined) update.line_custom_name = inLine.custom_name ?? null
-  update.decorations = validatedDecorations
   return update
 }
 
@@ -420,6 +418,20 @@ export async function submitCustomerOrder(
         fulfilment_route: routeForFulfilmentType(l.fulfilment_type),
       }
     }),
+    p_rendition_snapshot_plan: {
+      mode: 'provided',
+      lines: repriced.map((line, index) => ({
+        line_ordinal: index + 1,
+        decorations:
+          validatedByLineKey.get(
+            makeLineKey(
+              line.product_id,
+              line.variant_id ?? null,
+              line.size_id ?? null,
+            ),
+          ) ?? [],
+      })),
+    },
     p_intent: input.intent ?? 'customer',
     p_member_permission: input.context.orderingPermission ?? 'both',
     p_bill_country: billCountry,
@@ -578,9 +590,8 @@ export async function submitCustomerOrder(
     })
   }
 
-  // 4. Apply per-line ship_to_store_id, location label, and the decorations
-  //    snapshot. The RPC creates quote_items without any of these; we set them
-  //    here (the country wrapper keeps the legacy line contract) — see buildLineSnapshotUpdate.
+  // 4. Apply legacy per-line ship-to and location metadata. Decoration
+  //    rendition provenance was already committed atomically by the RPC.
   const { data: newLines } = await admin
     .from('quote_items')
     .select('id, product_id, variant_id, size_id, product_name')
@@ -602,9 +613,7 @@ export async function submitCustomerOrder(
       )
       if (!match) continue
       consumed.add(match.id)
-      const validated =
-        validatedByLineKey.get(makeLineKey(inLine.product_id, inLine.variant_id ?? null, inLine.size_id ?? null)) ?? []
-      const update = buildLineSnapshotUpdate(inLine, validated)
+      const update = buildLineSnapshotUpdate(inLine)
       if (Object.keys(update).length > 0) {
         // Collect and dispatch concurrently — one round-trip per line, but all
         // in flight at once instead of a serial await chain (N× faster tail on

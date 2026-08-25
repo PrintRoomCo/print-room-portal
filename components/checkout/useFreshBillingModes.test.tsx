@@ -32,9 +32,9 @@ describe('useFreshBillingModes', () => {
   })
 
   // The money-critical path. An empty map means every line resolves to a null
-  // mode and bills at FULL price — we over-quote a prepaid customer rather than
+  // mode and bills at FULL price; we over-quote a prepaid customer rather than
   // quote $17.25 on an order we'd invoice at $1,684.98.
-  it('fails CLOSED on a network error — empty map, never a stale $0', async () => {
+  it('fails CLOSED on a network error: empty map, never a stale $0', async () => {
     fetchMock.mockRejectedValue(new Error('offline'))
     const { result } = renderHook(() => useFreshBillingModes([{ variantId: 'v1' }]))
 

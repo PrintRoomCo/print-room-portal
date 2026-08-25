@@ -20,7 +20,7 @@ interface CheckoutCTAStickyBarProps {
 }
 
 /**
- * Full-width fixed bottom CTA bar — House of Miracles pass 2 signature element.
+ * Full-width fixed bottom CTA bar, the House of Miracles pass 2 signature element.
  * OEM black (Q1=A). Left: cart count + total. Right: CTA pill (defaults to
  * "Review order" for the /checkout page; the /checkout/review page overrides
  * to "Confirm & place order").

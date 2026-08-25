@@ -5,7 +5,7 @@ import { CHECKOUT_REVIEW_STORAGE_KEY } from '../checkoutReviewState'
 
 const mocks = vi.hoisted(() => ({
   lines: [] as Array<Record<string, unknown>>,
-  /** What GET /api/checkout/billing-modes returns — the FRESH read. */
+  /** What GET /api/checkout/billing-modes returns: the FRESH read. */
   billingModes: {} as Record<string, string>,
   /** Set to make the fresh read fail, exercising the fail-closed path. */
   billingModesFail: false,
@@ -111,7 +111,7 @@ beforeEach(() => {
 // cart's own billingMode is a PDP snapshot that can be days stale, and since the
 // badge now shares its predicate with the price, a stale snapshot would mean
 // showing $0 on goods we would invoice in full.
-describe('CheckoutReviewClient — Pre-paid badge reads the FRESH per-variant billing mode', () => {
+describe('CheckoutReviewClient: Pre-paid badge reads the FRESH per-variant billing mode', () => {
   it('shows the badge for a prepaid stock-drawing line', async () => {
     mocks.lines = [line({ fulfilmentType: 'stocked' })]
     mocks.billingModes = { 'variant-1': 'prepaid' }
@@ -137,7 +137,7 @@ describe('CheckoutReviewClient — Pre-paid badge reads the FRESH per-variant bi
     expect(screen.queryByText('Pre-paid')).toBeNull()
   })
 
-  it('fails CLOSED when the fresh read errors — no badge, full price', async () => {
+  it('fails CLOSED when the fresh read errors: no badge, full price', async () => {
     mocks.lines = [line({ billingMode: 'prepaid', fulfilmentType: 'stocked' })]
     mocks.billingModesFail = true
     renderReview()

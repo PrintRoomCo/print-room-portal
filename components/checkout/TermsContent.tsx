@@ -2,7 +2,7 @@ import { TERMS_VERSION } from '@/lib/checkout/terms'
 
 /**
  * Provisional-but-real plain-English B2B terms (design 2026-08-11, Decision 7).
- * NOT lorem ipsum — agreeing to filler on a live portal undermines the consent
+ * NOT lorem ipsum: agreeing to filler on a live portal undermines the consent
  * record. Jon reviews this wording before merge; final legal copy is a later
  * edit here. Bump TERMS_VERSION in lib/checkout/terms.ts on substantive change.
  */

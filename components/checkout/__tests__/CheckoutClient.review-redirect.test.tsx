@@ -40,7 +40,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 }))
 // AU Stage 1: the PDP/checkout now read the org's billing region for the GST
 // rate. access: null → gstRateForRegion(undefined) → 0.15, i.e. today's NZ
-// behaviour, so every assertion below is unchanged. (House idiom — same shape
+// behaviour, so every assertion below is unchanged. (House idiom: same shape
 // as the CheckoutReviewClient tests.)
 vi.mock('@/contexts/CompanyContext', () => ({
   useCompany: () => ({ access: null, loading: false }),
@@ -205,7 +205,7 @@ describe('CheckoutClient review step', () => {
       />,
     )
 
-    // made_to_order means the qty must be produced — it does NOT auto-route to
+    // made_to_order means the qty must be produced; it does NOT auto-route to
     // the inventory shelf. The switch starts OFF; the order ships to the
     // customer by default.
     const inventorySwitch = screen.getByRole('switch', { name: /add all lines to my inventory/i })
@@ -278,7 +278,7 @@ describe('CheckoutClient review step', () => {
     await user.type(screen.getByPlaceholderText(/street address/i), '12 Queen St')
     await user.type(screen.getByPlaceholderText(/^city$/i), 'Auckland')
     // SP1: country is a select over the org's enabled countries, pre-set to the
-    // org default — free text is no longer possible, so nothing is typed here.
+    // org default: free text is no longer possible, so nothing is typed here.
     const countrySelect = document.getElementById('custom-shipping-country') as HTMLSelectElement
     expect(countrySelect.value).toBe('NZ')
 

@@ -121,6 +121,18 @@ describe('computed path — pricing resolution ladder', () => {
     expect(submitCall?.args?.p_lines).toEqual([
       expect.objectContaining({ unit_price: 12.5 + 5 + 3.5, catalogue_item_id: ITEM_C }),
     ])
+    expect(submitCall?.args?.p_rendition_snapshot_plan).toEqual({
+      mode: 'provided',
+      lines: [
+        {
+          line_ordinal: 1,
+          decorations: [
+            expect.objectContaining({ decorationId: 'dec-c1', linkId: 'link-c1' }),
+            expect.objectContaining({ decorationId: 'dec-c2', linkId: 'link-c2' }),
+          ],
+        },
+      ],
+    })
   })
 
   it('falls back to org_decorations.unit_price when RPC returns null and no link override', async () => {

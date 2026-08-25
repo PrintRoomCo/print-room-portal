@@ -74,7 +74,7 @@ function renderReview(overrides?: {
 }
 
 // These tests exercise post-terms-guard behavior (conflicts, double-submit,
-// the placing overlay) — they need the box ticked to reach the POST at all.
+// the placing overlay); they need the box ticked to reach the POST at all.
 async function tickTerms(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByLabelText(/i have read and agree/i))
 }
@@ -346,7 +346,7 @@ describe('CheckoutReviewClient double-submit guard', () => {
         return Promise.resolve(okJson({ modeByVariantId: {} }))
       }
       if (url.includes('/api/checkout')) {
-        return new Promise<Response>(() => {}) // never resolves — stays in flight
+        return new Promise<Response>(() => {}) // never resolves, stays in flight
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`))
     })

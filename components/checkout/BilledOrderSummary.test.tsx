@@ -156,18 +156,18 @@ describe('CountryBilledOrderSummary', () => {
   })
 })
 
-describe('BilledOrderSummary — single prepaid order', () => {
+describe('BilledOrderSummary: single prepaid order', () => {
   it('shows the billed total, not the goods value', () => {
     render(
       <BilledOrderSummary shape={prepaidShape()} format={format} renderLine={renderLine} defaultBreakdownOpen />,
     )
-    // Twice by design (headline Total + breakdown Total) — and they must agree.
+    // Twice by design (headline Total + breakdown Total), and they must agree.
     expect(screen.getAllByText('$17.25')).toHaveLength(2)
     // The number from Chris's screenshot must be gone entirely.
     expect(screen.queryByText('$1,684.98')).not.toBeInTheDocument()
   })
 
-  it('surfaces the banding figure — without it the fee is underivable', () => {
+  it('surfaces the banding figure; without it the fee is underivable', () => {
     render(
       <BilledOrderSummary shape={prepaidShape()} format={format} renderLine={renderLine} defaultBreakdownOpen />,
     )
@@ -219,7 +219,7 @@ describe('BilledOrderSummary — single prepaid order', () => {
   })
 })
 
-describe('BilledOrderSummary — mixed cart', () => {
+describe('BilledOrderSummary: mixed cart', () => {
   it('groups the lines under their order headings', () => {
     render(<BilledOrderSummary shape={mixedShape()} format={format} renderLine={renderLine} />)
     expect(screen.getByText('Purchase order')).toBeInTheDocument()
@@ -244,12 +244,12 @@ describe('BilledOrderSummary — mixed cart', () => {
 
   it('shows no picking fee on the purchase-order group', () => {
     render(<BilledOrderSummary shape={mixedShape()} format={format} renderLine={renderLine} />)
-    // One fee row only — the stock order's.
+    // One fee row only: the stock order's.
     expect(screen.getAllByText('Picking fee')).toHaveLength(1)
   })
 })
 
-describe('BilledOrderSummary — non-prepaid order', () => {
+describe('BilledOrderSummary: non-prepaid order', () => {
   it('labels goods "Subtotal" and omits the prepaid row', () => {
     const shape = billedOrderShape({
       lines: [line({ billingMode: 'invoice_on_dispatch', qty: 10, unitPrice: 50 })],

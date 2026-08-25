@@ -46,7 +46,7 @@ interface CheckoutClientProps {
   paymentTerms: string | null
   defaultDepositPercent: number | null
   /**
-   * organizations.is_test — demo/test org gate. Suppresses the deposit /
+   * organizations.is_test: demo/test org gate. Suppresses the deposit /
    * payment-terms banner so a demo walkthrough never shows real terms, matching
    * the checkout review screen's suppression.
    */
@@ -59,7 +59,7 @@ interface CheckoutClientProps {
    */
   defaultStoreId: string | null
   /**
-   * Buyer Roles step 6 — when true, saved ship-tos are limited to defaultStoreId,
+   * Buyer Roles step 6: when true, saved ship-tos are limited to defaultStoreId,
    * but the one-time address path remains available. The DB CHECK guarantees
    * defaultStoreId is set for buyers, but we defend against drift by surfacing a
    * banner.
@@ -67,7 +67,7 @@ interface CheckoutClientProps {
   isBuyer: boolean
   /** Slice 4: gates the "Add to inventory" admin checkout toggle. */
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
-  /** SP1: the org's enabled countries — the only values the one-time address may carry. */
+  /** SP1: the org's enabled countries, the only values the one-time address may carry. */
   enabledCountries: EnabledCountry[]
   /** Default list currency, used only to label legacy persisted cart prices. */
   defaultPriceCurrency?: string | null
@@ -121,7 +121,7 @@ export function CheckoutClient({
   const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState<false | 'review'>(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  // Inventory routing is order-level only — the whole order either ships to
+  // Inventory routing is order-level only; the whole order either ships to
   // customer addresses or lands on the org's inventory shelf. There is no
   // per-line inventory choice (mixed orders aren't supported), so this is a
   // single opt-in toggle, default OFF. Offered only to inventory-tracking org
@@ -175,7 +175,7 @@ export function CheckoutClient({
           unitPrice: line.unitPrice,
           decorationPerUnit: decorationPerUnit(line),
           fulfilmentType: line.fulfilmentType,
-          // FRESH mode only — the cart's own billingMode snapshot is a PDP
+          // FRESH mode only; the cart's own billingMode snapshot is a PDP
           // reading and can be days stale. Absent ⇒ null ⇒ billed (fail closed).
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
@@ -378,14 +378,14 @@ export function CheckoutClient({
 
       {customerCodeMissing && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Your account is pending setup — contact staff to assign your customer code before
+          Your account is pending setup. Contact staff to assign your customer code before
           submitting an order.
         </div>
       )}
 
       {buyerMisconfigured && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          Your default shipping store is missing or no longer assigned to your account — please
+          Your default shipping store is missing or no longer assigned to your account. Please
           contact staff before submitting an order.
         </div>
       )}

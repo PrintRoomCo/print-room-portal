@@ -182,7 +182,7 @@ interface BilledOrderSummaryProps {
   /** Review opens the breakdown by default; checkout leaves it collapsed. */
   defaultBreakdownOpen?: boolean
   /**
-   * Order-level controls that belong with the lines rather than the totals —
+   * Order-level controls that belong with the lines rather than the totals.
    * /checkout puts its "Add all to my inventory" toggle here. Rendered after the
    * last line and before the grand total, which is where such a control reads
    * as applying to the items, not to the money.
@@ -196,13 +196,13 @@ interface BilledOrderSummaryProps {
  * fee/GST/total, and the legacy same-currency grand total. Flag-on checkout uses
  * CountryBilledOrderSummary and never mounts this renderer.
  *
- * Owns the STRUCTURE only — the caller passes `renderLine` because /checkout
+ * Owns the STRUCTURE only; the caller passes `renderLine` because /checkout
  * renders a ship-to row and /checkout/review renders an image+decoration card.
  * Everything money-shaped lives here so the two pages cannot disagree, which is
  * the whole point of this work.
  *
  * A mixed cart shows its two groups because the split into two orders (and two
- * Xero quotes) is already real — today's single total just hides it.
+ * Xero quotes) is already real; today's single total just hides it.
  */
 export function BilledOrderSummary({
   shape,

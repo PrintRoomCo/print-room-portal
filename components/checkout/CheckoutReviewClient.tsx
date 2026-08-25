@@ -55,13 +55,13 @@ interface CheckoutReviewClientProps {
   customerCode: string | null
   paymentTerms: string | null
   defaultDepositPercent: number | null
-  /** organizations.is_test — when true, hide the deposit/payment-terms block (demo org). */
+  /** organizations.is_test: when true, hide the deposit/payment-terms block (demo org). */
   isTest: boolean
-  /** Buyer role — a branch manager is a 'staff' member with ≥1 grant. */
+  /** Buyer role: a branch manager is a 'staff' member with ≥1 grant. */
   role?: 'org_admin' | 'staff'
   /** Location-manager allow-list (raw grants). ≥1 ⇒ show the order-level branch picker. */
   branchStoreIds?: string[]
-  /** The member's home store — always an allowed branch (union at read). */
+  /** The member's home store, always an allowed branch (union at read). */
   defaultStoreId?: string | null
   /** Default list currency, used only to label legacy persisted cart prices. */
   defaultPriceCurrency?: string | null
@@ -118,7 +118,7 @@ export function CheckoutReviewClient({
   // in-flight submit.
   const inFlightRef = useRef(false)
   const [banner, setBanner] = useState<{ kind: 'error' | 'info'; msg: string } | null>(null)
-  // T&C consent + honeypot: ephemeral, NOT persisted to reviewState — the box
+  // T&C consent + honeypot: ephemeral, NOT persisted to reviewState. The box
   // resets to unticked on every reload so each checkout is a fresh affirmation
   // (design 2026-08-11, Decision 6).
   const [termsAccepted, setTermsAccepted] = useState(false)
@@ -150,7 +150,7 @@ export function CheckoutReviewClient({
           unitPrice: line.unitPrice,
           decorationPerUnit: decorationPerUnit(line),
           fulfilmentType: line.fulfilmentType,
-          // FRESH mode only — never the cart's PDP-time snapshot.
+          // FRESH mode only, never the cart's PDP-time snapshot.
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
         gstRate: gstRateForRegion(access?.region),
@@ -167,7 +167,7 @@ export function CheckoutReviewClient({
     [cart.lines],
   )
   const depositPct = defaultDepositPercent ?? 0
-  // Off the BILLED subtotal — never charge a deposit on prepaid stock.
+  // Off the BILLED subtotal, never charge a deposit on prepaid stock.
   const depositAmount = (shape.billedSubtotal * depositPct) / 100
 
   const allCustom =
@@ -277,16 +277,16 @@ export function CheckoutReviewClient({
 
   async function confirmOrder() {
     if (inFlightRef.current) return // re-entry guard: one submit in flight at a time
-    if (isPreview) return // read-only preview — never POST
+    if (isPreview) return // read-only preview, never POST
     if (!reviewState || cart.lines.length === 0) return
 
     // Client-only honeypot (design 2026-08-11, Decision 5): a real user can
     // never see or focus this off-screen field. If it is non-empty it was
-    // autofilled/scripted — abort silently, no banner, no POST. NEVER sent to
+    // autofilled/scripted: abort silently, no banner, no POST. NEVER sent to
     // the server; the auth gate is the real anti-bot control.
     if (honeypot !== '') return
 
-    // Terms gate (Decision 8): a *validation* concern like missingShipTo below —
+    // Terms gate (Decision 8): a *validation* concern like missingShipTo below:
     // the button stays enabled and we guard here so the message is announced.
     if (!termsAccepted) {
       setBanner({
@@ -341,10 +341,10 @@ export function CheckoutReviewClient({
             size_label: line.sizeLabel ?? null,
             qty: line.qty,
             ship_to_store_id: allCustom ? null : reviewState.perLineShipTo[line.lineId] ?? null,
-            // Feature 1 — carry the chosen PDP location label so the server can
+            // Feature 1: carry the chosen PDP location label so the server can
             // snapshot it onto quote_items.line_location_label.
             location_label: line.locationLabel ?? null,
-            // Feature 2 — snapshot the optional custom name onto quote_items.line_custom_name.
+            // Feature 2: snapshot the optional custom name onto quote_items.line_custom_name.
             custom_name: line.customName ?? null,
             cart_line_id: line.lineId,
             decorations: line.decorations,
@@ -358,13 +358,13 @@ export function CheckoutReviewClient({
             // Drift guard (D4). The server re-resolves and 409s on ANY mismatch,
             // in both directions: even drift that favours the customer means the
             // page disagreed with the quote, which is the defect being fixed.
-            // Null for a variantless line — nothing to claim.
+            // Null for a variantless line, nothing to claim.
             claimed_billing_mode: line.variantId
               ? modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
               : null,
               })),
           // Consent for this order (design 2026-08-11). The server re-validates
-          // and 400s without these — the checkbox is not the only gate.
+          // and 400s without these; the checkbox is not the only gate.
           terms_accepted: true,
           terms_version: TERMS_VERSION,
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
@@ -515,7 +515,7 @@ export function CheckoutReviewClient({
         if (data.error === 'billing_mode_drift') {
           setBanner({
             kind: 'error',
-            msg: 'Pre-paid status changed — review your cart.',
+            msg: 'Pre-paid status changed. Review your cart.',
           })
           return
         }
@@ -570,7 +570,7 @@ export function CheckoutReviewClient({
       const result = (await res.json()) as CheckoutResponse
       clearCheckoutReviewState()
       // Keep `submitting` true so the overlay stays up through the redirect;
-      // navigate first, then clear the cart — the overlay masks the emptied
+      // navigate first, then clear the cart; the overlay masks the emptied
       // review page so it never flashes.
       navigating = true
       router.push(`/checkout/confirmation/${result.order_id}`)
@@ -904,7 +904,7 @@ export function CheckoutReviewClient({
       <section className="mt-6">
           {/*
             Client-only honeypot (design 2026-08-11, Decision 5). Deliberately
-            NOT Tailwind `sr-only` — that EXPOSES the field to screen readers,
+            NOT Tailwind `sr-only`, which EXPOSES the field to screen readers,
             the one false-positive path where a real assistive-tech user could
             fill it. Off-screen + aria-hidden + tabIndex=-1 keeps it out of both
             the visual and the accessibility tree. autoComplete="off" + an
@@ -933,7 +933,7 @@ export function CheckoutReviewClient({
               <button
                 type="button"
                 onClick={(e) => {
-                  // Stop the label from forwarding the click to the checkbox —
+                  // Stop the label from forwarding the click to the checkbox;
                   // opening the terms must not tick the box.
                   e.preventDefault()
                   e.stopPropagation()
@@ -971,7 +971,7 @@ export function CheckoutReviewClient({
               }]
         }
         onSubmit={confirmOrder}
-        // Unlike /checkout, this button PLACES the order — it must never fire
+        // Unlike /checkout, this button PLACES the order; it must never fire
         // against a total the fresh billing read hasn't resolved yet.
         disabled={
           !pricingReady ||
