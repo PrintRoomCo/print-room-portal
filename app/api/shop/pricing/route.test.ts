@@ -24,6 +24,7 @@ function adminStub(rpcData: unknown) {
         filters.push([column, value])
         return builder
       }),
+      gt: vi.fn(() => builder),
       lte: vi.fn(() => builder),
       order: vi.fn(() => builder),
       limit: vi.fn(() => builder),

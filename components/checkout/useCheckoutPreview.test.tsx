@@ -130,6 +130,16 @@ describe('checkout preview request lines', () => {
     })[0]).not.toHaveProperty('priceCurrency')
   })
 
+  it('uses the current default currency as display provenance for a legacy cart line', () => {
+    expect(buildCheckoutRequestLines({
+      lines: [cartLine],
+      perLineShipTo: { 'line-1': 'store-au' },
+      allCustom: false,
+      modeByVariantId: {},
+      defaultPriceCurrency: 'NZD',
+    })[0]).toMatchObject({ priceCurrency: 'NZD' })
+  })
+
   it('carries the exact reviewed country prices into placement', () => {
     const requestLines = buildCheckoutRequestLines({
       lines: [{ ...cartLine, priceCurrency: 'NZD' }],

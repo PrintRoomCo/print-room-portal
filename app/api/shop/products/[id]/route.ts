@@ -4,6 +4,7 @@ import {
   getOpenPeriodForOrg,
   getPreOrderItemIds,
   getPeriodBracketsForItem,
+  exactPdpBrackets,
 } from '@/lib/pricing/period-brackets'
 import { sanitizeDescription } from '@/lib/shop/sanitize-description'
 import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
@@ -181,13 +182,11 @@ export async function GET(
       defaultCountry?.currency ?? 'NZD',
       countryPartitionEnabled,
     )
-    if (periodBrackets.length > 0) {
-      finalBrackets = periodBrackets.map((b) => ({
-        min_quantity: b.minQty,
-        max_quantity: b.maxQty,
-        unit_price: b.unitPrice,
-      }))
-    }
+    finalBrackets = exactPdpBrackets({
+      liveBrackets: finalBrackets,
+      periodBrackets,
+      usesPeriodSnapshot: true,
+    })
   }
 
   return NextResponse.json({

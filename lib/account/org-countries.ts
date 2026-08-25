@@ -17,7 +17,7 @@ export interface BillingCountryConfig extends EnabledCountry {
 export function sortEnabledCountries<T extends EnabledCountry>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
     if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
-    return a.name.localeCompare(b.name)
+    return a.code.localeCompare(b.code)
   })
 }
 

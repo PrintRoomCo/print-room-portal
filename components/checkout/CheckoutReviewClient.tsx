@@ -63,6 +63,8 @@ interface CheckoutReviewClientProps {
   branchStoreIds?: string[]
   /** The member's home store — always an allowed branch (union at read). */
   defaultStoreId?: string | null
+  /** Default list currency, used only to label legacy persisted cart prices. */
+  defaultPriceCurrency?: string | null
   /** Server-evaluated SP3 flag. Client components never read process.env. */
   countryPartitionEnabled?: boolean
 }
@@ -98,6 +100,7 @@ export function CheckoutReviewClient({
   role,
   branchStoreIds = [],
   defaultStoreId = null,
+  defaultPriceCurrency = null,
   countryPartitionEnabled = false,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
@@ -178,9 +181,19 @@ export function CheckoutReviewClient({
             perLineShipTo: reviewState.perLineShipTo,
             allCustom,
             modeByVariantId,
+            defaultPriceCurrency: countryPartitionEnabled
+              ? defaultPriceCurrency ?? undefined
+              : undefined,
           })
         : [],
-    [reviewState, cart.lines, allCustom, modeByVariantId],
+    [
+      reviewState,
+      cart.lines,
+      allCustom,
+      modeByVariantId,
+      countryPartitionEnabled,
+      defaultPriceCurrency,
+    ],
   )
   const previewRequest = useMemo(
     () =>
@@ -586,11 +599,14 @@ export function CheckoutReviewClient({
     const lineFormat = currency
       ? (amount: number) => `${formatCurrency(amount, currency)} ${currency}`
       : format
+    const oemPresentation = countryPartitionEnabled
     return (
       <article>
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+            <div className={`relative h-24 w-24 shrink-0 overflow-hidden ${
+              oemPresentation ? 'rounded-2xl bg-black/[0.03]' : 'rounded-lg bg-gray-50'
+            }`}>
               {imageUrl ? (
                 <Image
                   src={imageUrl}
@@ -603,13 +619,15 @@ export function CheckoutReviewClient({
               ) : null}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
+              <h3 className={`text-base font-medium ${oemPresentation ? 'text-black' : 'text-gray-900'}`}>
+                {line.productName}
+              </h3>
               {!billedLine.billed && <PrepaidBadge />}
-              <p className="mt-1 text-xs tracking-wide text-gray-500">
+              <p className={`mt-1 text-xs tracking-wide ${oemPresentation ? 'text-black/55' : 'text-gray-500'}`}>
                 {line.variantLabel}
               </p>
               {visibleDecorations.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                <ul className={`mt-2 space-y-1 text-xs ${oemPresentation ? 'text-black/60' : 'text-gray-600'}`}>
                   {visibleDecorations.map((decoration) => (
                     <li key={decoration.linkId}>{decoration.name}</li>
                   ))}
@@ -619,22 +637,25 @@ export function CheckoutReviewClient({
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-xs text-gray-500">
-              <span className="tabular-nums text-gray-600">
+            <div className={`text-xs ${oemPresentation ? 'text-black/55' : 'text-gray-500'}`}>
+              <span className={`tabular-nums ${oemPresentation ? 'text-black/60' : 'text-gray-600'}`}>
                 {lineFormat(
                   currency
                     ? billedLine.unitPrice + billedLine.decorationPerUnit
                     : allInUnitPrice(line),
                 )}
               </span>
-              <span className="px-1.5 text-gray-300">×</span>
-              <span className="tabular-nums text-gray-600">{line.qty}</span>
+              <span aria-hidden="true" className={`px-1.5 ${oemPresentation ? 'text-black/30' : 'text-gray-300'}`}>×</span>
+              <span className={`tabular-nums ${oemPresentation ? 'text-black/60' : 'text-gray-600'}`}>
+                {line.qty}
+              </span>
             </div>
             <div className="mt-2 text-base">
               <PrepaidLinePrice
                 goodsValue={billedLine.goodsValue}
                 billed={billedLine.billed}
                 format={lineFormat}
+                oemPresentation={oemPresentation}
               />
             </div>
           </div>

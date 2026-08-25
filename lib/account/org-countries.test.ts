@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getOrgDefaultBillingCountry, getOrgEnabledCountries } from './org-countries'
+import {
+  getOrgDefaultBillingCountry,
+  getOrgEnabledCountries,
+  sortEnabledCountries,
+} from './org-countries'
 
 function countryAdmin(rows: unknown[]) {
   const filters: Array<[string, unknown]> = []
@@ -20,6 +24,14 @@ function countryAdmin(rows: unknown[]) {
 }
 
 describe('getOrgEnabledCountries', () => {
+  it('orders the default first and every remaining country by ISO code', () => {
+    expect(sortEnabledCountries([
+      { code: 'US', name: 'America', isDefault: false },
+      { code: 'NZ', name: 'New Zealand', isDefault: true },
+      { code: 'DE', name: 'Germany', isDefault: false },
+    ]).map((country) => country.code)).toEqual(['NZ', 'DE', 'US'])
+  })
+
   it('returns the one default first with its authored billing metadata and filters inactive countries', async () => {
     const { admin, query, filters } = countryAdmin([
       {

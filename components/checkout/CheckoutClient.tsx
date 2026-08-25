@@ -69,6 +69,8 @@ interface CheckoutClientProps {
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
   /** SP1: the org's enabled countries — the only values the one-time address may carry. */
   enabledCountries: EnabledCountry[]
+  /** Default list currency, used only to label legacy persisted cart prices. */
+  defaultPriceCurrency?: string | null
   /** Server-evaluated SP3 flag. Client components never read process.env. */
   countryPartitionEnabled?: boolean
 }
@@ -83,6 +85,7 @@ export function CheckoutClient({
   isBuyer,
   tenantType,
   enabledCountries,
+  defaultPriceCurrency = null,
   countryPartitionEnabled = false,
 }: CheckoutClientProps) {
   const cart = useCart()
@@ -192,8 +195,18 @@ export function CheckoutClient({
       perLineShipTo,
       allCustom,
       modeByVariantId,
+      defaultPriceCurrency: countryPartitionEnabled
+        ? defaultPriceCurrency ?? undefined
+        : undefined,
     }),
-    [cart.lines, perLineShipTo, allCustom, modeByVariantId],
+    [
+      cart.lines,
+      perLineShipTo,
+      allCustom,
+      modeByVariantId,
+      countryPartitionEnabled,
+      defaultPriceCurrency,
+    ],
   )
   const previewRequest = useMemo(
     () =>
@@ -378,7 +391,7 @@ export function CheckoutClient({
       )}
 
       {!isTest && depositPct > 0 && countryPartitionEnabled && (
-        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+        <div className="mb-4 rounded-2xl border border-black/10 bg-black/[0.03] p-4 text-sm text-black/70">
           A deposit of {depositPct}% will be invoiced per order. Balance on{' '}
           {paymentTerms ?? 'net20'}.
         </div>

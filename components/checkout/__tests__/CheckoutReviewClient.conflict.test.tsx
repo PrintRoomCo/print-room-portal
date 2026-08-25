@@ -302,6 +302,10 @@ describe('CheckoutReviewClient independent country outcomes', () => {
         { id: 'store-nz', name: 'Auckland', city: 'Auckland', country: 'NZ' },
       ],
     })
+    const auLine = (await screen.findByRole('heading', { name: 'Test tee' })).closest('article')
+    const imageWell = auLine?.querySelector('div.relative.h-24.w-24')
+    expect(imageWell).toHaveClass('rounded-2xl', 'bg-black/[0.03]')
+    expect(auLine?.innerHTML).not.toMatch(/(?:bg|text)-gray-|rounded-lg/)
     await tickTerms(user)
     await user.click(await screen.findByRole('button', { name: 'Place 2 orders' }))
 

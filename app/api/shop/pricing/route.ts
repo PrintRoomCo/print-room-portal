@@ -3,6 +3,11 @@ import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { effectiveUnitPrice, effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
 import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
+import {
+  getOpenPeriodForOrg,
+  getPeriodBracketsForItem,
+  getPreOrderItemIds,
+} from '@/lib/pricing/period-brackets'
 
 export async function POST(request: Request) {
   const auth = await requireB2BCustomerApi()
@@ -46,6 +51,34 @@ export async function POST(request: Request) {
     }
 
     const defaultCountry = await getOrgDefaultBillingCountry(admin, context.organizationId)
+    const openPeriod = await getOpenPeriodForOrg(admin, context.organizationId)
+    const preOrderItemIds = openPeriod
+      ? await getPreOrderItemIds(admin, [body.catalogue_item_id])
+      : new Set<string>()
+    if (openPeriod && preOrderItemIds.has(body.catalogue_item_id)) {
+      const periodBrackets = await getPeriodBracketsForItem(
+        admin,
+        openPeriod.id,
+        body.catalogue_item_id,
+        defaultCountry.currency,
+        true,
+      )
+      const bracket = periodBrackets.find(
+        (candidate) =>
+          candidate.minQty <= body.qty! &&
+          (candidate.maxQty == null || body.qty! <= candidate.maxQty),
+      )
+      const unitPrice = bracket?.unitPrice ?? null
+      return NextResponse.json({
+        unit_price: unitPrice ?? 0,
+        total: unitPrice == null ? 0 : Number((unitPrice * body.qty).toFixed(2)),
+        status: unitPrice == null ? 'missing' : 'ok',
+        bracket: bracket
+          ? { min_quantity: bracket.minQty, max_quantity: bracket.maxQty }
+          : null,
+        currency: defaultCountry.currency,
+      })
+    }
     const [unitPrice, { data: bracket }] = await Promise.all([
       effectiveUnitPriceForItem(
         admin,

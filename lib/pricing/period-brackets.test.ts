@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getPeriodBracketsForItem } from './period-brackets'
+import {
+  exactPdpBrackets,
+  getPeriodBracketsForItem,
+} from './period-brackets'
 
 function periodAdmin(data: unknown[]) {
   const filters: Array<[string, unknown]> = []
@@ -38,5 +41,15 @@ describe('getPeriodBracketsForItem', () => {
       ['period_id', 'period-1'],
       ['catalogue_item_id', 'item-1'],
     ])
+  })
+})
+
+describe('exactPdpBrackets', () => {
+  it('does not fall back to live tiers when an open pre-order snapshot is empty', () => {
+    expect(exactPdpBrackets({
+      liveBrackets: [{ min_quantity: 1, max_quantity: null, unit_price: 99 }],
+      periodBrackets: [],
+      usesPeriodSnapshot: true,
+    })).toEqual([])
   })
 })

@@ -38,6 +38,7 @@ export default async function CheckoutPage() {
       isBuyer={context.role === 'staff'}
       tenantType={context.tenantType}
       enabledCountries={enabledCountries}
+      defaultPriceCurrency={enabledCountries.find((country) => country.isDefault)?.currency ?? null}
       countryPartitionEnabled={isCheckoutCountryPartitionEnabled()}
     />
   )

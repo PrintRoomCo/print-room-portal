@@ -55,6 +55,8 @@ export function buildCheckoutRequestLines(input: {
   perLineShipTo: Record<string, string | null>
   allCustom: boolean
   modeByVariantId: Record<string, BillingMode>
+  /** Display provenance for persisted pre-SP3 lines that lack a currency stamp. */
+  defaultPriceCurrency?: string
 }): CheckoutLineInput[] {
   return input.lines.map((line) => ({
     product_id: line.productId,
@@ -71,7 +73,9 @@ export function buildCheckoutRequestLines(input: {
     cart_line_id: line.lineId,
     decorations: line.decorations,
     claimed_unit_price: line.unitPrice,
-    ...(line.priceCurrency ? { priceCurrency: line.priceCurrency } : {}),
+    ...(line.priceCurrency ?? input.defaultPriceCurrency
+      ? { priceCurrency: line.priceCurrency ?? input.defaultPriceCurrency }
+      : {}),
     has_brackets: Array.isArray(line.brackets) && line.brackets.length > 0,
     fulfilment_type: line.fulfilmentType,
     catalogueItemId: line.catalogueItemId ?? null,

@@ -317,4 +317,26 @@ describe('CheckoutClient review step', () => {
     rerender(<CheckoutClient {...bannerProps} isTest={true} />)
     expect(screen.queryByText(/A deposit of/i)).not.toBeInTheDocument()
   })
+
+  it('uses the OEM information surface for the flag-on deposit notice', () => {
+    render(
+      <CheckoutClient
+        stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland', country: 'NZ' }]}
+        customerCode="CUST-1"
+        paymentTerms="net30"
+        defaultDepositPercent={20}
+        isTest={false}
+        defaultStoreId={null}
+        isBuyer={false}
+        tenantType="studio"
+        enabledCountries={ENABLED_COUNTRIES}
+        countryPartitionEnabled
+      />,
+    )
+
+    const notice = screen.getByText(/A deposit of 20% will be invoiced per order/i)
+      .closest('div')
+    expect(notice).toHaveClass('rounded-2xl', 'border-black/10', 'bg-black/[0.03]', 'text-black/70')
+    expect(notice?.className).not.toMatch(/rounded-xl|sky-/)
+  })
 })

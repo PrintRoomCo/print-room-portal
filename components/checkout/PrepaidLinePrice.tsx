@@ -18,23 +18,34 @@ export function PrepaidLinePrice({
   goodsValue,
   billed,
   format,
+  oemPresentation = false,
 }: {
   /** Full goods value at current catalogue price — always shown. */
   goodsValue: number
   /** false ⇒ prepaid stock draw: struck through, invoiced at $0. */
   billed: boolean
   format: (nzdAmount: number) => string
+  /** New country-cutover surfaces use the OEM monochrome tokens; legacy stays frozen. */
+  oemPresentation?: boolean
 }) {
   if (billed) {
-    return <span className="font-semibold tabular-nums text-gray-900">{format(goodsValue)}</span>
+    return (
+      <span className={`font-semibold tabular-nums ${oemPresentation ? 'text-black' : 'text-gray-900'}`}>
+        {format(goodsValue)}
+      </span>
+    )
   }
   return (
     <span className="inline-flex items-baseline gap-1.5">
-      <s className="tabular-nums text-gray-400">{format(goodsValue)}</s>
-      <span aria-hidden="true" className="text-gray-400">
+      <s className={`tabular-nums ${oemPresentation ? 'text-black/55' : 'text-gray-400'}`}>
+        {format(goodsValue)}
+      </s>
+      <span aria-hidden="true" className={oemPresentation ? 'text-black/30' : 'text-gray-400'}>
         →
       </span>
-      <span className="font-semibold tabular-nums text-gray-900">{format(0)}</span>
+      <span className={`font-semibold tabular-nums ${oemPresentation ? 'text-black' : 'text-gray-900'}`}>
+        {format(0)}
+      </span>
       <span className="sr-only">— drawn from pre-paid stock, no charge</span>
     </span>
   )

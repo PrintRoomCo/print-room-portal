@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { CompanyProvider } from '@/contexts/CompanyContext'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
@@ -11,6 +12,34 @@ import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partit
 import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 import { getSupabaseServer } from '@/lib/supabase'
 
+async function CountryAwareCompanyProvider({
+  children,
+  initialAccess,
+  initialUserId,
+  countryPartitionEnabled,
+}: {
+  children: React.ReactNode
+  initialAccess: Awaited<ReturnType<typeof getPortalCompanyAccess>>
+  initialUserId: string | null
+  countryPartitionEnabled: boolean
+}) {
+  const defaultBillingCountry =
+    countryPartitionEnabled && initialAccess?.companyId
+      ? await getOrgDefaultBillingCountry(getSupabaseServer(), initialAccess.companyId)
+      : null
+
+  return (
+    <CompanyProvider
+      initialAccess={initialAccess}
+      initialUserId={initialUserId}
+      countryPartitionEnabled={countryPartitionEnabled}
+      defaultBillingCountryCode={defaultBillingCountry?.code ?? null}
+    >
+      {children}
+    </CompanyProvider>
+  )
+}
+
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const [user, access, exchangeRates, initialCurrency] = await Promise.all([
     getPortalUser(),
@@ -19,30 +48,27 @@ export default async function PortalLayout({ children }: { children: React.React
     resolveInitialCurrency(),
   ])
   const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
-  const defaultBillingCountry =
-    countryPartitionEnabled && access?.companyId
-      ? await getOrgDefaultBillingCountry(getSupabaseServer(), access.companyId)
-      : null
 
   return (
     <AuthProvider initialUser={user}>
-      <CompanyProvider
-        initialAccess={access}
-        initialUserId={user?.id ?? null}
-        countryPartitionEnabled={countryPartitionEnabled}
-        defaultBillingCountryCode={defaultBillingCountry?.code ?? null}
-      >
-        <PreviewBanner />
-        <CurrencyProvider
-          initialRates={exchangeRates.rates}
-          initialCurrency={access?.region === 'AU' ? 'AUD' : initialCurrency}
-          billingCurrency={access?.region === 'AU' ? 'AUD' : null}
+      <Suspense fallback={null}>
+        <CountryAwareCompanyProvider
+          initialAccess={access}
+          initialUserId={user?.id ?? null}
+          countryPartitionEnabled={countryPartitionEnabled}
         >
-          <CartProvider>
-            <PortalShell>{children}</PortalShell>
-          </CartProvider>
-        </CurrencyProvider>
-      </CompanyProvider>
+          <PreviewBanner />
+          <CurrencyProvider
+            initialRates={exchangeRates.rates}
+            initialCurrency={access?.region === 'AU' ? 'AUD' : initialCurrency}
+            billingCurrency={access?.region === 'AU' ? 'AUD' : null}
+          >
+            <CartProvider>
+              <PortalShell>{children}</PortalShell>
+            </CartProvider>
+          </CurrencyProvider>
+        </CountryAwareCompanyProvider>
+      </Suspense>
     </AuthProvider>
   )
 }
