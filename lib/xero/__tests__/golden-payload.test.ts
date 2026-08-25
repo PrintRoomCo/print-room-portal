@@ -3,10 +3,8 @@
 // GOLDEN FIXTURES (spec §7): exact /Quotes payload bodies from the CURRENT
 // code, captured before the OAuth auth swap. Byte-identical afterwards or the
 // swap broke parity. Do not regenerate snapshots to make a failure pass.
-// Creds env below satisfies TODAY's getXeroConfig; after the swap it is
-// harmlessly ignored — the assertions touch payload fields only.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { getXeroConfig } from '../config'
+import { xeroConfigFromCountryRow } from '../config'
 import { buildDraftQuotePayload, buildDraftLines, buildPickFeeLine } from '../draft-invoice'
 
 const SAVED = { ...process.env }
@@ -18,6 +16,11 @@ beforeEach(() => {
   process.env.XERO_AU_CLIENT_SECRET = 'au-secret'
 })
 afterEach(() => { process.env = { ...SAVED } })
+
+const COUNTRY_ROWS = {
+  NZ: { code: 'NZ', currency: 'NZD', xero_sales_account: '191', xero_tax_type: 'OUTPUT2' },
+  AU: { code: 'AU', currency: 'AUD', xero_sales_account: '200', xero_tax_type: 'OUTPUT' },
+} as const
 
 // Item rows COPIED from draft-invoice.buildlines.test.ts fixtures (same
 // shapes): one made-to-order line, one stock-drawn line for prepaid zeroing.
@@ -36,7 +39,7 @@ const ROWS: Parameters<typeof buildDraftLines>[0] = [
 
 describe('golden payloads — byte-identical across the auth swap', () => {
   it('NZ: cfg-driven payload, net20, delivery summary', () => {
-    const cfg = getXeroConfig('NZ')
+    const cfg = xeroConfigFromCountryRow(COUNTRY_ROWS.NZ)
     const lines = buildDraftLines(ROWS, new Set())
     const payload = buildDraftQuotePayload({
       contactId: 'contact-nz-1', orderRef: 'REBG-000999', today: '2026-08-17',
@@ -80,7 +83,7 @@ describe('golden payloads — byte-identical across the auth swap', () => {
   })
 
   it('NZ: prepaid-zeroed line + pick-fee line', () => {
-    const cfg = getXeroConfig('NZ')
+    const cfg = xeroConfigFromCountryRow(COUNTRY_ROWS.NZ)
     // Same makeLineKey format the buildlines test uses: product::variant::size.
     const prepaidKeys = new Set(['p2::v2::3'])
     const lines = buildDraftLines(ROWS, prepaidKeys)
@@ -128,8 +131,8 @@ describe('golden payloads — byte-identical across the auth swap', () => {
     `)
   })
 
-  it('AU: AUD + OUTPUT via getXeroConfig("AU") defaults', () => {
-    const cfg = getXeroConfig('AU')
+  it('AU: AUD + OUTPUT via country-row config', () => {
+    const cfg = xeroConfigFromCountryRow(COUNTRY_ROWS.AU)
     const lines = buildDraftLines(ROWS, new Set())
     const payload = buildDraftQuotePayload({
       contactId: 'contact-au-1', orderRef: 'AUBG-000001', today: '2026-08-17',

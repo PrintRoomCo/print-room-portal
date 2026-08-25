@@ -2,7 +2,9 @@
 //
 // PAYLOAD-ONLY since 2026-08-17: authentication moved to the single standard
 // OAuth app (lib/xero/token-store.ts, spec 2026-08-17-xero-oauth-multi-tenant).
-// This module maps a region to the invoice-payload knobs and nothing else.
+// This module maps a country row to invoice-payload knobs and nothing else.
+
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface XeroConfig {
   salesAccountCode: string
@@ -12,38 +14,46 @@ export interface XeroConfig {
   brandingThemeId: string | null
 }
 
+export interface XeroCountryRow {
+  code: string
+  currency: string
+  xero_sales_account: string
+  xero_tax_type: string
+}
+
 /** Deploy-dark rollout flag. Truthy = attempt Xero drafts. */
 export function isXeroEnabled(): boolean {
   const v = (process.env.XERO_ENABLED ?? '').trim().toLowerCase()
   return v === '1' || v === 'true' || v === 'on' || v === 'yes'
 }
 
-export type XeroRegion = 'NZ' | 'AU'
-
-/** Adapt an immutable billing-country stamp to the existing SP3 two-region seam. */
-export function xeroRegionForBillCountry(code: string): XeroRegion | null {
-  if (code === 'NZ') return 'NZ'
-  if (code === 'AU') return 'AU'
-  return null
+/** Map required country data to the exact Xero quote-payload knobs. */
+export function xeroConfigFromCountryRow(row: XeroCountryRow): XeroConfig {
+  const brandingThemeId = row.code === 'AU'
+    ? process.env.XERO_AU_BRANDING_THEME_ID || null
+    : row.code === 'NZ'
+      ? process.env.XERO_BRANDING_THEME_ID || null
+      : process.env[`XERO_${row.code}_BRANDING_THEME_ID`] || null
+  return {
+    salesAccountCode: row.xero_sales_account,
+    taxType: row.xero_tax_type,
+    currency: row.currency,
+    lineAmountTypes: process.env.XERO_LINE_AMOUNT_TYPES ?? 'Exclusive',
+    brandingThemeId,
+  }
 }
 
-/** Payload config for a region. Never throws — credentials live in the token
- *  store; "is Xero usable" is isXeroConnectedForRegion (token-store.ts). */
-export function getXeroConfig(region: XeroRegion = 'NZ'): XeroConfig {
-  if (region === 'AU') {
-    return {
-      salesAccountCode: process.env.XERO_AU_SALES_ACCOUNT_CODE ?? '200',
-      taxType: process.env.XERO_AU_TAX_TYPE ?? 'OUTPUT',
-      currency: process.env.XERO_AU_CURRENCY ?? 'AUD',
-      lineAmountTypes: process.env.XERO_LINE_AMOUNT_TYPES ?? 'Exclusive',
-      brandingThemeId: process.env.XERO_AU_BRANDING_THEME_ID || null,
-    }
-  }
-  return {
-    salesAccountCode: process.env.XERO_SALES_ACCOUNT_CODE ?? '191',
-    taxType: process.env.XERO_TAX_TYPE ?? 'OUTPUT2',
-    currency: process.env.XERO_CURRENCY ?? 'NZD',
-    lineAmountTypes: process.env.XERO_LINE_AMOUNT_TYPES ?? 'Exclusive',
-    brandingThemeId: process.env.XERO_BRANDING_THEME_ID || null,
-  }
+/** Payload config for an exact billing-country stamp. Credentials and tenant
+ * assignment remain in the token store; a missing row is unsupported. */
+export async function getXeroConfig(
+  admin: SupabaseClient,
+  countryCode: string,
+): Promise<XeroConfig | null> {
+  const { data, error } = await admin
+    .from('countries')
+    .select('code, currency, xero_sales_account, xero_tax_type')
+    .eq('code', countryCode)
+    .maybeSingle()
+  if (error) throw new Error(`countries Xero config read failed: ${error.message}`)
+  return data ? xeroConfigFromCountryRow(data as XeroCountryRow) : null
 }

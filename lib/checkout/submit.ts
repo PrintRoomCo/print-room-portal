@@ -11,7 +11,6 @@ import { pushOrderDeal, type OrderLineForMonday } from '@/lib/monday/deal-item'
 import { PRODUCTION_BOARD_ID } from '@/lib/monday/column-ids'
 import { createJobTrackerShellForOrder } from '@/lib/orders/job-tracker'
 import { createDraftInvoiceForOrder } from '@/lib/xero/draft-invoice'
-import { xeroRegionForBillCountry } from '@/lib/xero/config'
 import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
@@ -1154,7 +1153,6 @@ export async function submitCustomerOrder(
         ordererEmail: input.context.email ?? null,
         paymentTerms: input.context.paymentTerms ?? null,
         isTestOrg: xeroIsTestOrg,
-        orgRegion: xeroRegionForBillCountry(billCountry),
         billCountry,
         pickingFee: pickFee,
         prepaidDrawnLineKeys,
@@ -1226,7 +1224,7 @@ export async function submitCustomerOrder(
         trigger: 'placement',
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
-        region: xeroRegionForBillCountry(billCountry),
+        region: billCountry === 'NZ' || billCountry === 'AU' ? billCountry : null,
         billCountry,
         isStockOnHand: isStockOnHandOrder,
         customerEmail: input.context.email ?? null,

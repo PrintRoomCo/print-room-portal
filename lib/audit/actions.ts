@@ -22,7 +22,7 @@ export const AUDIT_ACTIONS = {
   ORDER_XERO_DRAFTED: 'order.xero_drafted',
   ORDER_XERO_MANUAL_REVIEW: 'order.xero_manual_review',
   ORDER_XERO_DRAFT_FAILED: 'order.xero_draft_failed',
-  /** Order skipped because the region's Xero connection is absent (not_connected). */
+  /** Order skipped because the billing country's Xero connection is absent. */
   ORDER_XERO_DRAFT_SKIPPED: 'order.xero_draft_skipped',
   ORDER_STARSHIPIT_PUSHED: 'order.starshipit_pushed',
   ORDER_STARSHIPIT_SKIPPED: 'order.starshipit_skipped',

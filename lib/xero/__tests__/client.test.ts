@@ -3,12 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getXeroAccessToken: vi.fn(),
-  xeroTenantIdForRegion: vi.fn(),
+  xeroTenantIdForCountry: vi.fn(),
 }))
 vi.mock('../token-store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../token-store')>()),
   getXeroAccessToken: mocks.getXeroAccessToken,
-  xeroTenantIdForRegion: mocks.xeroTenantIdForRegion,
+  xeroTenantIdForCountry: mocks.xeroTenantIdForCountry,
 }))
 
 import { getXeroToken, xeroFetch } from '../client'
@@ -16,14 +16,13 @@ import { getXeroToken, xeroFetch } from '../client'
 beforeEach(() => {
   vi.restoreAllMocks()
   mocks.getXeroAccessToken.mockReset().mockResolvedValue('tok')
-  mocks.xeroTenantIdForRegion.mockReset().mockResolvedValue('tenant-nz')
+  mocks.xeroTenantIdForCountry.mockReset().mockResolvedValue('tenant-nz')
 })
 
 describe('getXeroToken', () => {
-  it('delegates to the shared store (one app — region no longer selects credentials)', async () => {
+  it('delegates to the one shared OAuth token store', async () => {
     expect(await getXeroToken()).toBe('tok')
-    expect(await getXeroToken('AU')).toBe('tok')
-    expect(mocks.getXeroAccessToken).toHaveBeenCalledTimes(2)
+    expect(mocks.getXeroAccessToken).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -37,10 +36,12 @@ describe('xeroFetch', () => {
     return f
   }
 
-  it('sends Bearer token and ALWAYS sends Xero-tenant-id (resolved per region)', async () => {
+  it('sends Bearer token and the tenant resolved for the required country', async () => {
     const f = mockApiFetch()
-    await xeroFetch('/Quotes', { method: 'POST', idempotencyKey: 'order-1', body: '{}' })
-    expect(mocks.xeroTenantIdForRegion).toHaveBeenCalledWith('NZ') // default region
+    await xeroFetch('/Quotes', {
+      method: 'POST', countryCode: 'NZ', idempotencyKey: 'order-1', body: '{}',
+    })
+    expect(mocks.xeroTenantIdForCountry).toHaveBeenCalledWith('NZ')
     const [url, init] = f.mock.calls[0]
     expect(url).toBe('https://api.xero.com/api.xro/2.0/Quotes')
     expect(init.headers.Authorization).toBe('Bearer tok')
@@ -48,25 +49,25 @@ describe('xeroFetch', () => {
     expect(init.headers['Idempotency-Key']).toBe('order-1')
   })
 
-  it('resolves the AU tenant for region AU', async () => {
-    mocks.xeroTenantIdForRegion.mockResolvedValue('tenant-au')
+  it('resolves a third-country tenant without a branch', async () => {
+    mocks.xeroTenantIdForCountry.mockResolvedValue('tenant-gb')
     const f = mockApiFetch()
-    await xeroFetch('/Contacts', { region: 'AU' })
-    expect(mocks.xeroTenantIdForRegion).toHaveBeenCalledWith('AU')
-    expect(f.mock.calls[0][1].headers['Xero-tenant-id']).toBe('tenant-au')
+    await xeroFetch('/Contacts', { countryCode: 'GB' })
+    expect(mocks.xeroTenantIdForCountry).toHaveBeenCalledWith('GB')
+    expect(f.mock.calls[0][1].headers['Xero-tenant-id']).toBe('tenant-gb')
   })
 
   it('throws with body text on non-2xx (unchanged contract)', async () => {
     mockApiFetch(400, {}, 'ValidationException')
-    await expect(xeroFetch('/Quotes', { method: 'POST' })).rejects.toThrow(
+    await expect(xeroFetch('/Quotes', { method: 'POST', countryCode: 'NZ' })).rejects.toThrow(
       /Xero API 400 on \/Quotes: ValidationException/,
     )
   })
 
   it('propagates XeroNotConnectedError from tenant resolution (caught upstream as draft_failed)', async () => {
     const { XeroNotConnectedError } = await import('../token-store')
-    mocks.xeroTenantIdForRegion.mockRejectedValue(new XeroNotConnectedError())
+    mocks.xeroTenantIdForCountry.mockRejectedValue(new XeroNotConnectedError())
     mockApiFetch()
-    await expect(xeroFetch('/Quotes')).rejects.toBeInstanceOf(XeroNotConnectedError)
+    await expect(xeroFetch('/Quotes', { countryCode: 'GB' })).rejects.toBeInstanceOf(XeroNotConnectedError)
   })
 })

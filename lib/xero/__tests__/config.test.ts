@@ -1,6 +1,11 @@
 // lib/xero/__tests__/config.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { isXeroEnabled, getXeroConfig } from '../config'
+import { isXeroEnabled, xeroConfigFromCountryRow } from '../config'
+
+const COUNTRY_ROWS = {
+  NZ: { code: 'NZ', currency: 'NZD', xero_sales_account: '191', xero_tax_type: 'OUTPUT2' },
+  AU: { code: 'AU', currency: 'AUD', xero_sales_account: '200', xero_tax_type: 'OUTPUT' },
+} as const
 
 const SAVED = { ...process.env }
 beforeEach(() => {
@@ -20,9 +25,9 @@ describe('isXeroEnabled', () => {
   })
 })
 
-describe('getXeroConfig — payload-only (auth moved to token-store)', () => {
-  it('needs NO credentials and applies NZ defaults', () => {
-    expect(getXeroConfig()).toEqual({
+describe('xeroConfigFromCountryRow — payload-only', () => {
+  it('needs no credentials and maps the NZ row exactly', () => {
+    expect(xeroConfigFromCountryRow(COUNTRY_ROWS.NZ)).toEqual({
       salesAccountCode: '191',
       taxType: 'OUTPUT2',
       currency: 'NZD',
@@ -30,31 +35,41 @@ describe('getXeroConfig — payload-only (auth moved to token-store)', () => {
       brandingThemeId: null,
     })
   })
-  it('reads NZ overrides from env', () => {
+  it('retires account/tax/currency env overrides but keeps line type and branding', () => {
     process.env.XERO_SALES_ACCOUNT_CODE = '260'
     process.env.XERO_TAX_TYPE = 'OUTPUT'
+    process.env.XERO_CURRENCY = 'USD'
     process.env.XERO_LINE_AMOUNT_TYPES = 'Inclusive'
     process.env.XERO_BRANDING_THEME_ID = 'bt-1'
-    expect(getXeroConfig('NZ')).toEqual({
-      salesAccountCode: '260', taxType: 'OUTPUT', currency: 'NZD',
+    expect(xeroConfigFromCountryRow(COUNTRY_ROWS.NZ)).toEqual({
+      salesAccountCode: '191', taxType: 'OUTPUT2', currency: 'NZD',
       lineAmountTypes: 'Inclusive', brandingThemeId: 'bt-1',
     })
   })
-  it('AU defaults: AUD + OUTPUT, no credentials involved', () => {
-    expect(getXeroConfig('AU')).toEqual({
+  it('maps AU row data without credentials', () => {
+    expect(xeroConfigFromCountryRow(COUNTRY_ROWS.AU)).toEqual({
       salesAccountCode: '200', taxType: 'OUTPUT', currency: 'AUD',
       lineAmountTypes: 'Exclusive', brandingThemeId: null,
     })
   })
-  it('AU overrides from the XERO_AU_* payload surface', () => {
+  it('keeps only the AU branding override', () => {
     process.env.XERO_AU_SALES_ACCOUNT_CODE = '210'
     process.env.XERO_AU_BRANDING_THEME_ID = 'au-bt'
-    expect(getXeroConfig('AU')).toMatchObject({ salesAccountCode: '210', brandingThemeId: 'au-bt' })
+    expect(xeroConfigFromCountryRow(COUNTRY_ROWS.AU)).toMatchObject({
+      salesAccountCode: '200',
+      brandingThemeId: 'au-bt',
+    })
+  })
+  it('supports an optional country-specific branding theme for a third country', () => {
+    process.env.XERO_GB_BRANDING_THEME_ID = 'gb-bt'
+    expect(xeroConfigFromCountryRow({
+      code: 'GB', currency: 'GBP', xero_sales_account: '310', xero_tax_type: 'OUTPUT2',
+    })).toMatchObject({ currency: 'GBP', salesAccountCode: '310', brandingThemeId: 'gb-bt' })
   })
   it('carries no credential fields at all', () => {
     // `as unknown as` — XeroConfig has no index signature, so a direct cast is
     // a tsc error (TS2352). The assertions below are the point of the test.
-    const cfg = getXeroConfig() as unknown as Record<string, unknown>
+    const cfg = xeroConfigFromCountryRow(COUNTRY_ROWS.NZ) as unknown as Record<string, unknown>
     expect(cfg).not.toHaveProperty('clientId')
     expect(cfg).not.toHaveProperty('clientSecret')
     expect(cfg).not.toHaveProperty('scopes')

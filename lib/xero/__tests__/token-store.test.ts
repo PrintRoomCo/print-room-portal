@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getXeroAccessToken,
-  xeroTenantIdForRegion,
-  isXeroConnectedForRegion,
+  xeroTenantIdForCountry,
+  isXeroConnectedForCountry,
   __setXeroTokenStoreDepsForTests,
   __resetXeroTokenStoreForTests,
   XeroNotConnectedError,
@@ -23,7 +23,7 @@ interface FakeState {
   leaseHeld: boolean
   completes: Array<{ refreshToken: string; accessToken: string; expiresAt: string }>
   failures: string[]
-  regionMap: Record<string, string>
+  countryMap: Record<string, string>
 }
 
 function makeState(overrides: Partial<FakeState> = {}): FakeState {
@@ -33,7 +33,7 @@ function makeState(overrides: Partial<FakeState> = {}): FakeState {
     leaseHeld: false,
     completes: [],
     failures: [],
-    regionMap: { NZ: 'tenant-nz', AU: 'tenant-au' },
+    countryMap: { NZ: 'tenant-nz', AU: 'tenant-au', GB: 'tenant-gb' },
     ...overrides,
   }
 }
@@ -61,7 +61,7 @@ function makeDb(state: FakeState): TokenStoreDb {
       state.failures.push(code)
       state.leaseHeld = false
     },
-    tenantIdForRegion: async (region) => state.regionMap[region] ?? null,
+    tenantIdForCountry: async (countryCode) => state.countryMap[countryCode] ?? null,
   }
 }
 
@@ -165,15 +165,15 @@ describe('getXeroAccessToken', () => {
   })
 })
 
-describe('region exports', () => {
-  it('xeroTenantIdForRegion returns the mapped tenant and throws XeroNotConnectedError when unmapped', async () => {
-    const state = makeState({ regionMap: { NZ: 'tenant-nz' } })
+describe('country exports', () => {
+  it('xeroTenantIdForCountry handles a third country and throws when unmapped', async () => {
+    const state = makeState({ countryMap: { GB: 'tenant-gb' } })
     wireStore(state, vi.fn())
-    expect(await xeroTenantIdForRegion('NZ')).toBe('tenant-nz')
-    await expect(xeroTenantIdForRegion('AU')).rejects.toBeInstanceOf(XeroNotConnectedError)
+    expect(await xeroTenantIdForCountry('GB')).toBe('tenant-gb')
+    await expect(xeroTenantIdForCountry('AU')).rejects.toBeInstanceOf(XeroNotConnectedError)
   })
-  it('isXeroConnectedForRegion is false with no token row', async () => {
+  it('isXeroConnectedForCountry is false with no token row', async () => {
     wireStore(makeState({ row: null }), vi.fn())
-    expect(await isXeroConnectedForRegion('NZ')).toBe(false)
+    expect(await isXeroConnectedForCountry('NZ')).toBe(false)
   })
 })

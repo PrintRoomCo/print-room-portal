@@ -11,8 +11,6 @@
 // Node-only import — the shared core below stays runtime-agnostic.
 import { getSupabaseServer } from '@/lib/supabase'
 
-export type XeroRegion = 'NZ' | 'AU'
-
 export class XeroNotConnectedError extends Error {
   code = 'not_connected'
   constructor() {
@@ -57,7 +55,7 @@ export interface TokenStoreDb {
   beginRefresh(force: boolean): Promise<string | null>
   completeRefresh(refreshToken: string, accessToken: string, expiresAt: string): Promise<void>
   failRefresh(errorCode: string): Promise<void>
-  tenantIdForRegion(region: XeroRegion): Promise<string | null>
+  tenantIdForCountry(countryCode: string): Promise<string | null>
 }
 
 export interface TokenStoreDeps {
@@ -157,11 +155,11 @@ export function createXeroTokenStore(deps: TokenStoreDeps) {
       throw new XeroRefreshTimeoutError()
     },
 
-    /** §5 step 4: null = not connected (no token row, or region unassigned). */
-    async connectionForRegion(region: XeroRegion): Promise<{ tenantId: string } | null> {
+    /** §5 step 4: null = not connected (no token row, or country unassigned). */
+    async connectionForCountry(countryCode: string): Promise<{ tenantId: string } | null> {
       const [row, tenantId] = await Promise.all([
         deps.db.readTokenRow(),
-        deps.db.tenantIdForRegion(region),
+        deps.db.tenantIdForCountry(countryCode),
       ])
       if (!row || !tenantId) return null
       return { tenantId }
@@ -233,11 +231,11 @@ export function supabaseTokenStoreDb(client: TokenStoreClient): TokenStoreDb {
       const { error } = await client.rpc('xero_fail_refresh', { p_error_code: errorCode })
       if (error) console.error('xero_fail_refresh failed', { errorCode })
     },
-    async tenantIdForRegion(region) {
+    async tenantIdForCountry(countryCode) {
       const { data, error } = await client
         .from('xero_connections')
         .select('tenant_id')
-        .eq('region', region)
+        .eq('country_code', countryCode)
         .maybeSingle()
       if (error) throw new Error(`xero_connections read failed: ${error.message}`)
       return (data as { tenant_id: string } | null)?.tenant_id ?? null
@@ -279,12 +277,12 @@ export async function getXeroAccessToken(opts?: { force?: boolean }): Promise<st
   return store().getAccessToken(opts ?? {})
 }
 
-export async function xeroTenantIdForRegion(region: XeroRegion): Promise<string> {
-  const connection = await store().connectionForRegion(region)
+export async function xeroTenantIdForCountry(countryCode: string): Promise<string> {
+  const connection = await store().connectionForCountry(countryCode)
   if (!connection) throw new XeroNotConnectedError()
   return connection.tenantId
 }
 
-export async function isXeroConnectedForRegion(region: XeroRegion): Promise<boolean> {
-  return (await store().connectionForRegion(region)) !== null
+export async function isXeroConnectedForCountry(countryCode: string): Promise<boolean> {
+  return (await store().connectionForCountry(countryCode)) !== null
 }

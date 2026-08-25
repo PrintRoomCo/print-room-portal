@@ -10,14 +10,14 @@ beforeEach(() => vi.resetAllMocks())
 
 describe('resolveXeroContactId', () => {
   it('uses the cached contact id without any API call', async () => {
-    const r = await resolveXeroContactId({ region: 'NZ' as const, cachedContactId: 'cached-1', name: 'Acme', email: null })
+    const r = await resolveXeroContactId({ countryCode: 'NZ', cachedContactId: 'cached-1', name: 'Acme', email: null })
     expect(r).toEqual({ contactId: 'cached-1', created: false })
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('uses a single name match', async () => {
     mockFetch.mockResolvedValueOnce({ Contacts: [{ ContactID: 'found-1' }] })
-    const r = await resolveXeroContactId({ region: 'NZ' as const, cachedContactId: null, name: 'Acme', email: null })
+    const r = await resolveXeroContactId({ countryCode: 'NZ', cachedContactId: null, name: 'Acme', email: null })
     expect(r).toEqual({ contactId: 'found-1', created: false })
     expect(mockFetch.mock.calls[0][0]).toContain('/Contacts?where=')
   })
@@ -26,7 +26,7 @@ describe('resolveXeroContactId', () => {
     mockFetch
       .mockResolvedValueOnce({ Contacts: [] }) // name lookup: none
       .mockResolvedValueOnce({ Contacts: [{ ContactID: 'new-1' }] }) // create
-    const r = await resolveXeroContactId({ region: 'NZ' as const, cachedContactId: null, name: 'Acme', email: 'ap@acme.test' })
+    const r = await resolveXeroContactId({ countryCode: 'NZ', cachedContactId: null, name: 'Acme', email: 'ap@acme.test' })
     expect(r).toEqual({ contactId: 'new-1', created: true })
     const init = mockFetch.mock.calls[1][1]!
     expect(init.method).toBe('POST')
@@ -39,7 +39,7 @@ describe('resolveXeroContactId', () => {
       .mockResolvedValueOnce({ Contacts: [] }) // name lookup: none (race)
       .mockRejectedValueOnce(new Error('Xero API 400 on /Contacts: contact name must be unique'))
       .mockResolvedValueOnce({ Contacts: [{ ContactID: 'raced-1' }] }) // re-query wins
-    const r = await resolveXeroContactId({ region: 'NZ' as const, cachedContactId: null, name: 'Acme', email: null })
+    const r = await resolveXeroContactId({ countryCode: 'NZ', cachedContactId: null, name: 'Acme', email: null })
     expect(r).toEqual({ contactId: 'raced-1', created: false })
   })
 
@@ -48,7 +48,7 @@ describe('resolveXeroContactId', () => {
       .mockResolvedValueOnce({ Contacts: [] })
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce({ Contacts: [] })
-    await expect(resolveXeroContactId({ region: 'NZ' as const, cachedContactId: null, name: 'Acme', email: null })).rejects.toThrow('boom')
+    await expect(resolveXeroContactId({ countryCode: 'NZ', cachedContactId: null, name: 'Acme', email: null })).rejects.toThrow('boom')
   })
 
   it('sends location details on create — postal + street address and phone', async () => {
@@ -56,7 +56,7 @@ describe('resolveXeroContactId', () => {
       .mockResolvedValueOnce({ Contacts: [] }) // name lookup: none
       .mockResolvedValueOnce({ Contacts: [{ ContactID: 'new-loc-1' }] }) // create
     const r = await resolveXeroContactId({
-      region: 'NZ' as const, cachedContactId: null,
+      countryCode: 'NZ', cachedContactId: null,
       name: 'Reburger Takapuna',
       email: 'takapuna@reburger.test',
       details: {
@@ -100,7 +100,7 @@ describe('resolveXeroContactId', () => {
     mockFetch
       .mockResolvedValueOnce({ Contacts: [] })
       .mockResolvedValueOnce({ Contacts: [{ ContactID: 'new-2' }] })
-    await resolveXeroContactId({ region: 'NZ' as const, cachedContactId: null, name: 'Acme', email: null })
+    await resolveXeroContactId({ countryCode: 'NZ', cachedContactId: null, name: 'Acme', email: null })
     const init = mockFetch.mock.calls[1][1]!
     expect(init.body).not.toContain('"Addresses"')
     expect(init.body).not.toContain('"Phones"')

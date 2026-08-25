@@ -4,30 +4,39 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 vi.mock('../client', () => ({ xeroFetch: vi.fn() }))
 vi.mock('@/lib/audit/recordEvent', () => ({ recordAuditEvent: vi.fn() }))
-vi.mock('../token-store', () => ({ isXeroConnectedForRegion: vi.fn() }))
+vi.mock('../token-store', () => ({ isXeroConnectedForCountry: vi.fn() }))
 
 import { xeroFetch } from '../client'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
-import { isXeroConnectedForRegion } from '../token-store'
+import { isXeroConnectedForCountry } from '../token-store'
 import { createDraftInvoiceForOrder, type CreateDraftInvoiceArgs } from '../draft-invoice'
 
 const mockFetch = vi.mocked(xeroFetch)
 const mockAudit = vi.mocked(recordAuditEvent)
-const mockConnected = vi.mocked(isXeroConnectedForRegion)
+const mockConnected = vi.mocked(isXeroConnectedForCountry)
+
+const COUNTRY_ROWS = {
+  NZ: { code: 'NZ', currency: 'NZD', xero_sales_account: '191', xero_tax_type: 'OUTPUT2' },
+  AU: { code: 'AU', currency: 'AUD', xero_sales_account: '200', xero_tax_type: 'OUTPUT' },
+  GB: { code: 'GB', currency: 'GBP', xero_sales_account: '310', xero_tax_type: 'OUTPUT2' },
+} as const
 
 /** Minimal chainable Supabase stub covering exactly the calls the orchestrator makes. */
 function fakeAdmin(opts: {
   cachedContactId: string | null
   quoteItems: unknown[]
   storeRow?: Record<string, unknown> | null
+  countryRows?: Record<string, Record<string, unknown>>
 }) {
   const updates: Array<{ table: string; payload: Record<string, unknown> }> = []
   const from = (table: string) => ({
     select: () => ({
-      eq: () => ({
+      eq: (_column: string, value: unknown) => ({
         maybeSingle: async () => ({
           data:
-            table === 'organizations'
+            table === 'countries'
+              ? ((opts.countryRows ?? COUNTRY_ROWS) as Record<string, Record<string, unknown>>)[String(value)] ?? null
+              : table === 'organizations'
               ? { xero_contact_id: opts.cachedContactId }
               : table === 'stores'
                 ? opts.storeRow ?? null
@@ -57,7 +66,7 @@ const args: CreateDraftInvoiceArgs = {
   ordererEmail: 'buyer@acme.test',
   paymentTerms: 'net20',
   isTestOrg: false,
-  orgRegion: 'NZ',
+  billCountry: 'NZ',
   pickingFee: 0,
   prepaidDrawnLineKeys: new Set<string>(),
   existingInvoiceId: null,
@@ -256,15 +265,15 @@ describe('createDraftInvoiceForOrder — Xero failure propagates', () => {
   })
 })
 
-describe('createDraftInvoiceForOrder — region routing + not_connected gate', () => {
+describe('createDraftInvoiceForOrder — country routing + not_connected gate', () => {
   it('skips and audits an unsupported exact bill-country stamp without touching Xero', async () => {
     mockConnected.mockResolvedValue(false)
     const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })
 
     const res = await createDraftInvoiceForOrder(admin, {
       ...args,
-      billCountry: 'GB',
-    } as CreateDraftInvoiceArgs & { billCountry: string })
+      billCountry: 'US',
+    })
 
     expect(res).toEqual({ status: 'skipped', reason: 'unsupported_country' })
     expect(updates).toEqual([
@@ -275,7 +284,7 @@ describe('createDraftInvoiceForOrder — region routing + not_connected gate', (
         action: 'order.xero_draft_skipped',
         metadata: expect.objectContaining({
           reason: 'unsupported_country',
-          billCountry: 'GB',
+          country_code: 'US',
         }),
       }),
       admin,
@@ -284,19 +293,19 @@ describe('createDraftInvoiceForOrder — region routing + not_connected gate', (
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it.each(['NZ', 'AU'] as const)(
-    '%s org while Xero is NOT connected: skips not_connected, audits with region, zero HTTP',
-    async (region) => {
+  it.each(['NZ', 'AU', 'GB'] as const)(
+    '%s country row with no connection: skips not_connected and sends zero HTTP',
+    async (countryCode) => {
       mockConnected.mockResolvedValue(false)
       const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })
-      const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: region })
+      const res = await createDraftInvoiceForOrder(admin, { ...args, billCountry: countryCode })
       expect(res).toEqual({ status: 'skipped', reason: 'not_connected' })
-      expect(mockConnected).toHaveBeenCalledWith(region)
+      expect(mockConnected).toHaveBeenCalledWith(countryCode)
       expect(updates).toEqual([{ table: 'orders', payload: { xero_invoice_status: 'skipped' } }])
       expect(mockAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'order.xero_draft_skipped',
-          metadata: expect.objectContaining({ reason: 'not_connected', region }),
+          metadata: expect.objectContaining({ reason: 'not_connected', country_code: countryCode }),
         }),
         admin,
       )
@@ -304,19 +313,18 @@ describe('createDraftInvoiceForOrder — region routing + not_connected gate', (
     },
   )
 
-  it('AU org, connected: proceeds to the Xero calls against the AU tenant', async () => {
+  it('GB country, connected: reaches the GB tenant with row-backed GBP config', async () => {
     const { admin } = fakeAdmin({ cachedContactId: 'contact-1', quoteItems: [] })
-    mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'q-au', QuoteNumber: 'QU-1' }] })
+    mockFetch.mockResolvedValueOnce({ Quotes: [{ QuoteID: 'q-gb', QuoteNumber: 'QU-1' }] })
 
-    const res = await createDraftInvoiceForOrder(admin, { ...args, orgRegion: 'AU' })
+    const res = await createDraftInvoiceForOrder(admin, { ...args, billCountry: 'GB' })
 
     expect(res.status).toBe('drafted')
-    // Every Xero call must carry region: 'AU' so the AU connection is used.
     for (const call of mockFetch.mock.calls) {
-      expect((call[1] as { region?: string } | undefined)?.region).toBe('AU')
+      expect((call[1] as { countryCode?: string } | undefined)?.countryCode).toBe('GB')
     }
-    // AUD + OUTPUT come from the AU config, not the NZ one.
     const payload = JSON.parse((mockFetch.mock.calls.at(-1)![1] as { body: string }).body)
-    expect(payload.Quotes[0].CurrencyCode).toBe('AUD')
+    expect(payload.Quotes[0]).toMatchObject({ CurrencyCode: 'GBP' })
+    expect(payload.Quotes[0].LineItems).toEqual([])
   })
 })
