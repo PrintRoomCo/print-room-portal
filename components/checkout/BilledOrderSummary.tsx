@@ -83,7 +83,7 @@ export function CountryBilledOrderSummary({
 
           {group?.partitions.map((partition) => (
             <section key={partition.key} className="mt-5 border-t border-black/10 pt-5">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-black/55">
+              <h3 className="text-sm font-bold capitalize text-black">
                 {ORDER_TYPE_LABEL[partition.orderType]}
               </h3>
               <PartitionPlacementOutcome
@@ -221,7 +221,7 @@ export function BilledOrderSummary({
           className={multi ? 'mb-5 rounded-2xl bg-gray-50/60 p-5' : undefined}
         >
           {multi && (
-            <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <h3 className="mb-3 text-sm font-bold capitalize text-black">
               {ORDER_TYPE_LABEL[partition.orderType]}
             </h3>
           )}

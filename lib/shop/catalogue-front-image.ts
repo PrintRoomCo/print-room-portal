@@ -9,10 +9,23 @@ export interface CatalogueFrontImageRow {
   image_url: string | null
 }
 
+/**
+ * Source preference WITHIN a swatch tier, kept in step with the PDP's
+ * `pickPreferredGalleryImage` (lib/shop/catalogue-images.ts), which resolves
+ * `designer_snapshot` first. A designer snapshot is the decorated render of
+ * this item — the picture the customer actually chose on the PDP — so it must
+ * outrank the undecorated staff/supplier stock photography everywhere the same
+ * line is shown again (cart, checkout, confirmation, reorder, collections).
+ * Ranking staff fronts first made those surfaces contradict the PDP whenever an
+ * item carried both for one colour.
+ *
+ * Note this is the tie-break AFTER `swatchRank`, so a staff front in the
+ * selected colour still beats a snapshot of some other colour.
+ */
 function sourceRank(source: string | null | undefined): number {
-  if (source === 'staff_pick') return 0
-  if (source === 'staff_upload') return 1
-  if (source === 'designer_snapshot') return 2
+  if (source === 'designer_snapshot') return 0
+  if (source === 'staff_pick') return 1
+  if (source === 'staff_upload') return 2
   return 3
 }
 
