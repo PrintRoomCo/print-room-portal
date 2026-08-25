@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { billedOrderShape, type BilledLineInput } from './order-billing-shape'
+import {
+  billedOrderShape,
+  checkoutBillingShape,
+  type BilledLineInput,
+  type CheckoutOrderGroup,
+} from './order-billing-shape'
 
 function line(over: Partial<BilledLineInput> = {}): BilledLineInput {
   return {
@@ -19,6 +24,85 @@ const NZ = { gstRate: 0.15, shipCountry: 'NZ' as string | null }
 // the NZD picking fee — even on an NZ ship-to. GST computes on billed goods + a
 // zero fee at the AU rate.
 const AU = { gstRate: 0.1, shipCountry: 'NZ' as string | null, orgRegion: 'AU' as string | null }
+
+function countryOrder(
+  over: Partial<CheckoutOrderGroup> & Pick<CheckoutOrderGroup, 'key' | 'countryCode' | 'orderType'>,
+): CheckoutOrderGroup {
+  const isAu = over.countryCode === 'AU'
+  return {
+    countryName: isAu ? 'Australia' : 'New Zealand',
+    currency: isAu ? 'AUD' : 'NZD',
+    taxLabel: isAu ? 'GST' : 'GST',
+    lines: [],
+    subtotal: 100,
+    tax: isAu ? 10 : 15,
+    pickingFee: 0,
+    total: isAu ? 110 : 115,
+    ...over,
+  }
+}
+
+describe('checkoutBillingShape — country-first cutover', () => {
+  it('groups country first, fulfilment second, with each country own tax, fee and currency', () => {
+    const shape = checkoutBillingShape([
+      countryOrder({
+        key: 'AU:stock_on_hand', countryCode: 'AU', orderType: 'stock_on_hand',
+        subtotal: 200, tax: 20, total: 220,
+      }),
+      countryOrder({
+        key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand',
+        subtotal: 300, pickingFee: 20, tax: 48, total: 368,
+      }),
+      countryOrder({
+        key: 'AU:purchase_order', countryCode: 'AU', orderType: 'purchase_order',
+        subtotal: 100, tax: 10, total: 110,
+      }),
+    ])
+
+    expect(shape.countryGroups.map((group) => ({
+      countryCode: group.countryCode,
+      currency: group.currency,
+      taxLabel: group.taxLabel,
+      partitionKeys: group.partitions.map((partition) => partition.key),
+      subtotal: group.subtotal,
+      tax: group.tax,
+      pickingFee: group.pickingFee,
+      total: group.total,
+    }))).toStrictEqual([
+      {
+        countryCode: 'AU', currency: 'AUD', taxLabel: 'GST',
+        partitionKeys: ['AU:purchase_order', 'AU:stock_on_hand'],
+        subtotal: 300, tax: 30, pickingFee: 0, total: 330,
+      },
+      {
+        countryCode: 'NZ', currency: 'NZD', taxLabel: 'GST',
+        partitionKeys: ['NZ:stock_on_hand'],
+        subtotal: 300, tax: 48, pickingFee: 20, total: 368,
+      },
+    ])
+    expect(shape.totalsByCurrency).toStrictEqual([
+      { currency: 'AUD', total: 330 },
+      { currency: 'NZD', total: 368 },
+    ])
+    expect(shape.orderCount).toBe(3)
+    expect(shape).not.toHaveProperty('grandTotal')
+  })
+
+  it('combines country totals only when their exact currency codes match', () => {
+    const shape = checkoutBillingShape([
+      countryOrder({
+        key: 'AU:purchase_order', countryCode: 'AU', orderType: 'purchase_order',
+        currency: 'USD', total: 110,
+      }),
+      countryOrder({
+        key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand',
+        currency: 'USD', total: 115,
+      }),
+    ])
+
+    expect(shape.totalsByCurrency).toStrictEqual([{ currency: 'USD', total: 225 }])
+  })
+})
 
 describe('billedOrderShape — AU org (AU Stage 1)', () => {
   it('drops the picking fee and computes GST at 0.10 on an NZ-ship-to stocked order', () => {

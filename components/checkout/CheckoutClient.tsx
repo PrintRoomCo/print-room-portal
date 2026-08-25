@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
@@ -17,15 +17,28 @@ import {
   writeCheckoutReviewState,
   type CustomAddress,
 } from './checkoutReviewState'
-import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import {
+  billedOrderShape,
+  checkoutBillingShape,
+  checkoutOrderGroupFromPrepared,
+  type BilledLine,
+} from '@/lib/pricing/order-billing-shape'
 import { gstRateForRegion } from '@/lib/pricing/gst'
-import { resolveShipCountry } from '@/lib/checkout/ship-country'
 import { useFreshBillingModes } from './useFreshBillingModes'
-import { BilledOrderSummary } from './BilledOrderSummary'
+import {
+  BilledOrderSummary,
+  CountryBilledOrderSummary,
+  type CheckoutCountryFailure,
+} from './BilledOrderSummary'
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCompany } from '@/contexts/CompanyContext'
+import { formatCurrency } from '@/lib/currency/format'
+import {
+  buildCheckoutRequestLines,
+  useCheckoutPreview,
+} from './useCheckoutPreview'
 
 interface CheckoutClientProps {
   stores: StoreOption[]
@@ -56,6 +69,8 @@ interface CheckoutClientProps {
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
   /** SP1: the org's enabled countries — the only values the one-time address may carry. */
   enabledCountries: EnabledCountry[]
+  /** Server-evaluated SP3 flag. Client components never read process.env. */
+  countryPartitionEnabled?: boolean
 }
 
 export function CheckoutClient({
@@ -68,14 +83,16 @@ export function CheckoutClient({
   isBuyer,
   tenantType,
   enabledCountries,
+  countryPartitionEnabled = false,
 }: CheckoutClientProps) {
   const cart = useCart()
   const router = useRouter()
-  const { format } = useCurrency()
+  const currencyContext = useCurrency()
+  const { format } = currencyContext
   const { access } = useCompany()
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
-  const idempotencyKey = useRef<string>(crypto.randomUUID())
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
 
   const buyerDefaultIsAvailable =
     buyerDefaultStoreId != null && stores.some((s) => s.id === buyerDefaultStoreId)
@@ -146,25 +163,6 @@ export function CheckoutClient({
   // map ⇒ every line bills at full price), so only 'loading' blocks.
   const pricingReady = billingStatus !== 'loading'
 
-  const storeById = useMemo(() => {
-    const map = new Map<string, StoreOption>()
-    for (const store of stores) map.set(store.id, store)
-    return map
-  }, [stores])
-
-  const shipCountry = useMemo(
-    () =>
-      resolveShipCountry({
-        lines: cart.lines,
-        perLineShipTo,
-        customAddressCountry: customAddress.country,
-        countryByStoreId: new Map(
-          Array.from(storeById.entries()).map(([id, store]) => [id, store.country ?? null]),
-        ),
-      }),
-    [cart.lines, perLineShipTo, customAddress.country, storeById],
-  )
-
   const shape = useMemo(
     () =>
       billedOrderShape({
@@ -179,10 +177,69 @@ export function CheckoutClient({
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
         gstRate: gstRateForRegion(access?.region),
-        shipCountry,
+        // Task 7's private flag-off adapter freezes the pre-cutover drawer
+        // assumption; enabled checkout money comes only from prepared country
+        // partitions below.
+        shipCountry: 'NZ',
         orgRegion: access?.region ?? null,
       }),
-    [cart.lines, modeByVariantId, shipCountry, access?.region],
+    [cart.lines, modeByVariantId, access?.region],
+  )
+
+  const checkoutLines = useMemo(
+    () => buildCheckoutRequestLines({
+      lines: cart.lines,
+      perLineShipTo,
+      allCustom,
+      modeByVariantId,
+    }),
+    [cart.lines, perLineShipTo, allCustom, modeByVariantId],
+  )
+  const previewRequest = useMemo(
+    () =>
+      countryPartitionEnabled &&
+      pricingReady &&
+      !mixedCustom &&
+      !customIncomplete &&
+      !buyerMisconfigured
+        ? {
+            idempotency_key: idempotencyKey,
+            required_by: requiredBy || null,
+            notes: notes || null,
+            intent,
+            lines: checkoutLines,
+            custom_shipping_address: allCustom ? customAddress : null,
+          }
+        : null,
+    [
+      countryPartitionEnabled,
+      pricingReady,
+      mixedCustom,
+      customIncomplete,
+      buyerMisconfigured,
+      requiredBy,
+      notes,
+      intent,
+      checkoutLines,
+      allCustom,
+      customAddress,
+      idempotencyKey,
+    ],
+  )
+  const preview = useCheckoutPreview(countryPartitionEnabled, previewRequest)
+  const previewSuccesses = preview.partitions.filter((outcome) => outcome.ok)
+  const previewFailures: CheckoutCountryFailure[] = preview.partitions
+    .filter((outcome) => !outcome.ok)
+    .map((outcome) => ({
+      partitionKey: outcome.partitionKey,
+      countryCode: outcome.countryCode,
+      countryName: outcome.country.name,
+      currency: outcome.country.currency,
+      code: outcome.code,
+      error: outcome.error,
+    }))
+  const countryShape = checkoutBillingShape(
+    previewSuccesses.map((outcome) => checkoutOrderGroupFromPrepared(outcome.partition)),
   )
 
   const lineById = useMemo(
@@ -201,7 +258,11 @@ export function CheckoutClient({
     !customerCodeMissing &&
     !mixedCustom &&
     !customIncomplete &&
-    !buyerMisconfigured
+    !buyerMisconfigured &&
+    (!countryPartitionEnabled ||
+      (preview.status === 'ready' &&
+        preview.partitions.length > 0 &&
+        previewFailures.length === 0))
 
   function proceedToReview() {
     if (!canSubmitOrder) return
@@ -209,7 +270,7 @@ export function CheckoutClient({
     setBanner(null)
     try {
       writeCheckoutReviewState({
-        idempotencyKey: idempotencyKey.current,
+        idempotencyKey,
         requiredBy,
         notes,
         intent,
@@ -227,6 +288,34 @@ export function CheckoutClient({
       })
       setSubmitting(false)
     }
+  }
+
+  function renderShipLine(billedLine: BilledLine, currency?: string) {
+    const line = lineById.get(billedLine.lineId)
+    if (!line) return null
+    const lineFormat = currency
+      ? (amount: number) => `${formatCurrency(amount, currency)} ${currency}`
+      : format
+    return (
+      <ShipToRow
+        line={line}
+        stores={selectableStores}
+        format={lineFormat}
+        value={perLineShipTo[line.lineId] ?? null}
+        catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
+        onChange={(next) =>
+          setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+        }
+        disabled={submitting !== false}
+        allowCustom={!buyerMisconfigured}
+        hideShipTo={inventoryMode}
+        prepaidDrawn={!billedLine.billed}
+        billedUnitPrice={
+          currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
+        }
+        billedGoodsValue={billedLine.goodsValue}
+      />
+    )
   }
 
   if (cart.lines.length === 0) {
@@ -288,7 +377,14 @@ export function CheckoutClient({
         </div>
       )}
 
-      {!isTest && depositPct > 0 && (
+      {!isTest && depositPct > 0 && countryPartitionEnabled && (
+        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+          A deposit of {depositPct}% will be invoiced per order. Balance on{' '}
+          {paymentTerms ?? 'net20'}.
+        </div>
+      )}
+
+      {!isTest && depositPct > 0 && !countryPartitionEnabled && (
         <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
           A deposit of {depositPct}% ({format(depositAmount)}) will be
           invoiced up-front. Balance on {paymentTerms ?? 'net20'}.
@@ -305,42 +401,50 @@ export function CheckoutClient({
             </p>
           </div>
         )}
-        <BilledOrderSummary
-          shape={shape}
-          format={format}
-          afterLines={
-            canRouteToInventory ? (
-              <div className="mt-5 flex justify-end">
-                <AddAllToInventoryToggle
-                  checked={addToInventory}
-                  onChange={setAddToInventory}
-                  disabled={submitting !== false}
-                />
-              </div>
-            ) : null
-          }
-          renderLine={(billedLine: BilledLine) => {
-            const line = lineById.get(billedLine.lineId)
-            if (!line) return null
-            return (
-              <ShipToRow
-                line={line}
-                stores={selectableStores}
-                format={format}
-                value={perLineShipTo[line.lineId] ?? null}
-                catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
-                onChange={(next) =>
-                  setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+        {countryPartitionEnabled ? (
+          preview.status === 'ready' ? (
+            <CountryBilledOrderSummary
+              shape={countryShape}
+              failures={previewFailures}
+              renderLine={renderShipLine}
+            />
+          ) : (
+            <div>
+              <div
+                role={preview.status === 'error' ? 'alert' : 'status'}
+                className={
+                  preview.status === 'error'
+                    ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
+                    : 'mb-5 rounded-2xl bg-black/[0.03] p-4 text-sm text-black/65'
                 }
-                disabled={submitting !== false}
-                allowCustom={!buyerMisconfigured}
-                hideShipTo={inventoryMode}
-                prepaidDrawn={!billedLine.billed}
-                billedGoodsValue={billedLine.goodsValue}
-              />
-            )
-          }}
-        />
+              >
+                {preview.status === 'error'
+                  ? preview.error
+                  : 'Updating country prices…'}
+              </div>
+              <div className="space-y-6">
+                {shape.partitions.flatMap((partition) => partition.lines).map((line) => (
+                  <div key={line.lineId}>{renderShipLine(line)}</div>
+                ))}
+              </div>
+            </div>
+          )
+        ) : (
+          <BilledOrderSummary
+            shape={shape}
+            format={format}
+            renderLine={renderShipLine}
+          />
+        )}
+        {canRouteToInventory && (
+          <div className="mt-5 flex justify-end">
+            <AddAllToInventoryToggle
+              checked={addToInventory}
+              onChange={setAddToInventory}
+              disabled={submitting !== false}
+            />
+          </div>
+        )}
       </section>
 
       {mixedCustom && (
@@ -497,10 +601,32 @@ export function CheckoutClient({
       </div>
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}
-        totalLabel={pricingReady ? format(shape.grandTotal) : '—'}
+        orderCount={
+          countryPartitionEnabled
+            ? Math.max(1, preview.partitions.length)
+            : shape.invoiceCount
+        }
+        totalsByCurrency={
+          countryPartitionEnabled
+            ? preview.status === 'ready'
+              ? preview.totalsByCurrency
+              : []
+            : [{
+                currency: currencyContext.currency ?? (access?.region === 'AU' ? 'AUD' : 'NZD'),
+                total: currencyContext.convert?.(shape.grandTotal) ?? shape.grandTotal,
+              }]
+        }
         onSubmit={proceedToReview}
         disabled={!canSubmitOrder}
         submitting={submitting === 'review'}
+        legacyPresentation={
+          countryPartitionEnabled
+            ? undefined
+            : {
+                totalLabel: format(shape.grandTotal),
+                actionLabel: 'Review order',
+              }
+        }
       />
     </div>
   )

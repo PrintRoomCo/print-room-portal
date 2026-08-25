@@ -1,14 +1,22 @@
 'use client'
 
+import { formatCurrency } from '@/lib/currency/format'
+import type { CurrencyTotal } from '@/lib/pricing/order-billing-shape'
+
 interface CheckoutCTAStickyBarProps {
   itemCount: number
-  /** Total formatted via `useCurrency().format` in the parent. */
-  totalLabel: string
+  orderCount: number
+  totalsByCurrency: CurrencyTotal[]
   onSubmit: () => void
   disabled: boolean
   submitting: boolean
-  submitLabel?: string
+  action?: 'review' | 'place' | 'retry' | 'preview'
   submittingLabel?: string
+  /** Flag-off compatibility only; delete with CHECKOUT_COUNTRY_PARTITION_ENABLED. */
+  legacyPresentation?: {
+    totalLabel: string
+    actionLabel: string
+  }
 }
 
 /**
@@ -23,32 +31,59 @@ interface CheckoutCTAStickyBarProps {
  */
 export function CheckoutCTAStickyBar({
   itemCount,
-  totalLabel,
+  orderCount,
+  totalsByCurrency,
   onSubmit,
   disabled,
   submitting,
-  submitLabel = 'Review order',
+  action = 'review',
   submittingLabel = 'Submitting…',
+  legacyPresentation,
 }: CheckoutCTAStickyBarProps) {
+  const orderNoun = `${orderCount} order${orderCount === 1 ? '' : 's'}`
+  const actionLabel =
+    legacyPresentation?.actionLabel ??
+    (action === 'place'
+      ? `Place ${orderNoun}`
+      : action === 'retry'
+        ? `Retry ${orderNoun}`
+        : action === 'preview'
+          ? 'Preview only'
+          : orderCount === 1
+            ? 'Review order'
+            : `Review ${orderNoun}`)
+
   return (
     <div
       role="region"
       aria-label="Checkout actions"
-      className="fixed inset-x-0 bottom-0 z-40 bg-gray-900 px-4 py-4 text-white md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      className="fixed inset-x-0 bottom-0 z-40 bg-black px-4 py-4 text-white md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-4">
         <div className="flex flex-col md:flex-row md:items-baseline md:gap-6">
           <span className="text-sm font-medium">
             Cart: {itemCount} item{itemCount === 1 ? '' : 's'}
           </span>
-          <span className="text-base font-semibold">{totalLabel}</span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1 text-base font-semibold">
+            {legacyPresentation ? (
+              <span className="whitespace-nowrap tabular-nums">
+                {legacyPresentation.totalLabel}
+              </span>
+            ) : (
+              totalsByCurrency.map(({ currency, total }) => (
+                <span key={currency} className="whitespace-nowrap tabular-nums">
+                  {formatCurrency(total, currency)} {currency}
+                </span>
+              ))
+            )}
+          </span>
         </div>
         <button
           type="button"
           onClick={onSubmit}
           disabled={disabled || submitting}
           aria-busy={submitting}
-          className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors duration-300 ease-oem hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting && (
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -56,7 +91,7 @@ export function CheckoutCTAStickyBar({
               <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           )}
-          {submitting ? submittingLabel : submitLabel}
+          {submitting ? submittingLabel : actionLabel}
         </button>
       </div>
     </div>

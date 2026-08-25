@@ -55,14 +55,20 @@ function okJson(payload: unknown) {
   } as unknown as Response
 }
 
-function renderReview(overrides?: { isTest?: boolean; paymentTerms?: string | null }) {
+function renderReview(overrides?: {
+  isTest?: boolean
+  paymentTerms?: string | null
+  countryPartitionEnabled?: boolean
+  stores?: Array<{ id: string; name: string; city: string; country?: string }>
+}) {
   return render(
     <CheckoutReviewClient
-      stores={[{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
+      stores={overrides?.stores ?? [{ id: 'store-1', name: 'Main store', city: 'Auckland' }]}
       customerCode="CUST-1"
       paymentTerms={overrides?.paymentTerms ?? 'net20'}
       defaultDepositPercent={null}
       isTest={overrides?.isTest ?? false}
+      countryPartitionEnabled={overrides?.countryPartitionEnabled}
     />,
   )
 }
@@ -147,8 +153,13 @@ describe('CheckoutReviewClient conflict handling', () => {
 
     renderReview()
 
+    const actions = screen.getByRole('region', { name: 'Checkout actions' })
+    expect(actions).toHaveTextContent('$172.50')
+    expect(actions).not.toHaveTextContent('NZD')
     await tickTerms(user)
-    await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
+    await user.click(
+      await screen.findByRole('button', { name: /confirm & place order/i }),
+    )
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -159,6 +170,9 @@ describe('CheckoutReviewClient conflict handling', () => {
     expect(mocks.push).not.toHaveBeenCalledWith('/cart')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.clear).not.toHaveBeenCalled()
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input]) => String(input) === '/api/checkout/preview'),
+    ).toBe(false)
   })
 
   it('keeps OUT_OF_STOCK visible on the review page instead of routing to cart', async () => {
@@ -168,7 +182,9 @@ describe('CheckoutReviewClient conflict handling', () => {
     renderReview()
 
     await tickTerms(user)
-    await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
+    await user.click(
+      await screen.findByRole('button', { name: /confirm & place order/i }),
+    )
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -178,6 +194,133 @@ describe('CheckoutReviewClient conflict handling', () => {
     expect(mocks.push).not.toHaveBeenCalledWith('/cart')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.clear).not.toHaveBeenCalled()
+  })
+})
+
+describe('CheckoutReviewClient independent country outcomes', () => {
+  it('keeps successful refs, announces the failed group, and retries the same base', async () => {
+    mocks.lines = [
+      { ...mocks.lines[0], fulfilmentType: 'made_to_order', priceCurrency: 'NZD' },
+      {
+        ...mocks.lines[0], lineId: 'line-2', productId: 'product-2',
+        productName: 'NZ tee', variantId: 'variant-2', fulfilmentType: 'stocked',
+        priceCurrency: 'NZD',
+      },
+    ]
+    sessionStorage.setItem(
+      CHECKOUT_REVIEW_STORAGE_KEY,
+      JSON.stringify({
+        idempotencyKey: 'idem-1', requiredBy: '', notes: '', intent: 'customer',
+        perLineShipTo: { 'line-1': 'store-au', 'line-2': 'store-nz' },
+        customAddress: {
+          name: '', address: '', city: '', postal_code: '', country: 'NZ',
+        },
+        createdAt: '2026-06-05T00:00:00.000Z',
+      }),
+    )
+
+    const prepared = (
+      key: string,
+      country: { code: string; name: string; currency: string; taxRate: number; taxLabel: string },
+      orderType: 'purchase_order' | 'stock_on_hand',
+      line: Record<string, unknown>,
+    ) => ({
+      key, country, orderType,
+      lines: [{
+        ...line,
+        cartLineId: line.cart_line_id,
+        unitPrice: 10,
+        decorationUnitPrice: 0,
+        billingMode: 'invoice_on_dispatch',
+        billed: true,
+      }],
+      pricingPoolLines: [],
+      totals: {
+        goodsSubtotal: 120, decorationSubtotal: 0, pickingFee: 0,
+        tax: country.code === 'AU' ? 12 : 18, total: country.code === 'AU' ? 132 : 138,
+      },
+    })
+    const previewResponse = {
+      outcomes: [
+        { ok: true, partition: prepared(
+          'AU:purchase_order',
+          { code: 'AU', name: 'Australia', currency: 'AUD', taxRate: 0.1, taxLabel: 'GST 10%' },
+          'purchase_order',
+          { product_id: 'product-1', product_name: 'Test tee', variant_id: 'variant-1', qty: 12, cart_line_id: 'line-1', fulfilment_type: 'made_to_order' },
+        ) },
+        { ok: true, partition: prepared(
+          'NZ:stock_on_hand',
+          { code: 'NZ', name: 'New Zealand', currency: 'NZD', taxRate: 0.15, taxLabel: 'GST 15%' },
+          'stock_on_hand',
+          { product_id: 'product-2', product_name: 'NZ tee', variant_id: 'variant-2', qty: 12, cart_line_id: 'line-2', fulfilment_type: 'stocked' },
+        ) },
+      ],
+      totalsByCurrency: { AUD: 132, NZD: 138 },
+    }
+    const checkoutBodies: Array<Record<string, unknown>> = []
+    let placement = 0
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('review-images')) return okJson({ imagesByLineId: {} })
+      if (url.includes('billing-modes')) return okJson({ modeByVariantId: {} })
+      if (url === '/api/checkout/preview') return okJson(previewResponse)
+      if (url === '/api/checkout') {
+        checkoutBodies.push(JSON.parse(String(init?.body)))
+        placement += 1
+        return placement === 1
+          ? ({
+              status: 207, ok: true,
+              json: async () => ({ outcomes: [
+                {
+                  ok: true, partitionKey: 'AU:purchase_order', countryCode: 'AU',
+                  currency: 'AUD', orderType: 'purchase_order',
+                  orderId: 'order-au', orderRef: 'AU-1',
+                },
+                {
+                  ok: false, partitionKey: 'NZ:stock_on_hand', countryCode: 'NZ',
+                  currency: 'NZD', orderType: 'stock_on_hand', code: 'submit_failed',
+                  error: 'New Zealand order could not be placed.',
+                },
+              ] }),
+            } as Response)
+          : okJson({ outcomes: [
+              {
+                ok: true, partitionKey: 'NZ:stock_on_hand', countryCode: 'NZ',
+                currency: 'NZD', orderType: 'stock_on_hand',
+                orderId: 'order-nz', orderRef: 'NZ-1',
+              },
+            ] })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    const user = userEvent.setup()
+    renderReview({
+      countryPartitionEnabled: true,
+      stores: [
+        { id: 'store-au', name: 'Melbourne', city: 'Melbourne', country: 'AU' },
+        { id: 'store-nz', name: 'Auckland', city: 'Auckland', country: 'NZ' },
+      ],
+    })
+    await tickTerms(user)
+    await user.click(await screen.findByRole('button', { name: 'Place 2 orders' }))
+
+    expect(await screen.findByText('Placed · AU-1')).toBeInTheDocument()
+    const failure = screen.getByRole('alert', {
+      name: '',
+    })
+    expect(failure).toHaveTextContent('New Zealand order could not be placed.')
+    expect(failure).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Retry 1 order' })).toBeEnabled()
+    expect(mocks.clear).not.toHaveBeenCalled()
+    expect(mocks.push).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Retry 1 order' }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/checkout/confirmation/order-au'))
+    expect(checkoutBodies).toHaveLength(2)
+    expect(checkoutBodies[0].idempotency_key).toBe('idem-1')
+    expect(checkoutBodies[1].idempotency_key).toBe('idem-1')
+    expect(mocks.clear).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -206,7 +349,9 @@ describe('CheckoutReviewClient double-submit guard', () => {
 
     const user = userEvent.setup()
     renderReview()
-    const btn = await screen.findByRole('button', { name: /confirm & place order/i })
+    const btn = await screen.findByRole('button', {
+      name: /confirm & place order/i,
+    })
     await tickTerms(user)
 
     await act(async () => {
@@ -251,7 +396,9 @@ describe('CheckoutReviewClient placing overlay', () => {
     const user = userEvent.setup()
     renderReview()
     await tickTerms(user)
-    await user.click(await screen.findByRole('button', { name: /confirm & place order/i }))
+    await user.click(
+      await screen.findByRole('button', { name: /confirm & place order/i }),
+    )
 
     // Overlay visible while the POST is in flight.
     expect(await screen.findByRole('status')).toHaveTextContent(/placing your order/i)

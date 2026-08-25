@@ -8,11 +8,19 @@ import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages
 import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CheckoutPlacingOverlay } from './CheckoutPlacingOverlay'
-import { billedOrderShape, type BilledLine } from '@/lib/pricing/order-billing-shape'
+import {
+  billedOrderShape,
+  checkoutBillingShape,
+  checkoutOrderGroupFromPrepared,
+  type BilledLine,
+} from '@/lib/pricing/order-billing-shape'
 import { gstRateForRegion } from '@/lib/pricing/gst'
-import { resolveShipCountry } from '@/lib/checkout/ship-country'
 import { useFreshBillingModes } from './useFreshBillingModes'
-import { BilledOrderSummary } from './BilledOrderSummary'
+import {
+  BilledOrderSummary,
+  CountryBilledOrderSummary,
+  type CheckoutCountryFailure,
+} from './BilledOrderSummary'
 import { PrepaidBadge, PrepaidLinePrice } from './PrepaidLinePrice'
 import {
   allInUnitPrice,
@@ -29,11 +37,18 @@ import {
   readCheckoutReviewState,
   writeCheckoutReviewState,
   type CheckoutReviewState,
+  type StoredPartitionOutcome,
 } from './checkoutReviewState'
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 import { TERMS_VERSION } from '@/lib/checkout/terms'
 import { TermsModal } from './TermsModal'
 import { SameArtworkSavings } from '@/components/pricing/SameArtworkSavings'
+import { formatCurrency } from '@/lib/currency/format'
+import {
+  buildCheckoutRequestLines,
+  useCheckoutPreview,
+  withReviewedPartitionPrices,
+} from './useCheckoutPreview'
 
 interface CheckoutReviewClientProps {
   stores: StoreOption[]
@@ -48,11 +63,30 @@ interface CheckoutReviewClientProps {
   branchStoreIds?: string[]
   /** The member's home store — always an allowed branch (union at read). */
   defaultStoreId?: string | null
+  /** Server-evaluated SP3 flag. Client components never read process.env. */
+  countryPartitionEnabled?: boolean
 }
 
 interface CheckoutResponse {
   order_id: string
   order_ref: string
+}
+
+interface CheckoutPartitionResponse {
+  outcomes: Array<
+    | {
+        ok: true
+        partitionKey: string
+        orderId: string
+        orderRef: string
+      }
+    | {
+        ok: false
+        partitionKey: string
+        code: string
+        error: string
+      }
+  >
 }
 
 export function CheckoutReviewClient({
@@ -64,10 +98,12 @@ export function CheckoutReviewClient({
   role,
   branchStoreIds = [],
   defaultStoreId = null,
+  countryPartitionEnabled = false,
 }: CheckoutReviewClientProps) {
   const cart = useCart()
   const router = useRouter()
-  const { format } = useCurrency()
+  const currencyContext = useCurrency()
+  const { format } = currencyContext
   const { access } = useCompany()
   const isPreview = access?.isPreview ?? false
   const [reviewState, setReviewState] = useState<CheckoutReviewState | null>(null)
@@ -85,6 +121,7 @@ export function CheckoutReviewClient({
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
   const [honeypot, setHoneypot] = useState('')
+  const [focusPartitionKey, setFocusPartitionKey] = useState<string | null>(null)
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   useEffect(() => {
@@ -97,18 +134,6 @@ export function CheckoutReviewClient({
     for (const store of stores) map.set(store.id, store)
     return map
   }, [stores])
-
-  const shipCountry = useMemo<string | null>(() => {
-    if (!reviewState) return null
-    return resolveShipCountry({
-      lines: cart.lines,
-      perLineShipTo: reviewState.perLineShipTo,
-      customAddressCountry: reviewState.customAddress.country,
-      countryByStoreId: new Map(
-        Array.from(storeById.entries()).map(([id, store]) => [id, store.country ?? null]),
-      ),
-    })
-  }, [reviewState, cart.lines, storeById])
 
   const { modeByVariantId, status: billingStatus } = useFreshBillingModes(cart.lines)
   const pricingReady = billingStatus !== 'loading'
@@ -126,10 +151,12 @@ export function CheckoutReviewClient({
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
         gstRate: gstRateForRegion(access?.region),
-        shipCountry,
+        // Task 7's private flag-off adapter owns the frozen legacy estimate.
+        // Enabled checkout money comes only from prepared country partitions.
+        shipCountry: 'NZ',
         orgRegion: access?.region ?? null,
       }),
-    [cart.lines, modeByVariantId, shipCountry, access?.region],
+    [cart.lines, modeByVariantId, access?.region],
   )
 
   const lineById = useMemo(
@@ -142,6 +169,71 @@ export function CheckoutReviewClient({
 
   const allCustom =
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
+
+  const checkoutLines = useMemo(
+    () =>
+      reviewState
+        ? buildCheckoutRequestLines({
+            lines: cart.lines,
+            perLineShipTo: reviewState.perLineShipTo,
+            allCustom,
+            modeByVariantId,
+          })
+        : [],
+    [reviewState, cart.lines, allCustom, modeByVariantId],
+  )
+  const previewRequest = useMemo(
+    () =>
+      countryPartitionEnabled && reviewState && pricingReady
+        ? {
+            idempotency_key: reviewState.idempotencyKey,
+            required_by: reviewState.requiredBy || null,
+            notes: reviewState.notes || null,
+            intent: reviewState.intent,
+            lines: checkoutLines,
+            custom_shipping_address: allCustom ? reviewState.customAddress : null,
+          }
+        : null,
+    [countryPartitionEnabled, reviewState, pricingReady, checkoutLines, allCustom],
+  )
+  const preview = useCheckoutPreview(countryPartitionEnabled, previewRequest)
+  const previewSuccesses = preview.partitions.filter((outcome) => outcome.ok)
+  const previewFailures: CheckoutCountryFailure[] = preview.partitions
+    .filter((outcome) => !outcome.ok)
+    .map((outcome) => ({
+      partitionKey: outcome.partitionKey,
+      countryCode: outcome.countryCode,
+      countryName: outcome.country.name,
+      currency: outcome.country.currency,
+      code: outcome.code,
+      error: outcome.error,
+    }))
+  const countryShape = checkoutBillingShape(
+    previewSuccesses.map((outcome) => checkoutOrderGroupFromPrepared(outcome.partition)),
+  )
+  const partitionOutcomes = useMemo(
+    () => reviewState?.partitionOutcomes ?? {},
+    [reviewState?.partitionOutcomes],
+  )
+  const failedPartitionKeys = Object.values(partitionOutcomes)
+    .filter((outcome) => !outcome.ok)
+    .map((outcome) => outcome.partitionKey)
+  const failedPartitionCount = failedPartitionKeys.length
+  const retryShape = checkoutBillingShape(
+    previewSuccesses
+      .filter((outcome) => failedPartitionKeys.includes(outcome.partition.key))
+      .map((outcome) => checkoutOrderGroupFromPrepared(outcome.partition)),
+  )
+
+  useEffect(() => {
+    if (!focusPartitionKey) return
+    const target = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-partition-error]'),
+    ).find((element) => element.dataset.partitionError === focusPartitionKey)
+    if (target) {
+      target.focus()
+    }
+  }, [focusPartitionKey, partitionOutcomes])
 
   // Location-manager: a staff member with ≥1 grant may order for any branch they
   // manage. The order stays ONE destination (submit guard enforces it), so the
@@ -226,7 +318,9 @@ export function CheckoutReviewClient({
           required_by: reviewState.requiredBy || null,
           notes: reviewState.notes || null,
           intent: reviewState.intent,
-          lines: cart.lines.map((line) => ({
+          lines: countryPartitionEnabled
+            ? withReviewedPartitionPrices(checkoutLines, preview.partitions)
+            : cart.lines.map((line) => ({
             product_id: line.productId,
             product_name: line.productName,
             variant_id: line.variantId || null,
@@ -255,7 +349,7 @@ export function CheckoutReviewClient({
             claimed_billing_mode: line.variantId
               ? modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
               : null,
-          })),
+              })),
           // Consent for this order (design 2026-08-11). The server re-validates
           // and 400s without these — the checkbox is not the only gate.
           terms_accepted: true,
@@ -263,6 +357,69 @@ export function CheckoutReviewClient({
           custom_shipping_address: allCustom ? reviewState.customAddress : null,
         }),
       })
+
+      if (countryPartitionEnabled && res.ok) {
+        const result = (await res.json()) as CheckoutPartitionResponse
+        if (!Array.isArray(result.outcomes) || result.outcomes.length === 0) {
+          throw new Error('No country order outcomes were returned.')
+        }
+        const nextPartitionOutcomes: Record<string, StoredPartitionOutcome> = {
+          ...partitionOutcomes,
+        }
+        for (const outcome of result.outcomes) {
+          nextPartitionOutcomes[outcome.partitionKey] = outcome.ok
+            ? {
+                ok: true,
+                partitionKey: outcome.partitionKey,
+                orderId: outcome.orderId,
+                orderRef: outcome.orderRef,
+              }
+            : {
+                ok: false,
+                partitionKey: outcome.partitionKey,
+                code: outcome.code,
+                error: outcome.error,
+              }
+        }
+        const nextReviewState = {
+          ...reviewState,
+          partitionOutcomes: nextPartitionOutcomes,
+        }
+        writeCheckoutReviewState(nextReviewState)
+        setReviewState(nextReviewState)
+
+        const expectedPartitionKeys = previewSuccesses.map(
+          (outcome) => outcome.partition.key,
+        )
+        const missingPartitionKey = expectedPartitionKeys.find(
+          (partitionKey) => !nextPartitionOutcomes[partitionKey],
+        )
+        if (missingPartitionKey) {
+          throw new Error(
+            `No placement outcome was returned for ${missingPartitionKey}.`,
+          )
+        }
+        const failed = expectedPartitionKeys
+          .map((partitionKey) => nextPartitionOutcomes[partitionKey])
+          .filter(
+            (outcome): outcome is Extract<StoredPartitionOutcome, { ok: false }> =>
+              !outcome.ok,
+          )
+        if (failed.length > 0) {
+          setFocusPartitionKey(failed[0].partitionKey)
+          return
+        }
+
+        const primary = nextPartitionOutcomes[expectedPartitionKeys[0]]
+        if (!primary?.ok) {
+          throw new Error('No placed order was returned.')
+        }
+        clearCheckoutReviewState()
+        navigating = true
+        router.push(`/checkout/confirmation/${primary.orderId}`)
+        cart.clear()
+        return
+      }
 
       if (res.status === 409) {
         const data = (await res.json().catch(() => ({}))) as {
@@ -417,6 +574,75 @@ export function CheckoutReviewClient({
     }
   }
 
+  function renderReviewLine(billedLine: BilledLine, currency?: string) {
+    const line = lineById.get(billedLine.lineId)
+    if (!line) return null
+    const imageUrl = cartLineDisplayImageUrl(line, {
+      catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
+    })
+    const visibleDecorations = line.decorations.filter(
+      (decoration) => !isGenericCustomDecorationName(decoration.name),
+    )
+    const lineFormat = currency
+      ? (amount: number) => `${formatCurrency(amount, currency)} ${currency}`
+      : format
+    return (
+      <article>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+              {imageUrl ? (
+                <Image
+                  src={imageUrl}
+                  alt=""
+                  fill
+                  sizes="96px"
+                  className="object-contain p-1"
+                  unoptimized
+                />
+              ) : null}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
+              {!billedLine.billed && <PrepaidBadge />}
+              <p className="mt-1 text-xs tracking-wide text-gray-500">
+                {line.variantLabel}
+              </p>
+              {visibleDecorations.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                  {visibleDecorations.map((decoration) => (
+                    <li key={decoration.linkId}>{decoration.name}</li>
+                  ))}
+                </ul>
+              )}
+              <SameArtworkSavings line={line} />
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-xs text-gray-500">
+              <span className="tabular-nums text-gray-600">
+                {lineFormat(
+                  currency
+                    ? billedLine.unitPrice + billedLine.decorationPerUnit
+                    : allInUnitPrice(line),
+                )}
+              </span>
+              <span className="px-1.5 text-gray-300">×</span>
+              <span className="tabular-nums text-gray-600">{line.qty}</span>
+            </div>
+            <div className="mt-2 text-base">
+              <PrepaidLinePrice
+                goodsValue={billedLine.goodsValue}
+                billed={billedLine.billed}
+                format={lineFormat}
+              />
+            </div>
+          </div>
+        </div>
+      </article>
+    )
+  }
+
   if (cart.lines.length === 0 && !submitting) {
     return (
       <div className="min-h-screen bg-[#FAFAFA]">
@@ -516,79 +742,43 @@ export function CheckoutReviewClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
-        <BilledOrderSummary
-          shape={shape}
-          format={format}
-          defaultBreakdownOpen
-          renderLine={(billedLine: BilledLine) => {
-            const line = lineById.get(billedLine.lineId)
-            if (!line) return null
-            const imageUrl = cartLineDisplayImageUrl(line, {
-              catalogueFrontImageUrl: frontImageByLineId[line.lineId] ?? null,
-            })
-            const visibleDecorations = line.decorations.filter(
-              (decoration) => !isGenericCustomDecorationName(decoration.name),
-            )
-            return (
-              <article>
-                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-                  <div className="flex min-w-0 flex-1 items-start gap-3">
-                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-50">
-                      {imageUrl ? (
-                        <Image
-                          src={imageUrl}
-                          alt=""
-                          fill
-                          sizes="96px"
-                          className="object-contain p-1"
-                          unoptimized
-                        />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-base font-medium text-gray-900">{line.productName}</h3>
-                      {/* From the billed shape, so the badge and the $0 are the
-                          same decision — they cannot disagree. */}
-                      {!billedLine.billed && <PrepaidBadge />}
-                      <p className="mt-1 text-xs tracking-wide text-gray-500">
-                        {line.variantLabel}
-                      </p>
-                      {visibleDecorations.length > 0 && (
-                        <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                          {visibleDecorations.map((decoration) => (
-                            <li key={decoration.linkId}>
-                              {decoration.name}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {/* Pooled decoration pricing (spec §8) — the same pill the
-                          cart shows, so the price the customer is about to
-                          confirm carries the same explanation. */}
-                      <SameArtworkSavings line={line} />
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-xs text-gray-500">
-                      <span className="tabular-nums text-gray-600">
-                        {format(allInUnitPrice(line))}
-                      </span>
-                      <span className="px-1.5 text-gray-300">×</span>
-                      <span className="tabular-nums text-gray-600">{line.qty}</span>
-                    </div>
-                    <div className="mt-2 text-base">
-                      <PrepaidLinePrice
-                        goodsValue={billedLine.goodsValue}
-                        billed={billedLine.billed}
-                        format={format}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </article>
-            )
-          }}
-        />
+        {countryPartitionEnabled ? (
+          preview.status === 'ready' ? (
+            <CountryBilledOrderSummary
+              shape={countryShape}
+              failures={previewFailures}
+              partitionOutcomes={partitionOutcomes}
+              renderLine={renderReviewLine}
+            />
+          ) : (
+            <div>
+              <div
+                role={preview.status === 'error' ? 'alert' : 'status'}
+                className={
+                  preview.status === 'error'
+                    ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
+                    : 'mb-5 rounded-2xl bg-black/[0.03] p-4 text-sm text-black/65'
+                }
+              >
+                {preview.status === 'error'
+                  ? preview.error
+                  : 'Updating country prices…'}
+              </div>
+              <div className="space-y-6">
+                {shape.partitions.flatMap((partition) => partition.lines).map((line) => (
+                  <div key={line.lineId}>{renderReviewLine(line)}</div>
+                ))}
+              </div>
+            </div>
+          )
+        ) : (
+          <BilledOrderSummary
+            shape={shape}
+            format={format}
+            defaultBreakdownOpen
+            renderLine={renderReviewLine}
+          />
+        )}
 
         {!isTest && (depositPct > 0 || paymentTerms) && (
           <div className="mt-4 space-y-1 text-xs text-gray-500">
@@ -598,7 +788,10 @@ export function CheckoutReviewClient({
                 <span className="font-medium text-gray-700">{paymentTerms}</span>
               </p>
             )}
-            {depositPct > 0 && (
+            {depositPct > 0 && countryPartitionEnabled && (
+              <p>Expected deposit ({depositPct}%) will be invoiced per order.</p>
+            )}
+            {depositPct > 0 && !countryPartitionEnabled && (
               <p>
                 Expected deposit ({depositPct}%):{' '}
                 <span className="font-medium text-gray-900 tabular-nums">
@@ -739,14 +932,52 @@ export function CheckoutReviewClient({
 
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}
-        totalLabel={pricingReady ? format(shape.grandTotal) : '—'}
+        orderCount={
+          countryPartitionEnabled
+            ? failedPartitionCount || Math.max(1, preview.partitions.length)
+            : shape.invoiceCount
+        }
+        totalsByCurrency={
+          countryPartitionEnabled
+            ? preview.status === 'ready'
+              ? failedPartitionCount > 0
+                ? retryShape.totalsByCurrency
+                : preview.totalsByCurrency
+              : []
+            : [{
+                currency: currencyContext.currency ?? (access?.region === 'AU' ? 'AUD' : 'NZD'),
+                total: currencyContext.convert?.(shape.grandTotal) ?? shape.grandTotal,
+              }]
+        }
         onSubmit={confirmOrder}
         // Unlike /checkout, this button PLACES the order — it must never fire
         // against a total the fresh billing read hasn't resolved yet.
-        disabled={!pricingReady || isPreview || !customerCode}
+        disabled={
+          !pricingReady ||
+          isPreview ||
+          !customerCode ||
+          (countryPartitionEnabled &&
+            (preview.status !== 'ready' ||
+              preview.partitions.length === 0 ||
+              previewFailures.length > 0))
+        }
         submitting={submitting}
-        submitLabel={isPreview ? 'Preview only' : 'Confirm & place order'}
+        action={
+          isPreview
+            ? 'preview'
+            : countryPartitionEnabled && failedPartitionCount > 0
+              ? 'retry'
+              : 'place'
+        }
         submittingLabel="Placing order…"
+        legacyPresentation={
+          countryPartitionEnabled
+            ? undefined
+            : {
+                totalLabel: format(shape.grandTotal),
+                actionLabel: 'Confirm & place order',
+              }
+        }
       />
     </div>
   )

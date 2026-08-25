@@ -3,6 +3,7 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutReviewClient } from '@/components/checkout/CheckoutReviewClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
 
 export const metadata: Metadata = {
   title: 'Review order',
@@ -34,6 +35,7 @@ export default async function CheckoutReviewPage() {
       role={context.role}
       branchStoreIds={context.branchStoreIds}
       defaultStoreId={context.defaultStoreId}
+      countryPartitionEnabled={isCheckoutCountryPartitionEnabled()}
     />
   )
 }

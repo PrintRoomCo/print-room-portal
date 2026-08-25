@@ -397,12 +397,8 @@ export async function POST(request: Request) {
       }
       revalidateTag(cacheTags.accountData, { expire: 0 })
       revalidateTag(cacheTags.orderTracker, { expire: 0 })
-      const primary = outcomes.find(
-        (outcome): outcome is Extract<CheckoutPartitionOutcome, { ok: true }> =>
-          outcome.ok,
-      )
       return NextResponse.json(
-        { outcomes, ...(primary ? { primary } : {}) },
+        { outcomes },
         { status: outcomes.every((outcome) => outcome.ok) ? 200 : 207 },
       )
     }

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { billedOrderShape, type BilledLineInput } from './order-billing-shape'
+import {
+  billedOrderShape,
+  checkoutBillingShape,
+  type BilledLineInput,
+  type CheckoutOrderGroup,
+} from './order-billing-shape'
 import { buildDraftLines, buildPickFeeLine } from '@/lib/xero/draft-invoice'
 
 /**
@@ -104,6 +109,65 @@ function assertParity(fixtures: Fixture[], shipCountry: string | null) {
 }
 
 describe('checkout <-> Xero draft parity', () => {
+  it('compares every country/order group to its own draft without a mixed total', () => {
+    const fixtures = [
+      fixture({
+        lineId: 'au-po', productId: 'p-au-po', variantId: 'v-au-po', qty: 2,
+        allInUnitPrice: 50, fulfilmentType: 'made_to_order', prepaidVariant: false,
+      }),
+      fixture({
+        lineId: 'au-stock', productId: 'p-au-stock', variantId: 'v-au-stock', qty: 4,
+        allInUnitPrice: 25, fulfilmentType: 'stocked', prepaidVariant: false,
+      }),
+      fixture({
+        lineId: 'nz-stock', productId: 'p-nz-stock', variantId: 'v-nz-stock', qty: 5,
+        allInUnitPrice: 20, fulfilmentType: 'stocked', prepaidVariant: true,
+      }),
+    ]
+    const group = (
+      countryCode: 'AU' | 'NZ',
+      currency: 'AUD' | 'NZD',
+      mine: Fixture[],
+    ): CheckoutOrderGroup[] => {
+      const legacyShape = billedOrderShape({
+        lines: mine.map((item) => item.cart),
+        gstRate: countryCode === 'AU' ? 0.1 : 0.15,
+        shipCountry: countryCode,
+        billCountry: countryCode,
+        countryPartitionEnabled: true,
+      })
+      return legacyShape.partitions.map((partition) => ({
+        key: `${countryCode}:${partition.orderType}`,
+        countryCode,
+        countryName: countryCode === 'AU' ? 'Australia' : 'New Zealand',
+        currency,
+        taxLabel: countryCode === 'AU' ? 'GST (10%)' : 'GST (15%)',
+        orderType: partition.orderType,
+        lines: partition.lines,
+        subtotal: partition.billedSubtotal,
+        tax: partition.gst,
+        pickingFee: partition.pickingFee,
+        total: partition.total,
+      }))
+    }
+    const shape = checkoutBillingShape([
+      ...group('AU', 'AUD', fixtures.slice(0, 2)),
+      ...group('NZ', 'NZD', fixtures.slice(2)),
+    ])
+
+    for (const country of shape.countryGroups) {
+      for (const partition of country.partitions) {
+        const lineIds = new Set(partition.lines.map((line) => line.lineId))
+        const mine = fixtures.filter((item) => lineIds.has(item.cart.lineId))
+        expect(xeroExGstTotal(mine, partition.pickingFee)).toBe(
+          Math.round((partition.subtotal + partition.pickingFee) * 100) / 100,
+        )
+      }
+    }
+    expect(shape.orderCount).toBe(3)
+    expect(shape).not.toHaveProperty('grandTotal')
+  })
+
   it('agrees on a prepaid stock draw (the original defect)', () => {
     const shape = assertParity(
       [

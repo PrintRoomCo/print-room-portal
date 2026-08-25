@@ -216,6 +216,10 @@ describe('POST /api/checkout/preview', () => {
         ok: false,
         partitionKey: 'AU:purchase_order',
         countryCode: 'AU',
+        country: {
+          code: 'AU', name: 'Australia', currency: 'AUD',
+          taxRate: 0.1, taxLabel: 'GST 10%', isDefault: true,
+        },
         code: 'country_price_unavailable',
         error: 'Test tee is not orderable to AU yet',
       },

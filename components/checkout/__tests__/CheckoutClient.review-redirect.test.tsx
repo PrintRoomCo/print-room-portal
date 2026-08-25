@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CheckoutClient } from '../CheckoutClient'
@@ -101,6 +101,9 @@ describe('CheckoutClient review step', () => {
     expect(
       vi.mocked(fetch).mock.calls.some(([input]) => String(input) === '/api/checkout'),
     ).toBe(false)
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input]) => String(input) === '/api/checkout/preview'),
+    ).toBe(false)
 
     const raw = sessionStorage.getItem(CHECKOUT_REVIEW_STORAGE_KEY)
     expect(raw).toBeTruthy()
@@ -110,6 +113,79 @@ describe('CheckoutClient review step', () => {
       intent: 'customer',
       perLineShipTo: { 'line-1': 'store-1' },
     })
+  })
+
+  it('renders the server-priced country group and blocks review until it resolves', async () => {
+    let resolvePreview!: (value: Response) => void
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/checkout/preview') {
+        return new Promise<Response>((resolve) => { resolvePreview = resolve })
+      }
+      if (url.startsWith('/api/checkout/billing-modes')) {
+        return Promise.resolve({
+          ok: true, status: 200, json: async () => ({ modeByVariantId: {} }),
+        } as Response)
+      }
+      return Promise.resolve({
+        ok: true, status: 200, json: async () => ({ imagesByLineId: {} }),
+      } as Response)
+    })
+    mocks.lines[0] = { ...mocks.lines[0], priceCurrency: 'NZD' }
+
+    render(
+      <CheckoutClient
+        stores={[{ id: 'store-au', name: 'Melbourne', city: 'Melbourne', country: 'AU' }]}
+        customerCode="CUST-1"
+        paymentTerms="net20"
+        defaultDepositPercent={null}
+        isTest={false}
+        defaultStoreId={null}
+        isBuyer={false}
+        tenantType="studio"
+        enabledCountries={[{ code: 'AU', name: 'Australia', isDefault: true }]}
+        countryPartitionEnabled
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /review order/i })).toBeDisabled()
+    expect(screen.queryByText('Australia · AUD')).not.toBeInTheDocument()
+
+    await waitFor(() => expect(resolvePreview).toBeTypeOf('function'))
+    await act(async () => resolvePreview({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        outcomes: [{
+          ok: true,
+          partition: {
+            key: 'AU:purchase_order',
+            country: {
+              code: 'AU', name: 'Australia', currency: 'AUD', taxRate: 0.1,
+              taxLabel: 'GST 10%', isDefault: true,
+            },
+            orderType: 'purchase_order',
+            lines: [{
+              product_id: 'product-1', product_name: 'Test tee', variant_id: 'variant-1',
+              qty: 12, cart_line_id: 'line-1', cartLineId: 'line-1', unitPrice: 11,
+              decorationUnitPrice: 0, billingMode: 'invoice_on_dispatch', billed: true,
+              fulfilment_type: 'made_to_order', repricedFromCurrency: 'NZD',
+            }],
+            pricingPoolLines: [],
+            totals: {
+              goodsSubtotal: 132, decorationSubtotal: 0, pickingFee: 0,
+              tax: 13.2, total: 145.2,
+            },
+          },
+        }],
+        totalsByCurrency: { AUD: 145.2 },
+      }),
+    } as Response))
+
+    expect(await screen.findByText('Australia · AUD')).toBeInTheDocument()
+    expect(screen.getByText(/Repriced from NZD for delivery to Australia/)).toBeInTheDocument()
+    expect(screen.getAllByText('$145.20 AUD')).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Review order' })).toBeEnabled()
   })
 
   it('defaults make-to-stock lines to customer intent (inventory is opt-in)', async () => {

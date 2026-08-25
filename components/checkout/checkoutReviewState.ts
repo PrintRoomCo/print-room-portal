@@ -16,7 +16,22 @@ export interface CheckoutReviewState {
   perLineShipTo: Record<string, string | null>
   customAddress: CustomAddress
   createdAt: string
+  partitionOutcomes?: Record<string, StoredPartitionOutcome>
 }
+
+export type StoredPartitionOutcome =
+  | {
+      ok: true
+      partitionKey: string
+      orderId: string
+      orderRef: string
+    }
+  | {
+      ok: false
+      partitionKey: string
+      code: string
+      error: string
+    }
 
 export const CHECKOUT_REVIEW_STORAGE_KEY = 'pr-checkout-review-state'
 
@@ -52,6 +67,10 @@ export function readCheckoutReviewState(): CheckoutReviewState | null {
         ...parsed.customAddress,
       },
       createdAt: parsed.createdAt ?? new Date().toISOString(),
+      partitionOutcomes:
+        parsed.partitionOutcomes && typeof parsed.partitionOutcomes === 'object'
+          ? parsed.partitionOutcomes
+          : {},
     }
   } catch {
     return null

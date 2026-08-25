@@ -243,15 +243,6 @@ describe('POST /api/checkout country partition cutover', () => {
           orderRef: 'NZ-STOCK',
         },
       ],
-      primary: {
-        ok: true,
-        partitionKey: 'AU:purchase_order',
-        countryCode: 'AU',
-        currency: 'AUD',
-        orderType: 'purchase_order',
-        orderId: 'order-au-po',
-        orderRef: 'AU-PO',
-      },
     })
   })
 

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { getOrgEnabledCountries } from '@/lib/account/org-countries'
+import {
+  getOrgEnabledCountries,
+  type BillingCountryConfig,
+} from '@/lib/account/org-countries'
 import { sanitiseCustomName } from '@/lib/cart/custom-name'
 import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
 import {
@@ -43,6 +46,7 @@ export type PreviewPartitionOutcome =
       ok: false
       partitionKey: string
       countryCode: string
+      country: BillingCountryConfig
       code: string
       error: string
     }
@@ -50,13 +54,17 @@ export type PreviewPartitionOutcome =
 function pricingFailure(
   error: unknown,
   partitionKey: string,
-  countryCode: string,
+  country: BillingCountryConfig,
 ): PreviewPartitionOutcome {
+  const failureContext = {
+    partitionKey,
+    countryCode: country.code,
+    country,
+  }
   if (error instanceof CountryPriceUnavailableError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: error.code,
       error: error.message,
     }
@@ -64,8 +72,7 @@ function pricingFailure(
   if (error instanceof UnitPriceDriftError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'unit_price_drift',
       error: error.message,
     }
@@ -73,8 +80,7 @@ function pricingFailure(
   if (error instanceof DecorationDriftError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'decoration_price_drift',
       error: error.message,
     }
@@ -82,8 +88,7 @@ function pricingFailure(
   if (error instanceof BillingModeDriftError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'billing_mode_drift',
       error: error.message,
     }
@@ -91,8 +96,7 @@ function pricingFailure(
   if (error instanceof MemberAccessDriftError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'member_access_drift',
       error: error.message,
     }
@@ -100,8 +104,7 @@ function pricingFailure(
   if (error instanceof MoqViolationError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'moq_violation',
       error: error.message,
     }
@@ -109,8 +112,7 @@ function pricingFailure(
   if (error instanceof BuyerScopeError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'buyer_ship_to_mismatch',
       error: error.message,
     }
@@ -118,8 +120,7 @@ function pricingFailure(
   if (error instanceof DisabledCountryError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'disabled_country',
       error: error.message,
     }
@@ -127,16 +128,14 @@ function pricingFailure(
   if (error instanceof MixedShippingAddressError) {
     return {
       ok: false,
-      partitionKey,
-      countryCode,
+      ...failureContext,
       code: 'mixed_shipping_address',
       error: error.message,
     }
   }
   return {
     ok: false,
-    partitionKey,
-    countryCode,
+    ...failureContext,
     code: 'preview_failed',
     error: 'This order group could not be priced. Please try again.',
   }
@@ -362,7 +361,7 @@ export async function POST(request: Request) {
         ((totalsByCurrency[country.currency] ?? 0) + prepared.totals.total).toFixed(2),
       )
     } catch (error) {
-      outcomes.push(pricingFailure(error, partition.key, countryCode))
+      outcomes.push(pricingFailure(error, partition.key, country))
     }
   }
 
