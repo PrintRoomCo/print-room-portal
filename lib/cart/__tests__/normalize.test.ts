@@ -109,3 +109,34 @@ describe('normalizePersisted — canonical price currency', () => {
     expect(lines[0].priceCurrency).toBeUndefined()
   })
 })
+
+describe('normalizePersisted — decoration rendition provenance', () => {
+  it('preserves the exact production rendition through localStorage', () => {
+    const { lines } = normalizePersisted({
+      lines: [
+        {
+          lineId: 'navy',
+          productId: 'hood',
+          qty: 10,
+          unitPrice: 40,
+          decorations: [
+            {
+              linkId: 'link-navy',
+              decorationId: 'logo-left-chest',
+              name: 'Screen print — Left Chest',
+              method: 'screenprint',
+              unitPrice: 5,
+              renditionId: 'white-ink',
+              renditionLabel: 'White ink',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(lines[0].decorations[0]).toMatchObject({
+      renditionId: 'white-ink',
+      renditionLabel: 'White ink',
+    })
+  })
+})

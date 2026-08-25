@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { prepareCustomerOrderPartition } from './prepare'
+import {
+  prepareCustomerOrderPartition,
+  preparedCheckoutInternalsFor,
+  preparedLineKey,
+} from './prepare'
 import type { BillingCountryConfig } from '@/lib/account/org-countries'
 import { makeContext, makeFanoutStub, type StubConfig } from './__tests__/fanout-test-stub'
 import type { CheckoutInput } from './submit'
@@ -105,6 +109,120 @@ describe('prepareCustomerOrderPartition', () => {
     ])
     expect(stub.rpcCalls.some(({ name }) => name === 'submit_b2b_order')).toBe(false)
     expect(stub.writeCalls).toEqual([])
+  })
+
+  it('uses an exact rendition and never falls back to a stale legacy snapshot', async () => {
+    const stub = makeFanoutStub({
+      ...config(),
+      links: [{
+        id: 'link-1',
+        catalogueItemId: 'item-1',
+        sourceProductId: 'product-1',
+        snapshotUrl: 'https://example.test/stale-black-snapshot.png',
+        orgDecoration: {
+          id: 'decoration-1',
+          organizationId: 'org-1',
+          name: 'Logo',
+          unitPrice: 5,
+        },
+      }],
+      decorationRpcPrice: () => 5,
+      resolvedRenditions: [{
+        product_variant_id: 'variant-navy',
+        link_id: 'link-1',
+        org_decoration_id: 'decoration-1',
+        rendition_id: 'rendition-white',
+        rendition_label: 'White ink',
+        artwork_id: 'artwork-white',
+        artwork_name: 'Logo — White',
+        artwork_url: 'https://example.test/white.png',
+        artwork_storage_path: 'org-1/white.svg',
+        artwork_sha256: 'white-sha256',
+        snapshot_url: null,
+        resolution_source: 'exact_variant',
+        resolution_token: 'resolution-token',
+      }],
+    })
+    const checkout = input()
+    checkout.lines[0] = {
+      ...checkout.lines[0]!,
+      variant_id: 'variant-navy',
+      decorations: [{
+        linkId: 'link-1',
+        decorationId: 'decoration-1',
+        name: 'Logo',
+        method: 'screenprint',
+        positionLabel: null,
+        unitPrice: 5,
+        artworkUrl: 'https://example.test/black.png',
+        snapshotUrl: 'https://example.test/stale-black-snapshot.png',
+      }],
+    }
+
+    const prepared = await prepareCustomerOrderPartition(stub.admin, checkout, {
+      countryPartitionEnabled: false,
+      partitionKey: 'purchase_order',
+      country: NZ,
+    })
+
+    const resolvedDecorations = preparedCheckoutInternalsFor(prepared)
+      .validatedByLineKey.get(preparedLineKey('product-1', 'variant-navy'))
+    expect(resolvedDecorations).toEqual([
+      expect.objectContaining({
+        renditionId: 'rendition-white',
+        artworkUrl: 'https://example.test/white.png',
+        snapshotUrl: null,
+        renditionArtworkStoragePath: 'org-1/white.svg',
+        renditionArtworkSha256: 'white-sha256',
+        renditionProductVariantId: 'variant-navy',
+        renditionResolutionToken: 'resolution-token',
+      }),
+    ])
+  })
+
+  it('rejects an artwork-backed variant when canonical rendition resolution fails', async () => {
+    const stub = makeFanoutStub({
+      ...config(),
+      links: [{
+        id: 'link-1',
+        catalogueItemId: 'item-1',
+        sourceProductId: 'product-1',
+        orgDecoration: {
+          id: 'decoration-1',
+          organizationId: 'org-1',
+          name: 'Logo',
+          unitPrice: 5,
+        },
+      }],
+      decorationRpcPrice: () => 5,
+      resolvedRenditions: [],
+    })
+    const checkout = input()
+    checkout.lines[0] = {
+      ...checkout.lines[0]!,
+      variant_id: 'variant-navy',
+      decorations: [{
+        linkId: 'link-1',
+        decorationId: 'decoration-1',
+        name: 'Logo',
+        method: 'screenprint',
+        positionLabel: null,
+        unitPrice: 5,
+        artworkUrl: 'https://malicious.example/forged.svg',
+        snapshotUrl: null,
+        renditionId: 'forged-rendition',
+        renditionLabel: 'Forged ink',
+        artworkId: 'forged-artwork',
+      }],
+    }
+
+    await expect(prepareCustomerOrderPartition(stub.admin, checkout, {
+      countryPartitionEnabled: false,
+      partitionKey: 'purchase_order',
+      country: NZ,
+    })).rejects.toThrow(
+      'No active artwork rendition is available for Logo on variant variant-navy.',
+    )
   })
 })
 

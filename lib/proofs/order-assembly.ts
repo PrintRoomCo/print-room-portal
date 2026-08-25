@@ -170,6 +170,14 @@ interface DecorationSnapshot {
   unitPrice: number | null
   artworkUrl: string | null
   snapshotUrl: string | null
+  renditionId: string | null
+  renditionLabel: string | null
+  artworkId: string | null
+  artworkName: string | null
+  artworkSha256: string | null
+  artworkStoragePath: string | null
+  renditionProductVariantId: string | null
+  renditionResolutionToken: string | null
 }
 
 interface VariantSummary {
@@ -270,9 +278,12 @@ export async function loadOrderProofAssembly(
   const catalogueItemIds = uniqueStrings(
     Array.from(decorationLinksById.values()).map((link) => link.catalogue_item_id),
   )
-  const artworkIds = uniqueStrings(
-    Array.from(decorationLinksById.values()).map((link) => link.decoration?.artwork?.id),
-  )
+  const artworkIds = uniqueStrings([
+    ...Array.from(decorationLinksById.values()).map((link) => link.decoration?.artwork?.id),
+    ...lines.flatMap((line) =>
+      decorationSnapshotsFromLine(line).map((snapshot) => snapshot.artworkId),
+    ),
+  ])
   const productIds = uniqueStrings(lines.map((line) => line.product_id))
 
   const [
@@ -326,7 +337,11 @@ export function buildProofDocumentFromOrderRows(
 
     for (const snapshot of snapshots) {
       const link = snapshot.linkId ? input.decorationLinksById.get(snapshot.linkId) : undefined
-      const designKey = link?.org_decoration_id || snapshot.decorationId || snapshot.linkId || line.id
+      const decorationKey =
+        link?.org_decoration_id || snapshot.decorationId || snapshot.linkId || line.id
+      // Production designs split by physical file, while pricing/pooling keeps
+      // using the exact decoration identity elsewhere.
+      const designKey = `${decorationKey}::${snapshot.artworkSha256 ?? snapshot.renditionId ?? 'legacy-default'}`
       const design = getOrCreateDesignDraft({
         designsByKey,
         designKey,
@@ -418,7 +433,8 @@ function getOrCreateDesignDraft(args: {
   })
   const printArea = printAreaFromDecoration(args.link, args.snapshot)
   const designIndex = args.designsByKey.size + 1
-  const artworkName = args.link?.decoration?.artwork?.name || args.snapshot.name
+  const artworkName =
+    args.snapshot.artworkName || args.link?.decoration?.artwork?.name || args.snapshot.name
   const locationLabel =
     args.link?.print_area?.name ||
     args.link?.decoration?.location?.location ||
@@ -452,7 +468,15 @@ function getOrCreateDesignDraft(args: {
     backMockupUrl: isBackView(mockup.view) ? mockup.url || '' : '',
     artworkUrl: artwork.url || '',
     artworkBackground: '#f8f8f4',
-    artworkNotes: artworkName ? `Source artwork: ${artworkName}` : '',
+    artworkNotes: [
+      artworkName ? `Source artwork: ${artworkName}` : null,
+      args.snapshot.renditionLabel &&
+      args.snapshot.renditionLabel.toLowerCase() !== 'default'
+        ? `Rendition: ${args.snapshot.renditionLabel}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n'),
     printHeightsNote: buildPrintHeightsNote(args.link),
     productionNote: buildProductionNote(args.link, args.snapshot, mockup.source),
     mockupAssets: [],
@@ -563,13 +587,13 @@ function resolveArtworkUrl(
   snapshot: DecorationSnapshot,
   transparentArtworkUrlsByArtworkId: Map<string, string>,
 ) {
-  const artworkId = link?.decoration?.artwork?.id
+  const artworkId = snapshot.artworkId ?? link?.decoration?.artwork?.id
   if (artworkId) {
     const transparent = transparentArtworkUrlsByArtworkId.get(artworkId)
     if (transparent) return { url: transparent, source: 'transparent_png' as const }
   }
   return {
-    url: link?.decoration?.artwork?.public_url || snapshot.artworkUrl || null,
+    url: snapshot.artworkUrl || link?.decoration?.artwork?.public_url || null,
     source: 'organization_artwork' as const,
   }
 }
@@ -582,14 +606,23 @@ function resolveMockupImage(args: {
   catalogueImagesByItemId: Map<string, CatalogueProofImageRow[]>
   productImagesByProductId: Map<string, ProductProofImageRow[]>
 }): ImagePick {
-  if (args.link?.snapshot_url) {
+  // A rendition-aware order snapshot is authoritative, including an explicit
+  // null which means no matching rendered mockup existed at purchase time.
+  if (args.snapshot.renditionId && args.snapshot.snapshotUrl) {
+    return {
+      url: args.snapshot.snapshotUrl,
+      view: args.link?.print_area?.view || null,
+      source: 'decoration_snapshot',
+    }
+  }
+  if (!args.snapshot.renditionId && args.link?.snapshot_url) {
     return {
       url: args.link.snapshot_url,
       view: args.link.print_area?.view || null,
       source: 'decoration_snapshot',
     }
   }
-  if (args.snapshot.snapshotUrl) {
+  if (!args.snapshot.renditionId && args.snapshot.snapshotUrl) {
     return {
       url: args.snapshot.snapshotUrl,
       view: args.link?.print_area?.view || null,
@@ -692,6 +725,19 @@ function decorationSnapshotsFromLine(line: OrderProofLineRow): DecorationSnapsho
           : toNumberValue(record.unitPrice ?? record.unit_price),
         artworkUrl: toStringValue(record.artworkUrl || record.artwork_url) || null,
         snapshotUrl: toStringValue(record.snapshotUrl || record.snapshot_url) || null,
+        renditionId: toStringValue(record.renditionId || record.rendition_id) || null,
+        renditionLabel:
+          toStringValue(record.renditionLabel || record.rendition_label) || null,
+        artworkId: toStringValue(record.artworkId || record.artwork_id) || null,
+        artworkName: toStringValue(record.artworkName || record.artwork_name) || null,
+        artworkSha256:
+          toStringValue(record.renditionArtworkSha256 || record.artwork_sha256) || null,
+        artworkStoragePath:
+          toStringValue(record.renditionArtworkStoragePath || record.artwork_storage_path) || null,
+        renditionProductVariantId:
+          toStringValue(record.renditionProductVariantId || record.product_variant_id) || null,
+        renditionResolutionToken:
+          toStringValue(record.renditionResolutionToken || record.resolution_token) || null,
       } satisfies DecorationSnapshot
     })
     .filter((item): item is DecorationSnapshot => Boolean(item))

@@ -5,6 +5,7 @@ import {
   normalizeLadderBrackets,
   type DecorationLadderRow,
 } from '@/lib/pricing/decoration-ladder'
+import type { ResolvedRenditionPresentation } from './decoration-renditions'
 
 const ARTWORK_BUCKET = 'org-artworks'
 
@@ -36,6 +37,11 @@ export interface DecorationOption {
   /** designer-rendered mockup, populated by Phase 8. Null in Phase 5. */
   snapshotUrl: string | null
   snapshotColorSwatchId: string | null
+  /** Resolved file presentation by exact product_variants.id. This map changes
+   * artwork/link/snapshot only; decorationId, price and ladder stay shared. */
+  resolvedByVariantId?: Record<string, ResolvedRenditionPresentation>
+  renditionId?: string
+  renditionLabel?: string
   isDefault: boolean
   sortOrder: number
   /**
@@ -235,6 +241,8 @@ export async function loadCatalogueItemDecorations(
 
   const rows = (data ?? []) as unknown as RawLinkRow[]
 
+  const resolvedByDecorationId = await loadResolvedRenditions(admin, catalogueItemId)
+
   // Per-decoration price ladders (spec §3). One batched read for the whole item.
   // A ladder is THE decoration price — it beats both the link override and the
   // flat unit price, matching effective_decoration_unit_price, which every other
@@ -303,6 +311,7 @@ export async function loadCatalogueItemDecorations(
       artworkName: art?.name ?? null,
       snapshotUrl: row.snapshot_url,
       snapshotColorSwatchId: row.snapshot_color_swatch_id,
+      resolvedByVariantId: resolvedByDecorationId.get(dec.id) ?? {},
       isDefault: row.is_default === true,
       sortOrder: row.sort_order ?? 0,
       recalcInputs,
@@ -312,6 +321,71 @@ export async function loadCatalogueItemDecorations(
     })
   }
   return out
+}
+
+interface ResolvedRenditionRpcRow {
+  product_variant_id: string
+  link_id: string
+  org_decoration_id: string
+  rendition_id: string
+  rendition_label: string
+  artwork_id: string
+  artwork_name: string
+  artwork_url: string
+  overlay_storage_path: string | null
+  snapshot_url: string | null
+  resolution_source: 'exact_variant' | 'decoration_default'
+}
+
+async function loadResolvedRenditions(
+  admin: SupabaseClient,
+  catalogueItemId: string,
+): Promise<Map<string, Record<string, ResolvedRenditionPresentation>>> {
+  const result = new Map<string, Record<string, ResolvedRenditionPresentation>>()
+  const { data: item, error: itemError } = await admin
+    .from('b2b_catalogue_items')
+    .select('source_product_id')
+    .eq('id', catalogueItemId)
+    .maybeSingle()
+  if (itemError || !item?.source_product_id) return result
+
+  const { data: variants, error: variantError } = await admin
+    .from('product_variants')
+    .select('id')
+    .eq('product_id', item.source_product_id)
+    .eq('is_active', true)
+  if (variantError || !variants?.length) return result
+
+  const { data, error } = await admin.rpc('resolve_catalogue_decoration_renditions', {
+    p_catalogue_item_id: catalogueItemId,
+    p_product_variant_ids: variants.map((variant) => variant.id),
+  })
+  if (error) {
+    // During the rolling deployment the app may briefly precede the additive
+    // migration. Falling back to the legacy parent artwork is intentional.
+    console.error('[loadResolvedRenditions]', error)
+    return result
+  }
+
+  for (const row of (data ?? []) as ResolvedRenditionRpcRow[]) {
+    const byVariant = result.get(row.org_decoration_id) ?? {}
+    const overlayUrl = row.overlay_storage_path
+      ? admin.storage.from(ARTWORK_BUCKET).getPublicUrl(row.overlay_storage_path).data.publicUrl
+      : null
+    byVariant[row.product_variant_id] = {
+      linkId: row.link_id,
+      renditionId: row.rendition_id,
+      renditionLabel: row.rendition_label,
+      artworkId: row.artwork_id,
+      artworkName: row.artwork_name,
+      artworkUrl: row.artwork_url,
+      overlayUrl,
+      snapshotUrl: row.snapshot_url,
+      resolutionSource: row.resolution_source,
+    }
+    result.set(row.org_decoration_id, byVariant)
+  }
+  return result
 }
 
 /**

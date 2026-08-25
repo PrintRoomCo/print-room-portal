@@ -72,6 +72,7 @@ export interface StubConfig {
   items: StubItem[]
   products: StubProduct[]
   links: StubLink[]
+  resolvedRenditions?: AnyRow[]
   /** null → no b2b_accounts row (multiplier falls back to 1). */
   tier?: { tierDiscountOverride?: number | null; multiplier?: number } | null
   /** Return value for effective_decoration_unit_price, keyed by org_decoration_id. null → RPC returns null. */
@@ -179,6 +180,8 @@ export function makeFanoutStub(config: StubConfig) {
     b2b_catalogue_items: { id: l.catalogueItemId, source_product_id: l.sourceProductId },
     org_decorations: {
       id: l.orgDecoration.id,
+      artwork_id:
+        l.orgDecoration.artworkId === undefined ? 'art-stub' : l.orgDecoration.artworkId,
       organization_id: l.orgDecoration.organizationId,
       name: l.orgDecoration.name,
       decoration_method: l.orgDecoration.method ?? 'screenprint',
@@ -408,6 +411,9 @@ export function makeFanoutStub(config: StubConfig) {
       rpcCalls.push({ name, args })
       if (name === 'effective_unit_price_for_item' || name === 'effective_unit_price') {
         return { data: config.garmentUnitPrice ?? 12.5, error: null }
+      }
+      if (name === 'resolve_catalogue_decoration_renditions') {
+        return { data: config.resolvedRenditions ?? [], error: null }
       }
       if (name === 'effective_unit_price_for_item_currency') {
         return {

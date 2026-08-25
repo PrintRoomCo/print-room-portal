@@ -46,6 +46,8 @@ export function normalizeDecorations(raw: unknown): CartLineDecoration[] {
       unitPrice: d.unitPrice,
       artworkUrl: typeof d.artworkUrl === 'string' ? d.artworkUrl : null,
       snapshotUrl: typeof d.snapshotUrl === 'string' ? d.snapshotUrl : null,
+      renditionId: typeof d.renditionId === 'string' ? d.renditionId : null,
+      renditionLabel: typeof d.renditionLabel === 'string' ? d.renditionLabel : null,
       brackets: normalizeBrackets(d.brackets),
     })
   }

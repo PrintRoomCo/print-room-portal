@@ -905,6 +905,63 @@ export async function prepareCustomerOrderPartition(
   // (manualItemIds is resolved above, in the same widened b2b_catalogue_items
   // read that resolves each line's catalogue id and pooling flag.)
 
+  type ResolvedCheckoutRendition = {
+    product_variant_id: string
+    link_id: string
+    org_decoration_id: string
+    rendition_id: string
+    rendition_label: string
+    artwork_id: string
+    artwork_name: string
+    artwork_url: string
+    artwork_storage_path: string
+    artwork_sha256: string | null
+    snapshot_url: string | null
+    resolution_source: 'exact_variant' | 'decoration_default'
+    resolution_token: string
+  }
+
+  // Resolve production files from the current exact colourway assignment. The
+  // cart's rendition fields are display snapshots only; checkout never trusts
+  // them to choose what production prints. Grouping by item keeps this one RPC
+  // per catalogue item, even when the cart has many sizes/lines.
+  const variantIdsByItem = new Map<string, Set<string>>()
+  for (const line of input.lines) {
+    if (!line.catalogueItemId || !line.variant_id || !(line.decorations?.length)) continue
+    const ids = variantIdsByItem.get(line.catalogueItemId) ?? new Set<string>()
+    ids.add(line.variant_id)
+    variantIdsByItem.set(line.catalogueItemId, ids)
+  }
+  const resolvedRenditionByKey = new Map<string, ResolvedCheckoutRendition>()
+  await Promise.all(
+    Array.from(variantIdsByItem.entries()).map(async ([itemId, variantIds]) => {
+      const { data, error } = await admin.rpc('resolve_catalogue_decoration_renditions', {
+        p_catalogue_item_id: itemId,
+        p_product_variant_ids: Array.from(variantIds),
+      })
+      if (error) {
+        throw new Error(`decoration rendition lookup failed: ${error.message}`)
+      }
+      if (!Array.isArray(data)) return
+      for (const row of data as ResolvedCheckoutRendition[]) {
+        resolvedRenditionByKey.set(
+          `${itemId}::${row.product_variant_id}::${row.org_decoration_id}`,
+          row,
+        )
+      }
+    }),
+  )
+
+  const resolvedRenditionFor = (
+    line: CheckoutLineInput,
+    decorationId: string,
+  ): ResolvedCheckoutRendition | null =>
+    line.catalogueItemId && line.variant_id
+      ? resolvedRenditionByKey.get(
+          `${line.catalogueItemId}::${line.variant_id}::${decorationId}`,
+        ) ?? null
+      : null
+
   type LinkRow = {
     id: string
     catalogue_item_id: string
@@ -913,6 +970,7 @@ export async function prepareCustomerOrderPartition(
     b2b_catalogue_items: { id: string; source_product_id: string }
     org_decorations: {
       id: string
+      artwork_id: string | null
       organization_id: string
       name: string
       decoration_method: string
@@ -948,6 +1006,7 @@ export async function prepareCustomerOrderPartition(
         b2b_catalogue_items!inner(id, source_product_id),
         org_decorations!inner(
           id,
+          artwork_id,
           organization_id,
           name,
           decoration_method,
@@ -1230,6 +1289,12 @@ export async function prepareCustomerOrderPartition(
       }
       const loc = pickOne(od.decoration_locations)
       const art = pickOne(od.organization_artworks)
+      const rendition = resolvedRenditionFor(line, od.id)
+      if (line.catalogueItemId && line.variant_id && od.artwork_id && !rendition) {
+        throw new Error(
+          `No active artwork rendition is available for ${od.name} on variant ${line.variant_id}.`,
+        )
+      }
 
       // Manual-final: the placement stays on the order as metadata (real name +
       // artwork) but is NOT individually billed — unitPrice 0; the line's
@@ -1242,8 +1307,22 @@ export async function prepareCustomerOrderPartition(
           method: od.decoration_method,
           positionLabel: loc?.location ?? null,
           unitPrice: 0,
-          artworkUrl: art?.public_url ?? dec.artworkUrl,
-          snapshotUrl: row.snapshot_url,
+          artworkUrl: rendition?.artwork_url ?? art?.public_url ?? dec.artworkUrl,
+          snapshotUrl: rendition ? rendition.snapshot_url : row.snapshot_url,
+          renditionId: rendition?.rendition_id ?? dec.renditionId ?? null,
+          renditionLabel: rendition?.rendition_label ?? dec.renditionLabel ?? null,
+          artworkId: rendition?.artwork_id ?? dec.artworkId ?? null,
+          artworkName: rendition?.artwork_name ?? dec.artworkName ?? null,
+          renditionArtworkStoragePath:
+            rendition?.artwork_storage_path ?? dec.renditionArtworkStoragePath ?? null,
+          renditionArtworkSha256:
+            rendition?.artwork_sha256 ?? dec.renditionArtworkSha256 ?? null,
+          renditionProductVariantId:
+            rendition?.product_variant_id ?? dec.renditionProductVariantId ?? null,
+          renditionResolutionToken:
+            rendition?.resolution_token ?? dec.renditionResolutionToken ?? null,
+          renditionResolutionSource:
+            rendition?.resolution_source ?? dec.renditionResolutionSource ?? 'legacy_default',
         })
         continue
       }
@@ -1269,8 +1348,22 @@ export async function prepareCustomerOrderPartition(
         method: od.decoration_method,
         positionLabel: loc?.location ?? null,
         unitPrice: effective,
-        artworkUrl: art?.public_url ?? dec.artworkUrl,
-        snapshotUrl: row.snapshot_url,
+        artworkUrl: rendition?.artwork_url ?? art?.public_url ?? dec.artworkUrl,
+        snapshotUrl: rendition ? rendition.snapshot_url : row.snapshot_url,
+        renditionId: rendition?.rendition_id ?? dec.renditionId ?? null,
+        renditionLabel: rendition?.rendition_label ?? dec.renditionLabel ?? null,
+        artworkId: rendition?.artwork_id ?? dec.artworkId ?? null,
+        artworkName: rendition?.artwork_name ?? dec.artworkName ?? null,
+        renditionArtworkStoragePath:
+          rendition?.artwork_storage_path ?? dec.renditionArtworkStoragePath ?? null,
+        renditionArtworkSha256:
+          rendition?.artwork_sha256 ?? dec.renditionArtworkSha256 ?? null,
+        renditionProductVariantId:
+          rendition?.product_variant_id ?? dec.renditionProductVariantId ?? null,
+        renditionResolutionToken:
+          rendition?.resolution_token ?? dec.renditionResolutionToken ?? null,
+        renditionResolutionSource:
+          rendition?.resolution_source ?? dec.renditionResolutionSource ?? 'legacy_default',
       })
     }
 

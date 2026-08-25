@@ -18,6 +18,7 @@ import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './P
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
 import type { DecorationOption } from '@/lib/shop/decorations'
+import { applyResolvedRendition } from '@/lib/shop/decoration-renditions'
 import {
   filterDecorationsBySwatch,
   resolveDecorationsForPricing,
@@ -854,8 +855,15 @@ export function ProductDetailClient({
   )
 
   const swatchVisibleDecorations = useMemo(
-    () => filterDecorationsBySwatch(decorations, colorSwatchId),
-    [decorations, colorSwatchId],
+    () =>
+      filterDecorationsBySwatch(decorations, colorSwatchId).map((decoration) =>
+        applyResolvedRendition(
+          decoration,
+          selectedVariant?.variant_id ?? null,
+          decoration.resolvedByVariantId ?? {},
+        ),
+      ),
+    [decorations, colorSwatchId, selectedVariant?.variant_id],
   )
 
   const visibleDecorations = useMemo(
@@ -885,8 +893,14 @@ export function ProductDetailClient({
       resolveDecorationsForPricing(
         decorations.filter((d) => selectedLinkIds.has(d.linkId)),
         colorSwatchId,
+      ).map((decoration) =>
+        applyResolvedRendition(
+          decoration,
+          selectedVariant?.variant_id ?? null,
+          decoration.resolvedByVariantId ?? {},
+        ),
       ),
-    [decorations, selectedLinkIds, colorSwatchId],
+    [decorations, selectedLinkIds, colorSwatchId, selectedVariant?.variant_id],
   )
 
   // Soft gate (mirrors the RPC's NULL for embroidery with no stitch_count and
@@ -1148,26 +1162,38 @@ export function ProductDetailClient({
     const manualDecorationBracketsSnapshot =
       manualDecorationActive && hasManualData ? buildManualDecorationBrackets() : undefined
 
-    const cartDecorationsForSwatch = (swatchId: string | null): CartLineDecoration[] =>
-      resolveDecorationsForPricing(selectedDecorations, swatchId).map((d) => ({
-        linkId: d.linkId,
-        decorationId: d.decorationId,
-        name: d.name,
-        method: d.method,
-        positionLabel: d.positionLabel,
-        // Manual items: per-placement price is not individually billed (the line
-        // carries one combined figure). Snapshot 0 so any accidental fallback to
-        // the per-placement sum yields 0, never a wrong positive number.
-        unitPrice: manualDecorationActive
-          ? 0
-          : decorationPriceAt(d.linkId, qty, d.unitPrice),
-        artworkUrl: d.artworkUrl,
-        snapshotUrl: d.snapshotUrl,
-        brackets: manualDecorationActive ? undefined : buildDecorationBrackets(d.linkId),
-        // Server-decided eligibility (real artwork + non-'custom' method); the
-        // client only carries it through so checkout can re-derive the same pools.
-        poolable: d.poolable,
-      }))
+    const cartDecorationsForSwatch = (
+      swatchId: string | null,
+      productVariantId: string | null,
+    ): CartLineDecoration[] =>
+      resolveDecorationsForPricing(selectedDecorations, swatchId).map((option) => {
+        const d = applyResolvedRendition(
+          option,
+          productVariantId,
+          option.resolvedByVariantId ?? {},
+        )
+        return {
+          linkId: d.linkId,
+          decorationId: d.decorationId,
+          name: d.name,
+          method: d.method,
+          positionLabel: d.positionLabel,
+          // Manual items: per-placement price is not individually billed (the line
+          // carries one combined figure). Snapshot 0 so any accidental fallback to
+          // the per-placement sum yields 0, never a wrong positive number.
+          unitPrice: manualDecorationActive
+            ? 0
+            : decorationPriceAt(d.linkId, qty, d.unitPrice),
+          artworkUrl: d.artworkUrl,
+          snapshotUrl: d.snapshotUrl,
+          renditionId: d.renditionId ?? null,
+          renditionLabel: d.renditionLabel ?? null,
+          brackets: manualDecorationActive ? undefined : buildDecorationBrackets(d.linkId),
+          // Server-decided eligibility (real artwork + non-'custom' method); the
+          // client only carries it through so checkout can re-derive the same pools.
+          poolable: d.poolable,
+        }
+      })
     const cartImageForSwatch = (swatchId: string | null): string | null =>
       pickPreferredGalleryImageUrl(
         images,
@@ -1210,7 +1236,10 @@ export function ProductDetailClient({
             unitPrice: pricing.unit_price,
             priceCurrency,
             imageUrl: cartImageForSwatch(variant.color_swatch_id),
-            decorations: cartDecorationsForSwatch(variant.color_swatch_id),
+            decorations: cartDecorationsForSwatch(
+              variant.color_swatch_id,
+              variant.variant_id,
+            ),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
             catalogueId: product.catalogueId ?? null,
@@ -1278,7 +1307,10 @@ export function ProductDetailClient({
           unitPrice: pricing.unit_price,
           priceCurrency,
           imageUrl: cartImageForSwatch(colorSwatchId),
-          decorations: cartDecorationsForSwatch(colorSwatchId),
+          decorations: cartDecorationsForSwatch(
+            colorSwatchId,
+            variantsForSelectedColour[0]?.variant_id ?? null,
+          ),
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
@@ -1328,7 +1360,10 @@ export function ProductDetailClient({
       unitPrice: pricing.unit_price,
       priceCurrency,
       imageUrl: cartImageForSwatch(colorSwatchId),
-      decorations: cartDecorationsForSwatch(colorSwatchId),
+      decorations: cartDecorationsForSwatch(
+        colorSwatchId,
+        selectedVariant?.variant_id ?? null,
+      ),
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       catalogueId: product.catalogueId ?? null,

@@ -87,6 +87,15 @@ export interface CheckoutLineDecorationInput {
   unitPrice: number
   artworkUrl: string | null
   snapshotUrl: string | null
+  renditionId?: string | null
+  renditionLabel?: string | null
+  artworkId?: string | null
+  artworkName?: string | null
+  renditionArtworkStoragePath?: string | null
+  renditionArtworkSha256?: string | null
+  renditionProductVariantId?: string | null
+  renditionResolutionToken?: string | null
+  renditionResolutionSource?: 'exact_variant' | 'decoration_default' | 'legacy_default'
 }
 
 export interface CheckoutLineInput {
@@ -855,7 +864,7 @@ export async function submitCustomerOrder(
           product_name: string
           quantity: number
           unit_price: number
-          decorations: Array<{ name: string }> | null
+          decorations: Array<{ name: string; renditionLabel?: string | null }> | null
           size_label: string | null
           line_location_label: string | null
           line_custom_name: string | null
@@ -865,7 +874,13 @@ export async function submitCustomerOrder(
         }>).map((row) => {
           const swatch = pickOne(row.product_variants?.product_color_swatches ?? null)
           const variantLabel = [swatch?.label, row.size_label].filter(Boolean).join(' / ') || '—'
-          const designName = row.decorations?.[0]?.name ?? 'No decoration'
+          const firstDecoration = row.decorations?.[0]
+          const renditionLabel = firstDecoration?.renditionLabel?.trim()
+          const designName = firstDecoration
+            ? renditionLabel && renditionLabel.toLowerCase() !== 'default'
+              ? `${firstDecoration.name} · ${renditionLabel}`
+              : firstDecoration.name
+            : 'No decoration'
           return {
             quoteItemId: row.id,
             productId: row.product_id,
