@@ -161,7 +161,7 @@ function makeSupabaseStub(opts: {
       if (name === 'catalogue_item_decoration_price') {
         return { data: opts.manualDecoration, error: null }
       }
-      if (name === 'submit_b2b_order') {
+      if (name === 'submit_b2b_order_for_country') {
         return {
           data: [{ quote_id: QUOTE_ID, order_id: ORDER_ID, order_ref: 'ORD-TEST-1' }],
           error: null,
@@ -248,7 +248,7 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
       name: 'catalogue_item_decoration_price',
       args: { p_catalogue_item_id: CAT_ITEM_ID, p_qty: 10 },
     })
-    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+    const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')
     expect(submitCall?.args?.p_lines).toEqual([
       {
         product_id: PRODUCT_ID,
@@ -278,7 +278,7 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
         buildInput([line({ claimed_manual_decoration: manualDecoration })]),
       )
 
-      const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order')
+      const submitCall = rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')
       expect(submitCall?.args?.p_lines).toEqual([
         expect.objectContaining({
           unit_price: 12.5,
@@ -298,6 +298,6 @@ describe('submitCustomerOrder manual_final garment-only pricing', () => {
       ),
     ).rejects.toBeInstanceOf(DecorationDriftError)
 
-    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order')).toHaveLength(0)
+    expect(rpcCalls.filter((c) => c.name === 'submit_b2b_order_for_country')).toHaveLength(0)
   })
 })

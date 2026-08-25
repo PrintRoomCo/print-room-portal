@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { partitionByFulfilment, partitionCheckoutLines } from '../partition'
+import {
+  partitionByCountryAndFulfilment,
+  partitionByFulfilment,
+  partitionCheckoutLines,
+} from '../partition'
 import type { CheckoutLineInput } from '../submit'
 
 function line(overrides: Partial<CheckoutLineInput> = {}): CheckoutLineInput {
@@ -82,5 +86,103 @@ describe('partitionByFulfilment', () => {
 
   it('returns [] for empty input', () => {
     expect(partitionByFulfilment([], () => true)).toEqual([])
+  })
+})
+
+describe('partitionByCountryAndFulfilment', () => {
+  it('splits the WHITEFOX cart into AU production, AU stock, then NZ stock', () => {
+    const auStock = { id: 'au-stock', ship_country: 'AU', fulfilment_type: 'stocked' }
+    const auProduction = {
+      id: 'au-production',
+      ship_country: 'AU',
+      fulfilment_type: 'made_to_order',
+    }
+    const nzStock = { id: 'nz-stock', ship_country: 'NZ', fulfilment_type: 'stocked' }
+
+    expect(
+      partitionByCountryAndFulfilment([auStock, nzStock, auProduction], ['AU', 'NZ']),
+    ).toStrictEqual([
+      {
+        key: 'AU:purchase_order',
+        countryCode: 'AU',
+        orderType: 'purchase_order',
+        lines: [auProduction],
+      },
+      {
+        key: 'AU:stock_on_hand',
+        countryCode: 'AU',
+        orderType: 'stock_on_hand',
+        lines: [auStock],
+      },
+      {
+        key: 'NZ:stock_on_hand',
+        countryCode: 'NZ',
+        orderType: 'stock_on_hand',
+        lines: [nzStock],
+      },
+    ])
+  })
+
+  it('orders the default country first, remaining countries by ISO, and preserves line order', () => {
+    const lines = [
+      { id: 'gb-1', ship_country: 'GB', fulfilment_type: 'stocked' },
+      { id: 'au-1', ship_country: 'AU', fulfilment_type: 'stocked' },
+      { id: 'nz-1', ship_country: 'NZ', fulfilment_type: 'made_to_order' },
+      { id: 'au-2', ship_country: 'AU', fulfilment_type: 'stocked' },
+    ]
+
+    const partitions = partitionByCountryAndFulfilment(lines, ['NZ'])
+
+    expect(partitions.map((partition) => partition.key)).toStrictEqual([
+      'NZ:purchase_order',
+      'AU:stock_on_hand',
+      'GB:stock_on_hand',
+    ])
+    expect(partitions[1]?.lines).toStrictEqual([lines[1], lines[3]])
+  })
+
+  it.each(['', 'New Zealand', 'nz', 'NZL'])('rejects unresolved/non-exact ship country %j', (shipCountry) => {
+    expect(() =>
+      partitionByCountryAndFulfilment([
+        { id: 'bad', ship_country: shipCountry, fulfilment_type: 'stocked' },
+      ]),
+    ).toThrow(/Invalid checkout ship_country/)
+  })
+
+  it('uses the exact address country already decorating every all-custom line', () => {
+    const lines = [
+      { id: 'custom-au', ship_country: 'AU', fulfilment_type: 'stocked', source: 'custom' },
+      {
+        id: 'custom-nz',
+        ship_country: 'NZ',
+        fulfilment_type: 'made_to_order',
+        source: 'custom',
+      },
+    ]
+
+    expect(partitionByCountryAndFulfilment(lines).map((partition) => partition.key)).toStrictEqual([
+      'AU:stock_on_hand',
+      'NZ:purchase_order',
+    ])
+  })
+
+  it('keeps one-country custom-address lines in exact legacy fulfilment order', () => {
+    const stock = { id: 'stock', ship_country: 'NZ', fulfilment_type: 'stocked' }
+    const production = {
+      id: 'production',
+      ship_country: 'NZ',
+      fulfilment_type: 'made_to_order',
+    }
+
+    const partitions = partitionByCountryAndFulfilment([stock, production], ['NZ'])
+
+    expect(partitions.map(({ orderType, lines }) => ({ orderType, lines }))).toStrictEqual([
+      { orderType: 'purchase_order', lines: [production] },
+      { orderType: 'stock_on_hand', lines: [stock] },
+    ])
+  })
+
+  it('returns no country partitions for an empty cart', () => {
+    expect(partitionByCountryAndFulfilment([])).toStrictEqual([])
   })
 })

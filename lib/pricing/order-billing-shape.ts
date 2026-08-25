@@ -2,8 +2,9 @@ import { partitionByFulfilment, type CheckoutOrderType } from '@/lib/checkout/pa
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import type { CartLineFulfilmentType } from '@/lib/cart/types'
-import { orderPickingFee } from './order-picking-fee'
+import { checkoutPickingFee } from './order-picking-fee'
 import { round2 } from './pricingMath'
+import type { PreparedCheckoutPartition } from '@/lib/checkout/prepare'
 
 export interface BilledLineInput {
   /** Stable cart line id — how a caller maps a shaped line back to its own row. */
@@ -55,6 +56,11 @@ export interface BilledPartition {
   total: number
 }
 
+/**
+ * Flag-off compatibility shape. The enabled country-partition UI uses
+ * CheckoutBillingShape, whose currency-keyed totals deliberately have no
+ * cross-currency grand total.
+ */
 export interface BilledOrderShape {
   partitions: BilledPartition[]
   /** Sum of every partition total, inc GST. What the customer pays. */
@@ -65,6 +71,138 @@ export interface BilledOrderShape {
   invoiceCount: number
   /** Echoed back so the UI can label the GST row without a second source. */
   gstRate: number
+}
+
+export interface CheckoutOrderGroup {
+  key: string
+  countryCode: string
+  countryName: string
+  currency: string
+  taxLabel: string
+  orderType: CheckoutOrderType
+  lines: Array<BilledLine & { repricedFromCurrency?: string }>
+  subtotal: number
+  tax: number
+  pickingFee: number
+  total: number
+}
+
+export interface CheckoutCountryGroup {
+  countryCode: string
+  countryName: string
+  currency: string
+  taxLabel: string
+  partitions: CheckoutOrderGroup[]
+  subtotal: number
+  tax: number
+  pickingFee: number
+  total: number
+}
+
+export interface CurrencyTotal {
+  currency: string
+  total: number
+}
+
+export interface CheckoutBillingShape {
+  countryGroups: CheckoutCountryGroup[]
+  totalsByCurrency: CurrencyTotal[]
+  orderCount: number
+  // Deliberately no grandTotal: amounts in different currencies do not add.
+}
+
+export function checkoutBillingShape(
+  partitions: readonly CheckoutOrderGroup[],
+): CheckoutBillingShape {
+  const countryGroups: CheckoutCountryGroup[] = []
+  const groupByCountry = new Map<string, CheckoutCountryGroup>()
+
+  for (const partition of partitions) {
+    let group = groupByCountry.get(partition.countryCode)
+    if (!group) {
+      group = {
+        countryCode: partition.countryCode,
+        countryName: partition.countryName,
+        currency: partition.currency,
+        taxLabel: partition.taxLabel,
+        partitions: [],
+        subtotal: 0,
+        tax: 0,
+        pickingFee: 0,
+        total: 0,
+      }
+      groupByCountry.set(partition.countryCode, group)
+      countryGroups.push(group)
+    }
+    group.partitions.push(partition)
+    group.subtotal = round2(group.subtotal + partition.subtotal)
+    group.tax = round2(group.tax + partition.tax)
+    group.pickingFee = round2(group.pickingFee + partition.pickingFee)
+    group.total = round2(group.total + partition.total)
+  }
+
+  for (const group of countryGroups) {
+    group.partitions.sort((a, b) =>
+      a.orderType === b.orderType
+        ? 0
+        : a.orderType === 'purchase_order'
+          ? -1
+          : 1,
+    )
+  }
+
+  const totalsByCurrency: CurrencyTotal[] = []
+  const totalByCurrency = new Map<string, CurrencyTotal>()
+  for (const group of countryGroups) {
+    const existing = totalByCurrency.get(group.currency)
+    if (existing) {
+      existing.total = round2(existing.total + group.total)
+    } else {
+      const total = { currency: group.currency, total: group.total }
+      totalByCurrency.set(group.currency, total)
+      totalsByCurrency.push(total)
+    }
+  }
+
+  return { countryGroups, totalsByCurrency, orderCount: partitions.length }
+}
+
+export function checkoutOrderGroupFromPrepared(
+  prepared: PreparedCheckoutPartition,
+): CheckoutOrderGroup {
+  return {
+    key: prepared.key,
+    countryCode: prepared.country.code,
+    countryName: prepared.country.name,
+    currency: prepared.country.currency,
+    taxLabel: prepared.country.taxLabel,
+    orderType: prepared.orderType,
+    lines: prepared.lines.map((line, index) => {
+      const unitPrice = Number(line.unitPrice)
+      const decorationPerUnit = Number(line.decorationUnitPrice)
+      const allIn = round2(unitPrice + decorationPerUnit)
+      return {
+        lineId: line.cartLineId ?? line.cart_line_id ?? `${prepared.key}:${index}`,
+        qty: line.qty,
+        unitPrice,
+        decorationPerUnit,
+        fulfilmentType: line.fulfilment_type,
+        billingMode: line.billingMode,
+        billed: line.billed,
+        billedUnitPrice: line.billed ? allIn : 0,
+        goodsValue: round2(line.qty * allIn),
+        ...(line.repricedFromCurrency
+          ? { repricedFromCurrency: line.repricedFromCurrency }
+          : {}),
+      }
+    }),
+    subtotal: round2(
+      prepared.totals.goodsSubtotal + prepared.totals.decorationSubtotal,
+    ),
+    tax: prepared.totals.tax,
+    pickingFee: prepared.totals.pickingFee,
+    total: prepared.totals.total,
+  }
 }
 
 /** Customer-facing all-in unit price: garment plus any folded decoration. */
@@ -96,6 +234,9 @@ export function billedOrderShape(input: {
   lines: BilledLineInput[]
   gstRate: number
   shipCountry: string | null | undefined
+  /** Exact partition country when the SP3 cutover is enabled. */
+  billCountry?: string
+  countryPartitionEnabled?: boolean
   /** organizations.region — threaded to the picking-fee gate. Null/unknown = NZ. */
   orgRegion?: string | null
 }): BilledOrderShape {
@@ -122,11 +263,13 @@ export function billedOrderShape(input: {
       shaped.reduce((total, l) => (l.billed ? total : total + l.goodsValue), 0),
     )
     // Only a stock_on_hand order can carry a fee; a purchase order always gets 0.
-    const pickingFee = orderPickingFee({
-      isStockOnHand: orderType === 'stock_on_hand',
-      shipCountry: input.shipCountry,
+    const pickingFee = checkoutPickingFee({
+      countryPartitionEnabled: input.countryPartitionEnabled === true,
+      orderType,
+      billCountry: input.billCountry ?? '',
       goodsSubtotal: goodsValueForBand,
-      orgRegion: input.orgRegion ?? null,
+      legacyShipCountry: input.shipCountry,
+      legacyOrgRegion: input.orgRegion ?? null,
     })
     const gst = round2((billedSubtotal + pickingFee) * input.gstRate)
 

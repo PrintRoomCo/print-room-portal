@@ -4,11 +4,174 @@ import type {
   BilledLine,
   BilledOrderShape,
   BilledPartition,
+  CheckoutBillingShape,
+  CheckoutCountryGroup,
 } from '@/lib/pricing/order-billing-shape'
+import { formatCurrency } from '@/lib/currency/format'
+import type { StoredPartitionOutcome } from './checkoutReviewState'
 
 const ORDER_TYPE_LABEL: Record<BilledPartition['orderType'], string> = {
   purchase_order: 'Purchase order',
   stock_on_hand: 'Stock-on-hand order',
+}
+
+export interface CheckoutCountryFailure {
+  partitionKey: string
+  countryCode: string
+  countryName: string
+  currency: string
+  code: string
+  error: string
+}
+
+export function CountryBilledOrderSummary({
+  shape,
+  failures = [],
+  partitionOutcomes = {},
+  renderLine,
+}: {
+  shape: CheckoutBillingShape
+  failures?: CheckoutCountryFailure[]
+  partitionOutcomes?: Record<string, StoredPartitionOutcome>
+  renderLine: (line: BilledLine, currency: string, countryName: string) => ReactNode
+}) {
+  const countries: Array<{
+    key: string
+    group: CheckoutCountryGroup | null
+    countryName: string
+    currency: string
+    failures: CheckoutCountryFailure[]
+  }> = shape.countryGroups.map((group) => ({
+    key: group.countryCode,
+    group,
+    countryName: group.countryName,
+    currency: group.currency,
+    failures: failures.filter((failure) => failure.countryCode === group.countryCode),
+  }))
+  for (const failure of failures) {
+    if (countries.some((country) => country.key === failure.countryCode)) continue
+    countries.push({
+      key: failure.countryCode,
+      group: null,
+      countryName: failure.countryName,
+      currency: failure.currency,
+      failures: failures.filter((item) => item.countryCode === failure.countryCode),
+    })
+  }
+  const exact = (amount: number, currency: string) =>
+    `${formatCurrency(amount, currency)} ${currency}`
+
+  return (
+    <div className="space-y-6">
+      {countries.map(({ key, group, countryName, currency, failures: countryFailures }) => (
+        <section key={key} className="rounded-[24px] bg-black/[0.03] p-5 md:p-6">
+          <h2 className="text-lg font-medium text-black">
+            {countryName} · {currency}
+          </h2>
+
+          {countryFailures.map((failure) => (
+            <div
+              key={failure.partitionKey}
+              role="alert"
+              tabIndex={-1}
+              data-partition-error={failure.partitionKey}
+              className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+            >
+              {failure.error}
+            </div>
+          ))}
+
+          {group?.partitions.map((partition) => (
+            <section key={partition.key} className="mt-5 border-t border-black/10 pt-5">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-black/55">
+                {ORDER_TYPE_LABEL[partition.orderType]}
+              </h3>
+              <PartitionPlacementOutcome
+                partitionKey={partition.key}
+                outcome={partitionOutcomes[partition.key]}
+              />
+              <div className="mt-4 space-y-6">
+                {partition.lines.map((line) => (
+                  <div key={line.lineId}>
+                    {renderLine(line, currency, countryName)}
+                    {line.repricedFromCurrency &&
+                      line.repricedFromCurrency !== partition.currency && (
+                        <p className="mt-2 text-xs text-black/60">
+                          Repriced from {line.repricedFromCurrency} for delivery to {countryName}.
+                        </p>
+                      )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-baseline justify-between text-sm">
+                <span className="text-black/60">Order total</span>
+                <span className="font-medium tabular-nums text-black">
+                  {exact(partition.total, currency)}
+                </span>
+              </div>
+            </section>
+          ))}
+
+          {group && (
+            <dl className="mt-5 space-y-2 border-t border-black/10 pt-5 text-sm">
+              <CountryRow label="Subtotal" value={exact(group.subtotal, currency)} />
+              {group.pickingFee > 0 && (
+                <CountryRow label="Picking fee" value={exact(group.pickingFee, currency)} />
+              )}
+              <CountryRow label={group.taxLabel} value={exact(group.tax, currency)} />
+              <CountryRow label="Country total" value={exact(group.total, currency)} bold />
+            </dl>
+          )}
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function PartitionPlacementOutcome({
+  partitionKey,
+  outcome,
+}: {
+  partitionKey: string
+  outcome?: StoredPartitionOutcome
+}) {
+  if (!outcome) return null
+  if (outcome.ok) {
+    return (
+      <p role="status" className="mt-2 text-sm font-medium text-black">
+        Placed · {outcome.orderRef}
+      </p>
+    )
+  }
+  return (
+    <div
+      role="alert"
+      tabIndex={-1}
+      data-partition-error={partitionKey}
+      className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+    >
+      {outcome.error}
+    </div>
+  )
+}
+
+function CountryRow({
+  label,
+  value,
+  bold = false,
+}: {
+  label: string
+  value: string
+  bold?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className={bold ? 'font-medium text-black' : 'text-black/60'}>{label}</dt>
+      <dd className={bold ? 'font-semibold tabular-nums text-black' : 'tabular-nums text-black'}>
+        {value}
+      </dd>
+    </div>
+  )
 }
 
 interface BilledOrderSummaryProps {
@@ -28,8 +191,10 @@ interface BilledOrderSummaryProps {
 }
 
 /**
- * Renders the billed shape: line rows grouped into the orders they will actually
- * become, each order's own fee/GST/total, and the grand total.
+ * Flag-off compatibility renderer. It renders the legacy billed shape: line
+ * rows grouped into the orders they will actually become, each order's own
+ * fee/GST/total, and the legacy same-currency grand total. Flag-on checkout uses
+ * CountryBilledOrderSummary and never mounts this renderer.
  *
  * Owns the STRUCTURE only — the caller passes `renderLine` because /checkout
  * renders a ship-to row and /checkout/review renders an image+decoration card.

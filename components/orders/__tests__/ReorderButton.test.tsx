@@ -36,7 +36,15 @@ describe('ReorderButton', () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
-        lines: [{ productId: 'p1', qty: 10, variantId: 'v1', variantLabel: 'Bone / M' }],
+        lines: [
+          {
+            productId: 'p1',
+            qty: 10,
+            variantId: 'v1',
+            variantLabel: 'Bone / M',
+            priceCurrency: 'AUD',
+          },
+        ],
         degradedCount: 0,
       }),
     })
@@ -46,7 +54,11 @@ describe('ReorderButton', () => {
 
     await waitFor(() => expect(addLine).toHaveBeenCalledTimes(1))
     expect(addLine).toHaveBeenCalledWith(
-      expect.objectContaining({ productId: 'p1', variantLabel: 'Bone / M' }),
+      expect.objectContaining({
+        productId: 'p1',
+        variantLabel: 'Bone / M',
+        priceCurrency: 'AUD',
+      }),
     )
     expect(push).toHaveBeenCalledWith('/cart')
     expect(screen.queryByTestId('legacy-reorder-form')).toBeNull()

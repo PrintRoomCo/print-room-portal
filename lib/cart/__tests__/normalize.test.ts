@@ -89,3 +89,54 @@ describe('normalizePersisted — billingMode round-trip (Spec 3a)', () => {
     expect(lines[3].billingMode).toBeUndefined()
   })
 })
+
+describe('normalizePersisted — canonical price currency', () => {
+  it('preserves valid uppercase ISO currency and leaves legacy lines absent', () => {
+    const { lines } = normalizePersisted({
+      lines: [
+        { lineId: 'aud', productId: 'p1', qty: 1, unitPrice: 10, priceCurrency: 'AUD' },
+        { lineId: 'legacy', productId: 'p2', qty: 1, unitPrice: 10 },
+      ],
+    })
+    expect(lines[0].priceCurrency).toBe('AUD')
+    expect(lines[1].priceCurrency).toBeUndefined()
+  })
+
+  it.each(['aud', 'AU', 'AUDD', 123])('drops invalid persisted currency %j', (priceCurrency) => {
+    const { lines } = normalizePersisted({
+      lines: [{ lineId: 'bad', productId: 'p1', qty: 1, unitPrice: 10, priceCurrency }],
+    })
+    expect(lines[0].priceCurrency).toBeUndefined()
+  })
+})
+
+describe('normalizePersisted — decoration rendition provenance', () => {
+  it('preserves the exact production rendition through localStorage', () => {
+    const { lines } = normalizePersisted({
+      lines: [
+        {
+          lineId: 'navy',
+          productId: 'hood',
+          qty: 10,
+          unitPrice: 40,
+          decorations: [
+            {
+              linkId: 'link-navy',
+              decorationId: 'logo-left-chest',
+              name: 'Screen print — Left Chest',
+              method: 'screenprint',
+              unitPrice: 5,
+              renditionId: 'white-ink',
+              renditionLabel: 'White ink',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(lines[0].decorations[0]).toMatchObject({
+      renditionId: 'white-ink',
+      renditionLabel: 'White ink',
+    })
+  })
+})

@@ -2,7 +2,10 @@ import type { Metadata } from 'next'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireB2BCustomerCached } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
-import { effectiveUnitPricesBulk } from '@/lib/shop/effective-price'
+import {
+  effectiveUnitPriceForItem,
+  effectiveUnitPricesBulk,
+} from '@/lib/shop/effective-price'
 import { CatalogueGrid } from '@/components/shop/CatalogueGrid'
 import { CatalogueTopBar } from '@/components/shop/CatalogueTopBar'
 import { SetTopBarContext } from '@/components/layout/PortalTopBarContext'
@@ -29,6 +32,8 @@ import {
   resolveCatalogueDecorationPrices,
   type CatalogueDecorationRow,
 } from '@/lib/shop/catalogue-decoration-prices'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 export const metadata: Metadata = {
   title: 'Catalogue',
@@ -126,6 +131,10 @@ export default async function CataloguePage({
   const auth = await requireB2BCustomerCached()
   if ('kind' in auth) return handleAuthFailure(auth)
   const { admin, context } = auth
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountryPromise = countryPartitionEnabled
+    ? getOrgDefaultBillingCountry(admin, context.organizationId)
+    : Promise.resolve(null)
 
   // Hoisted: floorQty is catalogue-global and tierMultiplier keys only on
   // organizationId, so neither depends on the resolved product set. Start their
@@ -158,7 +167,7 @@ export default async function CataloguePage({
   const priceModeByItemId = new Map(catItemRows.map((r) => [r.id, r.price_mode]))
   // Explicit ex-GST stock sell price per item (Stock-on-hand). When set, the
   // card shows this single price instead of the computed range (matches PDP).
-  const stockUnitPriceByItemId = new Map(
+  let stockUnitPriceByItemId = new Map(
     catItemRows.map((r) => [
       r.id,
       r.stock_unit_price == null ? null : Number(r.stock_unit_price),
@@ -256,7 +265,11 @@ export default async function CataloguePage({
   const productIds = rows.map((r) => r.id)
   // Already in flight since just after auth (see hoist above) — this await only
   // joins their results back into the render.
-  const [floorQty, tierMultiplier] = await Promise.all([floorQtyPromise, tierMultiplierPromise])
+  const [floorQty, tierMultiplier, defaultCountry] = await Promise.all([
+    floorQtyPromise,
+    tierMultiplierPromise,
+    defaultCountryPromise,
+  ])
   // Two price points per card: floor qty = cheapest volume price (low end of
   // the range), ENTRY_QTY = most expensive realistic order (high end).
   const qtyByProduct: Record<string, number> = Object.fromEntries(
@@ -278,6 +291,59 @@ export default async function CataloguePage({
       .filter((r) => productIds.includes(r.source_product_id))
       .map((r) => [r.source_product_id, r]),
   )
+  if (defaultCountry) {
+    const { data: exactStockRows } = await admin
+      .from('b2b_catalogue_item_stock_prices')
+      .select('catalogue_item_id, unit_price')
+      .in('catalogue_item_id', scopedItemIds)
+      .eq('currency', defaultCountry.currency)
+    stockUnitPriceByItemId = new Map(
+      ((exactStockRows ?? []) as Array<{
+        catalogue_item_id: string
+        unit_price: number | string
+      }>).map((row) => [row.catalogue_item_id, Number(row.unit_price)]),
+    )
+  }
+
+  const loadCountryPrices = async (qty: number) => {
+    const prices = new Map<
+      string,
+      { unitPrice: number; status: 'ok' | 'missing'; hasStock: boolean }
+    >()
+    await Promise.all(
+      rows.map(async (row) => {
+        const itemId = itemIdByProductId.get(row.id)
+        if (!itemId || !defaultCountry) {
+          prices.set(row.id, { unitPrice: 0, status: 'missing', hasStock: false })
+          return
+        }
+        const unitPrice = await effectiveUnitPriceForItem(
+          admin,
+          itemId,
+          context.organizationId,
+          qty,
+          defaultCountry.currency,
+          true,
+        )
+        prices.set(row.id, {
+          unitPrice: unitPrice ?? 0,
+          status: unitPrice == null ? 'missing' : 'ok',
+          hasStock: false,
+        })
+      }),
+    )
+    return prices
+  }
+  const pricesLowPromise = defaultCountry
+    ? loadCountryPrices(floorQty)
+    : effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct).then(
+        (result) => result.prices,
+      )
+  const pricesHighPromise = defaultCountry
+    ? loadCountryPrices(ENTRY_QTY)
+    : effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyEntryByProduct).then(
+        (result) => result.prices,
+      )
   const imageLayoutByProductId = new Map(
     rows.map((row) => [
       row.id,
@@ -295,8 +361,8 @@ export default async function CataloguePage({
     .map((productId) => itemIdByProductId.get(productId))
     .filter((itemId): itemId is string => Boolean(itemId))
   const [
-    { prices: pricesLow },
-    { prices: pricesHigh },
+    pricesLow,
+    pricesHigh,
     { data: catalogueImageRows },
     { data: masterImageRows },
     { data: galleryOrderRows },
@@ -305,8 +371,8 @@ export default async function CataloguePage({
     { data: stockRows },
     { data: swatchRows },
   ] = await Promise.all([
-    effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyByProduct),
-    effectiveUnitPricesBulk(admin, productIds, context.organizationId, qtyEntryByProduct),
+    pricesLowPromise,
+    pricesHighPromise,
     scopedItemIds.length > 0
       ? admin
           .from('b2b_catalogue_item_images')
@@ -615,6 +681,8 @@ export default async function CataloguePage({
     floorQty,
     entryQty: ENTRY_QTY,
     tierMultiplier,
+    targetCurrency: defaultCountry?.currency,
+    countryPartitionEnabled,
   })
 
   const products = rows.map((p) => {
@@ -625,12 +693,12 @@ export default async function CataloguePage({
     const itemId = itemIdByProductId.get(p.id)
     const decoLow = itemId ? decoLowByItem.get(itemId) ?? 0 : 0
     const decoHigh = itemId ? decoHighByItem.get(itemId) ?? 0 : 0
-    const allInLow = lowPrice.unitPrice > 0 ? lowPrice.unitPrice + decoLow : 0
-    const allInHigh = highPrice.unitPrice > 0 ? highPrice.unitPrice + decoHigh : 0
+    const allInLow = lowPrice.status === 'ok' ? lowPrice.unitPrice + decoLow : null
+    const allInHigh = highPrice.status === 'ok' ? highPrice.unitPrice + decoHigh : null
     // Range = most expensive (entry qty) → cheapest (floor qty). min/max guard
     // so an inverted multiplier can never flip the display; equal ends collapse
     // to a single price (fixed-price items) in ProductCard.
-    const candidates = [allInLow, allInHigh].filter((v) => v > 0)
+    const candidates = [allInLow, allInHigh].filter((v): v is number => v != null)
     const priceLow = candidates.length ? Math.min(...candidates) : 0
     const priceHigh = candidates.length ? Math.max(...candidates) : 0
     const stockTotal = stockByProduct.has(p.id) ? stockByProduct.get(p.id)! : null
@@ -678,7 +746,11 @@ export default async function CataloguePage({
       type: p.garment_family ? garmentTypeLabel(p.garment_family) : null,
       price_low: priceLow,
       price_high: priceHigh,
-      price_status: priceHigh > 0 ? ('ok' as const) : ('missing' as const),
+      price_status:
+        lowPrice.status === 'ok' || highPrice.status === 'ok'
+          ? ('ok' as const)
+          : ('missing' as const),
+      price_currency: defaultCountry?.currency,
       stock_unit_price: catItemId ? (stockUnitPriceByItemId.get(catItemId) ?? null) : null,
       has_stock: lowPrice.hasStock,
       total_stock: stockTotal,

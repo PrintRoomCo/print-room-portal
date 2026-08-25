@@ -44,6 +44,8 @@ interface ShipToRowProps {
    * stock draw and is invoiced at $0.
    */
   prepaidDrawn?: boolean
+  /** Exact all-in unit price from the prepared destination-country partition. */
+  billedUnitPrice?: number
   /** Full goods value from the billed shape. Falls back to the cart's own
    *  all-in line total when the shape hasn't resolved yet. */
   billedGoodsValue?: number
@@ -60,6 +62,7 @@ export function ShipToRow({
   catalogueFrontImageUrl = null,
   hideShipTo = false,
   prepaidDrawn = false,
+  billedUnitPrice,
   billedGoodsValue,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
@@ -110,7 +113,9 @@ export function ShipToRow({
         )}
         <div className="text-right">
           <div className="text-xs text-gray-500">
-            <span className="tabular-nums text-gray-600">{format(allInUnitPrice(line))}</span>
+            <span className="tabular-nums text-gray-600">
+              {format(billedUnitPrice ?? allInUnitPrice(line))}
+            </span>
             <span className="px-1.5 text-gray-300">×</span>
             <span className="tabular-nums text-gray-600">{line.qty}</span>
           </div>

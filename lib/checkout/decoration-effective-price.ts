@@ -25,6 +25,11 @@ export interface DecorationPriceInput {
   baseUnitPrice: number | string
 }
 
+export interface DecorationPriceOptions {
+  countryPartitionEnabled: boolean
+  targetCurrency: string
+}
+
 export async function loadTierMultiplier(admin: SupabaseClient, organizationId: string): Promise<number> {
   const { data } = await admin
     .from('b2b_accounts')
@@ -42,7 +47,7 @@ export async function loadTierMultiplier(admin: SupabaseClient, organizationId: 
   return Number((tier as { multiplier?: number | string } | null)?.multiplier ?? 1)
 }
 
-export async function effectiveDecorationPrice(
+export function effectiveDecorationPrice(
   admin: SupabaseClient,
   input: DecorationPriceInput,
   qty: number,
@@ -52,11 +57,36 @@ export async function effectiveDecorationPrice(
    * once and pass it in; when absent it is loaded per call (legacy behaviour).
    */
   tierMultiplier?: number,
-): Promise<number> {
-  const { data, error } = await admin.rpc('effective_decoration_unit_price', {
-    p_org_decoration_id: input.orgDecorationId,
-    p_qty: qty,
-  })
+): Promise<number>
+export function effectiveDecorationPrice(
+  admin: SupabaseClient,
+  input: DecorationPriceInput,
+  qty: number,
+  tierMultiplier: number | undefined,
+  options: DecorationPriceOptions,
+): Promise<number | null>
+export async function effectiveDecorationPrice(
+  admin: SupabaseClient,
+  input: DecorationPriceInput,
+  qty: number,
+  tierMultiplier?: number,
+  options?: DecorationPriceOptions,
+): Promise<number | null> {
+  const countryPartitionEnabled = options?.countryPartitionEnabled === true
+  const { data, error } = countryPartitionEnabled
+    ? await admin.rpc('effective_decoration_unit_price_for_currency', {
+        p_org_decoration_id: input.orgDecorationId,
+        p_qty: qty,
+        p_currency: options.targetCurrency,
+      })
+    : await admin.rpc('effective_decoration_unit_price', {
+        p_org_decoration_id: input.orgDecorationId,
+        p_qty: qty,
+      })
+
+  if (countryPartitionEnabled && (error || data == null || !Number.isFinite(Number(data)))) {
+    return null
+  }
 
   let base: number
   if (!error && data != null) {

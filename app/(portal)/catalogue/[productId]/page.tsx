@@ -28,6 +28,8 @@ import {
 import { getPreOrderDemandForItem } from '@/lib/pricing/preorder-demand'
 import type { ImageLayout } from '@/lib/shop/image-layout'
 import { loadAuthoredPricingBands } from '@/lib/shop/authored-pricing-bands'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 type FulfilmentType = 'stocked' | 'made_to_order' | 'mixed'
 
@@ -87,6 +89,10 @@ const loadProductDetailPageData = cache(async (
   const auth = await requireB2BCustomerCached()
   if ('kind' in auth) return { status: 'auth-failure', failure: auth }
   const { admin, context } = auth
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(admin, context.organizationId)
+    : null
 
   // Per-member access filter — gate before we reach the product table.
   // Editor preview force-shows the exact in-edit skin; a stale or cross-product
@@ -139,7 +145,12 @@ const loadProductDetailPageData = cache(async (
     max_quantity: number | null
   }> =
     catItem.price_mode === 'manual_final'
-      ? await loadAuthoredPricingBands(admin, catItem.id)
+      ? await loadAuthoredPricingBands(
+          admin,
+          catItem.id,
+          defaultCountry?.currency,
+          countryPartitionEnabled,
+        )
       : []
 
   // The qty points every server-side pricing probe on this page samples. Kept as
@@ -163,6 +174,8 @@ const loadProductDetailPageData = cache(async (
             catItem.id,
             context.organizationId,
             qty,
+            defaultCountry?.currency ?? 'NZD',
+            countryPartitionEnabled,
           )
           return { qty, price }
         } catch {
@@ -220,10 +233,16 @@ const loadProductDetailPageData = cache(async (
     await Promise.all(
       BREAKPOINTS.map(async (qty) => {
         try {
-          const { data, error } = await admin.rpc('catalogue_item_decoration_price', {
-            p_catalogue_item_id: catItem.id,
-            p_qty: qty,
-          })
+          const { data, error } = defaultCountry
+            ? await admin.rpc('catalogue_item_decoration_price_for_currency', {
+                p_catalogue_item_id: catItem.id,
+                p_qty: qty,
+                p_currency: defaultCountry.currency,
+              })
+            : await admin.rpc('catalogue_item_decoration_price', {
+                p_catalogue_item_id: catItem.id,
+                p_qty: qty,
+              })
           if (!error && data != null && Number.isFinite(Number(data))) seed[qty] = Number(data)
         } catch {
           // per-probe failure swallowed — client fetch remains a fallback
@@ -461,11 +480,14 @@ const loadProductDetailPageData = cache(async (
   const isPreOrderItem = catalogueItemId != null && preOrderIds.has(catalogueItemId)
   const preOrderClosed = isPreOrderItem && !openPeriod
   let bracketRows = existingBracketRows
+  let targetPeriodPriceUnavailable = false
   if (isPreOrderItem && openPeriod && catalogueItemId) {
     const periodBrackets = await getPeriodBracketsForItem(
       admin,
       openPeriod.id,
       catalogueItemId,
+      defaultCountry?.currency ?? 'NZD',
+      countryPartitionEnabled,
     )
     if (periodBrackets.length > 0) {
       bracketRows = periodBrackets.map((b) => ({
@@ -473,6 +495,9 @@ const loadProductDetailPageData = cache(async (
         max_quantity: b.maxQty,
         unit_price: b.unitPrice,
       }))
+    } else if (defaultCountry) {
+      bracketRows = []
+      targetPeriodPriceUnavailable = true
     }
   }
 
@@ -482,6 +507,22 @@ const loadProductDetailPageData = cache(async (
     context.tenantType === 'franchise' && isPreOrderItem && openPeriod && catalogueItemId
       ? await getPreOrderDemandForItem(admin, context.organizationId, catalogueItemId)
       : null
+
+  const { data: exactStockPrice } = defaultCountry
+    ? await admin
+        .from('b2b_catalogue_item_stock_prices')
+        .select('catalogue_item_id, unit_price')
+        .eq('catalogue_item_id', catItem.id)
+        .eq('currency', defaultCountry.currency)
+        .maybeSingle()
+    : { data: null }
+  const resolvedStockUnitPrice = defaultCountry
+    ? exactStockPrice?.unit_price == null
+      ? null
+      : Number(exactStockPrice.unit_price)
+    : catItem.stock_unit_price == null
+      ? null
+      : Number(catItem.stock_unit_price)
 
   // Spec 3a follow-up — for PREPAID variants, surface the per-unit price of
   // the band the stock was originally purchased at (informational: a prepaid
@@ -638,8 +679,21 @@ const loadProductDetailPageData = cache(async (
       stockPurchasePriceByVariant,
       // Explicit ex-GST stock sell price (Stock-on-hand). null = not set →
       // existing single-price display, never the volume ladder. numeric → number.
-      stockUnitPrice:
-        catItem.stock_unit_price == null ? null : Number(catItem.stock_unit_price),
+      stockUnitPrice: resolvedStockUnitPrice,
+      // A stock-currency row is required only when this item actually has an
+      // explicit stock scalar. Items with no scalar deliberately use their
+      // exact garment ladder for stock draws, preserving single-country parity.
+      stockPriceUnavailable:
+        defaultCountry != null &&
+        catItem.stock_unit_price != null &&
+        exactStockPrice == null,
+      countryPriceUnavailable:
+        targetPeriodPriceUnavailable ||
+        (defaultCountry != null &&
+          catItem.price_mode === 'manual_final' &&
+          Object.keys(manualDecorationSeed).length === 0),
+      priceCurrency: defaultCountry?.currency,
+      priceCountryCode: defaultCountry?.code,
       organizationId: context.organizationId,
       customerRole: context.role,
       orderingPermission: context.orderingPermission,

@@ -34,6 +34,16 @@ describe('buildOrderPlacedSlackMessage', () => {
     expect(json).toContain('Classic Tee')
     expect(json).toContain('Stock on hand')
   })
+
+  it('formats the amount from the stamped ISO currency', () => {
+    const { text, blocks } = buildOrderPlacedSlackMessage({
+      ...sample,
+      currency: 'GBP',
+    } as OrderPlacedNotification & { currency: string })
+
+    expect(text).toContain('£349.50')
+    expect(JSON.stringify(blocks)).toContain('£349.50')
+  })
 })
 
 describe('postOrderPlacedSlack', () => {

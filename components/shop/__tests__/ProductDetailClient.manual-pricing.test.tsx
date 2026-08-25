@@ -7,7 +7,7 @@ const { addLine } = vi.hoisted(() => ({ addLine: vi.fn() }))
 
 vi.mock('@/components/cart/useCart', () => ({ useCart: () => ({ addLine }) }))
 vi.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({ format: (n: number) => `$${n}` }),
+  useCurrency: () => ({ format: (n: number) => `VISITOR-NZD $${n}` }),
 }))
 // AU Stage 1: the PDP/checkout now read the org's billing region for the GST
 // rate. access: null → gstRateForRegion(undefined) → 0.15, i.e. today's NZ
@@ -85,7 +85,7 @@ const detailsOnlyDecoration: DecorationOption = {
   ladder: null,
 }
 
-function renderPDP(decorations: DecorationOption[] = []) {
+function renderPDP(decorations: DecorationOption[] = [], priceCurrency?: string) {
   return render(
     <ProductDetailClient
       product={product}
@@ -100,6 +100,7 @@ function renderPDP(decorations: DecorationOption[] = []) {
       colourOptions={[]}
       decorations={decorations}
       effectiveMoq={1}
+      priceCurrency={priceCurrency}
     />,
   )
 }
@@ -153,5 +154,59 @@ describe('ProductDetailClient manual_final pricing', () => {
     expect(screen.queryByText(/Includes \d+ decoration/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Embroidery — Left chest')).not.toBeInTheDocument()
     expect(screen.queryByText('Included logo')).not.toBeInTheDocument()
+  })
+
+  it('snapshots the server-authored default-country currency onto every new cart line', async () => {
+    renderPDP([], 'AUD')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }))
+    expect(addLine).toHaveBeenCalledWith(expect.objectContaining({ priceCurrency: 'AUD' }))
+    expect(screen.getByText(/@ \$20\.00$/)).toBeInTheDocument()
+    expect(screen.queryByText(/VISITOR-NZD/)).not.toBeInTheDocument()
+  })
+
+  it('blocks the CTA with the named country error when exact computed decoration pricing cannot load', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes('/api/shop/decoration-pricing')) {
+          return { ok: false }
+        }
+        return {
+          ok: true,
+          json: async () => ({ status: 'ok', unit_price: 12.5 }),
+        }
+      }),
+    )
+
+    render(
+      <ProductDetailClient
+        product={{
+          ...product,
+          priceMode: 'computed',
+          manualDecorationSeed: undefined,
+        }}
+        variants={[]}
+        sizes={[]}
+        brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 12.5 }]}
+        availability={{}}
+        organizationId="o1"
+        customerRole="org_admin"
+        orderingPermission="both"
+        images={[]}
+        colourOptions={[]}
+        decorations={[detailsOnlyDecoration]}
+        effectiveMoq={1}
+        priceCurrency="AUD"
+        priceCountryCode="AU"
+      />,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText('Manual Tee is not orderable to AU yet')).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('button', { name: /add to cart/i })).not.toBeInTheDocument()
   })
 })

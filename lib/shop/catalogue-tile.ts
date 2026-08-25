@@ -23,6 +23,8 @@ export interface CatalogueProductForGrid {
   price_low: number
   price_high: number
   price_status: 'ok' | 'missing'
+  price_currency?: string
+  stock_unit_price?: number | null
   has_stock: boolean
   total_stock?: number | null
   colours: CatalogueColour[]
@@ -39,6 +41,8 @@ export interface ProductCardData {
   price_low: number
   price_high: number
   price_status: 'ok' | 'missing'
+  price_currency?: string
+  stock_unit_price?: number | null
   has_stock: boolean
   total_stock?: number | null
   swatches: ProductCardSwatch[]
@@ -70,6 +74,8 @@ export function toProductTile(p: CatalogueProductForGrid): CatalogueTile {
       price_low: p.price_low,
       price_high: p.price_high,
       price_status: p.price_status,
+      price_currency: p.price_currency,
+      stock_unit_price: p.stock_unit_price ?? null,
       has_stock: p.has_stock,
       total_stock: p.total_stock ?? null,
       swatches: p.colours.map((c) => ({ hex: c.hex, label: c.label })),

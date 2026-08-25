@@ -39,7 +39,7 @@ export interface CreateJobTrackerShellArgs {
   orderType: 'stock_on_hand' | 'purchase_order'
   shippingAddress?: Record<string, unknown> | null
   /** Order billing currency for the tracker snapshot (default NZD). */
-  currencyCode?: 'NZD' | 'AUD'
+  currencyCode?: string
 }
 
 interface QuoteRow {

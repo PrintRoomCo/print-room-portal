@@ -14,6 +14,26 @@ export interface OpenPeriod {
   closesAt: string
 }
 
+export interface PdpPriceBracket {
+  min_quantity: number
+  max_quantity: number | null
+  unit_price: number
+}
+
+/** An open pre-order window is authoritative even when its currency snapshot is empty. */
+export function exactPdpBrackets(input: {
+  liveBrackets: PdpPriceBracket[]
+  periodBrackets: CartLineBracket[]
+  usesPeriodSnapshot: boolean
+}): PdpPriceBracket[] {
+  if (!input.usesPeriodSnapshot) return input.liveBrackets
+  return input.periodBrackets.map((bracket) => ({
+    min_quantity: bracket.minQty,
+    max_quantity: bracket.maxQty,
+    unit_price: bracket.unitPrice,
+  }))
+}
+
 export async function getOpenPeriodForOrg(
   admin: SupabaseClient,
   organizationId: string,
@@ -60,13 +80,16 @@ export async function getPeriodBracketsForItem(
   admin: SupabaseClient,
   periodId: string,
   catalogueItemId: string,
+  currency = 'NZD',
+  countryPartitionEnabled = false,
 ): Promise<CartLineBracket[]> {
-  const { data } = await admin
+  let query = admin
     .from('b2b_ordering_period_item_pricing')
     .select('min_quantity, max_quantity, final_unit_price')
     .eq('period_id', periodId)
     .eq('catalogue_item_id', catalogueItemId)
-    .order('min_quantity', { ascending: true })
+  if (countryPartitionEnabled) query = query.eq('currency', currency)
+  const { data } = await query.order('min_quantity', { ascending: true })
   return ((data ?? []) as Array<{
     min_quantity: number
     max_quantity: number | null

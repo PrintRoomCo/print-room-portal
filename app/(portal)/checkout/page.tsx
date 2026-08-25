@@ -4,6 +4,7 @@ import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutClient } from '@/components/checkout/CheckoutClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
 import { getOrgEnabledCountries } from '@/lib/account/org-countries'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
 
 export const metadata: Metadata = {
   title: 'Checkout',
@@ -37,6 +38,8 @@ export default async function CheckoutPage() {
       isBuyer={context.role === 'staff'}
       tenantType={context.tenantType}
       enabledCountries={enabledCountries}
+      defaultPriceCurrency={enabledCountries.find((country) => country.isDefault)?.currency ?? null}
+      countryPartitionEnabled={isCheckoutCountryPartitionEnabled()}
     />
   )
 }

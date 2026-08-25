@@ -4,7 +4,7 @@ import { CartTable } from '../CartTable'
 import type { CartLine } from '@/lib/cart/types'
 
 vi.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({ format: (n: number) => `$${n.toFixed(2)}` }),
+  useCurrency: () => ({ format: (n: number) => `VISITOR-NZD $${n.toFixed(2)}` }),
 }))
 
 function makeLine(overrides: Partial<CartLine> = {}): CartLine {
@@ -64,5 +64,20 @@ describe('CartTable fulfilment copy', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
 
     expect(screen.queryByText(/produced before dispatch/i)).not.toBeInTheDocument()
+  })
+
+  it('formats the authored line currency directly instead of visitor FX', async () => {
+    render(
+      <CartTable
+        lines={[makeLine({ priceCurrency: 'AUD' })]}
+        onUpdateQty={() => {}}
+        onRemove={() => {}}
+      />,
+    )
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    expect(screen.getByText('$10.00')).toBeInTheDocument()
+    expect(screen.getByText('$300.00')).toBeInTheDocument()
+    expect(screen.queryByText(/VISITOR-NZD/)).not.toBeInTheDocument()
   })
 })

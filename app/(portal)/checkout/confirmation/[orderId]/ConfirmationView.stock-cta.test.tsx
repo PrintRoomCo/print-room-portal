@@ -43,4 +43,28 @@ describe('ConfirmationView track CTA', () => {
     expect(screen.queryByText('Track this order')).toBeNull()
     expect(screen.getByText('Continue shopping')).toBeTruthy()
   })
+
+  it('renders stamped order money and tax label independently of visitor FX', () => {
+    render(
+      <CurrencyProvider
+        initialCurrency="AUD"
+        initialRates={{ NZD: 1, AUD: 2, USD: 1, GBP: 1, EUR: 1 }}
+      >
+        <ConfirmationView
+          {...({
+            ...base,
+            currency: 'NZD',
+            taxLabel: 'GST 15%',
+          } as React.ComponentProps<typeof ConfirmationView> & {
+            currency: string
+            taxLabel: string
+          })}
+        />
+      </CurrencyProvider>,
+    )
+
+    expect(screen.getAllByText('$10.00').length).toBeGreaterThan(0)
+    expect(screen.queryByText('A$20.00')).toBeNull()
+    expect(screen.getByText('GST 15%')).toBeTruthy()
+  })
 })

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
 
 vi.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({ format: (amount: number) => `$${amount.toFixed(2)}` }),
+  useCurrency: () => ({ format: (amount: number) => `VISITOR-NZD $${amount.toFixed(2)}` }),
 }))
 
 describe('PeriodSavingsBar', () => {
@@ -76,5 +76,37 @@ describe('PeriodSavingsBar', () => {
         expect.stringContaining('item=duffel-item%3A48'),
       ),
     )
+  })
+
+  it('formats server-authored summary values in its currency instead of visitor FX', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          period: { id: 'period-1', closesAt: '2026-08-21T12:00:00.000Z' },
+          currency: 'AUD',
+          items: [
+            {
+              catalogueItemId: 'item-au',
+              aggQty: 0,
+              unitsToNextBreak: 2,
+              nextUnitPrice: 25,
+              perUnitSavings: 2,
+              franchiseSavings: 20,
+            },
+          ],
+        }),
+      })),
+    )
+
+    render(
+      <PeriodSavingsBar
+        cartItems={[{ catalogueItemId: 'item-au', productName: 'AU Tee', qty: 10 }]}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /order quantity savings/i }))
+    expect(screen.getByRole('status')).toHaveTextContent('$25.00')
+    expect(screen.getByRole('status')).not.toHaveTextContent('VISITOR-NZD')
   })
 })

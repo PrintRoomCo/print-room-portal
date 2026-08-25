@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { BilledOrderSummary } from './BilledOrderSummary'
-import { billedOrderShape, type BilledLineInput } from '@/lib/pricing/order-billing-shape'
+import {
+  BilledOrderSummary,
+  CountryBilledOrderSummary,
+} from './BilledOrderSummary'
+import {
+  billedOrderShape,
+  checkoutBillingShape,
+  type BilledLine,
+  type BilledLineInput,
+  type CheckoutOrderGroup,
+} from '@/lib/pricing/order-billing-shape'
 
 const format = (n: number) =>
   `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -38,6 +47,114 @@ const mixedShape = () =>
   })
 
 const renderLine = (l: { lineId: string }) => <div data-testid={`row-${l.lineId}`}>{l.lineId}</div>
+
+const previewLine: BilledLine & { repricedFromCurrency?: string } = {
+  lineId: 'au-tee', qty: 2, unitPrice: 50, decorationPerUnit: 0,
+  fulfilmentType: 'made_to_order', billingMode: 'invoice_on_dispatch',
+  billed: true, billedUnitPrice: 50, goodsValue: 100,
+  repricedFromCurrency: 'NZD',
+}
+
+function previewGroup(
+  over: Partial<CheckoutOrderGroup> & Pick<CheckoutOrderGroup, 'key' | 'countryCode' | 'orderType'>,
+): CheckoutOrderGroup {
+  const au = over.countryCode === 'AU'
+  return {
+    countryName: au ? 'Australia' : 'New Zealand',
+    currency: au ? 'AUD' : 'NZD',
+    taxLabel: au ? 'GST 10%' : 'GST 15%',
+    lines: [], subtotal: 100, tax: au ? 10 : 15, pickingFee: 0,
+    total: au ? 110 : 115,
+    ...over,
+  }
+}
+
+describe('CountryBilledOrderSummary', () => {
+  it('renders country-first groups, exact currencies, repricing notes, and no mixed total', () => {
+    const shape = checkoutBillingShape([
+      previewGroup({
+        key: 'AU:purchase_order', countryCode: 'AU', orderType: 'purchase_order',
+        lines: [previewLine],
+      }),
+      previewGroup({
+        key: 'AU:stock_on_hand', countryCode: 'AU', orderType: 'stock_on_hand',
+        total: 220,
+      }),
+      previewGroup({
+        key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand',
+        pickingFee: 20, tax: 18, total: 138,
+      }),
+    ])
+
+    render(
+      <CountryBilledOrderSummary shape={shape} renderLine={renderLine} />,
+    )
+
+    expect(screen.getByText('Australia · AUD')).toBeInTheDocument()
+    expect(screen.getByText('New Zealand · NZD')).toBeInTheDocument()
+    expect(screen.getAllByText('Purchase order')).toHaveLength(1)
+    expect(screen.getAllByText('Stock-on-hand order')).toHaveLength(2)
+    expect(screen.getByText('Repriced from NZD for delivery to Australia.')).toBeInTheDocument()
+    expect(screen.queryByText(/Total across/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/grand total/i)).not.toBeInTheDocument()
+  })
+
+  it('announces a named unavailable-price failure beside its country group', () => {
+    render(
+      <CountryBilledOrderSummary
+        shape={checkoutBillingShape([])}
+        failures={[{
+          partitionKey: 'AU:purchase_order', countryCode: 'AU',
+          countryName: 'Australia', currency: 'AUD',
+          code: 'country_price_unavailable',
+          error: 'This product is not orderable to AU yet.',
+        }]}
+        renderLine={renderLine}
+      />,
+    )
+
+    expect(screen.getByText('Australia · AUD')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This product is not orderable to AU yet.',
+    )
+  })
+
+  it('keeps placed refs attached while announcing the retryable group', () => {
+    const shape = checkoutBillingShape([
+      previewGroup({
+        key: 'AU:purchase_order', countryCode: 'AU', orderType: 'purchase_order',
+      }),
+      previewGroup({
+        key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand',
+      }),
+    ])
+
+    render(
+      <CountryBilledOrderSummary
+        shape={shape}
+        partitionOutcomes={{
+          'AU:purchase_order': {
+            ok: true, partitionKey: 'AU:purchase_order', orderId: 'order-au', orderRef: 'AU-1',
+          },
+          'NZ:stock_on_hand': {
+            ok: false, partitionKey: 'NZ:stock_on_hand', code: 'submit_failed',
+            error: 'New Zealand order could not be placed.',
+          },
+        }}
+        renderLine={renderLine}
+      />,
+    )
+
+    expect(screen.getByText('Placed · AU-1')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'New Zealand order could not be placed.',
+    )
+    expect(screen.getByRole('alert')).toHaveAttribute(
+      'data-partition-error',
+      'NZ:stock_on_hand',
+    )
+  })
+})
 
 describe('BilledOrderSummary — single prepaid order', () => {
   it('shows the billed total, not the goods value', () => {

@@ -20,6 +20,13 @@ export function isXeroEnabled(): boolean {
 
 export type XeroRegion = 'NZ' | 'AU'
 
+/** Adapt an immutable billing-country stamp to the existing SP3 two-region seam. */
+export function xeroRegionForBillCountry(code: string): XeroRegion | null {
+  if (code === 'NZ') return 'NZ'
+  if (code === 'AU') return 'AU'
+  return null
+}
+
 /** Payload config for a region. Never throws — credentials live in the token
  *  store; "is Xero usable" is isXeroConnectedForRegion (token-store.ts). */
 export function getXeroConfig(region: XeroRegion = 'NZ'): XeroConfig {

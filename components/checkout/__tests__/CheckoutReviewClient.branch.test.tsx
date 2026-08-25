@@ -35,7 +35,12 @@ const STORES = [
 ]
 
 function renderReview(
-  props: { role: 'org_admin' | 'staff'; branchStoreIds: string[]; defaultStoreId: string | null },
+  props: {
+    role: 'org_admin' | 'staff'
+    branchStoreIds: string[]
+    defaultStoreId: string | null
+    countryPartitionEnabled?: boolean
+  },
 ) {
   return render(
     <CheckoutReviewClient
@@ -47,6 +52,7 @@ function renderReview(
       role={props.role}
       branchStoreIds={props.branchStoreIds}
       defaultStoreId={props.defaultStoreId}
+      countryPartitionEnabled={props.countryPartitionEnabled}
     />,
   )
 }
@@ -108,5 +114,42 @@ describe('CheckoutReviewClient branch picker', () => {
     fireEvent.change(select, { target: { value: 'store-2' } })
     const persisted = readCheckoutReviewState()
     expect(persisted?.perLineShipTo).toEqual({ 'line-1': 'store-2', 'line-2': 'store-2' })
+  })
+
+  it('aborts the in-flight country preview when a manager changes branch', async () => {
+    let firstPreviewSignal: AbortSignal | undefined
+    let previewCalls = 0
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/checkout/billing-modes')) {
+        return { status: 200, ok: true, json: async () => ({ modeByVariantId: {} }) } as Response
+      }
+      if (url === '/api/checkout/preview') {
+        previewCalls += 1
+        if (previewCalls === 1) {
+          firstPreviewSignal = init?.signal as AbortSignal
+          return new Promise<Response>(() => {})
+        }
+        return {
+          status: 200, ok: true,
+          json: async () => ({ outcomes: [], totalsByCurrency: {} }),
+        } as Response
+      }
+      return {
+        status: 200, ok: true, json: async () => ({ imagesByLineId: {} }),
+      } as Response
+    })
+
+    renderReview({
+      role: 'staff', branchStoreIds: ['store-2'], defaultStoreId: 'store-1',
+      countryPartitionEnabled: true,
+    })
+    const select = await screen.findByLabelText(/ordering for branch/i)
+    await vi.waitFor(() => expect(previewCalls).toBe(1))
+
+    fireEvent.change(select, { target: { value: 'store-2' } })
+
+    await vi.waitFor(() => expect(previewCalls).toBe(2))
+    expect(firstPreviewSignal?.aborted).toBe(true)
   })
 })

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
 import { calculatePeriodSavingsOpportunity } from '@/lib/pricing/period-savings'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 function requestedCartQuantities(request: Request): Map<string, number> {
   const quantities = new Map<string, number>()
@@ -24,6 +26,10 @@ export async function GET(request: Request) {
   const orgId = context.organizationId
   const role = context.role
   const cartQuantities = requestedCartQuantities(request)
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(admin, orgId)
+    : null
 
   const { data, error } = await admin.rpc('period_progress_for_org', {
     p_org_id: orgId,
@@ -55,12 +61,13 @@ export async function GET(request: Request) {
   }
   let bandRows: BandRow[] = []
   if (rows[0] && requestedIds.size > 0) {
-    const bandResult = await admin
+    let bandQuery = admin
       .from('b2b_ordering_period_item_pricing')
       .select('catalogue_item_id, min_quantity, final_unit_price')
       .eq('period_id', rows[0].period_id)
       .in('catalogue_item_id', [...requestedIds])
-      .order('min_quantity', { ascending: true })
+    if (defaultCountry) bandQuery = bandQuery.eq('currency', defaultCountry.currency)
+    const bandResult = await bandQuery.order('min_quantity', { ascending: true })
     if (bandResult.error) {
       return NextResponse.json({ error: bandResult.error.message }, { status: 500 })
     }
@@ -84,6 +91,7 @@ export async function GET(request: Request) {
     period: rows[0]
       ? { id: rows[0].period_id, closesAt: rows[0].closes_at }
       : null,
+    ...(defaultCountry ? { currency: defaultCountry.currency } : {}),
     items: relevantRows.map((row) => {
       const franchiseQty = cartQuantities.get(row.catalogue_item_id) ?? 0
       const opportunity = calculatePeriodSavingsOpportunity({

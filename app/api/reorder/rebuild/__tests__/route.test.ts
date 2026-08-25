@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/checkout/server', () => ({
   requireB2BCustomerApi: vi.fn(),
@@ -44,7 +44,14 @@ function req(body: unknown): Request {
   })
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
+})
+
+afterEach(() => {
+  delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
+})
 
 describe('POST /api/reorder/rebuild', () => {
   it('404s when the quote belongs to another org', async () => {
@@ -108,5 +115,83 @@ describe('POST /api/reorder/rebuild', () => {
       fulfilmentType: 'made_to_order',
     })
     expect(json.degradedCount).toBe(0)
+  })
+
+  it('rebuilds from the current default-country list rather than the historical quote currency', async () => {
+    process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED = 'true'
+    const rpcCalls: Array<{ name: string; args: AnyRow }> = []
+    const admin = makeAdmin({
+      selects: {
+        quotes: {
+          data: { id: QUOTE, organization_id: ORG, currency: 'NZD' },
+          error: null,
+        },
+        organization_countries: {
+          data: [
+            {
+              country_code: 'AU',
+              is_default: true,
+              countries: {
+                name: 'Australia',
+                currency: 'AUD',
+                tax_rate: 0.1,
+                tax_label: 'GST 10%',
+              },
+            },
+          ],
+          error: null,
+        },
+        quote_items: {
+          data: [
+            {
+              product_id: 'p1',
+              variant_id: null,
+              product_name: 'Basic Tee',
+              quantity: 30,
+              decorations: [],
+              ship_to_store_id: null,
+              catalogue_item_id: 'item-au',
+              qty_from_stock: 0,
+              qty_to_make: 30,
+              size_label: null,
+              product_variants: null,
+            },
+          ],
+          error: null,
+        },
+        products: {
+          data: [{ id: 'p1', image_url: null, fulfilment_type: 'made_to_order' }],
+          error: null,
+        },
+        b2b_catalogue_item_images: { data: [], error: null },
+        b2b_catalogue_items: {
+          data: [{ id: 'item-au', fulfilment_type_override: null }],
+          error: null,
+        },
+      },
+      rpc: (name, args) => {
+        rpcCalls.push({ name, args })
+        return { data: 25.4, error: null }
+      },
+    })
+    vi.mocked(requireB2BCustomerApi).mockResolvedValue({
+      admin,
+      context: { organizationId: ORG },
+    } as never)
+
+    const res = await POST(req({ quoteId: QUOTE }))
+    const json = await res.json()
+
+    expect(json.lines[0]).toMatchObject({ unitPrice: 25.4, priceCurrency: 'AUD' })
+    expect(rpcCalls).toContainEqual({
+      name: 'effective_unit_price_for_item_currency',
+      args: {
+        p_catalogue_item_id: 'item-au',
+        p_org_id: ORG,
+        p_qty: 30,
+        p_currency: 'AUD',
+      },
+    })
+    expect(rpcCalls.some(({ name }) => name === 'effective_unit_price')).toBe(false)
   })
 })

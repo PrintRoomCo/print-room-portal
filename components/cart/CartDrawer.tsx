@@ -10,6 +10,7 @@ import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PickingFeeInfo } from '@/components/pricing/PickingFeeInfo'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { formatCurrency } from '@/lib/currency/format'
 import { useCompany } from '@/contexts/CompanyContext'
 import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
 import { CartTable } from './CartTable'
@@ -17,7 +18,11 @@ import { useCart } from './useCart'
 
 export function CartDrawer() {
   const cart = useCart()
-  const { access } = useCompany()
+  const {
+    access,
+    countryPartitionEnabled,
+    defaultBillingCountryCode,
+  } = useCompany()
   const isOrgAdmin = access?.role === 'org_admin'
   const drawer = useCartDrawer()
   const pathname = usePathname()
@@ -50,12 +55,24 @@ export function CartDrawer() {
           decorationPerUnit: decorationPerUnit(line),
         })),
         gstRate: gstRateForRegion(access?.region),
-        pickingFee: estimateCartPickingFee(cart.lines, access?.region),
+        pickingFee: estimateCartPickingFee(cart.lines, {
+          countryPartitionEnabled,
+          defaultBillCountry: defaultBillingCountryCode,
+          legacyOrgRegion: access?.region,
+        }),
       }),
-    [cart.lines, access?.region],
+    [
+      cart.lines,
+      access?.region,
+      countryPartitionEnabled,
+      defaultBillingCountryCode,
+    ],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
   const canCheckout = cart.lines.length > 0 && !oversell && !moqShort
+  const canonicalCurrency = cart.lines[0]?.priceCurrency
+  const formatCartMoney = (amount: number) =>
+    canonicalCurrency ? formatCurrency(amount, canonicalCurrency) : format(amount)
 
   function proceedToCheckout() {
     if (!canCheckout) return
@@ -116,18 +133,22 @@ export function CartDrawer() {
               {breakdown.pickingFee > 0 && (
                 <div className="mb-1 flex items-baseline justify-between">
                   <span className="flex items-center gap-1.5 text-sm text-gray-500">
-                    Picking fee
-                    <PickingFeeInfo goodsBasis={stockedGoods} format={format} direction="up" />
+                    {countryPartitionEnabled ? 'Estimated picking fee' : 'Picking fee'}
+                    <PickingFeeInfo
+                      goodsBasis={stockedGoods}
+                      format={formatCartMoney}
+                      direction="up"
+                    />
                   </span>
                   <span className="text-sm tabular-nums text-gray-700">
-                    {format(breakdown.pickingFee)}
+                    {formatCartMoney(breakdown.pickingFee)}
                   </span>
                 </div>
               )}
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-sm text-gray-500">Total</span>
                 <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
-                  {format(breakdown.total)}
+                  {formatCartMoney(breakdown.total)}
                 </span>
               </div>
               {(oversell || moqShort) && (

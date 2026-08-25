@@ -18,6 +18,7 @@ import { ProductImageGallery, type GalleryImage, type GalleryOverlay } from './P
 import { VariantlessSizeGrid } from './VariantlessSizeGrid'
 import { CatalogueTopBar } from './CatalogueTopBar'
 import type { DecorationOption } from '@/lib/shop/decorations'
+import { applyResolvedRendition } from '@/lib/shop/decoration-renditions'
 import {
   filterDecorationsBySwatch,
   resolveDecorationsForPricing,
@@ -29,6 +30,7 @@ import {
   orderVolumeDisplayBands,
 } from '@/lib/shop/volume-display-bands'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { formatCurrency } from '@/lib/currency/format'
 import { useCompany } from '@/contexts/CompanyContext'
 import { gstRateForRegion } from '@/lib/pricing/gst'
 import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
@@ -178,6 +180,8 @@ interface Props {
    * claim + checkout charge; the server bills prepaid draws $0 regardless.
    */
   stockUnitPrice?: number | null
+  /** Exact target stock row is absent; blocks only the stock-ordering path. */
+  stockPriceUnavailable?: boolean
   colourOptions?: ColourOption[]
   decorations: DecorationOption[]
   /**
@@ -223,6 +227,11 @@ interface Props {
    * window => the block is not rendered.
    */
   preOrderDemand?: PreOrderDemand | null
+  /** Canonical default-country list currency; absent preserves legacy visitor FX. */
+  priceCurrency?: string
+  priceCountryCode?: string
+  /** Server-proven missing period/manual target price. */
+  countryPriceUnavailable?: boolean
 }
 
 export function ProductDetailClient({
@@ -239,6 +248,7 @@ export function ProductDetailClient({
   billingModeByVariant = {},
   stockPurchasePriceByVariant = {},
   stockUnitPrice = null,
+  stockPriceUnavailable = false,
   colourOptions = [],
   decorations,
   effectiveMoq,
@@ -250,10 +260,16 @@ export function ProductDetailClient({
   locationOptions = [],
   customNameMaxLength = null,
   preOrderDemand = null,
+  priceCurrency,
+  priceCountryCode,
+  countryPriceUnavailable = false,
 }: Props) {
   const cart = useCart()
   const { format } = useCurrency()
+  const formatPrice = (amount: number) =>
+    priceCurrency ? formatCurrency(amount, priceCurrency) : format(amount)
   const { access } = useCompany()
+  const [countryDecorationUnavailable, setCountryDecorationUnavailable] = useState(false)
   const gstRate = gstRateForRegion(access?.region)
 
   const firstVariant = variants[0] ?? null
@@ -509,7 +525,11 @@ export function ProductDetailClient({
     ? sizeRowsForColour.filter((row) => row.available !== null && row.available > 0)
     : sizeRowsForColour
 
-  const isUnavailableToOrder = options.deadZone
+  const countryPricingBlocked =
+    countryPriceUnavailable ||
+    countryDecorationUnavailable ||
+    (stockPriceUnavailable && isInventoryMode)
+  const isUnavailableToOrder = options.deadZone || countryPricingBlocked
 
   // MOQ exists to make a new production run economical — it does not apply when
   // drawing down stock that has already been made. In inventory mode the only
@@ -680,7 +700,11 @@ export function ProductDetailClient({
         const res = await fetch('/api/shop/pricing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product_id: product.id, qty }),
+          body: JSON.stringify({
+            product_id: product.id,
+            ...(priceCurrency ? { catalogue_item_id: product.catalogueItemId } : {}),
+            qty,
+          }),
           signal: controller.signal,
         })
         if (res.ok && !cancelled) {
@@ -700,7 +724,7 @@ export function ProductDetailClient({
       controller.abort()
       if (priceTimer.current) clearTimeout(priceTimer.current)
     }
-  }, [qty, product.id, isInventoryMode, stockUnitPrice])
+  }, [qty, product.id, product.catalogueItemId, isInventoryMode, stockUnitPrice, priceCurrency])
 
   useEffect(() => {
     // The pricing API only needs the linkId (it re-resolves the decoration
@@ -710,6 +734,11 @@ export function ProductDetailClient({
     // the tier multiplier and keeps cart == checkout.
     const recalcItems = decorations.flatMap((d) => {
       const ri = d.recalcInputs
+      if (priceCurrency) {
+        return ri?.method === 'screenprint'
+          ? [{ linkId: d.linkId, placementKey: ri.placementKey, colourCount: ri.colourCount }]
+          : [{ linkId: d.linkId }]
+      }
       if (ri == null) return []
       return ri.method === 'screenprint'
         ? [{ linkId: d.linkId, placementKey: ri.placementKey, colourCount: ri.colourCount }]
@@ -720,8 +749,17 @@ export function ProductDetailClient({
     // from placement/colour-count. Without this a manual item whose decoration
     // has no recalcInputs (e.g. a legacy or manually-attached decoration)
     // would never fetch the combined and the PDP would show $0 decoration.
-    if (recalcItems.length === 0 && !isManualPricing) return
+    if (recalcItems.length === 0 && !isManualPricing) {
+      if (priceCurrency) setCountryDecorationUnavailable(false)
+      return
+    }
     if (!Number.isInteger(qty) || qty <= 0) return
+
+    // An enabled-country amount is orderable only after the exact currency RPC
+    // has answered for every required decoration. Keep the CTA blocked while
+    // the request is pending or unavailable; legacy flag-off pricing retains
+    // its existing optimistic/static-fallback behaviour.
+    if (priceCurrency) setCountryDecorationUnavailable(true)
 
     // Probe each bracket's representative qty, the standard screen-print
     // qty ladder (so we capture the decoration's own band breakpoints even
@@ -761,6 +799,15 @@ export function ProductDetailClient({
             pricesByQty: Record<string, Record<string, number | null>>
             manualByQty?: Record<string, number | null>
           }
+          if (priceCurrency) {
+            const currentKey = String(qty)
+            const targetMissing = isManualPricing
+              ? json.manualByQty?.[currentKey] == null
+              : recalcItems.some(
+                  (item) => json.pricesByQty?.[currentKey]?.[item.linkId] == null,
+                )
+            setCountryDecorationUnavailable(targetMissing)
+          }
           const resolved: Record<number, Record<string, number>> = {}
           for (const [qStr, links] of Object.entries(json.pricesByQty ?? {})) {
             const q = Number(qStr)
@@ -793,7 +840,14 @@ export function ProductDetailClient({
       controller.abort()
       if (decorationPriceTimer.current) clearTimeout(decorationPriceTimer.current)
     }
-  }, [qty, decorations, brackets, isManualPricing])
+  }, [
+    qty,
+    decorations,
+    brackets,
+    isManualPricing,
+    priceCurrency,
+    product.catalogueItemId,
+  ])
 
   const selectedLinkIds = useMemo<ReadonlySet<string>>(
     () => new Set(decorations.map((d) => d.linkId)),
@@ -801,8 +855,15 @@ export function ProductDetailClient({
   )
 
   const swatchVisibleDecorations = useMemo(
-    () => filterDecorationsBySwatch(decorations, colorSwatchId),
-    [decorations, colorSwatchId],
+    () =>
+      filterDecorationsBySwatch(decorations, colorSwatchId).map((decoration) =>
+        applyResolvedRendition(
+          decoration,
+          selectedVariant?.variant_id ?? null,
+          decoration.resolvedByVariantId ?? {},
+        ),
+      ),
+    [decorations, colorSwatchId, selectedVariant?.variant_id],
   )
 
   const visibleDecorations = useMemo(
@@ -832,8 +893,14 @@ export function ProductDetailClient({
       resolveDecorationsForPricing(
         decorations.filter((d) => selectedLinkIds.has(d.linkId)),
         colorSwatchId,
+      ).map((decoration) =>
+        applyResolvedRendition(
+          decoration,
+          selectedVariant?.variant_id ?? null,
+          decoration.resolvedByVariantId ?? {},
+        ),
       ),
-    [decorations, selectedLinkIds, colorSwatchId],
+    [decorations, selectedLinkIds, colorSwatchId, selectedVariant?.variant_id],
   )
 
   // Soft gate (mirrors the RPC's NULL for embroidery with no stitch_count and
@@ -894,13 +961,13 @@ export function ProductDetailClient({
   const decorationPriceAt = useMemo(
     () => (linkId: string, atQty: number, fallback: number) => {
       const authored = decorations.find((d) => d.linkId === linkId)?.ladder
-      if (authored && authored.length > 0) {
+      if (!priceCurrency && authored && authored.length > 0) {
         const band = pickBracket(authored, atQty)
         if (band) return band.unitPrice
       }
-      return decorationPricesByQty[atQty]?.[linkId] ?? fallback
+      return decorationPricesByQty[atQty]?.[linkId] ?? (priceCurrency ? 0 : fallback)
     },
-    [decorationPricesByQty, decorations],
+    [decorationPricesByQty, decorations, priceCurrency],
   )
 
   // Manual-final: the item's ONE combined decoration figure at a given qty.
@@ -1026,7 +1093,7 @@ export function ProductDetailClient({
       // checkout. Computed screenprint (no ladder) keeps probe-derived brackets;
       // there the probe breakpoints ARE the engine's band edges.
       const authored = decorations.find((d) => d.linkId === linkId)?.ladder
-      if (authored && authored.length > 0) return authored
+      if (!priceCurrency && authored && authored.length > 0) return authored
 
       const probeMins = Object.keys(decorationPricesByQty)
         .map((s) => Number(s))
@@ -1095,26 +1162,38 @@ export function ProductDetailClient({
     const manualDecorationBracketsSnapshot =
       manualDecorationActive && hasManualData ? buildManualDecorationBrackets() : undefined
 
-    const cartDecorationsForSwatch = (swatchId: string | null): CartLineDecoration[] =>
-      resolveDecorationsForPricing(selectedDecorations, swatchId).map((d) => ({
-        linkId: d.linkId,
-        decorationId: d.decorationId,
-        name: d.name,
-        method: d.method,
-        positionLabel: d.positionLabel,
-        // Manual items: per-placement price is not individually billed (the line
-        // carries one combined figure). Snapshot 0 so any accidental fallback to
-        // the per-placement sum yields 0, never a wrong positive number.
-        unitPrice: manualDecorationActive
-          ? 0
-          : decorationPriceAt(d.linkId, qty, d.unitPrice),
-        artworkUrl: d.artworkUrl,
-        snapshotUrl: d.snapshotUrl,
-        brackets: manualDecorationActive ? undefined : buildDecorationBrackets(d.linkId),
-        // Server-decided eligibility (real artwork + non-'custom' method); the
-        // client only carries it through so checkout can re-derive the same pools.
-        poolable: d.poolable,
-      }))
+    const cartDecorationsForSwatch = (
+      swatchId: string | null,
+      productVariantId: string | null,
+    ): CartLineDecoration[] =>
+      resolveDecorationsForPricing(selectedDecorations, swatchId).map((option) => {
+        const d = applyResolvedRendition(
+          option,
+          productVariantId,
+          option.resolvedByVariantId ?? {},
+        )
+        return {
+          linkId: d.linkId,
+          decorationId: d.decorationId,
+          name: d.name,
+          method: d.method,
+          positionLabel: d.positionLabel,
+          // Manual items: per-placement price is not individually billed (the line
+          // carries one combined figure). Snapshot 0 so any accidental fallback to
+          // the per-placement sum yields 0, never a wrong positive number.
+          unitPrice: manualDecorationActive
+            ? 0
+            : decorationPriceAt(d.linkId, qty, d.unitPrice),
+          artworkUrl: d.artworkUrl,
+          snapshotUrl: d.snapshotUrl,
+          renditionId: d.renditionId ?? null,
+          renditionLabel: d.renditionLabel ?? null,
+          brackets: manualDecorationActive ? undefined : buildDecorationBrackets(d.linkId),
+          // Server-decided eligibility (real artwork + non-'custom' method); the
+          // client only carries it through so checkout can re-derive the same pools.
+          poolable: d.poolable,
+        }
+      })
     const cartImageForSwatch = (swatchId: string | null): string | null =>
       pickPreferredGalleryImageUrl(
         images,
@@ -1155,8 +1234,12 @@ export function ProductDetailClient({
             sizeId: s.size_id,
             sizeLabel: s.size_label,
             unitPrice: pricing.unit_price,
+            priceCurrency,
             imageUrl: cartImageForSwatch(variant.color_swatch_id),
-            decorations: cartDecorationsForSwatch(variant.color_swatch_id),
+            decorations: cartDecorationsForSwatch(
+              variant.color_swatch_id,
+              variant.variant_id,
+            ),
             brackets: cartLineBrackets,
             catalogueItemId: product.catalogueItemId,
             catalogueId: product.catalogueId ?? null,
@@ -1222,8 +1305,12 @@ export function ProductDetailClient({
           variantLabel: size,
           qty: lineQty,
           unitPrice: pricing.unit_price,
+          priceCurrency,
           imageUrl: cartImageForSwatch(colorSwatchId),
-          decorations: cartDecorationsForSwatch(colorSwatchId),
+          decorations: cartDecorationsForSwatch(
+            colorSwatchId,
+            variantsForSelectedColour[0]?.variant_id ?? null,
+          ),
           fulfilmentType: 'made_to_order',
           brackets: cartLineBrackets,
           catalogueItemId: product.catalogueItemId,
@@ -1271,8 +1358,12 @@ export function ProductDetailClient({
       sizeId,
       sizeLabel: oneSizeSizeLabel,
       unitPrice: pricing.unit_price,
+      priceCurrency,
       imageUrl: cartImageForSwatch(colorSwatchId),
-      decorations: cartDecorationsForSwatch(colorSwatchId),
+      decorations: cartDecorationsForSwatch(
+        colorSwatchId,
+        selectedVariant?.variant_id ?? null,
+      ),
       brackets: cartLineBrackets,
       catalogueItemId: product.catalogueItemId,
       catalogueId: product.catalogueId ?? null,
@@ -1527,7 +1618,9 @@ export function ProductDetailClient({
 
           {isUnavailableToOrder ? (
             <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              unavailable to order right now. contact the print room for more information
+              {countryPricingBlocked && priceCountryCode
+                ? `${product.name} is not orderable to ${priceCountryCode} yet`
+                : 'unavailable to order right now. contact the print room for more information'}
             </div>
           ) : (
           <>
@@ -1555,14 +1648,14 @@ export function ProductDetailClient({
                     <span className="font-medium">
                       {preOrderSavings.unitsToNextSaving} more units of {product.name}
                     </span>{' '}
-                    by {preOrderCloses} unlocks {format(preOrderSavings.nextUnitPrice)} per unit.
+                    by {preOrderCloses} unlocks {formatPrice(preOrderSavings.nextUnitPrice)} per unit.
                   </p>
                   <p className="mt-1 text-black/70">
                     Your franchise&apos;s {qty}-unit order will save{' '}
                     <span className="font-semibold text-black">
-                      {format(preOrderSavings.franchiseSavings)}
+                      {formatPrice(preOrderSavings.franchiseSavings)}
                     </span>{' '}
-                    at that tier ({format(preOrderSavings.perUnitSavings)} per unit).
+                    at that tier ({formatPrice(preOrderSavings.perUnitSavings)} per unit).
                   </p>
                 </div>
               ) : qty <= 0 ? (
@@ -1597,7 +1690,7 @@ export function ProductDetailClient({
                       {b.min_quantity}
                       {b.max_quantity ? `–${b.max_quantity}` : '+'}
                     </span>{' '}
-                    <span className="text-gray-500">@ {format(b.unit_price)}</span>
+                    <span className="text-gray-500">@ {formatPrice(b.unit_price)}</span>
                   </li>
                 ))}
               </ul>
@@ -1624,7 +1717,7 @@ export function ProductDetailClient({
                 Price
               </p>
               <p className="mt-4 text-sm text-gray-700 tabular-nums">
-                <span className="font-medium text-gray-900">{format(stockUnitPrice)}</span>{' '}
+                <span className="font-medium text-gray-900">{formatPrice(stockUnitPrice)}</span>{' '}
                 <span className="text-gray-500">
                   per unit, excl. GST{selectedColourPrepaid ? ' — pre-paid' : ''}
                 </span>
@@ -1644,7 +1737,7 @@ export function ProductDetailClient({
               </p>
               <p className="mt-4 text-sm text-gray-700 tabular-nums">
                 <span className="font-medium text-gray-900">
-                  {format(selectedColourStockPrice)}
+                  {formatPrice(selectedColourStockPrice)}
                 </span>{' '}
                 <span className="text-gray-500">
                   per unit, excl. GST — original purchase price
@@ -1780,7 +1873,7 @@ export function ProductDetailClient({
                     Price
                   </p>
                   <p className="mt-2 text-sm text-gray-700 tabular-nums">
-                    <span className="font-medium text-gray-900">{format(stockUnitPrice)}</span>{' '}
+                    <span className="font-medium text-gray-900">{formatPrice(stockUnitPrice)}</span>{' '}
                     <span className="text-gray-500">
                       per unit, excl. GST{selectedColourPrepaid ? ' — pre-paid' : ''}
                     </span>
@@ -1793,7 +1886,7 @@ export function ProductDetailClient({
                   </p>
                   <p className="mt-2 text-sm text-gray-700 tabular-nums">
                     <span className="font-medium text-gray-900">
-                      {format(selectedColourStockPrice)}
+                      {formatPrice(selectedColourStockPrice)}
                     </span>{' '}
                     <span className="text-gray-500">
                       per unit, excl. GST — original purchase price
@@ -1966,12 +2059,14 @@ export function ProductDetailClient({
                       gstRate,
                     })}
                     variant="pdp"
-                    format={format}
+                    format={formatPrice}
                   />
                 ) : pricing && pricing.status === 'missing' ? (
                   <div>
                     <p className="text-sm font-medium text-gray-900">
-                      Price on request
+                      {priceCountryCode
+                        ? `${product.name} is not orderable to ${priceCountryCode} yet`
+                        : 'Price on request'}
                     </p>
                     <a
                       href="mailto:hello@theprint-room.co.nz"

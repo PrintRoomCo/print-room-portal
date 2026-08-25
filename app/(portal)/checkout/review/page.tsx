@@ -3,6 +3,8 @@ import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { CheckoutReviewClient } from '@/components/checkout/CheckoutReviewClient'
 import type { StoreOption } from '@/components/checkout/ShipToRow'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
 
 export const metadata: Metadata = {
   title: 'Review order',
@@ -23,6 +25,10 @@ export default async function CheckoutReviewPage() {
     .order('name')
 
   const stores = ((rawStores ?? []) as StoreOption[]) ?? []
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(admin, context.organizationId)
+    : null
 
   return (
     <CheckoutReviewClient
@@ -34,6 +40,8 @@ export default async function CheckoutReviewPage() {
       role={context.role}
       branchStoreIds={context.branchStoreIds}
       defaultStoreId={context.defaultStoreId}
+      defaultPriceCurrency={defaultCountry?.currency ?? null}
+      countryPartitionEnabled={countryPartitionEnabled}
     />
   )
 }

@@ -1,5 +1,6 @@
 import { sendEmail, type SendEmailResult } from '@/lib/email/client'
 import { getSupabaseServer } from '@/lib/supabase'
+import { formatCurrency } from '@/lib/utils'
 import {
   wrapBrandedEmail,
   escapeHtml,
@@ -38,13 +39,12 @@ export interface OrderConfirmationParams {
     quantity: number
     unitPrice: number
   }>
-  /** Billing currency. AUD renders every money figure with an A$ prefix so staff
-   *  and customers can never misread an AUD figure as NZD. Default NZD. */
-  currency?: 'NZD' | 'AUD'
+  /** Immutable ISO-4217 billing currency stamped on the quote. Default NZD. */
+  currency?: string
 }
 
-function formatMoney(n: number, currency: 'NZD' | 'AUD' = 'NZD'): string {
-  return `${currency === 'AUD' ? 'A$' : '$'}${n.toFixed(2)}`
+function formatMoney(n: number, currency = 'NZD'): string {
+  return formatCurrency(n, currency)
 }
 
 /** True when the variant label carries real content (not an empty/placeholder dash). */

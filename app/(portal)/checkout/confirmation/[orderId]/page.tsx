@@ -14,7 +14,7 @@ import {
   pickCatalogueFrontImage,
   type CatalogueFrontImageRow,
 } from '@/lib/shop/catalogue-front-image'
-import { gstRateForRegion } from '@/lib/pricing/gst'
+import { currencyForRegion, gstRateForRegion } from '@/lib/pricing/gst'
 
 interface OrderRow {
   id: string
@@ -34,6 +34,12 @@ interface OrderRow {
     billed_total: number | null
     shipping_address: unknown
     required_by: string | null
+    bill_country: string | null
+    currency: string | null
+    countries:
+      | { name: string; tax_rate: number | string; tax_label: string }
+      | Array<{ name: string; tax_rate: number | string; tax_label: string }>
+      | null
   } | null
 }
 
@@ -120,7 +126,8 @@ export default async function ConfirmationPage({
        quotes!inner (
          id, order_ref, monday_item_id, organization_id,
          subtotal, decoration_cost, tax, picking_fee, billed_total,
-         shipping_address, required_by
+         shipping_address, required_by, bill_country, currency,
+         countries!quotes_bill_country_fkey(name, tax_rate, tax_label)
        )`,
     )
     .eq('id', orderId)
@@ -143,15 +150,31 @@ export default async function ConfirmationPage({
     return notFound()
   }
 
-  // AU Stage 1: quotes.tax is never written (always 0), so this fallback rate is
-  // the effective GST path. Region-aware; NZ output is bit-identical to the old
-  // hardcoded 0.15 constant this replaced.
-  const { data: orgRegionRow } = await admin
-    .from('organizations')
-    .select('region')
-    .eq('id', order.quotes.organization_id!)
-    .maybeSingle()
-  const gstRate = gstRateForRegion((orgRegionRow as { region?: string | null } | null)?.region)
+  const stampedCountry = pickOne(order.quotes.countries)
+  let gstRate: number
+  let taxLabel: string
+  let currency: string
+  let countryName: string | null
+  if (order.quotes.bill_country && stampedCountry && order.quotes.currency) {
+    gstRate = Number(stampedCountry.tax_rate)
+    taxLabel = stampedCountry.tax_label
+    currency = order.quotes.currency
+    countryName = stampedCountry.name
+  } else {
+    // Historical pre-SP3 compatibility only: old quotes have no bill-country
+    // stamp, so retain the legacy organization-region reconstruction.
+    const { data: orgRegionRow } = await admin
+      .from('organizations')
+      .select('region')
+      .eq('id', order.quotes.organization_id!)
+      .maybeSingle()
+    const legacyRegion =
+      (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
+    gstRate = gstRateForRegion(legacyRegion)
+    taxLabel = `GST ${Math.round(gstRate * 100)}%`
+    currency = order.quotes.currency ?? currencyForRegion(legacyRegion)
+    countryName = null
+  }
 
   const orderRef = order.quotes.order_ref ?? '—'
   const awaitingApproval = order.status === 'awaiting-approval'
@@ -325,6 +348,9 @@ export default async function ConfirmationPage({
           gst={gst}
           totalIncGst={totalIncGst}
           gstRate={gstRate}
+          currency={currency}
+          taxLabel={taxLabel}
+          countryName={countryName}
         />
       </div>
     </div>

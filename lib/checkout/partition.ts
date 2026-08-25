@@ -1,4 +1,5 @@
 import type { CheckoutLineInput } from '@/lib/checkout/submit'
+import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
 
 export type CheckoutOrderType = 'purchase_order' | 'stock_on_hand'
 
@@ -8,6 +9,15 @@ export interface FulfilmentPartition<T> {
 }
 
 export type CheckoutPartition = FulfilmentPartition<CheckoutLineInput>
+
+export type CheckoutFulfilmentGroup = CheckoutOrderType
+
+export interface CountryPartition<T> {
+  key: `${string}:${CheckoutFulfilmentGroup}`
+  countryCode: string
+  orderType: CheckoutFulfilmentGroup
+  lines: T[]
+}
 
 /**
  * The split rule, independent of line shape: a line joins 'stock_on_hand' iff
@@ -47,4 +57,38 @@ export function partitionByFulfilment<T>(
  */
 export function partitionCheckoutLines(lines: CheckoutLineInput[]): CheckoutPartition[] {
   return partitionByFulfilment(lines, (line) => line.fulfilment_type === 'stocked')
+}
+
+export function partitionByCountryAndFulfilment<
+  T extends { fulfilment_type: string; ship_country: string },
+>(lines: readonly T[], countryOrder: readonly string[] = []): CountryPartition<T>[] {
+  const linesByCountry = new Map<string, T[]>()
+  for (const line of lines) {
+    const countryCode = isoCountryOrNull(line.ship_country)
+    if (!countryCode || line.ship_country !== countryCode) {
+      throw new Error(`Invalid checkout ship_country: ${line.ship_country}`)
+    }
+    const countryLines = linesByCountry.get(countryCode) ?? []
+    countryLines.push(line)
+    linesByCountry.set(countryCode, countryLines)
+  }
+
+  const preferredCountries = countryOrder
+    .map((country) => isoCountryOrNull(country))
+    .filter((country): country is string => country !== null && linesByCountry.has(country))
+  const remainingCountries = [...linesByCountry.keys()]
+    .filter((country) => !preferredCountries.includes(country))
+    .sort()
+
+  return [...new Set([...preferredCountries, ...remainingCountries])].flatMap((countryCode) =>
+    partitionByFulfilment(
+      linesByCountry.get(countryCode) ?? [],
+      (line) => line.fulfilment_type === 'stocked',
+    ).map((partition) => ({
+      key: `${countryCode}:${partition.orderType}` as const,
+      countryCode,
+      orderType: partition.orderType,
+      lines: partition.lines,
+    })),
+  )
 }

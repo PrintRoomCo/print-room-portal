@@ -12,6 +12,9 @@ import {
   pickCatalogueFrontImage,
   type CatalogueFrontImageRow,
 } from '@/lib/shop/catalogue-front-image'
+import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
+import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
+import { effectiveUnitPriceForItem } from '@/lib/shop/effective-price'
 
 function pickOne<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null
@@ -43,6 +46,10 @@ export async function POST(request: Request) {
   if (!quote || quote.organization_id !== auth.context.organizationId) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
+  const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
+  const defaultCountry = countryPartitionEnabled
+    ? await getOrgDefaultBillingCountry(auth.admin, auth.context.organizationId)
+    : null
 
   // variant labels embed cleanly (variant_id is a real FK to product_variants);
   // product images do NOT (product_id is a text column → no PostgREST embed),
@@ -163,12 +170,34 @@ export async function POST(request: Request) {
     const k = aggKey(l)
     totalQtyByKey.set(k, (totalQtyByKey.get(k) ?? 0) + l.qty)
   }
+  const priceKey = (line: RebuildLine) =>
+    countryPartitionEnabled
+      ? `${aggKey(line)}::${line.catalogueItemId ?? ''}`
+      : aggKey(line)
   const priceByKey = new Map<string, number>()
+  const uniquePriceLines = new Map<string, RebuildLine>()
+  for (const line of lines) uniquePriceLines.set(priceKey(line), line)
   await Promise.all(
-    Array.from(totalQtyByKey.entries()).map(async ([key, totalQty]) => {
-      const productId = key.slice(0, key.indexOf('::'))
+    Array.from(uniquePriceLines.entries()).map(async ([key, line]) => {
+      const totalQty = totalQtyByKey.get(aggKey(line)) ?? line.qty
+      if (countryPartitionEnabled) {
+        if (!line.catalogueItemId || !defaultCountry) {
+          priceByKey.set(key, 0)
+          return
+        }
+        const unit = await effectiveUnitPriceForItem(
+          auth.admin,
+          line.catalogueItemId,
+          auth.context.organizationId,
+          totalQty,
+          defaultCountry.currency,
+          true,
+        )
+        priceByKey.set(key, unit ?? 0)
+        return
+      }
       const { data: unit } = await auth.admin.rpc('effective_unit_price', {
-        p_product_id: productId,
+        p_product_id: line.productId,
         p_org_id: auth.context.organizationId,
         p_qty: totalQty,
       })
@@ -200,7 +229,8 @@ export async function POST(request: Request) {
 
   const priced: RebuildLine[] = lines.map((l) => ({
     ...l,
-    unitPrice: priceByKey.get(aggKey(l)) ?? 0,
+    unitPrice: priceByKey.get(priceKey(l)) ?? 0,
+    ...(defaultCountry ? { priceCurrency: defaultCountry.currency } : {}),
     nature: natureOf(l),
     billingMode: l.variantId
       ? billingModeByVariant.get(l.variantId) ?? 'invoice_on_dispatch'

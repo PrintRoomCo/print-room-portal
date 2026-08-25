@@ -46,6 +46,8 @@ export function normalizeDecorations(raw: unknown): CartLineDecoration[] {
       unitPrice: d.unitPrice,
       artworkUrl: typeof d.artworkUrl === 'string' ? d.artworkUrl : null,
       snapshotUrl: typeof d.snapshotUrl === 'string' ? d.snapshotUrl : null,
+      renditionId: typeof d.renditionId === 'string' ? d.renditionId : null,
+      renditionLabel: typeof d.renditionLabel === 'string' ? d.renditionLabel : null,
       brackets: normalizeBrackets(d.brackets),
     })
   }
@@ -95,6 +97,10 @@ export function normalizePersisted(raw: unknown): CartState {
         typeof l.sizeLabel === 'string' ? l.sizeLabel : null,
       qty: typeof l.qty === 'number' && l.qty > 0 ? l.qty : 1,
       unitPrice: typeof l.unitPrice === 'number' ? l.unitPrice : 0,
+      priceCurrency:
+        typeof l.priceCurrency === 'string' && /^[A-Z]{3}$/.test(l.priceCurrency)
+          ? l.priceCurrency
+          : undefined,
       imageUrl: typeof l.imageUrl === 'string' ? l.imageUrl : null,
       shipToStoreId:
         typeof l.shipToStoreId === 'string' || l.shipToStoreId === null

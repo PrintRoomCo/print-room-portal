@@ -25,6 +25,10 @@ export interface CartLineDecoration {
   artworkUrl: string | null
   /** designer-rendered mockup if present (Phase 8+); null in Phase 5. */
   snapshotUrl: string | null
+  /** Exact production file identity resolved for this line's colourway. */
+  renditionId?: string | null
+  /** Staff-facing production label (for example “White ink”). */
+  renditionLabel?: string | null
   /**
    * Decoration's own qty-band ladder, snapshotted at add-time. When present,
    * `recomputeProductTierPrices` re-picks `unitPrice` from this ladder on cart
@@ -73,6 +77,8 @@ export interface CartLine {
   sizeLabel?: string | null
   qty: number
   unitPrice: number
+  /** Canonical authored list currency. Absent only on legacy persisted carts. */
+  priceCurrency?: string
   imageUrl: string | null
   shipToStoreId?: string | null
   /**
@@ -246,8 +252,9 @@ export function lineSignature(
   sizeId: number | null = null,
   locationLabel: string | null = null,
   customName: string | null = null,
+  priceCurrency?: string,
 ): string {
-  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}::${customName ?? ''}`
+  return `${catalogueItemId ?? productId}::${variantId}::${sizeId ?? ''}::${locationLabel ?? ''}::${variantLabel}::${fulfilmentType}::${decorationSignature(decorations)}::${customName ?? ''}::${priceCurrency ?? ''}`
 }
 
 /**

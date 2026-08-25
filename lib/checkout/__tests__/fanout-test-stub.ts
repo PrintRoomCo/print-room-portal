@@ -10,12 +10,20 @@
  */
 import { vi } from 'vitest'
 import type { submitCustomerOrder } from '../submit'
+import type { BillingCountryConfig } from '@/lib/account/org-countries'
 
 type AnyRow = Record<string, unknown>
 
 export interface RpcCallRecord {
   name: string
   args: AnyRow | undefined
+}
+
+export interface WriteCallRecord {
+  table: string
+  operation: 'insert' | 'update'
+  value: unknown
+  filters: Array<{ op: string; column: string; value: unknown }>
 }
 
 export interface StubLink {
@@ -51,6 +59,7 @@ export interface StubItem {
   /** Pooled decoration pricing — the owning catalogue and its opt-in flag. */
   catalogueId?: string
   poolingEnabled?: boolean
+  stockUnitPrice?: number | null
 }
 
 export interface StubProduct {
@@ -63,6 +72,7 @@ export interface StubConfig {
   items: StubItem[]
   products: StubProduct[]
   links: StubLink[]
+  resolvedRenditions?: AnyRow[]
   /** null → no b2b_accounts row (multiplier falls back to 1). */
   tier?: { tierDiscountOverride?: number | null; multiplier?: number } | null
   /** Return value for effective_decoration_unit_price, keyed by org_decoration_id. null → RPC returns null. */
@@ -70,12 +80,58 @@ export interface StubConfig {
   /** Return value for catalogue_item_decoration_price, keyed by catalogue_item_id. */
   manualCombinedPrice?: (catalogueItemId: string, qty: number) => number | null
   garmentUnitPrice?: number
+  garmentUnitPriceForCurrency?: (
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  stockUnitPriceForCurrency?: (catalogueItemId: string, currency: string) => number | null
+  decorationPriceForCurrency?: (
+    orgDecorationId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  manualCombinedPriceForCurrency?: (
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  periodUnitPriceForCurrency?: (
+    periodId: string,
+    catalogueItemId: string,
+    qty: number,
+    currency: string,
+  ) => number | null
+  openPeriod?: { id: string; closesAt: string } | null
   /** Inject an error for a table's select (message → PostgREST-style error). */
   selectErrorFor?: Record<string, string>
+  /** Legacy organization billing facts used by checkout's flag-off path. */
+  organization?: { region: 'NZ' | 'AU'; isTest?: boolean }
+  /** ISO countries enabled for one-time-address validation. */
+  enabledCountryCodes?: string[]
+  enabledCountries?: BillingCountryConfig[]
+  stores?: Array<{
+    id: string
+    name: string
+    address: string
+    city: string
+    state?: string | null
+    country: string
+    postalCode: string
+    organizationId?: string
+  }>
+  /** Stable committed row returned by the submit system boundary. */
+  submitResult?: { quoteId: string; orderId: string; orderRef: string }
 }
 
 export function makeFanoutStub(config: StubConfig) {
   const rpcCalls: RpcCallRecord[] = []
+  const writeCalls: WriteCallRecord[] = []
+  const persistedQuotes: Array<{
+    id: string
+    bill_country: string
+    currency: string
+  }> = []
   const fromCounts = new Map<string, number>()
 
   const itemRows = config.items.map((i) => ({
@@ -85,7 +141,13 @@ export function makeFanoutStub(config: StubConfig) {
     moq_override: i.moqOverride ?? null,
     fulfilment_type_override: i.fulfilmentTypeOverride ?? null,
     catalogue_id: i.catalogueId ?? 'cat-stub',
+    stock_unit_price: i.stockUnitPrice ?? null,
     b2b_catalogues: { decoration_pooling_enabled: i.poolingEnabled === true },
+    products: {
+      fulfilment_type:
+        config.products.find((product) => product.id === i.sourceProductId)?.fulfilmentType ??
+        'made_to_order',
+    },
   }))
 
   // org_decorations, as read by loadPoolableDecorationIds. Deduped by id: one
@@ -118,6 +180,8 @@ export function makeFanoutStub(config: StubConfig) {
     b2b_catalogue_items: { id: l.catalogueItemId, source_product_id: l.sourceProductId },
     org_decorations: {
       id: l.orgDecoration.id,
+      artwork_id:
+        l.orgDecoration.artworkId === undefined ? 'art-stub' : l.orgDecoration.artworkId,
       organization_id: l.orgDecoration.organizationId,
       name: l.orgDecoration.name,
       decoration_method: l.orgDecoration.method ?? 'screenprint',
@@ -199,14 +263,19 @@ export function makeFanoutStub(config: StubConfig) {
       }
     }
     if (table === 'quotes') {
+      const result = config.submitResult ?? {
+        quoteId: 'quote-1',
+        orderId: 'order-1',
+        orderRef: 'ORD-TEST-1',
+      }
       return {
         data: [
           {
-            id: 'quote-1',
+            id: result.quoteId,
             organization_id: 'org-stub',
             customer_name: 'Acme Co',
             customer_email: 'buyer@acme.test',
-            order_ref: 'ORD-TEST-1',
+            order_ref: result.orderRef,
             total_amount: 125,
             required_by: null,
             payment_terms: 'net20',
@@ -215,7 +284,70 @@ export function makeFanoutStub(config: StubConfig) {
         error: null,
       }
     }
-    if (table === 'organizations') return { data: [{ is_test: true }], error: null }
+    if (table === 'organization_countries') {
+      if (config.enabledCountries) {
+        return {
+          data: config.enabledCountries.map((country) => ({
+            country_code: country.code,
+            is_default: country.isDefault,
+            countries: {
+              name: country.name,
+              currency: country.currency,
+              tax_rate: country.taxRate,
+              tax_label: country.taxLabel,
+            },
+          })),
+          error: null,
+        }
+      }
+      return {
+        data: (config.enabledCountryCodes ?? ['NZ']).map((countryCode) => ({
+          country_code: countryCode,
+        })),
+        error: null,
+      }
+    }
+    if (table === 'stores') {
+      let rows = (config.stores ?? []).map((store) => ({
+        id: store.id,
+        name: store.name,
+        address: store.address,
+        city: store.city,
+        state: store.state ?? null,
+        country: store.country,
+        postal_code: store.postalCode,
+        organization_id: store.organizationId ?? 'org-1',
+      }))
+      for (const f of filters) {
+        if (f.op === 'in' && f.column === 'id') {
+          const ids = new Set(f.value as string[])
+          rows = rows.filter((row) => ids.has(row.id))
+        }
+        if (f.op === 'eq' && f.column === 'organization_id') {
+          rows = rows.filter((row) => row.organization_id === f.value)
+        }
+      }
+      return { data: rows, error: null }
+    }
+    if (table === 'b2b_ordering_periods') {
+      return {
+        data: config.openPeriod
+          ? [{ id: config.openPeriod.id, closes_at: config.openPeriod.closesAt }]
+          : [],
+        error: null,
+      }
+    }
+    if (table === 'organizations') {
+      return {
+        data: [
+          {
+            is_test: config.organization?.isTest ?? true,
+            region: config.organization?.region ?? 'NZ',
+          },
+        ],
+        error: null,
+      }
+    }
     return { data: [], error: null }
   }
 
@@ -230,12 +362,14 @@ export function makeFanoutStub(config: StubConfig) {
 
     const builder = {
       select: () => builder,
-      insert: () => {
+      insert: (value: unknown) => {
         pendingWrite = true
+        writeCalls.push({ table, operation: 'insert', value, filters })
         return builder
       },
-      update: () => {
+      update: (value: unknown) => {
         pendingWrite = true
+        writeCalls.push({ table, operation: 'update', value, filters })
         return builder
       },
       eq: (column: string, value: unknown) => {
@@ -278,12 +412,47 @@ export function makeFanoutStub(config: StubConfig) {
       if (name === 'effective_unit_price_for_item' || name === 'effective_unit_price') {
         return { data: config.garmentUnitPrice ?? 12.5, error: null }
       }
+      if (name === 'resolve_catalogue_decoration_renditions') {
+        return { data: config.resolvedRenditions ?? [], error: null }
+      }
+      if (name === 'effective_unit_price_for_item_currency') {
+        return {
+          data:
+            config.garmentUnitPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
+      if (name === 'catalogue_stock_unit_price_for_currency') {
+        return {
+          data:
+            config.stockUnitPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
       if (name === 'effective_decoration_unit_price') {
         const v = config.decorationRpcPrice?.(
           args?.p_org_decoration_id as string,
           args?.p_qty as number,
         )
         return { data: v ?? null, error: null }
+      }
+      if (name === 'effective_decoration_unit_price_for_currency') {
+        return {
+          data:
+            config.decorationPriceForCurrency?.(
+              args?.p_org_decoration_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
       }
       if (name === 'catalogue_item_decoration_price') {
         const v = config.manualCombinedPrice?.(
@@ -292,9 +461,56 @@ export function makeFanoutStub(config: StubConfig) {
         )
         return { data: v ?? null, error: null }
       }
-      if (name === 'submit_b2b_order') {
+      if (name === 'catalogue_item_decoration_price_for_currency') {
         return {
-          data: [{ quote_id: 'quote-1', order_id: 'order-1', order_ref: 'ORD-TEST-1' }],
+          data:
+            config.manualCombinedPriceForCurrency?.(
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
+      if (name === 'period_unit_price_for_currency') {
+        return {
+          data:
+            config.periodUnitPriceForCurrency?.(
+              args?.p_period_id as string,
+              args?.p_catalogue_item_id as string,
+              args?.p_qty as number,
+              args?.p_currency as string,
+            ) ?? null,
+          error: null,
+        }
+      }
+      if (name === 'submit_b2b_order' || name === 'submit_b2b_order_for_country') {
+        const result = config.submitResult ?? {
+          quoteId: 'quote-1',
+          orderId: 'order-1',
+          orderRef: 'ORD-TEST-1',
+        }
+        if (name === 'submit_b2b_order_for_country') {
+          const billCountry = args?.p_bill_country as string
+          const currency = config.enabledCountries?.find(
+            (country) => country.code === billCountry,
+          )?.currency
+          if (currency) {
+            persistedQuotes.push({
+              id: result.quoteId,
+              bill_country: billCountry,
+              currency,
+            })
+          }
+        }
+        return {
+          data: [
+            {
+              quote_id: result.quoteId,
+              order_id: result.orderId,
+              order_ref: result.orderRef,
+            },
+          ],
           error: null,
         }
       }
@@ -305,7 +521,7 @@ export function makeFanoutStub(config: StubConfig) {
   const rpcCount = (name: string) => rpcCalls.filter((c) => c.name === name).length
   const fromCount = (table: string) => fromCounts.get(table) ?? 0
 
-  return { admin, rpcCalls, rpcCount, fromCount }
+  return { admin, rpcCalls, writeCalls, persistedQuotes, rpcCount, fromCount }
 }
 
 export function makeContext(orgId: string) {

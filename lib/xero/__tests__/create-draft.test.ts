@@ -257,6 +257,33 @@ describe('createDraftInvoiceForOrder — Xero failure propagates', () => {
 })
 
 describe('createDraftInvoiceForOrder — region routing + not_connected gate', () => {
+  it('skips and audits an unsupported exact bill-country stamp without touching Xero', async () => {
+    mockConnected.mockResolvedValue(false)
+    const { admin, updates } = fakeAdmin({ cachedContactId: null, quoteItems: [] })
+
+    const res = await createDraftInvoiceForOrder(admin, {
+      ...args,
+      billCountry: 'GB',
+    } as CreateDraftInvoiceArgs & { billCountry: string })
+
+    expect(res).toEqual({ status: 'skipped', reason: 'unsupported_country' })
+    expect(updates).toEqual([
+      { table: 'orders', payload: { xero_invoice_status: 'skipped' } },
+    ])
+    expect(mockAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'order.xero_draft_skipped',
+        metadata: expect.objectContaining({
+          reason: 'unsupported_country',
+          billCountry: 'GB',
+        }),
+      }),
+      admin,
+    )
+    expect(mockConnected).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it.each(['NZ', 'AU'] as const)(
     '%s org while Xero is NOT connected: skips not_connected, audits with region, zero HTTP',
     async (region) => {

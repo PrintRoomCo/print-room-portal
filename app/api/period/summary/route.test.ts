@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   role: 'org_admin' as 'org_admin' | 'staff',
   rpc: vi.fn(),
   from: vi.fn(),
+  pricingFilters: [] as Array<[string, unknown]>,
 }))
 
 vi.mock('@/lib/checkout/server', () => ({
@@ -40,9 +41,35 @@ const priceBands = [
 function pricingBuilder() {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),
-    eq: vi.fn(() => builder),
+    eq: vi.fn((column: string, value: unknown) => {
+      mocks.pricingFilters.push([column, value])
+      return builder
+    }),
     in: vi.fn(() => builder),
     order: vi.fn(async () => ({ data: priceBands, error: null })),
+  }
+  return builder
+}
+
+function countryBuilder() {
+  const builder: Record<string, unknown> = {
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    then: (resolve: (value: { data: unknown[] }) => unknown) =>
+      resolve({
+        data: [
+          {
+            country_code: 'AU',
+            is_default: true,
+            countries: {
+              name: 'Australia',
+              currency: 'AUD',
+              tax_rate: 0.1,
+              tax_label: 'GST 10%',
+            },
+          },
+        ],
+      }),
   }
   return builder
 }
@@ -59,11 +86,18 @@ async function getSummary() {
 describe('GET /api/period/summary', () => {
   beforeEach(() => {
     mocks.role = 'org_admin'
+    mocks.pricingFilters = []
+    delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
     mocks.rpc.mockResolvedValue({ data: progressRows, error: null })
     mocks.from.mockImplementation((table: string) => {
       if (table === 'b2b_ordering_period_item_pricing') return pricingBuilder()
+      if (table === 'organization_countries') return countryBuilder()
       throw new Error(`Unexpected table: ${table}`)
     })
+  })
+
+  afterEach(() => {
+    delete process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED
   })
 
   it('uses cart quantity and skips boundaries without a price drop', async () => {
@@ -90,5 +124,20 @@ describe('GET /api/period/summary', () => {
     expect(body.items[0].aggQty).toBeNull()
     expect(body.items[0].unitsToNextBreak).toBe(52)
     expect(body.items[0].franchiseSavings).toBe(95.04)
+  })
+
+  it('resolves and filters the authored default currency without trusting the request', async () => {
+    process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED = 'true'
+    const { GET } = await import('./route')
+    const response = await GET(
+      new Request(
+        'http://localhost/api/period/summary?item=duffel-item%3A48&currency=NZD',
+      ),
+    )
+
+    const body = await response.json()
+    expect(body.currency).toBe('AUD')
+    expect(mocks.pricingFilters).toContainEqual(['currency', 'AUD'])
+    expect(mocks.pricingFilters).not.toContainEqual(['currency', 'NZD'])
   })
 })

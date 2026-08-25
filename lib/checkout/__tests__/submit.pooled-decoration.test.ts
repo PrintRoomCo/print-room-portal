@@ -10,7 +10,7 @@
  *      arguments are identical to the pre-pooling ones. Same fixture, both flag
  *      states, compared.
  *   2. NEVER INFLATE REAL QUANTITIES — the pooled quantity appears ONLY as an
- *      RPC qty argument. `submit_b2b_order`'s line quantities, and therefore MOQ,
+ *      RPC qty argument. `submit_b2b_order_for_country`'s line quantities, and therefore MOQ,
  *      billed totals and order-type classification, are untouched.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -154,7 +154,7 @@ async function run(config: StubConfig, input: CheckoutInput) {
         .sort((a, b) => a - b),
     garmentQtys: () => qtysFor('effective_unit_price_for_item', 'p_qty').sort((a, b) => a - b),
     submittedLines: () =>
-      (stub.rpcCalls.find((c) => c.name === 'submit_b2b_order')?.args?.p_lines ??
+      (stub.rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines ??
         []) as Array<Record<string, unknown>>,
   }
 }

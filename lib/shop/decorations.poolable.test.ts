@@ -20,6 +20,11 @@ function makeAdmin(rows: Row[], ladderRows: Row[] = []): SupabaseClient {
       eq: () => b,
       in: () => b,
       order: () => b,
+      maybeSingle: () =>
+        Promise.resolve({
+          data: table === 'b2b_catalogue_items' ? { source_product_id: null } : data[0] ?? null,
+          error: null,
+        }),
       then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
         Promise.resolve({ data, error: null }).then(resolve, reject),
     }
@@ -27,6 +32,7 @@ function makeAdmin(rows: Row[], ladderRows: Row[] = []): SupabaseClient {
   }
   return {
     from: (table: string) => builder(table),
+    rpc: async () => ({ data: [], error: null }),
     storage: { from: () => ({ getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
   } as unknown as SupabaseClient
 }

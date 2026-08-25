@@ -28,6 +28,42 @@ describe('effectiveUnitPriceForItem', () => {
     const { admin } = mockAdmin({ error: new Error('boom') })
     await expect(effectiveUnitPriceForItem(admin, 'item-1', 'org-1', 1)).rejects.toThrow('boom')
   })
+
+  it('uses the exact target-currency RPC when country partitioning is enabled', async () => {
+    const { admin, rpc } = mockAdmin({ data: '25.40' })
+
+    await expect(
+      effectiveUnitPriceForItem(admin, 'item-au', 'org-1', 100, 'AUD', true),
+    ).resolves.toBe(25.4)
+    expect(rpc).toHaveBeenCalledWith('effective_unit_price_for_item_currency', {
+      p_catalogue_item_id: 'item-au',
+      p_org_id: 'org-1',
+      p_qty: 100,
+      p_currency: 'AUD',
+    })
+  })
+
+  it('preserves an authored zero and returns null only when the target list is missing', async () => {
+    const zero = mockAdmin({ data: 0 })
+    await expect(
+      effectiveUnitPriceForItem(zero.admin, 'item-au', 'org-1', 100, 'AUD', true),
+    ).resolves.toBe(0)
+
+    const missing = mockAdmin({ data: null })
+    await expect(
+      effectiveUnitPriceForItem(missing.admin, 'item-au', 'org-1', 100, 'AUD', true),
+    ).resolves.toBeNull()
+  })
+
+  it('keeps the legacy RPC name and arguments byte-identical when the flag is off', async () => {
+    const { admin, rpc } = mockAdmin({ data: 12 })
+    await effectiveUnitPriceForItem(admin, 'item-1', 'org-1', 24, 'AUD', false)
+    expect(rpc).toHaveBeenCalledWith('effective_unit_price_for_item', {
+      p_catalogue_item_id: 'item-1',
+      p_org_id: 'org-1',
+      p_qty: 24,
+    })
+  })
 })
 
 describe('effectiveUnitPricesForItemsBulk', () => {

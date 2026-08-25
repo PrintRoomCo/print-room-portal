@@ -27,6 +27,8 @@ interface ProductCardData {
   price_low: number
   price_high: number
   price_status: 'ok' | 'missing'
+  /** Canonical authored list currency; absent preserves legacy visitor conversion. */
+  price_currency?: string
   /**
    * Explicit ex-GST stock sell price (Stock-on-hand). When set, the card shows
    * this single price instead of the computed range, so the card and the PDP
@@ -94,15 +96,16 @@ export function ProductCard({ product }: ProductCardProps) {
             </dd>
             <dd className="whitespace-nowrap font-medium tracking-wider text-gray-900">
               {product.stock_unit_price != null ? (
-                <Money nzd={product.stock_unit_price} />
+                <Money nzd={product.stock_unit_price} currency={product.price_currency} />
               ) : product.price_status === 'missing' ? (
                 'On request'
               ) : product.price_high > product.price_low ? (
                 <>
-                  <Money nzd={product.price_high} /> – <Money nzd={product.price_low} />
+                  <Money nzd={product.price_high} currency={product.price_currency} /> –{' '}
+                  <Money nzd={product.price_low} currency={product.price_currency} />
                 </>
               ) : (
-                <Money nzd={product.price_low} />
+                <Money nzd={product.price_low} currency={product.price_currency} />
               )}
             </dd>
           </dl>

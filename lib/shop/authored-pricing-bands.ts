@@ -8,12 +8,14 @@ export interface AuthoredPricingBand {
 export async function loadAuthoredPricingBands(
   admin: SupabaseClient,
   catalogueItemId: string,
+  targetCurrency = 'NZD',
+  countryPartitionEnabled = false,
 ): Promise<AuthoredPricingBand[]> {
   const { data } = await admin
     .from('b2b_catalogue_item_pricing_tiers')
     .select('min_quantity, max_quantity')
     .eq('catalogue_item_id', catalogueItemId)
-    .eq('currency', 'NZD')
+    .eq('currency', countryPartitionEnabled ? targetCurrency : 'NZD')
     .order('min_quantity', { ascending: true })
 
   return (data ?? []).map((row) => ({

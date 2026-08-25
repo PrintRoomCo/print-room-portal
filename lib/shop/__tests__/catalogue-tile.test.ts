@@ -44,4 +44,14 @@ describe('toProductTile', () => {
     expect(tile.href).toBe('/catalogue/p1')
     expect(tile.product.swatches).toEqual([{ hex: '#191919', label: 'Black' }])
   })
+
+  it('carries the canonical authored currency and exact stock scalar to the card', () => {
+    const tile = toProductTile({
+      ...base,
+      price_currency: 'AUD',
+      stock_unit_price: 0,
+    })
+    expect(tile.product.price_currency).toBe('AUD')
+    expect(tile.product.stock_unit_price).toBe(0)
+  })
 })

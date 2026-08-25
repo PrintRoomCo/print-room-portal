@@ -3,9 +3,16 @@ import { xeroFetch } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { recordAuditEvent } from '@/lib/audit/recordEvent'
 import { AUDIT_ACTIONS } from '@/lib/audit/actions'
-import { getXeroConfig, isXeroEnabled, type XeroRegion } from './config'
+import {
+  getXeroConfig,
+  isXeroEnabled,
+  xeroRegionForBillCountry,
+  type XeroRegion,
+} from './config'
 import { isXeroConnectedForRegion } from './token-store'
 import { evaluateXeroEligibility } from './eligibility'
+
+export { xeroRegionForBillCountry } from './config'
 
 export interface XeroQuoteLineInput {
   description: string
@@ -338,7 +345,10 @@ export interface CreateDraftInvoiceArgs {
   isTestOrg: boolean
   /** organizations.region — selects the Xero organisation (tenant header +
    *  payload config). Not-connected regions skip with reason not_connected. */
-  orgRegion: XeroRegion
+  orgRegion: XeroRegion | null
+  /** Immutable quote billing stamp. When present this owns region selection;
+   *  orgRegion remains only for pre-SP3 callers during the dark cutover. */
+  billCountry?: string
   /** NZ picking fee for this order (0 when none applies). Added as a separate
    *  Xero line. Computed in submit.ts step 5c (stock-on-hand + NZ, region-gated). */
   pickingFee: number
@@ -385,10 +395,9 @@ export async function createDraftInvoiceForOrder(
     return { status: 'skipped', reason: elig.reason }
   }
 
-  // Not-connected gate, BOTH regions (spec §6): no token row, or this region's
-  // tenant unassigned → skip + audit; the order proceeds. Supersedes the AU
-  // dark-until-secrets gate — auth state is DB state now.
-  if (!(await isXeroConnectedForRegion(args.orgRegion))) {
+  const billCountry = args.billCountry ?? args.orgRegion
+  const xeroRegion = billCountry ? xeroRegionForBillCountry(billCountry) : null
+  if (!xeroRegion) {
     await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
     await recordAuditEvent(
       {
@@ -397,14 +406,42 @@ export async function createDraftInvoiceForOrder(
         action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_SKIPPED,
         targetType: 'order',
         targetId: args.orderId,
-        metadata: { order_ref: args.orderRef, reason: 'not_connected', region: args.orgRegion },
+        metadata: {
+          order_ref: args.orderRef,
+          billCountry,
+          reason: 'unsupported_country',
+        },
+      },
+      admin,
+    )
+    return { status: 'skipped', reason: 'unsupported_country' }
+  }
+
+  // Not-connected gate, BOTH regions (spec §6): no token row, or this region's
+  // tenant unassigned → skip + audit; the order proceeds. Supersedes the AU
+  // dark-until-secrets gate — auth state is DB state now.
+  if (!(await isXeroConnectedForRegion(xeroRegion))) {
+    await admin.from('orders').update({ xero_invoice_status: 'skipped' }).eq('id', args.orderId)
+    await recordAuditEvent(
+      {
+        orgId: args.organizationId,
+        actorUserId: args.actorUserId,
+        action: AUDIT_ACTIONS.ORDER_XERO_DRAFT_SKIPPED,
+        targetType: 'order',
+        targetId: args.orderId,
+        metadata: {
+          order_ref: args.orderRef,
+          billCountry,
+          reason: 'not_connected',
+          region: xeroRegion,
+        },
       },
       admin,
     )
     return { status: 'skipped', reason: 'not_connected' }
   }
 
-  const cfg = getXeroConfig(args.orgRegion)
+  const cfg = getXeroConfig(xeroRegion)
 
   // Contact — the quote is made out to the ship-to LOCATION (store): its own
   // cached id, its name (e.g. "Reburger Takapuna"), and its address/phone/email
@@ -430,7 +467,7 @@ export async function createDraftInvoiceForOrder(
     } | null
     if (store?.name) {
       const resolved = await resolveXeroContactId({
-        region: args.orgRegion,
+        region: xeroRegion,
         cachedContactId: store.xero_contact_id,
         name: store.name,
         email: store.email ?? args.ordererEmail,
@@ -463,7 +500,7 @@ export async function createDraftInvoiceForOrder(
       .maybeSingle()
     const cachedContactId = (orgRow as { xero_contact_id: string | null } | null)?.xero_contact_id ?? null
     resolvedContact = await resolveXeroContactId({
-      region: args.orgRegion,
+      region: xeroRegion,
       cachedContactId,
       name: args.organizationName,
       email: args.ordererEmail,
@@ -524,7 +561,7 @@ export async function createDraftInvoiceForOrder(
   // the same key returns the already-created draft instead of a duplicate.
   const res = await xeroFetch<XeroQuotesResponse>('/Quotes', {
     method: 'POST',
-    region: args.orgRegion,
+    region: xeroRegion,
     idempotencyKey: args.orderId,
     body: JSON.stringify({ Quotes: [payload] }),
   })

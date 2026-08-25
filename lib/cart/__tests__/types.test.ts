@@ -160,6 +160,53 @@ describe('lineSignature includes custom name', () => {
   })
 })
 
+describe('lineSignature includes canonical price currency', () => {
+  const signature = (priceCurrency?: string) =>
+    lineSignature(
+      'p1',
+      'v1',
+      'Black / L',
+      [],
+      'stocked',
+      null,
+      10,
+      null,
+      null,
+      priceCurrency,
+    )
+
+  it('keeps otherwise identical AUD and NZD snapshots as separate cart lines', () => {
+    expect(signature('AUD')).not.toBe(signature('NZD'))
+  })
+
+  it('omitting currency preserves legacy merge behaviour', () => {
+    expect(signature()).toBe(signature(undefined))
+  })
+
+  it('preserves the canonical currency while a qty edit reselects the volume band', () => {
+    const [repriced] = recomputeProductTierPrices([
+      {
+        lineId: 'aud-line',
+        productId: 'p1',
+        productName: 'Tee',
+        variantId: 'v1',
+        variantLabel: 'Black / L',
+        qty: 100,
+        unitPrice: 30,
+        priceCurrency: 'AUD',
+        imageUrl: null,
+        decorations: [],
+        brackets: [
+          { minQty: 24, maxQty: 99, unitPrice: 30 },
+          { minQty: 100, maxQty: null, unitPrice: 25 },
+        ],
+      },
+    ])
+
+    expect(repriced).toMatchObject({ qty: 100, unitPrice: 25, priceCurrency: 'AUD' })
+  })
+})
+
 describe('recomputeProductTierPrices', () => {
   // Canonical garment ladder used by every test below. Maps the price drop
   // pattern from the live engine: small qty = high amortization, qty 1000+ = cheap.
