@@ -56,6 +56,11 @@ export interface BilledPartition {
   total: number
 }
 
+/**
+ * Flag-off compatibility shape. The enabled country-partition UI uses
+ * CheckoutBillingShape, whose currency-keyed totals deliberately have no
+ * cross-currency grand total.
+ */
 export interface BilledOrderShape {
   partitions: BilledPartition[]
   /** Sum of every partition total, inc GST. What the customer pays. */

@@ -191,8 +191,10 @@ interface BilledOrderSummaryProps {
 }
 
 /**
- * Renders the billed shape: line rows grouped into the orders they will actually
- * become, each order's own fee/GST/total, and the grand total.
+ * Flag-off compatibility renderer. It renders the legacy billed shape: line
+ * rows grouped into the orders they will actually become, each order's own
+ * fee/GST/total, and the legacy same-currency grand total. Flag-on checkout uses
+ * CountryBilledOrderSummary and never mounts this renderer.
  *
  * Owns the STRUCTURE only — the caller passes `renderLine` because /checkout
  * renders a ship-to row and /checkout/review renders an image+decoration card.
