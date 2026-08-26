@@ -85,6 +85,17 @@ export async function effectiveDecorationPrice(
       })
 
   if (countryPartitionEnabled && (error || data == null || !Number.isFinite(Number(data)))) {
+    // The $0 'custom' placeholder is attached catalogue-wide and never pools
+    // (`lib/pricing/decoration-pooling.ts`), so it has no ladder and no engine
+    // branch — the RPC returns NULL for it in every currency, its own included.
+    // Failing that as "no price in this country" is what surfaced to customers
+    // as "<product> is not orderable to NZ yet" on a fully-configured NZ
+    // catalogue. Zero has no exchange rate, so a flat $0 decoration is $0
+    // anywhere: restore exactly that fallback and nothing wider. A NON-zero flat
+    // price still fails — being billed as another currency is the hole the
+    // country partition exists to close.
+    const flat = Number(input.unitPriceOverride ?? input.baseUnitPrice)
+    if (!error && Number.isFinite(flat) && flat === 0) return 0
     return null
   }
 

@@ -10,7 +10,7 @@ type AnyRow = Record<string, unknown>
 const ORG_ID = '00000000-0000-0000-0000-0000000000ff'
 const CAT_ITEM_ID = '00000000-0000-0000-0000-0000000000aa'
 
-function makeAdminStub() {
+function makeAdminStub(decorationUnitPrice: number = 99) {
   const rpcCalls: Array<{ name: string; args: AnyRow | undefined }> = []
 
   function builderFor(table: string) {
@@ -43,7 +43,7 @@ function makeAdminStub() {
                       id: 'link-1',
                       org_decoration_id: 'decoration-1',
                       catalogue_item_id: CAT_ITEM_ID,
-                      org_decorations: { unit_price: 99 },
+                      org_decorations: { unit_price: decorationUnitPrice },
                     },
                   ]
                 : [],
@@ -154,5 +154,56 @@ describe('POST /api/shop/decoration-pricing', () => {
         args: { p_catalogue_item_id: CAT_ITEM_ID, p_qty: 10, p_currency: 'AUD' },
       },
     ])
+  })
+})
+
+/**
+ * Parity with checkout (`lib/checkout/decoration-effective-price.ts`): the $0
+ * 'custom' placeholder has no ladder and no engine branch, so the currency RPC
+ * returns NULL for it in every currency. The PDP must price it at 0 exactly as
+ * the server bills it — otherwise a computed item carrying the placeholder sits
+ * permanently "not orderable", and cart and checkout disagree.
+ */
+describe('POST /api/shop/decoration-pricing — unpriceable $0 decoration', () => {
+  it('prices a $0 decoration at 0 under country pricing instead of null', async () => {
+    const { admin } = makeAdminStub(0)
+    vi.mocked(requireB2BCustomerApi).mockResolvedValue({
+      admin,
+      context: { organizationId: ORG_ID },
+    } as unknown as Awaited<ReturnType<typeof requireB2BCustomerApi>>)
+    process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED = 'true'
+
+    const res = await POST(
+      new Request('http://localhost/api/shop/decoration-pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qtys: [50], items: [{ linkId: 'link-1' }] }),
+      }),
+    )
+    const json = (await res.json()) as {
+      pricesByQty: Record<string, Record<string, number | null>>
+    }
+    expect(json.pricesByQty['50']['link-1']).toBe(0)
+  })
+
+  it('still returns null for a NON-zero decoration with no exact-currency price', async () => {
+    const { admin } = makeAdminStub(12.5)
+    vi.mocked(requireB2BCustomerApi).mockResolvedValue({
+      admin,
+      context: { organizationId: ORG_ID },
+    } as unknown as Awaited<ReturnType<typeof requireB2BCustomerApi>>)
+    process.env.CHECKOUT_COUNTRY_PARTITION_ENABLED = 'true'
+
+    const res = await POST(
+      new Request('http://localhost/api/shop/decoration-pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qtys: [50], items: [{ linkId: 'link-1' }] }),
+      }),
+    )
+    const json = (await res.json()) as {
+      pricesByQty: Record<string, Record<string, number | null>>
+    }
+    expect(json.pricesByQty['50']['link-1']).toBeNull()
   })
 })

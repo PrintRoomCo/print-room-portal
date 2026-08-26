@@ -269,6 +269,14 @@ export function ProductDetailClient({
     priceCurrency ? formatCurrency(amount, priceCurrency) : format(amount)
   const { access, defaultBillingCountry } = useCompany()
   const [countryDecorationUnavailable, setCountryDecorationUnavailable] = useState(false)
+  /**
+   * The exact-currency decoration re-price is DEBOUNCED and keyed on qty, so it
+   * re-opens on every quantity keystroke. Pending is not the same claim as
+   * unavailable: it blocks the CTA (we will not add at an unverified price) but
+   * must never render "not orderable to <country> yet", which previously swapped
+   * the entire ordering UI out from under anyone adjusting a quantity.
+   */
+  const [countryDecorationPending, setCountryDecorationPending] = useState(false)
   const gstRate = defaultBillingCountry.taxRate
 
   const firstVariant = variants[0] ?? null
@@ -749,16 +757,20 @@ export function ProductDetailClient({
     // has no recalcInputs (e.g. a legacy or manually-attached decoration)
     // would never fetch the combined and the PDP would show $0 decoration.
     if (recalcItems.length === 0 && !isManualPricing) {
-      if (priceCurrency) setCountryDecorationUnavailable(false)
+      if (priceCurrency) {
+        setCountryDecorationUnavailable(false)
+        setCountryDecorationPending(false)
+      }
       return
     }
     if (!Number.isInteger(qty) || qty <= 0) return
 
     // An enabled-country amount is orderable only after the exact currency RPC
-    // has answered for every required decoration. Keep the CTA blocked while
-    // the request is pending or unavailable; legacy flag-off pricing retains
-    // its existing optimistic/static-fallback behaviour.
-    if (priceCurrency) setCountryDecorationUnavailable(true)
+    // has answered for every required decoration. Keep the CTA blocked while the
+    // request is in flight — but as PENDING, not as "this country has no price".
+    // Legacy flag-off pricing retains its existing optimistic/static-fallback
+    // behaviour.
+    if (priceCurrency) setCountryDecorationPending(true)
 
     // Probe each bracket's representative qty, the standard screen-print
     // qty ladder (so we capture the decoration's own band breakpoints even
@@ -793,6 +805,12 @@ export function ProductDetailClient({
           }),
           signal: controller.signal,
         })
+        if (!res.ok && !cancelled && priceCurrency) {
+          // A fetch that never answered leaves the price unverified. That stays a
+          // hard block (pinned by ProductDetailClient.manual-pricing.test.tsx),
+          // unlike the in-flight window above.
+          setCountryDecorationUnavailable(true)
+        }
         if (res.ok && !cancelled) {
           const json = (await res.json()) as {
             pricesByQty: Record<string, Record<string, number | null>>
@@ -831,7 +849,11 @@ export function ProductDetailClient({
           }
         }
       } catch {
-        // network error — keep existing prices
+        // Network error — keep existing prices, but the exact-currency figure is
+        // unverified, so it blocks exactly like a non-ok response.
+        if (!cancelled && priceCurrency) setCountryDecorationUnavailable(true)
+      } finally {
+        if (!cancelled && priceCurrency) setCountryDecorationPending(false)
       }
     }, 300)
     return () => {
@@ -1520,6 +1542,8 @@ export function ProductDetailClient({
 
   const canSubmitSelection =
     !isUnavailableToOrder &&
+    // Never add at a price the exact-currency RPC has not confirmed yet.
+    !countryDecorationPending &&
     canAddToCart &&
     meetsLocation &&
     inventoryIntentShortfall == null &&

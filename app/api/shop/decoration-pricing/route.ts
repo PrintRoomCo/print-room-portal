@@ -139,12 +139,20 @@ async function priceLink(
         p_org_decoration_id: decoId,
         p_qty: qty,
       })
+  // Parity with lib/checkout/decoration-effective-price.ts: a flat $0 decoration
+  // (the catalogue-wide 'custom' placeholder) has no ladder and no engine branch,
+  // so the currency RPC returns NULL for it everywhere. Zero has no exchange rate,
+  // so price it at 0 — the same figure checkout bills. Any NON-zero decoration
+  // with no exact-currency price stays null and keeps blocking the add.
+  const flat = lookup.fallbackByLink.get(linkId) ?? null
   const base =
     !error && data != null
       ? Number(data)
       : countryPricing.enabled
-        ? null
-        : (lookup.fallbackByLink.get(linkId) ?? null)
+        ? !error && flat === 0
+          ? 0
+          : null
+        : flat
   if (base == null || !Number.isFinite(base)) return null
   return Number((base * tierMult).toFixed(2))
 }
