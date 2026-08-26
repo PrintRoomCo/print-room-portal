@@ -7,18 +7,24 @@
  *   Every pooled line band-selects at the combined quantity, but each line reads
  *   the selected band from its own item's price ladder.
  *
- * Two rules, both here:
+ * Three rules, all here:
  *
- *  1. **Per-decoration pooling for decoration price.** A line's decoration cost is
- *     the sum over its decorations of `ladder(decoration, that decoration's pooled
- *     qty)`. A garment carrying an extra placement is automatically "the sequential
- *     difference added on".
+ *  1. **Per-decoration pooling for decoration price — COMPUTED items.** Their
+ *     decoration cost is the sum over their decorations of `ladder(decoration,
+ *     that decoration's pooled qty)`. A garment carrying an extra placement is
+ *     automatically "the sequential difference added on".
  *
  *  2. **Max rule for the garment band.** A line's garment band quantity is the
  *     LARGEST pool among its own decorations, never below its own group qty. Taking
  *     the max — rather than the transitive closure of everything connected — is what
  *     stops a garment bridging two artwork groups from dragging the third garment up
  *     with it. See the worked example in `decoration-pooling.test.ts`.
+ *
+ *  3. **`manual_final` items keep their OWN combined figure** (2026-08-26
+ *     amendment): pooling moves the quantity and nothing else. The item's own
+ *     per-band `decoration_unit_price` still prices the line — band-selected at
+ *     the max-rule quantity, i.e. rule 2 applied to the decoration half too. See
+ *     `manualCombinedBandQty` at the foot of this file.
  *
  * Cart (`lib/cart/types.ts`) and checkout (`lib/checkout/submit.ts`) both call this,
  * so the "keep them in step" contract those two files carry in comments is shared
@@ -174,4 +180,32 @@ export function poolSizesForLine(
     if (pooled != null) out.set(dec.decorationId, pooled)
   }
   return out
+}
+
+/**
+ * The quantity a `manual_final` line's ONE COMBINED decoration figure
+ * band-selects at (2026-08-26 amendment — docs/2026-08-26-pooled-manual-
+ * decoration-own-ladder.md).
+ *
+ * A manual_final item is a single all-in price an AM typed; its decoration half
+ * is a back-solved residual of that price, not a claim about what the artwork
+ * costs to print. So it has no meaningful PER-DECORATION quantity to pool at —
+ * it moves as one number, at the same band its garment half moves at. That is
+ * exactly the max rule, which is why this delegates rather than restating it:
+ * one implementation, one place to change.
+ *
+ * `ownGroupQty` stays each caller's existing pre-pooling group aggregate (the
+ * cart's product+signature total; checkout's decoration-tier total), so the band
+ * can only ever move UP and flag-off is byte-identical.
+ *
+ * Computed items are untouched: they keep per-decoration ladders, each placement
+ * at its own pooled qty (`pooledDecorationQty`), because only a per-decoration
+ * price can express a per-placement delta (spec §3, reason 1).
+ */
+export function manualCombinedBandQty(
+  line: PoolingLine,
+  pools: Map<string, number>,
+  ownGroupQty: number,
+): number {
+  return garmentBandQty(line, pools, ownGroupQty)
 }

@@ -3,6 +3,7 @@ import type { FulfilmentType } from '@/lib/shop/fulfilment-mode'
 import {
   garmentBandQty,
   isPoolingLine,
+  manualCombinedBandQty,
   pooledDecorationQty,
   pooledQtyByDecoration,
   poolSizesForLine,
@@ -345,22 +346,24 @@ export function recomputeProductTierPrices(lines: CartLine[]): CartLine[] {
     // Manual-final: re-pick the line-level combined decoration from its own
     // ladder on a qty edit (mirrors the garment + per-placement re-pick above).
     //
-    // Pooled lines do NOT use the combined figure at all: the item's per-band
-    // decoration_unit_price cannot express a per-placement delta, which is the
-    // whole reason pooling moves decoration price onto per-decoration ladders
-    // (spec §3). Clearing it makes decorationPerUnit() fall through to the
-    // per-placement sum, matching what the checkout server bills for these lines.
+    // Pooling changes the QUANTITY and nothing else (2026-08-26 amendment). The
+    // combined figure stays the price source on a pooled line — it is a residual
+    // of the ONE all-in price the AM typed for this garment, so it differing from
+    // another garment's figure for the same logo is the intent of all-in pricing,
+    // not drift. Only the band it reads moves, to `manualBandQty` — the same
+    // max-rule quantity the garment above band-selects at, because one all-in
+    // price cannot have its two halves sitting in different bands.
+    const manualBandQty = pooling
+      ? manualCombinedBandQty(l, pools, total)
+      : total
     let nextManualDeco = l.manualDecorationPerUnit
     let manualDecoChanged = false
-    if (pooling && l.manualDecorationPerUnit != null) {
-      nextManualDeco = null
-      manualDecoChanged = true
-    } else if (
+    if (
       l.manualDecorationPerUnit != null &&
       l.manualDecorationBrackets &&
       l.manualDecorationBrackets.length > 0
     ) {
-      const manualBracket = pickBracket(l.manualDecorationBrackets, total)
+      const manualBracket = pickBracket(l.manualDecorationBrackets, manualBandQty)
       if (manualBracket && manualBracket.unitPrice !== l.manualDecorationPerUnit) {
         nextManualDeco = manualBracket.unitPrice
         manualDecoChanged = true

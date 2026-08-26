@@ -36,7 +36,12 @@ vi.mock('@/lib/xero/draft-invoice', () => ({
   createDraftInvoiceForOrder: vi.fn().mockResolvedValue({ status: 'skipped', reason: 'test' }),
 }))
 
-import { submitCustomerOrder, type CheckoutInput, type CheckoutLineInput } from '../submit'
+import {
+  DecorationDriftError,
+  submitCustomerOrder,
+  type CheckoutInput,
+  type CheckoutLineInput,
+} from '../submit'
 import { makeFanoutStub, makeContext, type StubConfig } from './fanout-test-stub'
 
 const ORG = 'org-1'
@@ -283,5 +288,182 @@ describe('pricing_pool_lines (the F1 mixed-cart split)', () => {
     const stockedTee = { ...TEE, fulfilment_type: 'stocked' as const }
     const on = await run(world(true), checkout([HOOD], [stockedTee, HOOD, CAP]))
     expect(on.decorationQtys(A)).toEqual([100])
+  })
+})
+
+/**
+ * manual_final items: pooling moves the QUANTITY and nothing else (2026-08-26
+ * amendment to spec §3 — docs/2026-08-26-pooled-manual-decoration-own-ladder.md).
+ *
+ * The spec's own worked example A, with both garments on manual_final pricing:
+ * 500 tees + 100 hoods sharing ONE left-chest print. Each line's decoration is
+ * its OWN item's combined per-band figure, read at the pooled band 600 — and the
+ * two figures legitimately DIFFER, because an all-in price on a tee is not an
+ * all-in price on a hoodie. That single property is the whole feature.
+ */
+const MANUAL_TEE = 'item-m-tee'
+const MANUAL_HOOD = 'item-m-hood'
+
+/** Combined per-band figure per item — deliberately different for the same logo. */
+function manualCombined(itemId: string, qty: number): number | null {
+  if (itemId === MANUAL_TEE) return qty >= 600 ? 3.5 : 8
+  if (itemId === MANUAL_HOOD) return qty >= 600 ? 9.25 : 22.5
+  return null
+}
+
+function manualWorld(poolingEnabled: boolean): StubConfig {
+  const items = [
+    { id: MANUAL_TEE, sourceProductId: 'prod-m-tee' },
+    { id: MANUAL_HOOD, sourceProductId: 'prod-m-hood' },
+  ].map((i) => ({
+    ...i,
+    priceMode: 'manual_final' as const,
+    catalogueId: CAT,
+    poolingEnabled,
+  }))
+  const dec = () => ({
+    id: A,
+    organizationId: ORG,
+    name: A,
+    method: 'screenprint',
+    unitPrice: 9,
+    artworkId: 'art-1',
+  })
+  return {
+    items,
+    // 'mixed' nature so a line claiming 'stocked' survives the nature coercion
+    // (an unsupported claim is demoted to made_to_order — see world() above).
+    products: items.map((i) => ({ id: i.sourceProductId, fulfilmentType: 'mixed' })),
+    links: [
+      { id: 'link-m-tee-A', catalogueItemId: MANUAL_TEE, sourceProductId: 'prod-m-tee', orgDecoration: dec() },
+      { id: 'link-m-hood-A', catalogueItemId: MANUAL_HOOD, sourceProductId: 'prod-m-hood', orgDecoration: dec() },
+    ],
+    tier: null,
+    // A distinct, wrong-on-purpose number: if a manual line ever fell through to
+    // the per-placement path, the billed total would show it.
+    decorationRpcPrice: () => 99,
+    manualCombinedPrice: manualCombined,
+    garmentUnitPrice: 12.5,
+  }
+}
+
+const M_TEE = line({
+  product_id: 'prod-m-tee',
+  qty: 500,
+  cart_line_id: 'm-tee',
+  catalogueItemId: MANUAL_TEE,
+  decorations: [{ linkId: 'link-m-tee-A', decorationId: A, name: A, method: 'screenprint', positionLabel: null, unitPrice: 0, artworkUrl: null, snapshotUrl: null }],
+})
+const M_HOOD = line({
+  product_id: 'prod-m-hood',
+  qty: 100,
+  cart_line_id: 'm-hood',
+  catalogueItemId: MANUAL_HOOD,
+  decorations: [{ linkId: 'link-m-hood-A', decorationId: A, name: A, method: 'screenprint', positionLabel: null, unitPrice: 0, artworkUrl: null, snapshotUrl: null }],
+})
+
+/** Every (item, qty) pair that reached the combined-figure RPC. */
+function combinedPairs(stub: ReturnType<typeof makeFanoutStub>) {
+  return stub.rpcCalls
+    .filter((c) => c.name === 'catalogue_item_decoration_price')
+    .map((c) => [c.args?.p_catalogue_item_id as string, c.args?.p_qty as number] as const)
+    .sort()
+}
+
+describe('manual_final pooled — the combined figure survives pooling', () => {
+  it('pooled manual: each line bills its OWN combined figure at the pooled band 600', async () => {
+    const stub = makeFanoutStub(manualWorld(true))
+    await submitCustomerOrder(
+      stub.admin,
+      checkout([
+        { ...M_TEE, claimed_manual_decoration: 3.5 },
+        { ...M_HOOD, claimed_manual_decoration: 9.25 },
+      ]),
+    )
+    // Both items looked up at the POOLED band, not their own 500 / 100.
+    expect(combinedPairs(stub)).toEqual([
+      [MANUAL_HOOD, 600],
+      [MANUAL_TEE, 600],
+    ])
+    // ...and each billed ITS OWN figure there. The two differ on purpose.
+    expect(
+      (stub.rpcCalls.find((c) => c.name === 'submit_b2b_order_for_country')?.args?.p_lines ?? []) as Array<Record<string, unknown>>,
+    ).toEqual([
+      expect.objectContaining({ unit_price: 12.5 + 3.5, quantity: 500 }),
+      expect.objectContaining({ unit_price: 12.5 + 9.25, quantity: 100 }),
+    ])
+    // The per-placement engine is never consulted for a manual line, pooled or not.
+    expect(stub.rpcCalls.filter((c) => c.name === 'effective_decoration_unit_price')).toHaveLength(0)
+  })
+
+  it('pooled manual: a matching cart claim does NOT drift', async () => {
+    const stub = makeFanoutStub(manualWorld(true))
+    await expect(
+      submitCustomerOrder(
+        stub.admin,
+        checkout([
+          { ...M_TEE, claimed_manual_decoration: 3.5 },
+          { ...M_HOOD, claimed_manual_decoration: 9.25 },
+        ]),
+      ),
+    ).resolves.toBeDefined()
+  })
+
+  it('pooled manual: a STALE claim (the un-pooled band) still blocks', async () => {
+    // 22.5 is the hood's own-quantity figure — what a cart that had not seen the
+    // tee would have claimed. Zero tolerance: it must 409, not silently re-price.
+    const stub = makeFanoutStub(manualWorld(true))
+    const err = await submitCustomerOrder(
+      stub.admin,
+      checkout([
+        { ...M_TEE, claimed_manual_decoration: 3.5 },
+        { ...M_HOOD, claimed_manual_decoration: 22.5 },
+      ]),
+    ).then(
+      () => null,
+      (e) => e,
+    )
+    expect(err).toBeInstanceOf(DecorationDriftError)
+    expect((err as DecorationDriftError).drift).toEqual([
+      expect.objectContaining({
+        cartLineId: 'm-hood',
+        decorationName: 'Decoration (combined)',
+        was: 22.5,
+        now: 9.25,
+        reason: 'price_drift',
+      }),
+    ])
+    expect(stub.rpcCalls.filter((c) => c.name === 'submit_b2b_order_for_country')).toHaveLength(0)
+  })
+
+  it('flag OFF: each manual line reads the combined figure at its OWN qty', async () => {
+    const stub = makeFanoutStub(manualWorld(false))
+    await submitCustomerOrder(
+      stub.admin,
+      checkout([
+        { ...M_TEE, claimed_manual_decoration: 8 },
+        { ...M_HOOD, claimed_manual_decoration: 22.5 },
+      ]),
+    )
+    expect(combinedPairs(stub)).toEqual([
+      [MANUAL_HOOD, 100],
+      [MANUAL_TEE, 500],
+    ])
+  })
+
+  it('a stocked manual line neither contributes to nor receives the pooled band', async () => {
+    const stub = makeFanoutStub(manualWorld(true))
+    await submitCustomerOrder(
+      stub.admin,
+      checkout([
+        { ...M_TEE, fulfilment_type: 'stocked', claimed_manual_decoration: 8 },
+        { ...M_HOOD, claimed_manual_decoration: 22.5 },
+      ]),
+    )
+    // Tee is stocked → out of the pool entirely; the hood sees only its own 100.
+    expect(combinedPairs(stub)).toEqual([
+      [MANUAL_HOOD, 100],
+      [MANUAL_TEE, 500],
+    ])
   })
 })

@@ -363,7 +363,7 @@ describe('recomputeProductTierPrices — pooled decoration pricing', () => {
   function placement(
     decorationId: string,
     unitPrice: number,
-    brackets: CartLineBracket[],
+    brackets: CartLineBracket[] | undefined,
     poolable = true,
   ): CartLineDecoration {
     return {
@@ -468,9 +468,15 @@ describe('recomputeProductTierPrices — pooled decoration pricing', () => {
     expect(out[1].unitPrice).toBe(65)
   })
 
-  it('a pooled manual_final line drops the combined figure for the per-placement sum', () => {
-    // The per-band combined figure cannot express a per-placement delta, which is
-    // exactly why pooling moves decoration price onto per-decoration ladders.
+  it('pooled manual_final: KEEPS its own combined figure, re-picked at the pooled band', () => {
+    // 2026-08-26: pooling moves the QUANTITY and nothing else. A manual_final
+    // item's decoration figure is a back-solved residual of one all-in price the
+    // AM typed — it stays the price source; only the band it reads moves.
+    const manualBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 149, unitPrice: 12 },
+      { minQty: 150, maxQty: 599, unitPrice: 10 },
+      { minQty: 600, maxQty: null, unitPrice: 7 },
+    ]
     const [out] = recomputeProductTierPrices([
       {
         ...pooled({
@@ -479,13 +485,89 @@ describe('recomputeProductTierPrices — pooled decoration pricing', () => {
           qty: 600,
           unitPrice: 20,
           brackets: teeLadder,
-          decorations: [placement('A', 9, ladderA), placement('B', 8, ladderB)],
+          // A manual PDP snapshots $0 placements with NO ladder (Decision #2):
+          // an accidental fallback then yields 0, never a wrong positive number.
+          decorations: [placement('A', 0, undefined), placement('B', 0, undefined)],
         }),
         manualDecorationPerUnit: 12,
-        manualDecorationBrackets: [{ minQty: 1, maxQty: null, unitPrice: 12 }],
+        manualDecorationBrackets: manualBrackets,
       },
     ])
-    expect(out.manualDecorationPerUnit).toBeNull()
+    // The combined figure survives pooling and re-picks at the 600 band.
+    expect(out.manualDecorationPerUnit).toBe(7)
+    expect(decorationPerUnit(out)).toBe(7)
+    // Per-placement figures stay $0 metadata — no per-decoration ladder money
+    // leaks onto a manual line, so an accidental fallback yields 0, not a wrong
+    // positive number.
+    expect(out.decorations.map((d) => d.unitPrice)).toEqual([0, 0])
+  })
+
+  it('pooled manual_final worked example: each line reads its OWN item ladder at band 600', () => {
+    // The whole feature in one test. 500 tees + 100 hoods, one shared left-chest
+    // print, BOTH manual_final. Each line's decoration comes from its own item's
+    // combined ladder at the pooled band 600 — and the two legitimately differ,
+    // because an all-in price on a sock is not an all-in price on a hoodie.
+    const teeManual: CartLineBracket[] = [
+      { minQty: 1, maxQty: 599, unitPrice: 8 },
+      { minQty: 600, maxQty: null, unitPrice: 3.5 },
+    ]
+    const hoodManual: CartLineBracket[] = [
+      { minQty: 1, maxQty: 599, unitPrice: 22.5 },
+      { minQty: 600, maxQty: null, unitPrice: 9.25 },
+    ]
+    const out = recomputeProductTierPrices([
+      {
+        ...pooled({ lineId: 'tee', productId: 'p-tee', qty: 500, unitPrice: 25, brackets: teeLadder, decorations: [placement('A', 0, undefined)] }),
+        manualDecorationPerUnit: 8,
+        manualDecorationBrackets: teeManual,
+      },
+      {
+        ...pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('A', 0, undefined)] }),
+        manualDecorationPerUnit: 22.5,
+        manualDecorationBrackets: hoodManual,
+      },
+    ])
+    // Garment: each at the 600+ row of its OWN ladder (unchanged behaviour).
+    expect(out.map((l) => l.unitPrice)).toEqual([20, 55])
+    // Decoration: each at the 600+ row of its OWN item ladder. Different figures
+    // for the same logo is the INTENT of all-in pricing, not a data defect.
+    expect(out.map((l) => l.manualDecorationPerUnit)).toEqual([3.5, 9.25])
+    expect(out.map((l) => decorationPerUnit(l))).toEqual([3.5, 9.25])
+  })
+
+  it('pooled manual_final re-picks when a SIBLING line\u2019s qty changes', () => {
+    const hoodManual: CartLineBracket[] = [
+      { minQty: 1, maxQty: 599, unitPrice: 22.5 },
+      { minQty: 600, maxQty: null, unitPrice: 9.25 },
+    ]
+    const hood = {
+      ...pooled({ lineId: 'hood', productId: 'p-hood', qty: 100, unitPrice: 65, brackets: hoodLadder, decorations: [placement('A', 0, undefined)] }),
+      manualDecorationPerUnit: 22.5,
+      manualDecorationBrackets: hoodManual,
+    }
+    const tee = pooled({ lineId: 'tee', productId: 'p-tee', qty: 100, unitPrice: 65, brackets: teeLadder, decorations: [placement('A', 0, undefined)] })
+    // 200 pooled → hood still in its 1-599 band.
+    expect(recomputeProductTierPrices([tee, hood])[1].manualDecorationPerUnit).toBe(22.5)
+    // Bump the sibling to 500 → 600 pooled → the hood's own 600+ figure.
+    const bumped = recomputeProductTierPrices([{ ...tee, qty: 500 }, hood])
+    expect(bumped[1].manualDecorationPerUnit).toBe(9.25)
+    // ...and back DOWN when the sibling shrinks again.
+    const shrunk = recomputeProductTierPrices([{ ...tee, qty: 10 }, bumped[1]])
+    expect(shrunk[1].manualDecorationPerUnit).toBe(22.5)
+  })
+
+  it('a pooled COMPUTED line is untouched — still Σ per-decoration at each own pool', () => {
+    const [out] = recomputeProductTierPrices([
+      pooled({
+        lineId: 'polo',
+        productId: 'p-polo',
+        qty: 600,
+        unitPrice: 20,
+        brackets: teeLadder,
+        decorations: [placement('A', 9, ladderA), placement('B', 8, ladderB)],
+      }),
+    ])
+    expect(out.manualDecorationPerUnit).toBeUndefined()
     // Σ per-decoration ladder picks at the pooled qty: A@600 = 4, B@600 → tail = 5.
     expect(out.decorations.map((d) => d.unitPrice)).toEqual([4, 5])
     expect(decorationPerUnit(out)).toBe(9)

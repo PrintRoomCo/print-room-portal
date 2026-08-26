@@ -138,6 +138,47 @@ describe('nextArtworkBand', () => {
     expect(next?.unitsToNext).toBe(150)
   })
 
+  it('measures a manual_final line against ITS OWN combined ladder', () => {
+    // 2026-08-26: a manual line's decoration half is the item's combined ladder,
+    // not a per-decoration one. Its placements carry no ladder at all, so without
+    // this the nudge would only ever see the garment ladder — and understate the
+    // break whenever the garment price is flat across a boundary the decoration
+    // figure drops at (live: the demo hoodie is 70.28 flat from 1-49 while its
+    // decoration goes 8.00 → 6.50 at 24).
+    const manual = line({
+      qty: 10,
+      decorations: [deco({ pooledQty: 20, unitPrice: 0, brackets: undefined })],
+      brackets: [
+        { minQty: 1, maxQty: 49, unitPrice: 70.28 },
+        { minQty: 50, maxQty: null, unitPrice: 61.08 },
+      ],
+      manualDecorationPerUnit: 8,
+      manualDecorationBrackets: [
+        { minQty: 1, maxQty: 23, unitPrice: 8 },
+        { minQty: 24, maxQty: 49, unitPrice: 6.5 },
+        { minQty: 50, maxQty: null, unitPrice: 5 },
+      ],
+    })
+    // 24 (decoration break) is nearer than 50 (garment break): 24 - 20 = 4.
+    expect(nextArtworkBand(manual)).toEqual({
+      unitsToNext: 4,
+      decorationName: 'Embroidery — Left Chest',
+    })
+  })
+
+  it('is silent for a manual line already in its top combined band', () => {
+    const manual = line({
+      decorations: [deco({ pooledQty: 600, unitPrice: 0, brackets: undefined })],
+      brackets: [{ minQty: 1, maxQty: null, unitPrice: 55 }],
+      manualDecorationPerUnit: 3.5,
+      manualDecorationBrackets: [
+        { minQty: 1, maxQty: 599, unitPrice: 8 },
+        { minQty: 600, maxQty: null, unitPrice: 3.5 },
+      ],
+    })
+    expect(nextArtworkBand(manual)).toBeNull()
+  })
+
   it('is silent on a line that does not pool', () => {
     expect(nextArtworkBand(line({ decorations: [deco()] }))).toBeNull()
   })

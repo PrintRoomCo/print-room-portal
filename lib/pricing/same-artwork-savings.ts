@@ -55,9 +55,16 @@ export function sameArtworkSavings(line: CartLine): SameArtworkSavings | null {
 }
 
 /**
- * Distance to the next price break, across BOTH ladders the pooled quantity
- * moves: the garment's own ladder and the governing artwork's ladder. The
- * customer does not care which one drops — only how many more garments it takes.
+ * Distance to the next price break, across EVERY ladder the pooled quantity
+ * moves: the garment's own ladder, and whichever ladder prices this line's
+ * decoration half. The customer does not care which one drops — only how many
+ * more garments it takes.
+ *
+ * Which decoration ladder that is depends on the item's price mode:
+ *   * computed → the governing artwork's own per-decoration ladder;
+ *   * manual_final → the item's ONE combined ladder (2026-08-26 amendment), whose
+ *     placements deliberately carry no ladder of their own.
+ * Reading both is safe: exactly one is ever populated on a given line.
  *
  * Same-price band boundaries are skipped: they are not a saving. Mirrors
  * `calculatePeriodSavingsOpportunity`.
@@ -70,6 +77,7 @@ export function nextArtworkBand(line: CartLine): NextArtworkBand | null {
   const candidates = [
     nextCheaperMin(line.brackets, pooledQty),
     nextCheaperMin(governing.brackets, pooledQty),
+    nextCheaperMin(line.manualDecorationBrackets, pooledQty),
   ].filter((v): v is number => v != null)
 
   if (candidates.length === 0) return null

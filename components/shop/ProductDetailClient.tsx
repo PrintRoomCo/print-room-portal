@@ -673,9 +673,9 @@ export function ProductDetailClient({
     Record<number, number>
   >(product.manualDecorationSeed ?? {})
   const isManualPricing = product.priceMode === 'manual_final'
-  // Pooled decoration pricing (spec 2026-08-13): false for every catalogue until
-  // an AM opts one in, so both the PDP note and the manual-combined suppression
-  // below are inert today.
+  // Pooled decoration pricing (spec 2026-08-13): drives the static PDP note only
+  // (spec §8). It deliberately does NOT touch pricing here — the PDP has no
+  // cross-product visibility, so every pooled band selection happens in the cart.
   const poolingActive = product.poolingEnabled === true
   const decorationPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1171,12 +1171,14 @@ export function ProductDetailClient({
     // hasn't (sub-debounce add / fetch error), snapshot null so the server
     // silently re-prices from the engine rather than us claiming a stale 0 that
     // would trip the zero-tolerance drift guard at checkout.
-    // Pooled catalogues never use the item's combined per-band figure: it cannot
-    // express a per-placement delta, which is exactly why pooling moves decoration
-    // price onto per-decoration ladders (spec §3). Pooled manual items therefore
-    // snapshot real per-placement prices + ladders, like computed items, and the
-    // checkout server bills the same Σ per-decoration sum.
-    const manualDecorationActive = isManualPricing && !poolingActive
+    //
+    // Price MODE alone decides this — pooling does not (2026-08-26 amendment to
+    // spec §3). Pooling moves the QUANTITY: the PDP still snapshots the item's own
+    // combined figure and its bracket ladder, and the cart re-picks that ladder at
+    // the pooled band, exactly as it already does for the garment price. The PDP
+    // deliberately has no cross-product visibility (spec §8), so it snapshots at
+    // its OWN qty and the cart does the pooling.
+    const manualDecorationActive = isManualPricing
     const hasManualData = Object.keys(manualDecorationByQty).length > 0
     const manualDecorationPerUnitSnapshot =
       manualDecorationActive && hasManualData ? manualDecorationAt(qty) : null

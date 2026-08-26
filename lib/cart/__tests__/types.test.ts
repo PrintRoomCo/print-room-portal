@@ -624,6 +624,30 @@ describe('recomputeProductTierPrices — pooled decoration pricing', () => {
     expect(out[1].unitPrice).toBe(30)
   })
 
+  it('pooled manual_final keeps its combined figure and re-picks it at the pooled band', () => {
+    // 2026-08-26 amendment: pooling changes the QUANTITY, not the price source.
+    // Sibling lines pool to 600; the manual line reads ITS OWN item ladder there.
+    const manualBrackets: CartLineBracket[] = [
+      { minQty: 1, maxQty: 599, unitPrice: 22.5 },
+      { minQty: 600, maxQty: null, unitPrice: 9.25 },
+    ]
+    const out = recomputeProductTierPrices([
+      poolLine({ lineId: 'tee', productId: 'p-tee', qty: 500, decorations: [art('A')] }),
+      {
+        ...poolLine({ lineId: 'hood', productId: 'p-hood', qty: 100, decorations: [art('A')] }),
+        decorations: [{ ...art('A'), unitPrice: 0, brackets: undefined }],
+        manualDecorationPerUnit: 22.5,
+        manualDecorationBrackets: manualBrackets,
+      },
+    ])
+    expect(out[1].manualDecorationPerUnit).toBe(9.25)
+    expect(decorationPerUnit(out[1])).toBe(9.25)
+    // The pool size still rides the line for the "Same artwork savings" pill.
+    expect(out[1].decorations[0].pooledQty).toBe(600)
+    // ...and no per-placement money appears on it.
+    expect(out[1].decorations[0].unitPrice).toBe(0)
+  })
+
   it('allInUnitPrice reflects the pooled garment AND pooled decoration', () => {
     const [tee] = recomputeProductTierPrices([
       poolLine({ lineId: 'tee', productId: 'p-tee', qty: 300, decorations: [art('A')] }),

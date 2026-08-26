@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   garmentBandQty,
   isPoolingLine,
+  manualCombinedBandQty,
   poolKey,
   poolSizesForLine,
   pooledDecorationQty,
@@ -202,5 +203,65 @@ describe('poolSizesForLine — display input', () => {
     const stocked = line({ qty: 500, fulfilmentType: 'stocked', decorations: [dec(A)] })
     const pools = pooledQtyByDecoration([line({ qty: 100, decorations: [dec(A)] })])
     expect(poolSizesForLine(stocked, pools).size).toBe(0)
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// manual_final: the ONE combined figure (2026-08-26 amendment to §3).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('manualCombinedBandQty — the band a manual_final line’s combined figure reads', () => {
+  it('is the same max rule the garment uses, for the same line', () => {
+    // A manual_final item is ONE all-in price the AM typed, so its decoration
+    // half must move with the band its garment half moves with.
+    const tee = line({ qty: 500, decorations: [dec(A)] })
+    const hood = line({ qty: 100, decorations: [dec(A), dec(B)] })
+    const cap = line({ qty: 50, decorations: [dec(B)] })
+    const pools = pooledQtyByDecoration([tee, hood, cap])
+    for (const [l, own] of [
+      [tee, 500],
+      [hood, 100],
+      [cap, 50],
+    ] as const) {
+      expect(manualCombinedBandQty(l, pools, own)).toBe(garmentBandQty(l, pools, own))
+    }
+    // And concretely: A pools to 600, B to 150; the hood takes the max, the cap
+    // does not inherit 600 through it.
+    expect(manualCombinedBandQty(hood, pools, 100)).toBe(600)
+    expect(manualCombinedBandQty(cap, pools, 50)).toBe(150)
+  })
+
+  it('never bands DOWN — a line whose own group qty exceeds every pool keeps it', () => {
+    // Own group qty can legitimately exceed the pool: sibling lines of the same
+    // product with a DIFFERENT decoration signature still aggregate into the
+    // caller’s group total, while the pool counts only lines carrying artwork A.
+    const soloPool = pooledQtyByDecoration([line({ qty: 20, decorations: [dec(A)] })])
+    const l = line({ qty: 20, decorations: [dec(A)] })
+    expect(manualCombinedBandQty(l, soloPool, 900)).toBe(900)
+  })
+
+  it('returns the caller’s own group qty when the line cannot pool at all', () => {
+    const pools = pooledQtyByDecoration([line({ qty: 600, decorations: [dec(A)] })])
+    expect(
+      manualCombinedBandQty(line({ qty: 10, poolingEnabled: false, decorations: [dec(A)] }), pools, 10),
+    ).toBe(10)
+    expect(
+      manualCombinedBandQty(
+        line({ qty: 10, fulfilmentType: 'stocked', decorations: [dec(A)] }),
+        pools,
+        10,
+      ),
+    ).toBe(10)
+  })
+
+  it('ignores the $0 custom placeholder, exactly like every other pooled read', () => {
+    const PH = 'dec-placeholder'
+    const pools = pooledQtyByDecoration([
+      line({ qty: 500, decorations: [dec(PH, false)] }),
+      line({ qty: 100, decorations: [dec(PH, false)] }),
+    ])
+    expect(manualCombinedBandQty(line({ qty: 100, decorations: [dec(PH, false)] }), pools, 100)).toBe(
+      100,
+    )
   })
 })

@@ -82,10 +82,14 @@ const detailsOnlyDecoration: DecorationOption = {
   ladder: null,
 }
 
-function renderPDP(decorations: DecorationOption[] = [], priceCurrency?: string) {
+function renderPDP(
+  decorations: DecorationOption[] = [],
+  priceCurrency?: string,
+  productOverrides: Partial<typeof product> = {},
+) {
   return render(
     <ProductDetailClient
-      product={product}
+      product={{ ...product, ...productOverrides }}
       variants={[]}
       sizes={[]}
       brackets={[{ min_quantity: 1, max_quantity: null, unit_price: 12.5 }]}
@@ -139,6 +143,65 @@ describe('ProductDetailClient manual_final pricing', () => {
         manualDecorationBrackets: [{ minQty: 1, maxQty: null, unitPrice: 7.5 }],
       }),
     )
+  })
+
+  it('a POOLED manual PDP still snapshots the combined figure and its brackets', async () => {
+    // 2026-08-26 amendment: pooling moves the QUANTITY, not the price source. A
+    // pooled manual item keeps its own combined figure — the cart then re-picks
+    // it from these brackets at the pooled band. Before this change the PDP
+    // suppressed both and fell through to per-placement prices.
+    renderPDP([], undefined, {
+      catalogueId: 'cat-1',
+      poolingEnabled: true,
+    } as Partial<typeof product>)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }))
+
+    expect(addLine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        poolingEnabled: true,
+        manualDecorationPerUnit: 7.5,
+        manualDecorationBrackets: [{ minQty: 1, maxQty: null, unitPrice: 7.5 }],
+      }),
+    )
+  })
+
+  it('a POOLED manual PDP keeps placements as $0 metadata with no per-placement ladder', async () => {
+    // Decision #2: an accidental fallback to the per-placement sum must yield 0,
+    // never a wrong positive number — so the safety property the non-pooled path
+    // has always had now covers pooled manual lines too.
+    const poolable: DecorationOption = {
+      ...detailsOnlyDecoration,
+      linkId: 'link-lc',
+      decorationId: 'dec-lc',
+      name: 'Left chest',
+      method: 'screenprint',
+      unitPrice: 10,
+      poolable: true,
+    }
+    renderPDP([poolable], undefined, {
+      catalogueId: 'cat-1',
+      poolingEnabled: true,
+    } as Partial<typeof product>)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }))
+
+    const line = addLine.mock.calls[0][0] as {
+      decorations: Array<{ unitPrice: number; brackets?: unknown; poolable?: boolean }>
+      manualDecorationPerUnit: number | null
+    }
+    expect(line.manualDecorationPerUnit).toBe(7.5)
+    expect(line.decorations).toHaveLength(1)
+    expect(line.decorations[0].unitPrice).toBe(0)
+    expect(line.decorations[0].brackets).toBeUndefined()
+    // Eligibility still rides through so checkout can re-derive the same pools.
+    expect(line.decorations[0].poolable).toBe(true)
   })
 
   it('does not render the read-only included-decorations section (removed 2026-07-15)', () => {

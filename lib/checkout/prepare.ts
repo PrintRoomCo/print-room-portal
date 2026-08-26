@@ -41,7 +41,7 @@ import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
 import {
   garmentBandQty,
-  isPoolingLine,
+  manualCombinedBandQty,
   pooledDecorationQty,
   pooledQtyByDecoration,
   type PoolingLine,
@@ -1050,22 +1050,38 @@ export async function prepareCustomerOrderPartition(
     )
   }
 
-  const isPooledLine = (line: CheckoutLineInput): boolean =>
-    poolingActive && isPoolingLine(toPoolingLine(line))
-
   const isManualCheckoutLine = (line: CheckoutLineInput): boolean =>
     !!line.catalogueItemId && manualItemIds.has(line.catalogueItemId)
 
   /**
-   * Manual-final items in a POOLED catalogue stop using the item's combined
-   * per-band decoration figure: one number per garment cannot express a
-   * per-placement delta, which is exactly why pooling moves decoration price onto
-   * per-decoration ladders (spec §3). Those lines take the per-placement path
-   * instead — Sigma effective_decoration_unit_price at each placement's pooled qty —
-   * matching what the cart claims for them.
+   * EVERY manual_final line bills the item's own combined per-band decoration
+   * figure — pooled or not (2026-08-26 amendment to spec §3, see
+   * docs/2026-08-26-pooled-manual-decoration-own-ladder.md).
+   *
+   * Pooling moves the QUANTITY and nothing else. On a manual_final item the AM
+   * types one all-in price per garment and the decoration figure is a back-solved
+   * residual of it — not a claim about what that artwork costs to print. It
+   * differing between a sock and a hoodie is the intent of all-in pricing, so §3's
+   * "per-item figures drift for the same logo" argument does not apply here.
+   * (Its other argument — one blended number cannot express a per-placement delta —
+   * does, which is why COMPUTED items keep per-decoration ladders below.)
    */
   const isCombinedManualLine = (line: CheckoutLineInput): boolean =>
-    isManualCheckoutLine(line) && !isPooledLine(line)
+    isManualCheckoutLine(line)
+
+  /**
+   * The band quantity a manual line's ONE combined figure prices at: the max rule,
+   * floored at today's decoration-tier group total so flag-off is byte-identical
+   * and the band can only move UP. The same quantity the line's GARMENT half
+   * band-selects at — one all-in price cannot have its two halves in different
+   * bands. Mirrors the cart's `manualBandQty` exactly, which is what keeps the
+   * zero-tolerance drift guard below from firing on every pooled manual order.
+   */
+  const manualDecorationBandQtyForLine = (line: CheckoutLineInput): number => {
+    const own = decorationQtyForLine(line)
+    if (!poolingActive) return own
+    return manualCombinedBandQty(toPoolingLine(line), poolQtyByDecorationId, own)
+  }
 
   // Pre-resolve every decoration price this order needs, concurrently and
   // deduplicated: manual lines need ONE combined figure per distinct
@@ -1082,7 +1098,7 @@ export async function prepareCustomerOrderPartition(
   >()
   for (const line of input.lines) {
     if (isCombinedManualLine(line) && line.catalogueItemId) {
-      const qty = decorationQtyForLine(line)
+      const qty = manualDecorationBandQtyForLine(line)
       manualPairs.set(`${line.catalogueItemId}::${qty}`, {
         itemId: line.catalogueItemId,
         qty,
@@ -1212,11 +1228,10 @@ export async function prepareCustomerOrderPartition(
 
   for (const line of input.lines) {
     const decs = line.decorations ?? []
-    // Pooled manual items take the per-placement path (see isCombinedManualLine).
     const isManualLine = isCombinedManualLine(line)
     if (decs.length === 0) {
       if (isManualLine) {
-        applyManualDecorationForLine(line, decorationQtyForLine(line), '')
+        applyManualDecorationForLine(line, manualDecorationBandQtyForLine(line), '')
       }
       validatedByLineKey.set(preparedLineKey(line.product_id, line.variant_id ?? null, line.size_id ?? null), [])
       continue
@@ -1224,12 +1239,12 @@ export async function prepareCustomerOrderPartition(
     const byId = linkRowById
     const validated: CheckoutLineDecorationInput[] = []
 
-    // Line-level decoration tier qty (aggregated across same product+signature
-    // lines, mirroring the cart). Still the qty for the manual-final combined
-    // figure; per-placement prices now resolve their OWN pooled qty via
-    // decorationQtyFor, since two placements on one garment can sit in different
-    // bands when their artworks appear on different numbers of garments.
-    const decorationQty = decorationQtyForLine(line)
+    // The manual-final combined figure's band quantity (the max rule when pooling
+    // is on, today's decoration-tier group total otherwise). Per-placement prices
+    // resolve their OWN pooled qty via decorationQtyFor instead, since two
+    // placements on one garment can sit in different bands when their artworks
+    // appear on different numbers of garments.
+    const manualBandQty = manualDecorationBandQtyForLine(line)
 
     // Manual-final: when the line's catalogue item is manual, resolve the item's
     // ONE combined decoration figure from the engine (exact, no multiplier).
@@ -1378,7 +1393,7 @@ export async function prepareCustomerOrderPartition(
     if (isManualLine) {
       applyManualDecorationForLine(
         line,
-        decorationQty,
+        manualBandQty,
         validated[0]?.linkId ?? decs[0]?.linkId ?? '',
       )
     }
