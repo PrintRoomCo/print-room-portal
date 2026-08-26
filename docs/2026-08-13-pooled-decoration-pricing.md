@@ -101,3 +101,34 @@ Per Chris: the org-page **Artwork** and **Decorations** features merge into one.
 - **Backfill disagreements** (per-item figures that conflict for a shared logo) need AM decisions per catalogue — this is the activation gate, not a blocker to shipping the engine dark.
 - **Ladder validation:** current tier writes have no overlap/ordering guard beyond the per-row `qty_range` CHECK (`min_quantity > 0` and `max_quantity is null or max_quantity >= min_quantity`, baseline :8332); the new decoration-ladder editor should validate contiguous, non-overlapping bands.
 - **Placeholder cleanup** for pilot org (Trade Services) must land before activation.
+
+---
+
+## Amendment — 2026-08-26: §3 applies to COMPUTED items only
+
+**Status:** Built. Full reasoning, findings and decisions: [`docs/2026-08-26-pooled-manual-decoration-own-ladder.md`](./2026-08-26-pooled-manual-decoration-own-ladder.md).
+
+§3 above declares the per-decoration ladder *"the single source of truth for decoration price everywhere — pooled or not"*. **That is now scoped to `price_mode = 'computed'` items.** For `price_mode = 'manual_final'` items the rule is:
+
+> A pooled `manual_final` line's decoration cost is the item's **own combined per-band `decoration_unit_price`**, band-selected at the **pooled band quantity** (the max rule of §2.2 — the largest pool among the line's own poolable decorations, never below its own group quantity).
+
+In other words, for `manual_final`, **pooling changes the quantity and nothing else** — which is precisely §2's agreed rule ("every pooled line band-selects at the combined quantity, but each line reads the selected band from its own item's price ladder"), applied to the decoration half as well as the garment half. §3 was the section that quietly stopped that from being true.
+
+### Why one of §3's two reasons does not survive
+
+§3 gave two reasons for moving decoration price onto `org_decoration_pricing_tiers`.
+
+1. **"One combined figure can't express a per-placement delta."** **Accepted, unchanged.** A hood carrying left-chest *plus* back-print needs the back print to cost the marginal difference, and a single blended number cannot decompose into that. This is exactly why computed items keep per-decoration ladders and are untouched by the amendment.
+
+2. **"Per-item decoration figures drift for the same logo"** (AF Relax Socks `0.93/0.70/9.00` vs Stencil Hood `22.50/2.62/5.74/7.50`). **Does not apply to `manual_final`.** That reads as a data-quality defect only if the number is a claim about what the logo costs to print. On a `manual_final` item it is not: the AM types one **all-in price per garment**, and the decoration figure is a **back-solved residual** of it. A sock and a hoodie carrying the same logo *should* produce different residuals — that is what all-in pricing means. §3 retired the AM's primary pricing control to fix a problem `manual_final` does not have.
+
+The business cost was concrete: on a pooled catalogue the account manager lost the Total-price lever (edit the all-in figure; it back-solves decoration and leaves base cost untouched), which is the main reason `manual_final` exists.
+
+### What this changes in the sections above
+
+- **§3** — "single source of truth for decoration price everywhere" now reads "…for **computed** items". `b2b_catalogue_item_pricing_tiers.decoration_unit_price` is **not** retired: it remains the authored, charged price for `manual_final` items, pooled or not. The staff pricing editor keeps it editable, and its warning note now says so.
+- **§6** — the amendment RPCs also apply the per-decoration/combined split by `price_mode`. `amendment_decoration_unit_price_for_currency` gained a `p_band_qty` argument and a leading pooled-`manual_final` branch that fires in **every** currency, resolving a pre-existing split where NZD priced pooled manual lines per-placement while non-NZD priced the combined figure at the *un-pooled* quantity.
+- **§7** — the per-catalogue opt-in and the ladder-readiness gate are unchanged. The gate still demands an `org_decoration_pricing_tiers` ladder for every real decoration on an enabled pooled catalogue even where only `manual_final` items use it; that over-demand is deliberate and documented (a decoration can serve both modes in one catalogue, so a per-decoration relaxation is not a simple test).
+- **§8** — the "Same artwork savings" pill is unaffected and is now *more* accurate for manual lines: the band it names is the band both halves of the price actually read.
+
+Everything else in this spec stands: pool identity, the max rule and its deliberate non-transitivity, eligibility (§5), per-catalogue opt-in, and the invariant that a pooled quantity is a **band-selection** quantity only.
