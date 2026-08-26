@@ -68,6 +68,13 @@ export function CartDrawer() {
     ],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
+  // CartTable prints ex-GST line amounts while the total is GST-inclusive, so
+  // without these rows the two never reconcile on screen — and the gap grows
+  // with the order (Jon, 2026-08-26). Suppressed when no tax applies, so a
+  // zero-rated country doesn't get a "GST 0%" row.
+  const showsTax = breakdown.gst > 0
+  const taxLabel =
+    defaultBillingCountry.taxLabel || `GST (${Math.round(breakdown.gstRate * 100)}%)`
   const canCheckout = cart.lines.length > 0 && !oversell && !moqShort
   const canonicalCurrency = cart.lines[0]?.priceCurrency
   const formatCartMoney = (amount: number) =>
@@ -129,6 +136,17 @@ export function CartDrawer() {
                 )}
                 compact
               />
+              {(showsTax || breakdown.pickingFee > 0) && (
+                <div
+                  data-testid="cart-subtotal-row"
+                  className="mb-1 flex items-baseline justify-between"
+                >
+                  <span className="text-sm text-gray-500">Subtotal (excl. GST)</span>
+                  <span className="text-sm tabular-nums text-gray-700">
+                    {formatCartMoney(breakdown.netSubtotal)}
+                  </span>
+                </div>
+              )}
               {breakdown.pickingFee > 0 && (
                 <div className="mb-1 flex items-baseline justify-between">
                   <span className="flex items-center gap-1.5 text-sm text-gray-500">
@@ -144,8 +162,24 @@ export function CartDrawer() {
                   </span>
                 </div>
               )}
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-sm text-gray-500">Total</span>
+              {showsTax && (
+                <div
+                  data-testid="cart-gst-row"
+                  className="mb-2 flex items-baseline justify-between border-b border-gray-200/70 pb-2"
+                >
+                  <span className="text-sm text-gray-500">{taxLabel}</span>
+                  <span className="text-sm tabular-nums text-gray-700">
+                    {formatCartMoney(breakdown.gst)}
+                  </span>
+                </div>
+              )}
+              <div
+                data-testid="cart-total-row"
+                className="flex items-baseline justify-between gap-4"
+              >
+                <span className="text-sm text-gray-500">
+                  {showsTax ? 'Total (incl. GST)' : 'Total'}
+                </span>
                 <span className="font-dm-sans text-xl font-medium text-gray-900 tabular-nums">
                   {formatCartMoney(breakdown.total)}
                 </span>
