@@ -12,7 +12,7 @@ describe('TERMS_VERSION', () => {
 
 describe('TermsModal', () => {
   it('renders the terms in a dialog with the version and real clauses', () => {
-    render(<TermsModal onClose={vi.fn()} />)
+    render(<TermsModal onClose={vi.fn()} currency="NZD" taxLabel="GST 15%" />)
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByText(/Terms & Conditions/i)).toBeTruthy()
     // Real, non-lorem clause content is present.
@@ -23,8 +23,18 @@ describe('TermsModal', () => {
 
   it('calls onClose when the Close button is clicked', () => {
     const onClose = vi.fn()
-    render(<TermsModal onClose={onClose} />)
+    render(<TermsModal onClose={onClose} currency="NZD" taxLabel="GST 15%" />)
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the exact AUD sentence and generalises future country rows', () => {
+    const { rerender } = render(
+      <TermsModal onClose={vi.fn()} currency="AUD" taxLabel="GST 10%" />,
+    )
+    expect(screen.getByText(/All prices are in Australian dollars and exclude GST/)).toBeTruthy()
+
+    rerender(<TermsModal onClose={vi.fn()} currency="GBP" taxLabel="VAT 20%" />)
+    expect(screen.getByText(/All prices are in GBP and exclude tax, which is added as VAT 20%/)).toBeTruthy()
   })
 })

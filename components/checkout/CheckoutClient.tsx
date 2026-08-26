@@ -24,7 +24,6 @@ import {
   checkoutOrderGroupFromPrepared,
   type BilledLine,
 } from '@/lib/pricing/order-billing-shape'
-import { gstRateForRegion } from '@/lib/pricing/gst'
 import { useFreshBillingModes } from './useFreshBillingModes'
 import {
   BilledOrderSummary,
@@ -93,7 +92,7 @@ export function CheckoutClient({
   const router = useRouter()
   const currencyContext = useCurrency()
   const { format } = currencyContext
-  const { access } = useCompany()
+  const { defaultBillingCountry } = useCompany()
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
   const [idempotencyKey] = useState(() => crypto.randomUUID())
@@ -180,14 +179,19 @@ export function CheckoutClient({
           // reading and can be days stale. Absent ⇒ null ⇒ billed (fail closed).
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
-        gstRate: gstRateForRegion(access?.region),
+        gstRate: defaultBillingCountry.taxRate,
         // Task 7's private flag-off adapter freezes the pre-cutover drawer
         // assumption; enabled checkout money comes only from prepared country
         // partitions below.
         shipCountry: 'NZ',
-        orgRegion: access?.region ?? null,
+        orgRegion: defaultBillingCountry.code,
       }),
-    [cart.lines, modeByVariantId, access?.region],
+    [
+      cart.lines,
+      modeByVariantId,
+      defaultBillingCountry.code,
+      defaultBillingCountry.taxRate,
+    ],
   )
 
   const checkoutLines = useMemo(
@@ -621,7 +625,7 @@ export function CheckoutClient({
               ? preview.totalsByCurrency
               : []
             : [{
-                currency: currencyContext.currency ?? (access?.region === 'AU' ? 'AUD' : 'NZD'),
+                currency: currencyContext.currency ?? defaultBillingCountry.currency,
                 total: currencyContext.convert?.(shape.grandTotal) ?? shape.grandTotal,
               }]
         }

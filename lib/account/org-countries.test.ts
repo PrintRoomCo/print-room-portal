@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   getOrgDefaultBillingCountry,
   getOrgEnabledCountries,
+  getPlatformBillingCountry,
   sortEnabledCountries,
 } from './org-countries'
 
@@ -30,6 +31,32 @@ describe('getOrgEnabledCountries', () => {
       { code: 'NZ', name: 'New Zealand', isDefault: true },
       { code: 'DE', name: 'Germany', isDefault: false },
     ]).map((country) => country.code)).toEqual(['NZ', 'DE', 'US'])
+  })
+
+  it('maps a platform country row into complete billing config', async () => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      maybeSingle: vi.fn(async () => ({
+        data: {
+          code: 'NZ', name: 'New Zealand', currency: 'NZD',
+          tax_rate: '0.15', tax_label: 'GST 15%',
+        },
+        error: null,
+      })),
+    }
+    const admin = { from: vi.fn(() => query) } as never
+
+    await expect(getPlatformBillingCountry(admin, 'NZ')).resolves.toEqual({
+      code: 'NZ',
+      name: 'New Zealand',
+      currency: 'NZD',
+      taxRate: 0.15,
+      taxLabel: 'GST 15%',
+      isDefault: true,
+    })
+    expect(query.select).toHaveBeenCalledWith('code, name, currency, tax_rate, tax_label')
+    expect(query.eq).toHaveBeenCalledWith('code', 'NZ')
   })
 
   it('returns the one default first with its authored billing metadata and filters inactive countries', async () => {

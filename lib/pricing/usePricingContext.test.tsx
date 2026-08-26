@@ -41,7 +41,6 @@ function makeAccess(overrides: Partial<B2BCustomerAccess>): B2BCustomerAccess {
     hasTrackedInventory: false,
     defaultStoreId: null,
     tenantType: null,
-    region: 'NZ',
     allowsMultiStoreOrdering: false,
     ...overrides,
   }

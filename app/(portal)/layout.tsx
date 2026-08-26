@@ -9,7 +9,10 @@ import { getPortalCompanyAccess, getPortalUser } from '@/lib/portal-data'
 import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 import { resolveInitialCurrency } from '@/lib/currency/server-currency'
 import { isCheckoutCountryPartitionEnabled } from '@/lib/checkout/country-partition-config'
-import { getOrgDefaultBillingCountry } from '@/lib/account/org-countries'
+import {
+  getOrgDefaultBillingCountry,
+  getPlatformBillingCountry,
+} from '@/lib/account/org-countries'
 import { getSupabaseServer } from '@/lib/supabase'
 
 async function CountryAwareCompanyProvider({
@@ -17,25 +20,42 @@ async function CountryAwareCompanyProvider({
   initialAccess,
   initialUserId,
   countryPartitionEnabled,
+  initialRates,
+  initialCurrency,
 }: {
   children: React.ReactNode
   initialAccess: Awaited<ReturnType<typeof getPortalCompanyAccess>>
   initialUserId: string | null
   countryPartitionEnabled: boolean
+  initialRates: Awaited<ReturnType<typeof getServerExchangeRates>>['rates']
+  initialCurrency: Awaited<ReturnType<typeof resolveInitialCurrency>>
 }) {
-  const defaultBillingCountry =
-    countryPartitionEnabled && initialAccess?.companyId
-      ? await getOrgDefaultBillingCountry(getSupabaseServer(), initialAccess.companyId)
-      : null
+  const defaultBillingCountry = initialAccess?.companyId
+    ? await getOrgDefaultBillingCountry(getSupabaseServer(), initialAccess.companyId)
+    : await getPlatformBillingCountry(getSupabaseServer(), 'NZ')
 
   return (
     <CompanyProvider
       initialAccess={initialAccess}
       initialUserId={initialUserId}
       countryPartitionEnabled={countryPartitionEnabled}
-      defaultBillingCountryCode={defaultBillingCountry?.code ?? null}
+      defaultBillingCountry={defaultBillingCountry}
     >
-      {children}
+      <CurrencyProvider
+        initialRates={initialRates}
+        initialCurrency={
+          defaultBillingCountry.currency === 'NZD'
+            ? initialCurrency
+            : defaultBillingCountry.currency
+        }
+        billingCurrency={
+          initialAccess?.companyId && defaultBillingCountry.currency !== 'NZD'
+            ? defaultBillingCountry.currency
+            : null
+        }
+      >
+        {children}
+      </CurrencyProvider>
     </CompanyProvider>
   )
 }
@@ -56,17 +76,13 @@ export default async function PortalLayout({ children }: { children: React.React
           initialAccess={access}
           initialUserId={user?.id ?? null}
           countryPartitionEnabled={countryPartitionEnabled}
+          initialRates={exchangeRates.rates}
+          initialCurrency={initialCurrency}
         >
           <PreviewBanner />
-          <CurrencyProvider
-            initialRates={exchangeRates.rates}
-            initialCurrency={access?.region === 'AU' ? 'AUD' : initialCurrency}
-            billingCurrency={access?.region === 'AU' ? 'AUD' : null}
-          >
-            <CartProvider>
-              <PortalShell>{children}</PortalShell>
-            </CartProvider>
-          </CurrencyProvider>
+          <CartProvider>
+            <PortalShell>{children}</PortalShell>
+          </CartProvider>
         </CountryAwareCompanyProvider>
       </Suspense>
     </AuthProvider>

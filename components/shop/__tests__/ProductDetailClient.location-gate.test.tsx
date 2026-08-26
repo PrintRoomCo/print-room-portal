@@ -7,12 +7,9 @@ vi.mock('@/components/cart/useCart', () => ({ useCart: () => ({ addLine: vi.fn()
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ format: (n: number) => `$${n}` }),
 }))
-// AU Stage 1: the PDP/checkout now read the org's billing region for the GST
-// rate. access: null → gstRateForRegion(undefined) → 0.15, i.e. today's NZ
-// behaviour, so every assertion below is unchanged. (House idiom — same shape
-// as the CheckoutReviewClient tests.)
+// Supply the complete NZ country config used by this component's price display.
 vi.mock('@/contexts/CompanyContext', () => ({
-  useCompany: () => ({ access: null, loading: false }),
+  useCompany: () => ({ access: null, loading: false, defaultBillingCountry: { code: 'NZ', name: 'New Zealand', currency: 'NZD', taxRate: 0.15, taxLabel: 'GST 15%', isDefault: true } }),
 }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back: vi.fn(), push: vi.fn(), refresh: vi.fn() }),

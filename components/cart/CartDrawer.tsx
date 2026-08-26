@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { estimateCartPickingFee, stockedGoodsValue } from '@/lib/pricing/order-picking-fee'
-import { gstRateForRegion } from '@/lib/pricing/gst'
 import { computeOrderBreakdown } from '@/lib/pricing/pricingMath'
 import { PickingFeeInfo } from '@/components/pricing/PickingFeeInfo'
 import { useCartDrawer } from '@/components/layout/PortalTopBarContext'
@@ -21,7 +20,7 @@ export function CartDrawer() {
   const {
     access,
     countryPartitionEnabled,
-    defaultBillingCountryCode,
+    defaultBillingCountry,
   } = useCompany()
   const isOrgAdmin = access?.role === 'org_admin'
   const drawer = useCartDrawer()
@@ -54,18 +53,18 @@ export function CartDrawer() {
           unitEffective: line.unitPrice,
           decorationPerUnit: decorationPerUnit(line),
         })),
-        gstRate: gstRateForRegion(access?.region),
+        gstRate: defaultBillingCountry.taxRate,
         pickingFee: estimateCartPickingFee(cart.lines, {
           countryPartitionEnabled,
-          defaultBillCountry: defaultBillingCountryCode,
-          legacyOrgRegion: access?.region,
+          defaultBillCountry: defaultBillingCountry.code,
+          legacyOrgRegion: defaultBillingCountry.code,
         }),
       }),
     [
       cart.lines,
-      access?.region,
       countryPartitionEnabled,
-      defaultBillingCountryCode,
+      defaultBillingCountry.code,
+      defaultBillingCountry.taxRate,
     ],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])

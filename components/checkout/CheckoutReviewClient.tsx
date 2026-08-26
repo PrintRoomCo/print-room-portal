@@ -15,7 +15,6 @@ import {
   checkoutOrderGroupFromPrepared,
   type BilledLine,
 } from '@/lib/pricing/order-billing-shape'
-import { gstRateForRegion } from '@/lib/pricing/gst'
 import { useFreshBillingModes } from './useFreshBillingModes'
 import {
   BilledOrderSummary,
@@ -108,7 +107,7 @@ export function CheckoutReviewClient({
   const router = useRouter()
   const currencyContext = useCurrency()
   const { format } = currencyContext
-  const { access } = useCompany()
+  const { access, defaultBillingCountry } = useCompany()
   const isPreview = access?.isPreview ?? false
   const [reviewState, setReviewState] = useState<CheckoutReviewState | null>(null)
   const [hydrated, setHydrated] = useState(false)
@@ -154,13 +153,18 @@ export function CheckoutReviewClient({
           // FRESH mode only, never the cart's PDP-time snapshot.
           billingMode: modeByVariantId[line.variantId] ?? null,
         })),
-        gstRate: gstRateForRegion(access?.region),
+        gstRate: defaultBillingCountry.taxRate,
         // Task 7's private flag-off adapter owns the frozen legacy estimate.
         // Enabled checkout money comes only from prepared country partitions.
         shipCountry: 'NZ',
-        orgRegion: access?.region ?? null,
+        orgRegion: defaultBillingCountry.code,
       }),
-    [cart.lines, modeByVariantId, access?.region],
+    [
+      cart.lines,
+      modeByVariantId,
+      defaultBillingCountry.code,
+      defaultBillingCountry.taxRate,
+    ],
   )
 
   const lineById = useMemo(
@@ -945,7 +949,13 @@ export function CheckoutReviewClient({
         </div>
       </div>
 
-      {termsOpen && <TermsModal onClose={() => setTermsOpen(false)} region={access?.region ?? 'NZ'} />}
+      {termsOpen && (
+        <TermsModal
+          currency={defaultBillingCountry.currency}
+          taxLabel={defaultBillingCountry.taxLabel}
+          onClose={() => setTermsOpen(false)}
+        />
+      )}
 
       <CheckoutCTAStickyBar
         itemCount={cart.lines.length}
@@ -962,7 +972,7 @@ export function CheckoutReviewClient({
                 : preview.totalsByCurrency
               : []
             : [{
-                currency: currencyContext.currency ?? (access?.region === 'AU' ? 'AUD' : 'NZD'),
+                currency: currencyContext.currency ?? defaultBillingCountry.currency,
                 total: currencyContext.convert?.(shape.grandTotal) ?? shape.grandTotal,
               }]
         }

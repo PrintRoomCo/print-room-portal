@@ -32,7 +32,6 @@ import {
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { formatCurrency } from '@/lib/currency/format'
 import { useCompany } from '@/contexts/CompanyContext'
-import { gstRateForRegion } from '@/lib/pricing/gst'
 import { pickPreferredGalleryImageUrl, hiddenViewSetForColour } from '@/lib/shop/catalogue-images'
 import { resolveSizingMode, type SizingMode } from '@/lib/shop/sizing-mode'
 import {
@@ -268,9 +267,9 @@ export function ProductDetailClient({
   const { format } = useCurrency()
   const formatPrice = (amount: number) =>
     priceCurrency ? formatCurrency(amount, priceCurrency) : format(amount)
-  const { access } = useCompany()
+  const { access, defaultBillingCountry } = useCompany()
   const [countryDecorationUnavailable, setCountryDecorationUnavailable] = useState(false)
-  const gstRate = gstRateForRegion(access?.region)
+  const gstRate = defaultBillingCountry.taxRate
 
   const firstVariant = variants[0] ?? null
   // Deep-link preselect: honour `?color=` when it names a colour this product

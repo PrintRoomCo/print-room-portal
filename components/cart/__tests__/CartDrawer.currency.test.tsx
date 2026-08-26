@@ -35,7 +35,18 @@ vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ format: (amount: number) => `VISITOR-NZD ${amount.toFixed(2)}` }),
 }))
 vi.mock('@/contexts/CompanyContext', () => ({
-  useCompany: () => ({ access: { role: 'org_admin', region: 'AU' } }),
+  useCompany: () => ({
+    access: { role: 'org_admin' },
+    countryPartitionEnabled: true,
+    defaultBillingCountry: {
+      code: 'AU',
+      name: 'Australia',
+      currency: 'AUD',
+      taxRate: 0.1,
+      taxLabel: 'GST 10%',
+      isDefault: true,
+    },
+  }),
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => '/catalogue',

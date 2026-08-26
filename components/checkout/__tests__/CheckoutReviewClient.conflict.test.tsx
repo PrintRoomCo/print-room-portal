@@ -36,7 +36,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 }))
 
 vi.mock('@/contexts/CompanyContext', () => ({
-  useCompany: () => ({ access: null, loading: false }),
+  useCompany: () => ({ access: null, loading: false, defaultBillingCountry: { code: 'NZ', name: 'New Zealand', currency: 'NZD', taxRate: 0.15, taxLabel: 'GST 15%', isDefault: true } }),
 }))
 
 function checkoutConflict(payload: unknown) {

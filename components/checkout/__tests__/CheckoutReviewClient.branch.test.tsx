@@ -18,7 +18,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ format: (n: number) => `$${n.toFixed(2)}` }),
 }))
 vi.mock('@/contexts/CompanyContext', () => ({
-  useCompany: () => ({ access: null, loading: false }),
+  useCompany: () => ({ access: null, loading: false, defaultBillingCountry: { code: 'NZ', name: 'New Zealand', currency: 'NZD', taxRate: 0.15, taxLabel: 'GST 15%', isDefault: true } }),
 }))
 
 function line(over: Record<string, unknown> = {}) {

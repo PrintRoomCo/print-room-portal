@@ -6,7 +6,23 @@ import { TERMS_VERSION } from '@/lib/checkout/terms'
  * record. Jon reviews this wording before merge; final legal copy is a later
  * edit here. Bump TERMS_VERSION in lib/checkout/terms.ts on substantive change.
  */
-export function TermsContent({ region = 'NZ' }: { region?: 'NZ' | 'AU' }) {
+function pricingSentence(currency: string, taxLabel: string): string {
+  if (currency === 'AUD') {
+    return ' All prices are in Australian dollars and exclude GST, which is added at the prevailing Australian rate on your invoice.'
+  }
+  if (currency === 'NZD') {
+    return ' All prices are in New Zealand dollars and exclude GST, which is added at the prevailing rate on your invoice.'
+  }
+  return ` All prices are in ${currency} and exclude tax, which is added as ${taxLabel} on your invoice.`
+}
+
+export function TermsContent({
+  currency,
+  taxLabel,
+}: {
+  currency: string
+  taxLabel: string
+}) {
   return (
     <div className="space-y-4 text-sm leading-relaxed text-gray-700">
       <p className="text-xs text-gray-500">
@@ -17,9 +33,7 @@ export function TermsContent({ region = 'NZ' }: { region?: 'NZ' | 'AU' }) {
         <h3 className="font-medium text-gray-900">1. Quotes &amp; pricing</h3>
         <p>
           Prices shown at checkout are valid for 30 days unless stated otherwise.
-          {region === 'AU'
-            ? ' All prices are in Australian dollars and exclude GST, which is added at the prevailing Australian rate on your invoice.'
-            : ' All prices are in New Zealand dollars and exclude GST, which is added at the prevailing rate on your invoice.'}
+          {pricingSentence(currency, taxLabel)}
         </p>
       </section>
 

@@ -5,12 +5,12 @@ import { useEffect, useRef } from 'react'
 import { TermsContent } from './TermsContent'
 
 interface TermsModalProps {
-  /** AU Stage 1: org billing region; drives the currency sentence in §1. */
-  region?: 'NZ' | 'AU'
+  currency: string
+  taxLabel: string
   onClose: () => void
 }
 
-export function TermsModal({ onClose, region = 'NZ' }: TermsModalProps) {
+export function TermsModal({ onClose, currency, taxLabel }: TermsModalProps) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function TermsModal({ onClose, region = 'NZ' }: TermsModalProps) {
           </Dialog.Description>
 
           <div className="mt-4">
-            <TermsContent region={region} />
+            <TermsContent currency={currency} taxLabel={taxLabel} />
           </div>
 
           <div className="mt-6 flex justify-end">

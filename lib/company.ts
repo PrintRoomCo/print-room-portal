@@ -80,7 +80,12 @@ export const getCompanyAccess = cache(async (
     { data: locations },
     { count, error: inventoryError },
   ] = await Promise.all([
-    supabase.from('organizations').select('*').eq('id', orgId).is('deleted_at', null).maybeSingle(),
+    supabase
+      .from('organizations')
+      .select('name, logo_url')
+      .eq('id', orgId)
+      .is('deleted_at', null)
+      .maybeSingle(),
     supabase.from('b2b_accounts').select('*').eq('organization_id', orgId).maybeSingle(),
     supabase.from('stores').select('id').eq('organization_id', orgId),
     // Tolerant of `variant_inventory` not existing yet (Inventory sub-app
@@ -159,7 +164,6 @@ export const getCompanyAccess = cache(async (
     hasTrackedInventory,
     defaultStoreId: orgMembership.default_store_id ?? null,
     tenantType: (b2bAccount?.tenant_type as B2BCustomerAccess['tenantType']) ?? null,
-    region: ((org as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'),
   })
 })
 
@@ -182,9 +186,6 @@ interface AccessInput {
   hasTrackedInventory: boolean
   defaultStoreId: string | null
   tenantType: B2BCustomerAccess['tenantType']
-  /** AU Stage 1 — organizations.region. Absent on the individual-user and
-   *  soft-deleted-org paths, which have no org row; those default to 'NZ'. */
-  region?: 'NZ' | 'AU'
 }
 
 export function buildAccess(input: AccessInput): B2BCustomerAccess {
@@ -197,7 +198,6 @@ export function buildAccess(input: AccessInput): B2BCustomerAccess {
     tierDiscount,
     pricingMode,
     tenantType,
-    region,
     ...rest
   } = input
 
@@ -206,7 +206,6 @@ export function buildAccess(input: AccessInput): B2BCustomerAccess {
 
   return {
     ...rest,
-    region: region ?? 'NZ',
     role,
     isCompanyUser,
     isIndividual: !isCompanyUser,

@@ -49,7 +49,7 @@ interface AccountClientProps {
 }
 
 export function AccountClient({ ratesFetchedAt, initialData, enabledCountries }: AccountClientProps) {
-  const { access, loading: companyLoading } = useCompany()
+  const { access, defaultBillingCountry, loading: companyLoading } = useCompany()
   const currentOwnerKey = getPortalOwnerKey(access)
 
   const [stores, setStores] = useState<Store[]>(initialData.stores)
@@ -439,9 +439,9 @@ export function AccountClient({ ratesFetchedAt, initialData, enabledCountries }:
         </div>
       )}
 
-      {/* AU Stage 1: an AU org has nothing to choose — their prices ARE AUD, not
-          conversions of an NZD base, and the provider is pinned. */}
-      {access?.region !== 'AU' && (
+      {/* Non-NZD orgs have nothing to choose: their country prices already use
+          the billing currency, and the provider is pinned to it. */}
+      {defaultBillingCountry.currency === 'NZD' && (
         <CurrencyDisplayPreferenceSection fetchedAt={ratesFetchedAt} />
       )}
 

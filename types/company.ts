@@ -64,10 +64,6 @@ export interface B2BCustomerAccess {
    */
   tenantType: 'franchise' | 'studio_plus_inventory' | 'studio' | null
 
-  /** AU Stage 1 — organizations.region. Billing region: drives GST rate (15%/10%)
-   *  and billing currency (NZD/AUD). 'NZ' for individual users / missing orgs. */
-  region: 'NZ' | 'AU'
-
   /**
    * Derived from tenantType. True only for studio_plus_inventory tenants
    * (catalogue + inventory shape; admins can place orders across stores).

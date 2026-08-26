@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServerComponent } from '@/lib/supabase-server-component'
 import { getSupabaseServer } from '@/lib/supabase'
+import type { SupportedCurrency } from '@/lib/currency/types'
 
 export interface EnabledCountry {
   code: string
@@ -9,7 +10,7 @@ export interface EnabledCountry {
 }
 
 export interface BillingCountryConfig extends EnabledCountry {
-  currency: string
+  currency: SupportedCurrency
   taxRate: number
   taxLabel: string
 }
@@ -41,7 +42,7 @@ export async function getOrgEnabledCountries(
     return {
       code: r.country_code as string,
       name: c?.name ?? (r.country_code as string),
-      currency: c?.currency ?? '',
+      currency: (c?.currency ?? '') as SupportedCurrency,
       taxRate: Number(c?.tax_rate),
       taxLabel: c?.tax_label ?? '',
       isDefault: Boolean(r.is_default),
@@ -60,6 +61,27 @@ export async function getOrgDefaultBillingCountry(
     throw new Error(`Organization ${organizationId} has no enabled default billing country`)
   }
   return defaultCountry
+}
+
+export async function getPlatformBillingCountry(
+  admin: SupabaseClient,
+  code: string,
+): Promise<BillingCountryConfig> {
+  const { data, error } = await admin
+    .from('countries')
+    .select('code, name, currency, tax_rate, tax_label')
+    .eq('code', code)
+    .maybeSingle()
+  if (error) throw new Error(`Country ${code} billing config could not be loaded: ${error.message}`)
+  if (!data) throw new Error(`Country ${code} billing config does not exist`)
+  return {
+    code: data.code as string,
+    name: data.name as string,
+    currency: data.currency as SupportedCurrency,
+    taxRate: Number(data.tax_rate),
+    taxLabel: data.tax_label as string,
+    isDefault: true,
+  }
 }
 
 /**
