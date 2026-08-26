@@ -49,6 +49,14 @@ export function normalizeDecorations(raw: unknown): CartLineDecoration[] {
       renditionId: typeof d.renditionId === 'string' ? d.renditionId : null,
       renditionLabel: typeof d.renditionLabel === 'string' ? d.renditionLabel : null,
       brackets: normalizeBrackets(d.brackets),
+      // Pooled decoration pricing (2026-08-13 spec). Eligibility is a SERVER
+      // decision (real artwork + method is not 'custom') that nothing on the
+      // client can re-derive, so it has to survive the reload or the line
+      // silently stops pooling. `pooledQty` is deliberately NOT carried: it is
+      // derived from the other lines in the cart, and persisting it would let a
+      // stale pool size outlive the cart that produced it. `recomputeProduct-
+      // TierPrices` rebuilds it on hydrate.
+      poolable: d.poolable === true,
     })
   }
   return out
@@ -135,6 +143,20 @@ export function normalizePersisted(raw: unknown): CartState {
       // else the order line loses which skin sold on reload.
       catalogueItemId:
         typeof l.catalogueItemId === 'string' ? l.catalogueItemId : null,
+      // Pooled decoration pricing (2026-08-13 spec) — the owning catalogue and
+      // its opt-in flag, snapshotted at add-time. Both are add-time facts the
+      // cart cannot re-derive, so dropping them here left the line unable to
+      // pool EVER again: `isPoolingLine` needs both, and no later add restores
+      // them. That is what made "Same artwork savings" vanish on reload.
+      catalogueId: typeof l.catalogueId === 'string' ? l.catalogueId : null,
+      poolingEnabled: l.poolingEnabled === true,
+      // manual_final — the item's ONE combined decoration figure and its own
+      // qty ladder. Placements on a manual line are $0 metadata, so without
+      // these the reloaded cart shows no decoration cost at all while checkout
+      // still bills the combined figure.
+      manualDecorationPerUnit:
+        typeof l.manualDecorationPerUnit === 'number' ? l.manualDecorationPerUnit : null,
+      manualDecorationBrackets: normalizeBrackets(l.manualDecorationBrackets),
     })
   }
   return { lines: normalized }
