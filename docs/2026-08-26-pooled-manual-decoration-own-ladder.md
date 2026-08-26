@@ -1,7 +1,9 @@
 # Pooled manual_final items keep their OWN combined decoration figure
 
 **Date:** 2026-08-26
-**Status:** Built. Customer repo committed on `fix/pooled-manual-own-decoration-ladder`; staff repo committed on the same branch name, **migration authored but NOT pushed**.
+**Status:** SHIPPED 2026-08-26. Both mainlines carry it (customer `main`, staff `master`) and
+migration `20260826120000` is applied — verified in prod:
+`amendment_decoration_unit_price_for_currency` now takes `p_band_qty integer` in position 5.
 **Amends:** [`docs/2026-08-13-pooled-decoration-pricing.md`](./2026-08-13-pooled-decoration-pricing.md) §3 (see the dated amendment section there).
 **Requested by:** Jon, after the demo catalogue went pooled and the AM's Total-price lever stopped working.
 
@@ -240,8 +242,12 @@ They are inseparable: a half-deploy makes the cart's claim and the server's re-d
 
 ### Staff repo — same branch name
 
-- `supabase/migrations/20260826120000_pooled_manual_decoration_own_ladder.sql` — **authored, NOT pushed.**
-- `src/components/catalogues/sections/PricingSection.tsx` — the amber note is now mode-aware.
+- `supabase/migrations/20260826120000_pooled_manual_decoration_own_ladder.sql` — **applied.**
+- `src/components/catalogues/sections/PricingSection.tsx` — the amber note is now
+  automatic-pricing ONLY. A manual item shows nothing: its per-band Decoration and
+  Total are the charged figures, so no caveat is left to give, and amber is the OEM
+  *warn* status — wrong dress for "this is working correctly". The note now appears
+  exactly when the decoration column reads "By decoration ladder".
 - `src/lib/orders/quote-line-pooling.ts` — comment only; no behaviour change needed.
 
 ---
