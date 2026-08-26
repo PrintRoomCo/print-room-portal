@@ -28,7 +28,18 @@ Introduced by `eb9747f feat(au-stage-1): AUD billing-currency pin on the display
 
 ### Defect 2 — the catalogue grid bypasses FX for every org
 
-`app/(portal)/catalogue/page.tsx:753` stamps each tile with `price_currency: defaultCountry?.currency`, and `components/shop/Money.tsx:17-19` short-circuits on it:
+**This one is a collision with a deliberate decision, not a plain mistake.** `be9e931 feat(pricing): use the default-country list in cart` (2026-08-24, Jamie) introduced the bypass on purpose, documented it, and pinned it with a test:
+
+```tsx
+/** Authored canonical currency. When present, visitor FX conversion is bypassed. */
+currency?: string
+```
+
+> *"formats an authored AUD amount directly instead of applying visitor conversion"* — `components/shop/__tests__/Money.test.tsx:15`
+
+The reasoning is sound and is preserved by this spec (see D8): a price drawn from a **country price list** is a real commercial price, not an FX derivation, and rendering A$29.00 as a converted NZ$34.78 would misrepresent it.
+
+The mechanism is `components/shop/Money.tsx:17-19`:
 
 ```tsx
 if (currency) {
@@ -36,11 +47,17 @@ if (currency) {
 }
 ```
 
-`formatCurrency` **relabels without converting**. With the partition flag on, `defaultCountry` is populated for every org, so every catalogue card price is hard-formatted in the org's billing currency and ignores the picker. This hits NZ orgs too — the symptom is "prices change on the product page and in the cart, but the grid never moves".
+`formatCurrency` **relabels without converting**, and `app/(portal)/catalogue/page.tsx:753` stamps every tile with `price_currency: defaultCountry?.currency`. With the partition flag on, `defaultCountry` is populated for every org, so every catalogue card price is hard-formatted in the org's billing currency and ignores the picker. This hits NZ orgs too — the symptom is "prices change on the product page and in the cart, but the grid never moves".
 
-### Why no test caught either
+What makes it a defect is the wiring, not the idea. Because `price_currency` is always `defaultCountry.currency`, `sourceCurrency === baseCurrency` at **every current call site**. The "authored foreign price" case the bypass was written to protect is never actually exercised; its only live effect is to pin the grid to base.
 
-There are **no tests for `CurrencyPicker` or `CurrencyContext`**. `components/layout/__tests__/` holds `AccountMenu`, `PortalShell` and `Sidebar` only. A silent no-op in a click handler is exactly the failure a render-and-click test catches.
+### Why the tests did not catch this
+
+The two defects failed differently, and the difference matters for the Testing section below.
+
+**Defect 1 had no test at all.** There is nothing covering `CurrencyPicker` or `CurrencyContext` — `components/layout/__tests__/` holds `AccountMenu`, `PortalShell` and `Sidebar` only. A silent no-op in a click handler is precisely what a render-and-click test catches, and none existed.
+
+**Defect 2 had a passing test that asserted it.** `Money.test.tsx` was green throughout, because the bypass was the intended behaviour when it was written. No test was wrong; the requirement changed underneath it. That is the ordinary cost of a deliberate decision meeting a later one, and the fix is to move the assertion (§4), not to treat the old test as a failure.
 
 ## Vocabulary
 
@@ -65,6 +82,7 @@ Three distinct currencies are presently collapsed into one concept. Naming them 
 | D5 | **The tooltip renders nothing when billing set == display currency.** | An NZ org browsing in NZD — most traffic — sees no change at all. Warning someone that NZD will be invoiced as NZD is noise. |
 | D6 | **Rename `nzd`/`nzdAmount`/`convertNZD` to base-currency-neutral names.** | Post-D1 these parameters hold AUD for WHITEFOX. A parameter that lies about its unit is how the next money bug gets written. |
 | D7 | **Confirmation and past-orders are left alone.** | They already read the immutable stored order currency (`ConfirmationView.tsx:118-122`, `OrdersTable.tsx:92-95`), which is correct: a historical invoice must not move with today's FX rate. |
+| D8 | **Convert on shopping surfaces; never convert on billing surfaces.** Catalogue, PDP and cart convert freely. `/checkout/review`, confirmation and past-orders render authored figures verbatim. | Keeps `be9e931`'s intent and relocates it to the layer where it is actually load-bearing. One rule, stated once: **convert wherever the number is not the number you will be billed.** |
 
 ### D1 in detail — why the pin can be removed safely
 
@@ -94,7 +112,7 @@ export function convertBetween(
 
 `amount × (rates[to] / rates[from])`, with the D2 guard. `from === to` returns `amount` untouched — no float drift on the common path.
 
-`convertNZD` is reimplemented as `convertBetween(amount, 'NZD', currency, rates)` so existing callers keep working during the rename.
+`convertNZD` is **replaced by** `convertBetween`, not wrapped by it. Its only three callers all live inside `CurrencyContext` (`:7`, `:130`, `:139`), so there is no external surface needing a compatibility alias — see §7.
 
 ### 2. Context — `contexts/CurrencyContext.tsx`
 
@@ -155,6 +173,8 @@ export function Money({ amount, sourceCurrency, className }: Props) {
 
 `ProductCard.tsx:99-108` keeps passing `product.price_currency` at all four sites; only the semantics change. The loading branch formats in the source currency instead of hardcoded NZD.
 
+`components/shop/__tests__/Money.test.tsx` is **rewritten, not deleted**. Its current assertion ("formats an authored AUD amount directly instead of applying visitor conversion") encodes the pre-D8 rule. The replacement asserts the D8 boundary: `Money` converts `sourceCurrency` → display, and the verbatim-authored path now lives on the billing surfaces in §5. Deleting the test would discard the intent; rewriting it records where that intent moved.
+
 ### 5. Checkout vs review — `components/checkout/BilledOrderSummary.tsx`
 
 `CountryBilledOrderSummary` hardcodes `exact()` (`:59-60`). It gains a formatter prop:
@@ -195,7 +215,23 @@ Returns `null` when `billingCurrencies` is exactly `[displayCurrency]` (D5).
 
 Mounted beside the order total on `/checkout`, matching `PickingFeeInfo`'s placement pattern (`BilledOrderSummary.tsx:316-320`).
 
-### 7. Picker hidden on review — `components/layout/CurrencyPicker.tsx`
+### 7. Rename (D6) — inventory
+
+Confirmed in scope. **24 occurrences across 11 files**, all mechanical and all type-checked:
+
+| Old | New | Sites |
+| --- | --- | --- |
+| `convertNZD(nzdAmount, currency, rates)` | `convertBetween(amount, from, to, rates)` | `lib/currency/format.ts:19`, `lib/currency/index.ts:7`, `contexts/CurrencyContext.tsx:7,130,139` |
+| `Money`'s `nzd` prop | `amount` | `components/shop/Money.tsx:8,15,18,21`, `ProductCard.tsx:99,104,105,108`, `Money.test.tsx:16` |
+| `Money`'s `currency` prop | `sourceCurrency` | same call sites |
+| `format: (nzdAmount: number)` | `format: (amount: number)` | `CurrencyContext.tsx:32,33,127,136`, `PrepaidLinePrice.tsx:27`, `BilledOrderSummary.tsx:179`, `PriceBreakdown.tsx:17`, `PickingFeeInfo.tsx:9` |
+| doc comment `<Money nzd={…} />` | `<Money amount={…} />` | `lib/format/price.ts:4` |
+
+**`convertNZD` is removed, not kept as an alias.** Leaving a deprecated wrapper is how the misleading name survives the rename — and its only three callers are all inside `CurrencyContext`, so there is no external surface to keep compatible. `lib/currency/index.ts:7` re-exports it; that export changes with it.
+
+The `/** NZD amount stored in DB. */` comment on `Money.tsx:8` is factually wrong post-D1 and is replaced with a note that the amount is denominated in `sourceCurrency`, defaulting to the org's base currency.
+
+### 8. Picker hidden on review — `components/layout/CurrencyPicker.tsx`
 
 ```tsx
 const pathname = usePathname()
@@ -206,7 +242,7 @@ Kept inside `CurrencyPicker` rather than in `PortalTopBar` so the visibility rul
 
 ## Testing
 
-`lib/currency/__tests__/detect.test.ts` is the only existing currency test — nothing covers the context, the picker, or conversion. This spec adds four files and extends that one:
+`lib/currency/__tests__/detect.test.ts` is the only existing currency test — nothing covers the context, the picker, or conversion. This spec adds three files, extends one and rewrites one:
 
 | File | Covers |
 | --- | --- |
@@ -214,7 +250,7 @@ Kept inside `CurrencyPicker` rather than in `PortalTopBar` so the visibility rul
 | `contexts/__tests__/CurrencyContext.test.tsx` | AUD base converts to USD; **regression: `setCurrency` persists and updates for an AU org**; rates-absent fallback formats in base, not NZD |
 | `components/layout/__tests__/CurrencyPicker.test.tsx` | opens on click, selection calls through and closes, returns null on `/checkout/review` |
 | `components/checkout/__tests__/InvoiceCurrencyInfo.test.tsx` | single-currency copy, multi-currency copy, renders null when sets match |
-| `components/shop/__tests__/Money.test.tsx` | `sourceCurrency` converts rather than relabels |
+| `components/shop/__tests__/Money.test.tsx` *(rewrite)* | `sourceCurrency` converts rather than relabels; replaces the pre-D8 bypass assertion from `be9e931` |
 | `lib/currency/__tests__/detect.test.ts` *(extend)* | fallback chain — saved cookie wins over geo; geo wins over base; base used only when both absent; NZ org chain unchanged from today |
 
 The `CurrencyContext` `setCurrency` test is the one that would have caught the original defect.
