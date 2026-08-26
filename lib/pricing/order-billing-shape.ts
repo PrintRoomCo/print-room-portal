@@ -237,8 +237,9 @@ export function billedOrderShape(input: {
   /** Exact partition country when the SP3 cutover is enabled. */
   billCountry?: string
   countryPartitionEnabled?: boolean
-  /** organizations.region — threaded to the picking-fee gate. Null/unknown = NZ. */
-  orgRegion?: string | null
+  /** Org default country code — threaded to the flag-off picking-fee gate.
+   *  Null/unknown = NZ. */
+  defaultBillCountry?: string | null
 }): BilledOrderShape {
   const partitions = partitionByFulfilment(
     input.lines,
@@ -269,7 +270,7 @@ export function billedOrderShape(input: {
       billCountry: input.billCountry ?? '',
       goodsSubtotal: goodsValueForBand,
       legacyShipCountry: input.shipCountry,
-      legacyOrgRegion: input.orgRegion ?? null,
+      legacyDefaultBillCountry: input.defaultBillCountry ?? null,
     })
     const gst = round2((billedSubtotal + pickingFee) * input.gstRate)
 

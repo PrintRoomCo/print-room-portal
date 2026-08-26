@@ -10,7 +10,9 @@ vi.mock('@/components/layout/PortalTopBarContext', () => ({
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import ConfirmationPage from './page'
 
-function adminForStampedQuote() {
+function adminForStampedQuote(
+  quoteOverrides: Record<string, unknown> = {},
+) {
   const from = vi.fn((table: string) => {
     const response = () => {
       if (table === 'orders') {
@@ -40,13 +42,20 @@ function adminForStampedQuote() {
                 tax_rate: 0.1,
                 tax_label: 'GST 10%',
               },
+              ...quoteOverrides,
             },
           },
           error: null,
         }
       }
-      if (table === 'organizations') {
-        return { data: { region: 'NZ' }, error: null }
+      if (table === 'organization_countries') {
+        return {
+          data: {
+            country_code: 'AU',
+            countries: { currency: 'AUD', tax_rate: 0.1, tax_label: 'GST 10%' },
+          },
+          error: null,
+        }
       }
       return { data: [], error: null }
     }
@@ -88,6 +97,31 @@ describe('checkout confirmation billing stamp', () => {
     expect(screen.getByText('A$110.00')).toBeTruthy()
     expect(screen.getByText('GST 10%')).toBeTruthy()
     expect(screen.getByText('Australia · AUD')).toBeTruthy()
+    expect(from).not.toHaveBeenCalledWith('organizations')
+    expect(from).not.toHaveBeenCalledWith('organization_countries')
+  })
+
+  it('reconstructs a historical null stamp from the org default country row, never org region', async () => {
+    const { admin, from } = adminForStampedQuote({
+      bill_country: null,
+      currency: null,
+      countries: null,
+    })
+    vi.mocked(requireB2BCustomer).mockResolvedValue({
+      admin,
+      context: {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        email: 'buyer@example.test',
+      },
+    } as never)
+
+    render(await ConfirmationPage({ params: Promise.resolve({ orderId: 'order-au' }) }))
+
+    expect(screen.getAllByText('A$100.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('A$110.00')).toBeTruthy()
+    expect(screen.getByText('GST 10%')).toBeTruthy()
+    expect(from).toHaveBeenCalledWith('organization_countries')
     expect(from).not.toHaveBeenCalledWith('organizations')
   })
 })

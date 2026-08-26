@@ -20,10 +20,10 @@ function line(over: Partial<BilledLineInput> = {}): BilledLineInput {
 
 const NZ = { gstRate: 0.15, shipCountry: 'NZ' as string | null }
 
-// AU Stage 1 (spec §10 oracle): an AU org bills AUD at 10% GST and NEVER carries
-// the NZD picking fee — even on an NZ ship-to. GST computes on billed goods + a
-// zero fee at the AU rate.
-const AU = { gstRate: 0.1, shipCountry: 'NZ' as string | null, orgRegion: 'AU' as string | null }
+// Flag-off oracle: an AU-default-country org bills AUD at 10% GST and NEVER
+// carries the NZD picking fee — even on an NZ ship-to. GST computes on billed
+// goods + a zero fee at the AU rate.
+const AU = { gstRate: 0.1, shipCountry: 'NZ' as string | null, defaultBillCountry: 'AU' as string | null }
 
 function countryOrder(
   over: Partial<CheckoutOrderGroup> & Pick<CheckoutOrderGroup, 'key' | 'countryCode' | 'orderType'>,

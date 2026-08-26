@@ -184,7 +184,7 @@ export function CheckoutClient({
         // assumption; enabled checkout money comes only from prepared country
         // partitions below.
         shipCountry: 'NZ',
-        orgRegion: defaultBillingCountry.code,
+        defaultBillCountry: defaultBillingCountry.code,
       }),
     [
       cart.lines,

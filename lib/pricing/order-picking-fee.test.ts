@@ -32,13 +32,13 @@ describe('orderPickingFee exact bill-country rule', () => {
 })
 
 describe('checkoutPickingFee flag compatibility', () => {
-  it('changes AU-org → NZ-stock only when the country cutover is enabled', () => {
+  it('changes AU-default-org → NZ-stock only when the country cutover is enabled', () => {
     const input = {
       orderType: 'stock_on_hand' as const,
       billCountry: 'NZ',
       goodsSubtotal: 100,
       legacyShipCountry: 'NZ',
-      legacyOrgRegion: 'AU',
+      legacyDefaultBillCountry: 'AU',
     }
 
     expect(checkoutPickingFee({ ...input, countryPartitionEnabled: false })).toBe(0)
@@ -55,9 +55,32 @@ describe('checkoutPickingFee flag compatibility', () => {
           billCountry: '',
           goodsSubtotal: 100,
           legacyShipCountry,
-          legacyOrgRegion: 'NZ',
+          legacyDefaultBillCountry: 'NZ',
         }),
       ).toBe(30)
+    },
+  )
+
+  // Flag-off parity matrix: the legacy fee exists only for an NZ default
+  // country. A future non-NZ default (e.g. GB) is exact-country safe: zero.
+  it.each([
+    { legacyDefaultBillCountry: 'NZ', legacyShipCountry: 'New Zealand', expected: 30 },
+    { legacyDefaultBillCountry: 'NZ', legacyShipCountry: 'AU', expected: 0 },
+    { legacyDefaultBillCountry: 'AU', legacyShipCountry: 'NZ', expected: 0 },
+    { legacyDefaultBillCountry: 'GB', legacyShipCountry: 'NZ', expected: 0 },
+  ])(
+    'flag-off default $legacyDefaultBillCountry shipping $legacyShipCountry → $expected',
+    ({ legacyDefaultBillCountry, legacyShipCountry, expected }) => {
+      expect(
+        checkoutPickingFee({
+          countryPartitionEnabled: false,
+          orderType: 'stock_on_hand',
+          billCountry: '',
+          goodsSubtotal: 100,
+          legacyShipCountry,
+          legacyDefaultBillCountry,
+        }),
+      ).toBe(expected)
     },
   )
 })
@@ -124,27 +147,27 @@ describe('stockedGoodsValue / estimateCartPickingFee', () => {
     ).toBe(0)
   })
 
-  it('uses the exact default country when enabled and the frozen region gate when off', () => {
+  it('uses the exact default country when enabled and the frozen legacy default-country gate when off', () => {
     const lines = [cartLine({ qty: 5, unitPrice: 20 })]
     expect(
       estimateCartPickingFee(lines, {
         countryPartitionEnabled: true,
         defaultBillCountry: 'NZ',
-        legacyOrgRegion: 'AU',
+        legacyDefaultBillCountry: 'AU',
       }),
     ).toBe(30)
     expect(
       estimateCartPickingFee(lines, {
         countryPartitionEnabled: true,
         defaultBillCountry: 'AU',
-        legacyOrgRegion: 'NZ',
+        legacyDefaultBillCountry: 'NZ',
       }),
     ).toBe(0)
     expect(
       estimateCartPickingFee(lines, {
         countryPartitionEnabled: false,
         defaultBillCountry: 'NZ',
-        legacyOrgRegion: 'AU',
+        legacyDefaultBillCountry: 'AU',
       }),
     ).toBe(0)
   })

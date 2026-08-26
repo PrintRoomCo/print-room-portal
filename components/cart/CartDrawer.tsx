@@ -57,7 +57,7 @@ export function CartDrawer() {
         pickingFee: estimateCartPickingFee(cart.lines, {
           countryPartitionEnabled,
           defaultBillCountry: defaultBillingCountry.code,
-          legacyOrgRegion: defaultBillingCountry.code,
+          legacyDefaultBillCountry: defaultBillingCountry.code,
         }),
       }),
     [

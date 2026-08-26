@@ -14,7 +14,6 @@ import {
   pickCatalogueFrontImage,
   type CatalogueFrontImageRow,
 } from '@/lib/shop/catalogue-front-image'
-import { currencyForRegion, gstRateForRegion } from '@/lib/pricing/gst'
 
 interface OrderRow {
   id: string
@@ -162,17 +161,24 @@ export default async function ConfirmationPage({
     countryName = stampedCountry.name
   } else {
     // Historical pre-SP3 compatibility only: old quotes have no bill-country
-    // stamp, so retain the legacy organization-region reconstruction.
-    const { data: orgRegionRow } = await admin
-      .from('organizations')
-      .select('region')
-      .eq('id', order.quotes.organization_id!)
+    // stamp, so reconstruct from the org's current default country row (no
+    // is_active filter — an immutable order outlives the platform kill switch).
+    const { data: defaultRow } = await admin
+      .from('organization_countries')
+      .select('country_code, countries!inner(currency, tax_rate, tax_label)')
+      .eq('organization_id', order.quotes.organization_id!)
+      .eq('is_default', true)
       .maybeSingle()
-    const legacyRegion =
-      (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
-    gstRate = gstRateForRegion(legacyRegion)
-    taxLabel = `GST ${Math.round(gstRate * 100)}%`
-    currency = order.quotes.currency ?? currencyForRegion(legacyRegion)
+    const joined = pickOne(
+      (defaultRow as {
+        countries?:
+          | { currency: string; tax_rate: number | string; tax_label: string }
+          | Array<{ currency: string; tax_rate: number | string; tax_label: string }>
+      } | null)?.countries,
+    )
+    gstRate = joined ? Number(joined.tax_rate) : 0.15
+    taxLabel = joined?.tax_label ?? `GST ${Math.round(gstRate * 100)}%`
+    currency = order.quotes.currency ?? joined?.currency ?? 'NZD'
     countryName = null
   }
 

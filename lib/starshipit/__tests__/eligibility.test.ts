@@ -10,7 +10,7 @@ const base: StarshipitEligibilityInput = {
   isStockOnHand: true,
   hasDeliveryAddress: true,
   orderType: null,
-  region: 'NZ',
+  billCountry: 'NZ',
 }
 
 describe('evaluateStarshipitEligibility', () => {
@@ -53,7 +53,7 @@ describe('evaluateStarshipitEligibility', () => {
     expect(evaluateStarshipitEligibility({
       enabled: true, trigger: 'placement', isTestOrg: true, intent: 'inventory',
       alreadyPushed: true, isStockOnHand: false,
-      hasDeliveryAddress: false, orderType: 'pickup', region: 'NZ',
+      hasDeliveryAddress: false, orderType: 'pickup', billCountry: 'NZ',
     })).toEqual({ eligible: false, reason: 'test_org' })
   })
   it('skips an already-pushed order (idempotency, D6)', () => {
@@ -75,19 +75,19 @@ describe('evaluateStarshipitEligibility', () => {
   })
 })
 
-describe('evaluateStarshipitEligibility — AU org (AU Stage 1)', () => {
-  it('AU org → au_region, ordered after test_org', () => {
+describe('evaluateStarshipitEligibility — AU bill country', () => {
+  it('AU bill country → au_region, ordered after test_org', () => {
     const base = {
       enabled: true, trigger: 'placement' as const, intent: 'customer' as const,
       isTestOrg: false, alreadyPushed: false, isStockOnHand: true,
-      hasDeliveryAddress: true, region: 'AU',
+      hasDeliveryAddress: true, billCountry: 'AU',
     }
     expect(evaluateStarshipitEligibility(base)).toEqual({ eligible: false, reason: 'au_region' })
     // test_org wins over au_region
     expect(evaluateStarshipitEligibility({ ...base, isTestOrg: true })).toEqual({ eligible: false, reason: 'test_org' })
     // au_region wins over the downstream gates (e.g. stock gate)
     expect(evaluateStarshipitEligibility({ ...base, isStockOnHand: false })).toEqual({ eligible: false, reason: 'au_region' })
-    // null region = NZ
-    expect(evaluateStarshipitEligibility({ ...base, region: null })).toEqual({ eligible: true, reason: 'ok' })
+    // null bill country = NZ
+    expect(evaluateStarshipitEligibility({ ...base, billCountry: null })).toEqual({ eligible: true, reason: 'ok' })
   })
 })

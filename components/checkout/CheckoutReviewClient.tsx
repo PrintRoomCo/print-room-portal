@@ -157,7 +157,7 @@ export function CheckoutReviewClient({
         // Task 7's private flag-off adapter owns the frozen legacy estimate.
         // Enabled checkout money comes only from prepared country partitions.
         shipCountry: 'NZ',
-        orgRegion: defaultBillingCountry.code,
+        defaultBillCountry: defaultBillingCountry.code,
       }),
     [
       cart.lines,

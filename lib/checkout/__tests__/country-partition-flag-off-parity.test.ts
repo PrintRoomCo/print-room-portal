@@ -86,14 +86,14 @@ afterEach(() => {
 interface ParityFixture {
   name: string
   countryCode: 'NZ' | 'AU'
-  orgRegion: 'NZ' | 'AU'
+  defaultCountryCode: 'NZ' | 'AU'
   currency: 'NZD' | 'AUD'
   isTest?: boolean
 }
 
 const parityFixtures: ParityFixture[] = [
-  { name: 'NZ single-country checkout', countryCode: 'NZ', orgRegion: 'NZ', currency: 'NZD' },
-  { name: 'AU single-country checkout', countryCode: 'AU', orgRegion: 'AU', currency: 'AUD' },
+  { name: 'NZ single-country checkout', countryCode: 'NZ', defaultCountryCode: 'NZ', currency: 'NZD' },
+  { name: 'AU single-country checkout', countryCode: 'AU', defaultCountryCode: 'AU', currency: 'AUD' },
 ]
 
 function parityWorld(fixture: ParityFixture, partitionIndex: number): StubConfig {
@@ -127,7 +127,7 @@ function parityWorld(fixture: ParityFixture, partitionIndex: number): StubConfig
     garmentUnitPriceForCurrency: () => 12.5,
     decorationRpcPrice: () => 6,
     decorationPriceForCurrency: () => 6,
-    organization: { region: fixture.orgRegion, isTest: fixture.isTest ?? true },
+    organization: { isTest: fixture.isTest ?? true },
     enabledCountries: [
       {
         code: fixture.countryCode,
@@ -605,12 +605,12 @@ describe('executable checkout flag-off parity oracle', () => {
       expect((off.mondayCalls[0] as Record<string, unknown>).currency).toBe(fixture.currency)
       expect(off.xeroCalls).toHaveLength(2)
       expect(
-        (off.xeroCalls as Array<Record<string, unknown>>).map((call) => call.orgRegion),
-      ).toStrictEqual([fixture.orgRegion, fixture.orgRegion])
+        (off.xeroCalls as Array<Record<string, unknown>>).map((call) => call.billCountry),
+      ).toStrictEqual([fixture.defaultCountryCode, fixture.defaultCountryCode])
       expect(off.starshipitCalls).toHaveLength(2)
       expect(
-        (off.starshipitCalls as Array<Record<string, unknown>>).map((call) => call.region),
-      ).toStrictEqual([fixture.orgRegion, fixture.orgRegion])
+        (off.starshipitCalls as Array<Record<string, unknown>>).map((call) => call.billCountry),
+      ).toStrictEqual([fixture.defaultCountryCode, fixture.defaultCountryCode])
       expect(off.emailCalls).toHaveLength(2)
       expect(
         (off.emailCalls as Array<{ call: Record<string, unknown> }>).map(
@@ -626,7 +626,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
@@ -644,7 +644,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
@@ -662,21 +662,15 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
     )
 
     expect(
-      (artifact.xeroCalls as Array<Record<string, unknown>>).map((call) => ({
-        billCountry: call.billCountry,
-        orgRegion: call.orgRegion,
-      })),
-    ).toStrictEqual([
-      { billCountry: 'NZ', orgRegion: 'NZ' },
-      { billCountry: 'NZ', orgRegion: 'NZ' },
-    ])
+      (artifact.xeroCalls as Array<Record<string, unknown>>).map((call) => call.billCountry),
+    ).toStrictEqual(['NZ', 'NZ'])
   })
 
   it('routes Starshipit from the exact destination stamp in the AU-org to NZ canary', async () => {
@@ -684,7 +678,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
@@ -692,7 +686,7 @@ describe('executable checkout flag-off parity oracle', () => {
 
     expect(
       (artifact.starshipitCalls as Array<Record<string, unknown>>).map(
-        (call) => call.region,
+        (call) => call.billCountry,
       ),
     ).toStrictEqual(['NZ', 'NZ'])
   })
@@ -702,7 +696,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
@@ -720,7 +714,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
       },
       true,
@@ -738,7 +732,7 @@ describe('executable checkout flag-off parity oracle', () => {
       {
         name: 'AU organization shipping to NZ',
         countryCode: 'NZ',
-        orgRegion: 'AU',
+        defaultCountryCode: 'AU',
         currency: 'NZD',
         isTest: false,
       },

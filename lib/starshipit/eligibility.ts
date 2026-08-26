@@ -41,9 +41,10 @@ export interface StarshipitEligibilityInput {
   hasDeliveryAddress: boolean
   /** Optional delivery/pickup discriminator (NOT Spec A order_type). */
   orderType?: string | null
-  /** organizations.region — AU orgs skip Starshipit entirely in Stage 1 (no AU
-   *  account; AU freight is Tier 2+). Null/unknown = NZ. */
-  region: string | null | undefined
+  /** Immutable quote billing stamp (org default country for historical NULL
+   *  quotes). AU-billed orders skip Starshipit entirely (no AU account; AU
+   *  freight is Tier 2+). Null/unknown = NZ. */
+  billCountry: string | null | undefined
 }
 
 export interface StarshipitEligibility {
@@ -56,7 +57,9 @@ export function evaluateStarshipitEligibility(
 ): StarshipitEligibility {
   if (!input.enabled) return { eligible: false, reason: 'disabled' }
   if (input.isTestOrg) return { eligible: false, reason: 'test_org' }
-  if ((input.region ?? 'NZ') === 'AU') return { eligible: false, reason: 'au_region' }
+  // The externally observed reason string 'au_region' is stable audit history;
+  // the gate itself reads the bill-country stamp, not an organization column.
+  if ((input.billCountry ?? 'NZ') === 'AU') return { eligible: false, reason: 'au_region' }
   if (input.intent === 'inventory') return { eligible: false, reason: 'inventory_intent' }
   if (input.alreadyPushed) return { eligible: false, reason: 'already_pushed' }
   if (input.trigger === 'placement' && !input.isStockOnHand)

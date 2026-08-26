@@ -26,8 +26,8 @@ function persistenceWorld(overrides: Partial<StubConfig> = {}) {
     tier: null,
     garmentUnitPrice: 12.5,
     garmentUnitPriceForCurrency: () => 15,
-    enabledCountries: [AU_COUNTRY],
-    organization: { region: 'AU' },
+    // AU is the org's default country row: the flag-off path stamps from it.
+    enabledCountries: [{ ...AU_COUNTRY, isDefault: true }],
     submitResult: {
       quoteId: 'quote-au',
       orderId: 'order-au',

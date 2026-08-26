@@ -47,7 +47,7 @@ const baseArgs = {
   trigger: 'placement' as const,
   intent: 'customer' as const,
   isTestOrg: false,
-  region: 'NZ',
+  billCountry: 'NZ',
   isStockOnHand: true,
   customerEmail: 'jamie@theprint-room.co.nz',
   shippingAddress: { name: 'AF', street: '12 Example St', city: 'Auckland', postcode: '1023', country: 'New Zealand' },
@@ -128,9 +128,8 @@ describe('pushOrderToStarshipit', () => {
 
     const r = await pushOrderToStarshipit(admin, {
       ...baseArgs,
-      region: null,
       billCountry: 'GB',
-    } as typeof baseArgs & { region: null; billCountry: string })
+    })
 
     expect(r).toEqual({ status: 'skipped', reason: 'unsupported_country' })
     expect(createStarshipitOrder).not.toHaveBeenCalled()

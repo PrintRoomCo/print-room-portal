@@ -19,16 +19,18 @@ export function orderPickingFee(input: {
 
 /**
  * Flag-off compatibility only. Delete with CHECKOUT_COUNTRY_PARTITION_ENABLED.
- * This freezes the pre-SP3 fuzzy address and AU-region override and is never
- * reached by enabled preparation.
+ * This freezes the pre-SP3 fuzzy address and non-NZ-default suppression and is
+ * never reached by enabled preparation. Only an NZ default country carries the
+ * legacy fee; a future non-NZ default (e.g. GB) is exact-country safe: zero.
+ * Null/undefined preserves the old unknown-org NZ assumption.
  */
 function legacyPickingFeeWhenCountryPartitionOff(input: {
   orderType: 'purchase_order' | 'stock_on_hand'
   shipCountry: string | null | undefined
   goodsSubtotal: number
-  orgRegion: string | null | undefined
+  defaultBillCountry: string | null | undefined
 }): number {
-  if ((input.orgRegion ?? 'NZ') === 'AU') return 0
+  if ((input.defaultBillCountry ?? 'NZ') !== 'NZ') return 0
   const normalized = (typeof input.shipCountry === 'string' ? input.shipCountry : '')
     .trim()
     .toLowerCase()
@@ -46,14 +48,14 @@ export function checkoutPickingFee(input: {
   billCountry: string
   goodsSubtotal: number
   legacyShipCountry: string | null | undefined
-  legacyOrgRegion: string | null | undefined
+  legacyDefaultBillCountry: string | null | undefined
 }): number {
   if (!input.countryPartitionEnabled) {
     return legacyPickingFeeWhenCountryPartitionOff({
       orderType: input.orderType,
       shipCountry: input.legacyShipCountry,
       goodsSubtotal: input.goodsSubtotal,
-      orgRegion: input.legacyOrgRegion,
+      defaultBillCountry: input.legacyDefaultBillCountry,
     })
   }
   return orderPickingFee({
@@ -87,11 +89,11 @@ export function estimateCartPickingFee(
   options: {
     countryPartitionEnabled: boolean
     defaultBillCountry: string | null
-    legacyOrgRegion: string | null | undefined
+    legacyDefaultBillCountry: string | null | undefined
   } = {
     countryPartitionEnabled: false,
     defaultBillCountry: null,
-    legacyOrgRegion: null,
+    legacyDefaultBillCountry: null,
   },
 ): number {
   const goods = stockedGoodsValue(lines)
@@ -102,8 +104,8 @@ export function estimateCartPickingFee(
     billCountry: options.defaultBillCountry ?? '',
     goodsSubtotal: goods,
     // The legacy drawer always assumed an NZ destination because it did not yet
-    // know the final ship-to; only the old org-region override could suppress it.
+    // know the final ship-to; only a non-NZ default country could suppress it.
     legacyShipCountry: 'NZ',
-    legacyOrgRegion: options.legacyOrgRegion,
+    legacyDefaultBillCountry: options.legacyDefaultBillCountry,
   })
 }

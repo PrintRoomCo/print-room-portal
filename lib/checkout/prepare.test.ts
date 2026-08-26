@@ -50,7 +50,6 @@ function config(): StubConfig {
     links: [],
     tier: null,
     garmentUnitPrice: 12.5,
-    organization: { region: 'NZ' },
     enabledCountryCodes: ['NZ'],
   }
 }
@@ -686,7 +685,24 @@ describe('prepareCustomerOrderPartition exact destination pricing', () => {
 
   it('charges the deliberate AU-org → NZ-stock fee only in enabled preparation', async () => {
     const canaryConfig = countryConfig({
-      organization: { region: 'AU' },
+      enabledCountries: [
+        {
+          code: 'AU',
+          name: 'Australia',
+          currency: 'AUD',
+          taxRate: 0.1,
+          taxLabel: 'GST 10%',
+          isDefault: true,
+        },
+        {
+          code: 'NZ',
+          name: 'New Zealand',
+          currency: 'NZD',
+          taxRate: 0.15,
+          taxLabel: 'GST 15%',
+          isDefault: false,
+        },
+      ],
       products: [{ id: 'product-1', fulfilmentType: 'stocked', moq: 24 }],
     })
     const off = await prepareCustomerOrderPartition(

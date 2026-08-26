@@ -50,7 +50,7 @@ export async function pushOrderOnProductionComplete(
 
     const { data: quoteData } = await admin
       .from('quotes')
-      .select('order_ref, customer_email, organization_id, shipping_address')
+      .select('order_ref, customer_email, organization_id, shipping_address, bill_country')
       .eq('id', args.quoteId)
       .maybeSingle()
     const quote = quoteData as {
@@ -58,14 +58,29 @@ export async function pushOrderOnProductionComplete(
       customer_email: string | null
       organization_id: string | null
       shipping_address: Record<string, unknown> | null
+      bill_country: string | null
     } | null
     if (!quote?.order_ref || !quote.organization_id) return
 
     const { data: orgData } = await admin
       .from('organizations')
-      .select('is_test, region')
+      .select('is_test')
       .eq('id', quote.organization_id)
       .maybeSingle()
+
+    // Historical pre-SP3 quotes have no billing stamp; resolve the org's
+    // default country row — never organizations.region.
+    let billCountry: string | null = quote.bill_country
+    if (!billCountry) {
+      const { data: defaultRow } = await admin
+        .from('organization_countries')
+        .select('country_code')
+        .eq('organization_id', quote.organization_id)
+        .eq('is_default', true)
+        .maybeSingle()
+      billCountry =
+        (defaultRow as { country_code?: string | null } | null)?.country_code ?? null
+    }
 
     try {
       const result = await pushOrderToStarshipit(admin, {
@@ -77,7 +92,7 @@ export async function pushOrderOnProductionComplete(
         trigger: 'production_complete',
         intent: order.intent === 'inventory' ? 'inventory' : 'customer',
         isTestOrg: Boolean((orgData as { is_test?: boolean } | null)?.is_test),
-        region: (orgData as { region?: string | null } | null)?.region ?? null,
+        billCountry,
         isStockOnHand: order.order_type === 'stock_on_hand',
         customerEmail: quote.customer_email ?? null,
         shippingAddress: order.shipping_address ?? quote.shipping_address ?? null,

@@ -23,8 +23,9 @@ const QUOTE = {
   customer_email: 'jamie@theprint-room.co.nz',
   organization_id: 'org1',
   shipping_address: { name: 'Quote Addr', street: '9 Quote St', city: 'Wellington' },
+  bill_country: 'NZ',
 }
-const ORG = { is_test: false, region: 'NZ' }
+const ORG = { is_test: false }
 
 /** Table-aware stub: maybeSingle resolves per-table fixtures. */
 function makeAdmin(tables: Record<string, unknown>) {
@@ -80,21 +81,33 @@ describe('pushOrderOnProductionComplete', () => {
       trigger: 'production_complete',
       intent: 'customer',
       isTestOrg: false,
-      region: 'NZ',
+      billCountry: 'NZ',
       isStockOnHand: false,
       customerEmail: 'jamie@theprint-room.co.nz',
       shippingAddress: ORDER.shipping_address,
     })
   })
 
-  // AU Stage 1: the bridge trigger must carry the org region so an AU org's
-  // production-complete push is skipped by the same eligibility gate.
-  it('threads an AU org region through to the push args', async () => {
-    const { admin } = makeAdmin({
-      orders: ORDER, quotes: QUOTE, organizations: { is_test: false, region: 'AU' },
+  it('threads the stamped AU bill country through to the push args', async () => {
+    const { admin, fromSpy } = makeAdmin({
+      orders: ORDER, quotes: { ...QUOTE, bill_country: 'AU' }, organizations: ORG,
     })
     await pushOrderOnProductionComplete(admin, { quoteId: 'q1', displayLabel: LABEL })
-    expect(pushMock.mock.calls[0][1].region).toBe('AU')
+    expect(pushMock.mock.calls[0][1].billCountry).toBe('AU')
+    expect(fromSpy).not.toHaveBeenCalledWith('organization_countries')
+  })
+
+  // Historical pre-SP3 quotes carry no stamp; the bridge resolves the org's
+  // default country row — never organizations.region.
+  it('resolves a historical null stamp from the org default country row', async () => {
+    const { admin } = makeAdmin({
+      orders: ORDER,
+      quotes: { ...QUOTE, bill_country: null },
+      organizations: ORG,
+      organization_countries: { country_code: 'AU' },
+    })
+    await pushOrderOnProductionComplete(admin, { quoteId: 'q1', displayLabel: LABEL })
+    expect(pushMock.mock.calls[0][1].billCountry).toBe('AU')
   })
 
   it('falls back to the quote shipping address when the order has none', async () => {

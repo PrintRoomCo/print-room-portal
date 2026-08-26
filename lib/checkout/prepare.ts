@@ -150,7 +150,8 @@ export interface PreparedCheckoutInternals {
   orderBillingLines: Array<{ stocked: boolean; billingMode: BillingMode }>
   needsInvoicing: boolean
   goodsValueForBand: number
-  orgRegion: 'NZ' | 'AU'
+  /** Enabled: the partition's country. Flag off: the org's default country row. */
+  billingCountry: BillingCountryConfig
   pickFee: number
   billedTotal: number
   openPeriod: OpenPeriod | null
@@ -1453,15 +1454,43 @@ export async function prepareCustomerOrderPartition(
     repriced.reduce((total, line) => total + line.unit_price * line.qty, 0),
   )
   const goodsValueForBand = round2(garmentSubtotal + totalDecorationRevenue)
-  let orgRegion: 'NZ' | 'AU' = 'NZ'
+  let billingCountry: BillingCountryConfig = options.country
   if (!options.countryPartitionEnabled) {
-    const { data: orgRegionRow } = await admin
-      .from('organizations')
-      .select('region')
-      .eq('id', input.context.organizationId)
+    // Flag-off billing facts come from the org's default country row, never
+    // organizations.region. The NZ fixture exists only for malformed pre-SP1
+    // test/manual data with no default row.
+    const { data: defaultRow } = await admin
+      .from('organization_countries')
+      .select('country_code, countries!inner(name, currency, tax_rate, tax_label)')
+      .eq('organization_id', input.context.organizationId)
+      .eq('is_default', true)
       .maybeSingle()
-    orgRegion =
-      (orgRegionRow as { region?: string | null } | null)?.region === 'AU' ? 'AU' : 'NZ'
+    const joined = pickOne(
+      (defaultRow as {
+        country_code?: string
+        countries?:
+          | { name: string; currency: string; tax_rate: number | string; tax_label: string }
+          | Array<{ name: string; currency: string; tax_rate: number | string; tax_label: string }>
+      } | null)?.countries,
+    )
+    billingCountry =
+      defaultRow && joined
+        ? {
+            code: String((defaultRow as { country_code?: string }).country_code),
+            name: joined.name,
+            currency: joined.currency as BillingCountryConfig['currency'],
+            taxRate: Number(joined.tax_rate),
+            taxLabel: joined.tax_label,
+            isDefault: true,
+          }
+        : {
+            code: 'NZ',
+            name: 'New Zealand',
+            currency: 'NZD',
+            taxRate: 0.15,
+            taxLabel: 'GST 15%',
+            isDefault: true,
+          }
   }
   const pickFee = checkoutPickingFee({
     countryPartitionEnabled: options.countryPartitionEnabled,
@@ -1472,7 +1501,7 @@ export async function prepareCustomerOrderPartition(
       | string
       | null
       | undefined,
-    legacyOrgRegion: orgRegion,
+    legacyDefaultBillCountry: billingCountry.code,
   })
 
   let billedGoodsSubtotal = 0
@@ -1547,7 +1576,7 @@ export async function prepareCustomerOrderPartition(
     orderBillingLines,
     needsInvoicing,
     goodsValueForBand,
-    orgRegion,
+    billingCountry,
     pickFee,
     billedTotal,
     openPeriod,

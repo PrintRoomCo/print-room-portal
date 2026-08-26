@@ -105,8 +105,8 @@ export interface StubConfig {
   openPeriod?: { id: string; closesAt: string } | null
   /** Inject an error for a table's select (message → PostgREST-style error). */
   selectErrorFor?: Record<string, string>
-  /** Legacy organization billing facts used by checkout's flag-off path. */
-  organization?: { region: 'NZ' | 'AU'; isTest?: boolean }
+  /** Organization facts read by checkout side-effect gates. */
+  organization?: { isTest?: boolean }
   /** ISO countries enabled for one-time-address validation. */
   enabledCountryCodes?: string[]
   enabledCountries?: BillingCountryConfig[]
@@ -286,19 +286,22 @@ export function makeFanoutStub(config: StubConfig) {
     }
     if (table === 'organization_countries') {
       if (config.enabledCountries) {
-        return {
-          data: config.enabledCountries.map((country) => ({
-            country_code: country.code,
-            is_default: country.isDefault,
-            countries: {
-              name: country.name,
-              currency: country.currency,
-              tax_rate: country.taxRate,
-              tax_label: country.taxLabel,
-            },
-          })),
-          error: null,
+        let rows = config.enabledCountries.map((country) => ({
+          country_code: country.code,
+          is_default: country.isDefault,
+          countries: {
+            name: country.name,
+            currency: country.currency,
+            tax_rate: country.taxRate,
+            tax_label: country.taxLabel,
+          },
+        }))
+        for (const f of filters) {
+          if (f.op === 'eq' && f.column === 'is_default') {
+            rows = rows.filter((row) => row.is_default === f.value)
+          }
         }
+        return { data: rows, error: null }
       }
       return {
         data: (config.enabledCountryCodes ?? ['NZ']).map((countryCode) => ({
@@ -342,7 +345,6 @@ export function makeFanoutStub(config: StubConfig) {
         data: [
           {
             is_test: config.organization?.isTest ?? true,
-            region: config.organization?.region ?? 'NZ',
           },
         ],
         error: null,

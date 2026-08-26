@@ -71,7 +71,6 @@ function previewConfig(overrides: Partial<StubConfig> = {}): StubConfig {
       currency === 'AUD' ? 25 : 20,
     stockUnitPriceForCurrency: (_itemId, currency) =>
       currency === 'AUD' ? 8 : 7,
-    organization: { region: 'NZ' },
     ...overrides,
   }
 }

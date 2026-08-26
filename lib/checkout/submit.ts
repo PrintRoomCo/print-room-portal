@@ -15,7 +15,6 @@ import { pushOrderToStarshipit } from '@/lib/starshipit/push-order'
 import { isStarshipitEnabled } from '@/lib/starshipit/config'
 import { postItemUpdate } from '@/lib/monday/updates'
 import { orderBillingNote } from '@/lib/monday/billing-note'
-import { currencyForRegion } from '@/lib/pricing/gst'
 import { round2 } from '@/lib/pricing/pricingMath'
 import { billedFigures } from '@/lib/checkout/billed-figures'
 import type { BillingMode } from '@/lib/shop/billing-mode'
@@ -346,19 +345,17 @@ export async function submitCustomerOrder(
     billingModeByVariant,
     orderType,
     needsInvoicing,
-    orgRegion,
+    billingCountry,
     pickFee,
     billedTotal,
     openPeriod,
     preOrderItemIds,
   } = preparedCheckoutInternalsFor(prepared)
   const isStockOnHandOrder = orderType === 'stock_on_hand'
-  const billCountry = preparationOptions.countryPartitionEnabled
-    ? prepared.country.code
-    : orgRegion
-  const billingCurrency = preparationOptions.countryPartitionEnabled
-    ? prepared.country.currency
-    : currencyForRegion(orgRegion)
+  // Enabled: the partition's exact country. Flag off: the org's default
+  // country row. Either way the prepared config is the only billing source.
+  const billCountry = billingCountry.code
+  const billingCurrency = billingCountry.currency
 
   // Phase 2 — drift signal only (we never throw): if a line's own catalogue
   // identity disagrees with the one its decoration links resolve to, log once
@@ -1224,7 +1221,6 @@ export async function submitCustomerOrder(
         trigger: 'placement',
         intent: input.intent ?? 'customer',
         isTestOrg: ssIsTestOrg,
-        region: billCountry === 'NZ' || billCountry === 'AU' ? billCountry : null,
         billCountry,
         isStockOnHand: isStockOnHandOrder,
         customerEmail: input.context.email ?? null,
