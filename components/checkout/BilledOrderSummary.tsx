@@ -64,7 +64,7 @@ export function CountryBilledOrderSummary({
   return (
     <div className="space-y-6">
       {countries.map(({ key, group, countryName, currency, failures: countryFailures }) => (
-        <section key={key} className="rounded-[24px] bg-white p-5 md:p-6">
+        <section key={key}>
           <h2 className="text-lg font-medium text-black">
             {countryName} · {currency}
           </h2>
@@ -82,7 +82,7 @@ export function CountryBilledOrderSummary({
           ))}
 
           {group?.partitions.map((partition) => (
-            <section key={partition.key} className="mt-5 border-t border-black/10 pt-5">
+            <section key={partition.key} className="mt-5 pt-5">
               <h3 className="text-sm font-bold capitalize text-black">
                 {ORDER_TYPE_LABEL[partition.orderType]}
               </h3>
@@ -113,7 +113,7 @@ export function CountryBilledOrderSummary({
           ))}
 
           {group && (
-            <dl className="mt-5 space-y-2 border-t border-black/10 pt-5 text-sm">
+            <dl className="mt-5 space-y-2 pt-5 text-sm">
               <CountryRow label="Subtotal" value={exact(group.subtotal, currency)} />
               {group.pickingFee > 0 && (
                 <CountryRow label="Picking fee" value={exact(group.pickingFee, currency)} />
@@ -216,10 +216,7 @@ export function BilledOrderSummary({
   return (
     <>
       {shape.partitions.map((partition) => (
-        <section
-          key={partition.orderType}
-          className={multi ? 'mb-5 rounded-2xl bg-white p-5' : undefined}
-        >
+        <section key={partition.orderType} className={multi ? 'mb-5' : undefined}>
           {multi && (
             <h3 className="mb-3 text-sm font-bold capitalize text-black">
               {ORDER_TYPE_LABEL[partition.orderType]}
