@@ -228,7 +228,7 @@ export function ProductImageGallery({
 
   if (!activeItem) {
     return (
-      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-white">
         <div className="flex h-full items-center justify-center text-gray-300">No image</div>
       </div>
     )
@@ -236,7 +236,7 @@ export function ProductImageGallery({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-100 bg-white">
         {failedKeys.has(activeItem.key) ? (
           <div className="flex h-full items-center justify-center text-gray-300">No image</div>
         ) : (

@@ -331,7 +331,7 @@ export default async function ConfirmationPage({
   const shippingAddress = asAddress(order.quotes.shipping_address)
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <SetTopBarContext value={{ kind: 'section', label: 'Order confirmation' }} />
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[var(--portal-topbar-h,76px)] md:px-6 md:pt-[120px]">
         <ConfirmationView

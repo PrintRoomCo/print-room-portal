@@ -389,7 +389,7 @@ export function AccountClient({ ratesFetchedAt, initialData, enabledCountries }:
           )}
 
           <div className="flex items-center gap-5">
-            <div className="flex h-16 w-32 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-2">
+            <div className="flex h-16 w-32 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white p-2">
               {access.logoUrl ? (
                 <Image
                   src={access.logoUrl}

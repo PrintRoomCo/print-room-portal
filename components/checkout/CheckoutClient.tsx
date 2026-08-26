@@ -338,7 +338,7 @@ export function CheckoutClient({
 
   if (cart.lines.length === 0) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="min-h-screen bg-white">
         <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
           <header className="mb-10 md:mb-12">
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
@@ -360,7 +360,7 @@ export function CheckoutClient({
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
@@ -391,7 +391,7 @@ export function CheckoutClient({
       )}
 
       {!isTest && depositPct > 0 && countryPartitionEnabled && (
-        <div className="mb-4 rounded-2xl border border-black/10 bg-black/[0.03] p-4 text-sm text-black/70">
+        <div className="mb-4 rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/70">
           A deposit of {depositPct}% will be invoiced per order. Balance on{' '}
           {paymentTerms ?? 'net20'}.
         </div>
@@ -406,7 +406,7 @@ export function CheckoutClient({
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
         {inventoryMode && (
-          <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
+          <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4 text-sm">
             <p className="font-medium text-gray-900">Print Room warehouse</p>
             <p className="mt-1 text-xs text-gray-500">
               Stock lands in your 3PL inventory. Your account manager will notify you when
@@ -428,7 +428,7 @@ export function CheckoutClient({
                 className={
                   preview.status === 'error'
                     ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
-                    : 'mb-5 rounded-2xl bg-black/[0.03] p-4 text-sm text-black/65'
+                    : 'mb-5 rounded-2xl bg-white p-4 text-sm text-black/65'
                 }
               >
                 {preview.status === 'error'

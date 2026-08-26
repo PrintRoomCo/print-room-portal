@@ -17,7 +17,7 @@ export default async function ProofsPage() {
   const proofs = await listVisibleProofsForOrg(admin, context.organizationId)
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">

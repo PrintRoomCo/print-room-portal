@@ -39,7 +39,7 @@ export function CustomerSupportPageContent({ access }: { access: CustomerSupport
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         <header className="max-w-3xl">
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900 md:text-4xl">Support</h1>

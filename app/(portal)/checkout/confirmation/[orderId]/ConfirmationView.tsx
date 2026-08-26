@@ -187,7 +187,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                       key={line.id}
                       className="flex items-start gap-x-6 gap-y-4 md:gap-5"
                     >
-                      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
+                      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-white">
                         {imageUrl ? (
                           <Image
                             src={imageUrl}

@@ -35,7 +35,7 @@ export function CustomerInventoryTable({ rows }: CustomerInventoryTableProps) {
   return (
     <div className="card-elevated overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-gray-600">
+        <thead className="bg-white text-gray-600">
           <tr>
             <th className="text-left px-4 py-3 font-medium">Product</th>
             <th className="text-left px-4 py-3 font-medium">Colour</th>

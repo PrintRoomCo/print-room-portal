@@ -411,7 +411,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="block text-sm font-medium text-gray-700 mb-1">{label}</p>
-      <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm text-gray-700 truncate" title={value}>
+      <div className="px-3 py-2 rounded-xl bg-white border border-gray-100 text-sm text-gray-700 truncate" title={value}>
         {value}
       </div>
     </div>

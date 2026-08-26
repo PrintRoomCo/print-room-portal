@@ -35,7 +35,7 @@ export function FilterRail({ filters, facets, basePath, showModeFilter = true }:
             name="q"
             defaultValue={filters.q}
             placeholder="Search products"
-            className="w-full rounded-full bg-gray-50 px-4 py-2 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="w-full rounded-full bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </Section>
 

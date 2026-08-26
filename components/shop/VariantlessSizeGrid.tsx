@@ -28,7 +28,7 @@ export function VariantlessSizeGrid({ sizes, quantities, onChange }: Props) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs text-gray-500">
+        <thead className="bg-white text-left text-xs text-gray-500">
           <tr>
             <th className="px-3 py-2 font-medium">Size</th>
             <th className="px-3 py-2 text-right font-medium">Qty</th>
@@ -57,7 +57,7 @@ export function VariantlessSizeGrid({ sizes, quantities, onChange }: Props) {
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t border-gray-200 bg-gray-50">
+          <tr className="border-t border-gray-200 bg-white">
             <td className="px-3 py-2 text-xs font-medium text-gray-500">
               Order total
             </td>

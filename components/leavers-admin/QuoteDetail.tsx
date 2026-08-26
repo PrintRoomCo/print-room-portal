@@ -65,7 +65,7 @@ export function QuoteDetail({ quote }: Props) {
         ) : (
           <div className="space-y-3">
             {garmentLines.map((line: any, idx: number) => (
-              <div key={idx} className="bg-gray-50 rounded-xl p-4">
+              <div key={idx} className="bg-white rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium text-sm">
                     {line.productName || line.productType || `Line ${idx + 1}`}

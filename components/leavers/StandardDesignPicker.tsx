@@ -42,7 +42,7 @@ export function StandardDesignPicker({ designs, onSelect, onClose }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={design.imageUrl} alt={design.name} className="w-full h-20 object-contain rounded-lg" />
                 ) : (
-                  <div className="w-full h-20 bg-gray-50 rounded-lg flex items-center justify-center text-muted-foreground text-xs">
+                  <div className="w-full h-20 bg-white rounded-lg flex items-center justify-center text-muted-foreground text-xs">
                     Preview
                   </div>
                 )}

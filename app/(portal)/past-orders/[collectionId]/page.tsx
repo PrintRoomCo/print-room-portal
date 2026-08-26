@@ -336,7 +336,7 @@ export default function CollectionDetail() {
 
       {/* Status Messages */}
       {isDraft && collection.design_count > 0 && (
-        <div className="p-4 bg-gray-50/50 rounded-xl border border-gray-100">
+        <div className="p-4 bg-white rounded-xl border border-gray-100">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -605,7 +605,7 @@ export default function CollectionDetail() {
                       onClick={() => handleAddDesign(design.id)}
                       className="card-interactive overflow-hidden text-left"
                     >
-                      <div className="aspect-square bg-gray-100/50">
+                      <div className="aspect-square bg-white">
                         {design.images && design.images[0] ? (
                           <img src={design.images[0]} alt={design.design_name} className="w-full h-full object-contain p-2" />
                         ) : (
@@ -715,7 +715,7 @@ function QuoteDetail({
     quote.customer_company || quote.customer_name || quote.customer_email
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <SetTopBarContext value={{ kind: 'section', label: 'Order summary' }} />
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[var(--portal-topbar-h,76px)] md:px-6 md:pt-[120px]">
         {/* Hero */}
@@ -792,7 +792,7 @@ function QuoteDetail({
                         key={item.id || `line-${index}`}
                         className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 md:gap-5"
                       >
-                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-50">
+                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white">
                           {itemImage ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
@@ -1003,7 +1003,7 @@ function DesignCard({
 
   return (
     <div className="card-interactive overflow-hidden group">
-      <div className="aspect-square bg-gray-100/50 relative">
+      <div className="aspect-square bg-white relative">
         {images[0] ? (
           <>
             <img src={images[0]} alt={design.design_name} className="w-full h-full object-contain p-2" loading="lazy" />

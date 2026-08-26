@@ -1559,7 +1559,7 @@ export function ProductDetailClient({
     pendingPricingDecorations.length === 0
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 motion-safe:animate-portal-enter md:px-6 md:pt-4">
         <CatalogueTopBar
           crumbs={[
@@ -1642,7 +1642,7 @@ export function ProductDetailClient({
           )}
 
           {isUnavailableToOrder ? (
-            <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+            <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
               {countryPricingBlocked && priceCountryCode
                 ? `${product.name} is not orderable to ${priceCountryCode} yet`
                 : 'unavailable to order right now. contact the print room for more information'}
@@ -1846,7 +1846,7 @@ export function ProductDetailClient({
                               })
                             }}
                             aria-label={`Quantity for size ${row.sizeLabel}`}
-                            className="w-20 rounded-full bg-gray-50 px-3 py-1.5 text-right text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                            className="w-20 rounded-full bg-white px-3 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-gray-300"
                           />
                         </td>
                       </tr>
@@ -1946,7 +1946,7 @@ export function ProductDetailClient({
                         value={qty}
                         onChange={(e) => setQty(Number(e.target.value))}
                         aria-label="Quantity"
-                        className="w-24 rounded-full bg-gray-50 px-3 py-1.5 text-right text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        className="w-24 rounded-full bg-white px-3 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-gray-300"
                       />
                     </td>
                   </tr>
@@ -2049,7 +2049,7 @@ export function ProductDetailClient({
                     step={1}
                     value={qty}
                     onChange={(e) => setQty(Number(e.target.value))}
-                    className="mt-2 w-28 rounded-full bg-gray-50 px-4 py-2 text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    className="mt-2 w-28 rounded-full bg-white px-4 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-gray-300"
                   />
                   {isOutOfStock && (
                     <p className="mt-2 text-xs text-amber-700">

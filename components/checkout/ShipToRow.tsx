@@ -71,7 +71,7 @@ export function ShipToRow({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 bg-white text-sm">
       <div className="flex min-w-0 flex-1 items-start gap-4">
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-white">
           {imageUrl ? (
             <Image
               src={imageUrl}

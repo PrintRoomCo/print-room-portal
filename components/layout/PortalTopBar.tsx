@@ -166,7 +166,7 @@ function FilterRow({
           defaultValue={filters.q}
           placeholder="Search products"
           aria-label="Search products"
-          className="min-w-[10rem] flex-1 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-500 transition-colors hover:bg-gray-200 focus:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className="min-w-[10rem] flex-1 rounded-full bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
         />
 
         <FilterAutoSubmitSelect

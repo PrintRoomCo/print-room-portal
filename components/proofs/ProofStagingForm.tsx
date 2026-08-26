@@ -270,7 +270,7 @@ export function ProofStagingForm({
                 {design.printAreas.map((area, aIndex) => (
                   <div
                     key={area.id}
-                    className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-4"
+                    className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-white p-3 md:grid-cols-4"
                   >
                     <label className="block md:col-span-2">
                       <span className="text-xs font-medium tracking-wide text-gray-500">
@@ -352,7 +352,7 @@ export function ProofStagingForm({
 
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-xs">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-white text-gray-600">
               <tr>
                 <th className="border border-gray-200 px-2 py-1 text-left">Name</th>
                 <th className="border border-gray-200 px-2 py-1 text-left">Colour</th>

@@ -89,7 +89,7 @@ function QuoteCardSkeleton() {
 
 export function CatalogueRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading catalogue">
+    <div className="min-h-screen bg-white" aria-label="Loading catalogue">
       <div className="mx-auto max-w-[1680px] px-4 pb-16 pt-3 md:px-8 md:pt-4">
         <div className="mb-4 flex items-center gap-3 md:mb-6">
           <div className="h-9 w-9 animate-pulse rounded-full bg-gray-100" />
@@ -110,7 +110,7 @@ export function CatalogueRouteSkeleton() {
 
 export function ProductDetailRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading product">
+    <div className="min-h-screen bg-white" aria-label="Loading product">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-3 md:px-6 md:pt-4">
         <div className="mb-4 flex items-center gap-3 md:mb-6">
           <div className="h-9 w-9 animate-pulse rounded-full bg-gray-100" />
@@ -170,7 +170,7 @@ export function ProductDetailRouteSkeleton() {
 
 export function OrderTrackerRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading tracker">
+    <div className="min-h-screen bg-white" aria-label="Loading tracker">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <SkeletonLine className="h-14 w-56" />
@@ -200,7 +200,7 @@ export function OrderTrackerRouteSkeleton() {
 
 export function PastOrdersRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading orders">
+    <div className="min-h-screen bg-white" aria-label="Loading orders">
       <div className="mx-auto max-w-[1320px] px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         <header className="mb-10 md:mb-12">
           <SkeletonLine className="h-14 w-44" />
@@ -221,7 +221,7 @@ export function PastOrdersRouteSkeleton() {
 
 export function CollectionDetailRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading order">
+    <div className="min-h-screen bg-white" aria-label="Loading order">
       <div className="mx-auto max-w-7xl space-y-6 px-4 pb-16 pt-[100px] md:px-6 md:pt-[120px]">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-3">
@@ -251,7 +251,7 @@ export function CollectionDetailRouteSkeleton() {
 
 export function AccountRouteSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FAFAFA]" aria-label="Loading account">
+    <div className="min-h-screen bg-white" aria-label="Loading account">
       <div className="mx-auto max-w-[1320px] px-6 pb-16 pt-[120px]">
         <div className="mx-auto max-w-7xl space-y-6">
           <header className="mb-10 md:mb-12">

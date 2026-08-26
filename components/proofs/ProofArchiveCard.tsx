@@ -11,7 +11,7 @@ export function ProofArchiveCard({ proof }: ProofArchiveCardProps) {
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-      <div className="aspect-[4/3] overflow-hidden bg-gray-50">
+      <div className="aspect-[4/3] overflow-hidden bg-white">
         {proof.mockupUrl ? (
           <img
             src={proof.mockupUrl}
@@ -19,7 +19,7 @@ export function ProofArchiveCard({ proof }: ProofArchiveCardProps) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gray-50 text-sm font-medium text-gray-400">
+          <div className="flex h-full w-full items-center justify-center bg-white text-sm font-medium text-gray-400">
             Proof
           </div>
         )}

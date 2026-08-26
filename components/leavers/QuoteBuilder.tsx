@@ -487,7 +487,7 @@ export function QuoteBuilder() {
                   {design.imageUrl ? (
                     <img src={design.imageUrl} alt={design.name} className="w-full h-20 object-contain rounded-lg" />
                   ) : (
-                    <div className="w-full h-20 bg-gray-50 rounded-lg flex items-center justify-center text-muted-foreground text-xs">Preview</div>
+                    <div className="w-full h-20 bg-white rounded-lg flex items-center justify-center text-muted-foreground text-xs">Preview</div>
                   )}
                   <div className="text-sm font-medium mt-2">{design.name}</div>
                 </button>

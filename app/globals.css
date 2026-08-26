@@ -254,11 +254,11 @@
 
   /* ============================================
    * INPUT SYSTEM
-   * Gray-fill pill style
+   * White-fill pill style
    * ============================================ */
 
   .input-glass {
-    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200;
+    @apply w-full px-5 py-2.5 rounded-full bg-white border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 transition-all duration-200;
   }
 
   .input-glass:focus {
@@ -266,7 +266,7 @@
   }
 
   .select-glass {
-    @apply w-full px-5 py-2.5 rounded-full bg-gray-50 border border-[hsl(var(--border))] text-foreground focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 appearance-none cursor-pointer;
+    @apply w-full px-5 py-2.5 rounded-full bg-white border border-[hsl(var(--border))] text-foreground focus:outline-none focus:border-gray-400 transition-all duration-200 appearance-none cursor-pointer;
   }
 
   .select-glass:focus {
@@ -274,7 +274,7 @@
   }
 
   .textarea-glass {
-    @apply w-full px-5 py-3 rounded-2xl bg-gray-50 border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 focus:bg-gray-100 transition-all duration-200 resize-none;
+    @apply w-full px-5 py-3 rounded-2xl bg-white border border-[hsl(var(--border))] text-foreground placeholder:text-gray-400 focus:outline-none focus:border-gray-400 transition-all duration-200 resize-none;
   }
 
   .textarea-glass:focus {

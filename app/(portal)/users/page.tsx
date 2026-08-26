@@ -43,7 +43,7 @@ export default async function TeamPage() {
   const members = (memberships ?? []).map((m) => buildTeamMemberRow(m, profileById.get(m.user_id)))
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1320px] px-6 pt-[120px] pb-16">
         <TeamClient
           organizationName={access.companyName ?? 'your organisation'}

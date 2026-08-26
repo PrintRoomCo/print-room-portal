@@ -610,7 +610,7 @@ export function CheckoutReviewClient({
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <div className={`relative h-24 w-24 shrink-0 overflow-hidden ${
-              oemPresentation ? 'rounded-2xl bg-black/[0.03]' : 'rounded-lg bg-gray-50'
+              oemPresentation ? 'rounded-2xl bg-white' : 'rounded-lg bg-white'
             }`}>
               {imageUrl ? (
                 <Image
@@ -671,7 +671,7 @@ export function CheckoutReviewClient({
 
   if (cart.lines.length === 0 && !submitting) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="min-h-screen bg-white">
         <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <header className="mb-10 md:mb-12">
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
@@ -691,7 +691,7 @@ export function CheckoutReviewClient({
 
   if (hydrated && !reviewState) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="min-h-screen bg-white">
         <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <header className="mb-10 md:mb-12">
             <h1 className="font-dm-sans font-medium leading-[1.05] tracking-[-0.02em] text-[clamp(40px,5vw,72px)] text-gray-900">
@@ -718,7 +718,7 @@ export function CheckoutReviewClient({
 
   if (!reviewState) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="min-h-screen bg-white">
         <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
           <div className="rounded-[32px] bg-white p-7 text-sm text-gray-600 md:p-8">
             Loading review...
@@ -729,7 +729,7 @@ export function CheckoutReviewClient({
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <CheckoutPlacingOverlay show={submitting} />
       <div className="mx-auto max-w-[1320px] px-4 pb-[120px] pt-[100px] md:px-6 md:pb-[96px] md:pt-[120px]">
         <button
@@ -778,7 +778,7 @@ export function CheckoutReviewClient({
                 className={
                   preview.status === 'error'
                     ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
-                    : 'mb-5 rounded-2xl bg-black/[0.03] p-4 text-sm text-black/65'
+                    : 'mb-5 rounded-2xl bg-white p-4 text-sm text-black/65'
                 }
               >
                 {preview.status === 'error'

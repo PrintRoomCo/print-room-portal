@@ -8,7 +8,7 @@ export default function AuthResolvePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="min-h-screen bg-white flex items-center justify-center p-6">
           <p className="text-gray-600">Finalising sign-in...</p>
         </div>
       }
@@ -76,7 +76,7 @@ function AuthResolve() {
 
   if (status === 'error') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
         <div className="w-full max-w-md text-center">
           <p className="text-red-600 mb-4">{error ?? 'Could not finalise sign-in.'}</p>
           <a href="/sign-in" className="text-[rgb(var(--color-brand-blue))] hover:underline">
@@ -88,7 +88,7 @@ function AuthResolve() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-white flex items-center justify-center p-6">
       <p className="text-gray-600">Finalising sign-in...</p>
     </div>
   )

@@ -333,7 +333,7 @@ describe('CheckoutClient review step', () => {
 
     const notice = screen.getByText(/A deposit of 20% will be invoiced per order/i)
       .closest('div')
-    expect(notice).toHaveClass('rounded-2xl', 'border-black/10', 'bg-black/[0.03]', 'text-black/70')
+    expect(notice).toHaveClass('rounded-2xl', 'border-black/10', 'bg-white', 'text-black/70')
     expect(notice?.className).not.toMatch(/rounded-xl|sky-/)
   })
 })

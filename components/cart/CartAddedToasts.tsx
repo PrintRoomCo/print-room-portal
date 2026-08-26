@@ -87,7 +87,7 @@ function ToastCard({
 
   return (
     <div
-      className={`pointer-events-auto relative overflow-hidden rounded-3xl bg-gray-100 p-3 shadow-lg ring-1 ring-black/5 motion-reduce:animate-none ${
+      className={`pointer-events-auto relative overflow-hidden rounded-3xl bg-white p-3 shadow-lg ring-1 ring-black/5 motion-reduce:animate-none ${
         leaving
           ? 'animate-out fade-out slide-out-to-right-4 duration-200'
           : 'animate-in fade-in slide-in-from-top-3 duration-300'

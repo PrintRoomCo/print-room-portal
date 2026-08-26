@@ -64,7 +64,7 @@ export function CountryBilledOrderSummary({
   return (
     <div className="space-y-6">
       {countries.map(({ key, group, countryName, currency, failures: countryFailures }) => (
-        <section key={key} className="rounded-[24px] bg-black/[0.03] p-5 md:p-6">
+        <section key={key} className="rounded-[24px] bg-white p-5 md:p-6">
           <h2 className="text-lg font-medium text-black">
             {countryName} · {currency}
           </h2>
@@ -218,7 +218,7 @@ export function BilledOrderSummary({
       {shape.partitions.map((partition) => (
         <section
           key={partition.orderType}
-          className={multi ? 'mb-5 rounded-2xl bg-gray-50/60 p-5' : undefined}
+          className={multi ? 'mb-5 rounded-2xl bg-white p-5' : undefined}
         >
           {multi && (
             <h3 className="mb-3 text-sm font-bold capitalize text-black">

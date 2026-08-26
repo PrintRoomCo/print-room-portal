@@ -761,7 +761,7 @@ export default async function CataloguePage({
   const activeCount = activeFilterCount(filters)
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-white">
       <SetTopBarContext
         value={{
           kind: 'listing',

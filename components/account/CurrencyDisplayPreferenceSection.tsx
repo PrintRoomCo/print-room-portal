@@ -17,7 +17,7 @@ export function CurrencyDisplayPreferenceSection({ fetchedAt }: Props) {
       <h2 className="text-lg font-semibold text-gray-900">Display preferences</h2>
       <div className="mt-4 flex items-center gap-3">
         <label className="text-sm text-gray-600">Currency for display</label>
-        <div className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+        <div className="rounded-full border border-gray-200 bg-white px-3 py-1">
           <CurrencySelector />
         </div>
       </div>

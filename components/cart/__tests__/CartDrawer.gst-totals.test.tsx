@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { allInLineTotal } from '@/lib/cart/types'
 import { CartDrawer } from '../CartDrawer'
 
 const { cart, setOpen } = vi.hoisted(() => ({
@@ -99,5 +100,45 @@ describe('CartDrawer totals reconcile the line amounts to the total', () => {
     const total = screen.getByTestId('cart-total-row')
     expect(within(total).getByText(/incl\. GST/i)).toBeInTheDocument()
     expect(within(total).getByText('$13,351.96')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The "excl. GST" label is only honest while the subtotal stays the raw goods
+ * value that GST is charged ON. Pin both halves: it equals the sum of the
+ * amounts CartTable prints, and GST is added on top rather than baked in.
+ */
+describe('CartDrawer subtotal is genuinely ex-GST', () => {
+  it('equals the sum of the line amounts, with no tax component', () => {
+    render(<CartDrawer />)
+
+    const expected = cart.lines.reduce((sum, line) => sum + allInLineTotal(line), 0)
+    expect(expected).toBeCloseTo(11610.4, 2)
+
+    const subtotal = screen.getByTestId('cart-subtotal-row')
+    expect(within(subtotal).getByText('$11,610.40')).toBeInTheDocument()
+    // Had the subtotal been GST-inclusive it would read 13,351.96 here.
+    expect(within(subtotal).queryByText('$13,351.96')).not.toBeInTheDocument()
+  })
+
+  it('adds GST on top of the subtotal to reach the total', () => {
+    render(<CartDrawer />)
+
+    const amount = (testId: string) => {
+      const text = screen.getByTestId(testId).textContent ?? ''
+      const match = text.match(/\$([\d,]+\.\d{2})/)
+      if (!match) throw new Error(`no amount rendered in ${testId}: ${text}`)
+      return Number(match[1].replace(/,/g, ''))
+    }
+
+    const subtotal = amount('cart-subtotal-row')
+    const gst = amount('cart-gst-row')
+    const total = amount('cart-total-row')
+
+    expect(subtotal + gst).toBeCloseTo(total, 2)
+    expect(gst).toBeCloseTo(subtotal * 0.15, 2)
+    // Tax-inclusive subtotal would fail both of the above, but assert the
+    // direction outright so the intent survives a future rate change.
+    expect(subtotal).toBeLessThan(total)
   })
 })

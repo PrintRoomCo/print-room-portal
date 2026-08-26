@@ -183,7 +183,7 @@ export function CartTable({
           >
             <div className="flex items-start gap-4 md:gap-5">
               {/* Image plate */}
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-50 md:h-28 md:w-28">
+              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-white md:h-28 md:w-28">
                 {imageUrl ? (
                   <Image
                     src={imageUrl}
@@ -299,7 +299,7 @@ export function CartTable({
                     if (Number.isInteger(next) && next > 0) onUpdateQty(line.lineId, next)
                   }}
                   aria-label="Quantity"
-                  className="w-14 rounded-full bg-gray-50 px-2 py-1.5 text-center text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                  className="w-14 rounded-full bg-white px-2 py-1.5 text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-gray-300"
                 />
                 <QtyChip
                   onClick={() => onUpdateQty(line.lineId, line.qty + 1)}

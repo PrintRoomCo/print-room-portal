@@ -67,7 +67,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <article className="group flex h-full flex-col rounded-3xl bg-white p-3 transition-shadow duration-300 ease-spring hover:shadow-md">
-      <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-gray-50">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-white">
         <ImageWithFallback
           src={product.image_url ?? ''}
           alt={product.title}
