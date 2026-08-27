@@ -213,6 +213,19 @@ export async function readMinOrderExempt(
   }
 }
 
+/** organizations.is_test, for surfaces that hold no B2BCustomerContext. */
+export async function readOrgIsTest(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from('organizations')
+    .select('is_test')
+    .eq('id', organizationId)
+    .maybeSingle()
+  return Boolean((data as { is_test?: boolean | null } | null)?.is_test)
+}
+
 export const requireB2BCustomerCached = cache(
   async (requireCustomerCode = false): Promise<RequireB2BCustomerResult> =>
     requireB2BCustomer({ requireCustomerCode }),
