@@ -1,7 +1,7 @@
 /**
  * NZD-only formatter for SERVER-SAFE rendering paths. If you need
  * the user's chosen display currency (CurrencyContext) — use
- * <Money nzd={…} /> from components/shop/Money.tsx instead.
+ * <Money amount={…} /> from components/shop/Money.tsx instead.
  *
  * Server components can't call useCurrency() (it's a hook). This
  * helper exists for those paths.

@@ -96,16 +96,16 @@ export function ProductCard({ product }: ProductCardProps) {
             </dd>
             <dd className="whitespace-nowrap font-medium tracking-wider text-gray-900">
               {product.stock_unit_price != null ? (
-                <Money nzd={product.stock_unit_price} currency={product.price_currency} />
+                <Money amount={product.stock_unit_price} sourceCurrency={product.price_currency} />
               ) : product.price_status === 'missing' ? (
                 'On request'
               ) : product.price_high > product.price_low ? (
                 <>
-                  <Money nzd={product.price_high} currency={product.price_currency} /> –{' '}
-                  <Money nzd={product.price_low} currency={product.price_currency} />
+                  <Money amount={product.price_high} sourceCurrency={product.price_currency} /> –{' '}
+                  <Money amount={product.price_low} sourceCurrency={product.price_currency} />
                 </>
               ) : (
-                <Money nzd={product.price_low} currency={product.price_currency} />
+                <Money amount={product.price_low} sourceCurrency={product.price_currency} />
               )}
             </dd>
           </dl>

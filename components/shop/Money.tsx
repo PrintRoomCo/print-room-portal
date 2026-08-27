@@ -1,24 +1,25 @@
 'use client'
 
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { formatCurrency } from '@/lib/currency/format'
 
 interface Props {
-  /** NZD amount stored in DB. */
-  nzd: number
-  /** Authored canonical currency. When present, visitor FX conversion is bypassed. */
-  currency?: string
+  /** Amount denominated in `sourceCurrency`, or in the org's base currency when omitted. */
+  amount: number
+  /**
+   * Denomination of `amount` (e.g. a country price list's currency). Converted
+   * into the viewer's display currency; billing surfaces that must render the
+   * authored figure verbatim do not use Money.
+   */
+  sourceCurrency?: string
   /** Class on the wrapping span. */
   className?: string
 }
 
-export function Money({ nzd, currency, className }: Props) {
-  const { format, loading } = useCurrency()
-  if (currency) {
-    return <span className={className}>{formatCurrency(nzd, currency)}</span>
-  }
-  if (loading) {
-    return <span className={className}>{formatCurrency(nzd, 'NZD')}</span>
-  }
-  return <span className={className}>{format(nzd)}</span>
+export function Money({ amount, sourceCurrency, className }: Props) {
+  const { format, formatFrom } = useCurrency()
+  return (
+    <span className={className}>
+      {sourceCurrency ? formatFrom(amount, sourceCurrency) : format(amount)}
+    </span>
+  )
 }

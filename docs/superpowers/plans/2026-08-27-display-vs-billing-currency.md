@@ -685,7 +685,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 The old `currency` prop meant "bypass FX and relabel". The new `sourceCurrency` means "this amount is denominated in X, convert it to display". The old loading branch (hardcoded NZD) is subsumed: `format`/`formatFrom` already fall back to the source denomination while rates are absent.
 
-- [ ] **Step 1: Rewrite the test to assert the D8 boundary**
+- [x] **Step 1: Rewrite the test to assert the D8 boundary**
 
 Replace `components/shop/__tests__/Money.test.tsx` with:
 
@@ -723,12 +723,12 @@ describe('Money display conversion', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run components/shop/__tests__/Money.test.tsx`
 Expected: FAIL. `Money` has no `amount`/`sourceCurrency` props and the authored-currency branch bypasses `formatFrom`.
 
-- [ ] **Step 3: Rewrite `components/shop/Money.tsx`**
+- [x] **Step 3: Rewrite `components/shop/Money.tsx`**
 
 ```tsx
 'use client'
@@ -758,7 +758,7 @@ export function Money({ amount, sourceCurrency, className }: Props) {
 }
 ```
 
-- [ ] **Step 4: Update the four `ProductCard.tsx` call sites**
+- [x] **Step 4: Update the four `ProductCard.tsx` call sites**
 
 Lines 99-108: replace each `nzd=` with `amount=` and each `currency=` with `sourceCurrency=`:
 
@@ -779,7 +779,7 @@ Lines 99-108: replace each `nzd=` with `amount=` and each `currency=` with `sour
 
 (The `–` between the range values is the existing en dash in the JSX text, kept as is; the no-em-dash rule concerns em dashes in prose and names, not this pre-existing numeric range separator.)
 
-- [ ] **Step 5: Update the `CatalogueGrid.test.tsx` mock and the `price.ts` comment**
+- [x] **Step 5: Update the `CatalogueGrid.test.tsx` mock and the `price.ts` comment**
 
 In `components/shop/__tests__/CatalogueGrid.test.tsx`, the `useCurrency` mock (lines 8-14) gains `formatFrom` so `Money`'s new destructure finds it:
 
@@ -796,12 +796,12 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 
 In `lib/format/price.ts` line 4, change `<Money nzd={…} />` to `<Money amount={…} />`.
 
-- [ ] **Step 6: Run the shop tests and the typecheck**
+- [x] **Step 6: Run the shop tests and the typecheck**
 
 Run: `npx vitest run components/shop` then `npx tsc --noEmit`
 Expected: PASS and clean. The typecheck is the rename's safety net: any missed `nzd=` call site is a compile error.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add components/shop/Money.tsx components/shop/ProductCard.tsx components/shop/__tests__/Money.test.tsx components/shop/__tests__/CatalogueGrid.test.tsx lib/format/price.ts
@@ -1590,3 +1590,4 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - Task 3's leftover grep would match Task 1's supplied test name containing the removed symbol. The test name now says "previous conversion path" so the exact removal sweep returns no output.
 - Task 3's full suite exposed `app/(portal)/layout.test.ts` as an unlisted coupled test that asserted the removed AU pin. It now asserts the org base fallback and verifies that no `billingCurrency` prop remains.
 - After the Task 3 coupled-test update, the full suite reported 1,741 passing and the same 5 baseline failures. The required typecheck still reports only the 14 baseline errors documented under Task 2.
+- Task 4's 107 shopping tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.

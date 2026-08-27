@@ -8,6 +8,7 @@ import type { CatalogueProductForGrid } from '@/lib/shop/catalogue-tile'
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({
     format: (n: number) => `$${n.toFixed(2)}`,
+    formatFrom: (n: number) => `$${n.toFixed(2)}`,
     loading: false,
     currency: 'NZD',
   }),
