@@ -1522,7 +1522,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Files:** none modified (fixes discovered here fold back into the task that owns the file).
 
-- [ ] **Step 1: Full test suite, typecheck, lint, build**
+- [x] **Step 1: Full test suite, typecheck, lint, build**
 
 Run, in order:
 
@@ -1535,7 +1535,7 @@ npm run build
 
 Expected: all pass. `npm run lint` tolerates up to 200 warnings by configuration; it must introduce no new errors.
 
-- [ ] **Step 2: Em dash sweep over the diff**
+- [x] **Step 2: Em dash sweep over the diff**
 
 Run:
 
@@ -1545,7 +1545,7 @@ git diff main -- '*.ts' '*.tsx' | grep -n "—"
 
 Expected: no output from added lines (the spec and plan markdown files are excluded by the pathspec; pre-existing em dashes in unchanged code lines are out of scope).
 
-- [ ] **Step 3: Manual QA checklist (dev server)**
+- [x] **Step 3: Manual QA checklist (dev server)**
 
 `CHECKOUT_COUNTRY_PARTITION_ENABLED` is `false` in `.env.local` but `true` in production, so both flag states need a pass. With `npm run dev`:
 
@@ -1562,7 +1562,7 @@ Then set `CHECKOUT_COUNTRY_PARTITION_ENABLED=true` in `.env.local`, restart, and
 
 Restore `.env.local` to its original flag value afterwards.
 
-- [ ] **Step 4: Re-assert the invoice-safety claim on the final diff**
+- [x] **Step 4: Re-assert the invoice-safety claim on the final diff**
 
 Run:
 
@@ -1594,3 +1594,15 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - Task 7's checkout suite exposed `CheckoutClient.review-redirect.test.tsx` as an unlisted coupled test whose currency-context mock lacked `formatFrom`, display currency, and rates, and whose assertions expected the old billing-currency checkout presentation. The mock and assertions now cover the converted country total, collapsed sticky total, currency-free heading, and tooltip trigger.
 - After that Task 7 coupled-test update, all 91 checkout tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.
 - Task 9's chained `npx tsc --noEmit && npm test` stopped at the same 14 baseline type errors, so `npm test` was run separately. It reported 1,759 passing and the same 5 baseline failures across 1,764 tests; the rename grep is empty.
+
+### Task 10 (full verification)
+
+- Baseline claims in this section were re-derived rather than trusted, by checking `main` out into a scratch worktree and running the same commands there. The 5 failing tests (`CartProvider.test.tsx` 1, `OrdersTable.test.tsx` 2, `TeamClient.branch.test.tsx` 2) and the 14 `tsc` errors reproduce identically on `main`, so this change introduces none of them. `OrdersTable.tsx` is a D7 surface and is byte-identical to `main`.
+- Final counts: 1,759 passing, 5 failing (all baseline), 1,764 total, 289 files. Typecheck error set is byte-identical to `main`. `npm run build` exits 0.
+- Lint exits 0 with 199 warnings against a `--max-warnings=200` budget, and `main` itself sits at 200, so this change is one warning better. Zero errors on both. The single new warning is `jsx-a11y/no-static-element-interactions` on `InvoiceCurrencyInfo.tsx:54`, the same warning `PickingFeeInfo.tsx:29` already carries on `main`: the component it is modelled on. The warning it removes is an unused `react-hooks/set-state-in-effect` disable on the old `CurrencyContext`.
+- Em dash sweep: zero on added lines. The four hits the raw command reports are three lines this change deletes and one pre-existing context line in `lib/format/price.ts`. Commit messages are clean too.
+- Step 3 was run with playwright against the dev server rather than by hand, signed in as the Print Room Demo org (NZ, base NZD). The flag-on pass used a `CHECKOUT_COUNTRY_PARTITION_ENABLED=true` shell override on `npm run dev` instead of editing `.env.local`, because Next does not overwrite an already-set `process.env` key. `.env.local` was therefore never modified and needed no restore. Next 16 allows only one dev server per directory, so the two flag states were run in sequence rather than side by side, and the server was left running in its original flag-off state.
+- QA results, both flag states. Flag off: the catalogue grid converts (all 8 figures at exactly the live USD rate 0.597219, for example $30.76 to $18.37), which is Defect 2 fixed, and the PDP and cart drawer follow the same pick (drawer NZD $50.22 / $100.44 / $30.00 / $19.57 / $150.01 becomes USD $29.99 / $59.98 / $17.92 / $11.69 / $89.59). Flag on: the grid still converts; `/checkout` renders every figure in the display currency, drops the currency chip from the "New Zealand" heading, and mounts the `i` beside "Country total" reading "You will be invoiced in NZD. Converted totals are an estimate at today's rate."; the sticky bar reads "$89.59 USD"; `/checkout/review` renders exact "$150.01 NZD" figures under a "New Zealand · NZD" heading, and 150.01 times 0.597219 is 89.59, so the two pages agree. D5 verified: with the display currency set to NZD the tooltip trigger count is 0. D4 verified: the picker is present on `/catalogue`, a PDP, `/past-orders`, `/current-orders`, `/inventory`, `/account` and `/checkout`, and absent only on `/checkout/review`. D7 verified live: `/past-orders` and a past-order detail page render byte-identical figures with the picker on NZD and on USD.
+- Checklist item 6 (a WHITEFOX AU login) was not run: no AU credentials are available in this environment. Shipping the demo cart to the org's Australian location does not produce an AUD billing group, because the partition derives billing country from the stock and org side rather than the ship-to, so it could not stand in. The AU behaviour stays covered by `CurrencyContext.test.tsx` ("lets an AU org change currency, updating state and persistence"), the detect fallback-chain tests, and `InvoiceCurrencyInfo.test.tsx`'s multi-currency copy case. **This is the one remaining human QA step.**
+- No orders were placed. The walk stops on `/checkout/review` without pressing "Place 1 order". The cart is `localStorage`-only, so the headless browser's cart never touched the database.
+- Running `npm run build` while a `next dev --turbopack` server was live on the same directory wedged that server (listening, 0% CPU, no response). It was restarted. Worth avoiding when both are needed.
