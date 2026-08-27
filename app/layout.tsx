@@ -11,7 +11,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: {
     default: 'B2B Portal | The Print Room',
-    template: '%s | The Print Room B2B Portal',
+    template: 'The Print Room B2B Portal',
   },
   description: 'The Print Room B2B customer portal',
 }
