@@ -10,7 +10,9 @@ import {
 } from '@/lib/pricing/period-brackets'
 
 export async function POST(request: Request) {
-  const auth = await requireB2BCustomerApi()
+  // Pure price lookup — staff preview sessions read it too (allowPreview);
+  // a 403 here reads to the PDP as "no price in this country".
+  const auth = await requireB2BCustomerApi({ allowPreview: true })
   if ('error' in auth) return auth.error
   const { admin, context } = auth
 

@@ -246,14 +246,17 @@ export type RequireB2BCustomerApiResult =
   | { admin: SupabaseClient; context: B2BCustomerContext }
 
 export async function requireB2BCustomerApi(
-  opts: { requireCustomerCode?: boolean } = {}
+  opts: { requireCustomerCode?: boolean; allowPreview?: boolean } = {}
 ): Promise<RequireB2BCustomerApiResult> {
-  const result = await requireB2BCustomer(opts)
+  const result = await requireB2BCustomer({ requireCustomerCode: opts.requireCustomerCode })
   if ('kind' in result) {
     const mapped = AUTH_FAILURE_RESPONSE[result.kind]
     return { error: NextResponse.json({ error: mapped.message }, { status: mapped.status }) }
   }
-  if (result.context.isPreview) {
+  // Preview sessions are read-only: any route that mutates must reject them.
+  // allowPreview is the opt-in for pure lookups (price probes) whose 403 the
+  // PDP cannot tell apart from "this country has no price".
+  if (result.context.isPreview && opts.allowPreview !== true) {
     return {
       error: NextResponse.json(
         { error: 'Preview only — nothing was saved.' },
