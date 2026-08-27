@@ -39,7 +39,12 @@ function persistenceWorld(overrides: Partial<StubConfig> = {}) {
 
 function checkoutInput(): CheckoutInput {
   return {
-    context: makeContext('org-1'),
+    context: {
+      // Unrelated to the $500 minimum: this suite's fixtures are sub-minimum
+      // purchase orders. Exempt the ORG, never soften the gate.
+      ...makeContext('org-1'),
+      minOrderExempt: true,
+    } as CheckoutInput['context'],
     idempotency_key: 'checkout-au:po',
     custom_shipping_address: {
       street: '1 Test Street',

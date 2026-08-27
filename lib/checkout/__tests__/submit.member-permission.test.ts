@@ -109,7 +109,7 @@ function ctx(overrides: Partial<B2BCustomerContext> = {}): B2BCustomerContext {
     customerCode: 'PRT', isTest: false, b2bAccountId: 'b1', tierLevel: 1, paymentTerms: 'net20',
     contractNotes: null, pricingMode: null, defaultDepositPercent: null, storeIds: [],
     defaultStoreId: null, branchStoreIds: [], tenantType: null, allowsMultiStoreOrdering: false,
-    moqExempt: true, orderingPermission: 'both', ...overrides,
+    moqExempt: true, minOrderExempt: true, orderingPermission: 'both', ...overrides,
   }
 }
 

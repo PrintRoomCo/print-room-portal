@@ -205,6 +205,9 @@ function buildInput(
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: false, // MOQ ENFORCED — this suite tests the MOQ × fulfilment interaction
+      // Unrelated to the $500 minimum: this suite's fixtures are sub-minimum
+      // purchase orders. Exempt the ORG, never soften the gate.
+      minOrderExempt: true,
       orderingPermission: 'both',
     },
     idempotency_key: 'idem-fulfilment-1',

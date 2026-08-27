@@ -44,6 +44,7 @@ import {
   DecorationDriftError,
   DisabledCountryError,
   MemberAccessDriftError,
+  MinimumOrderValueError,
   MixedShippingAddressError,
   MoqViolationError,
   StockShortfallError,
@@ -62,6 +63,7 @@ export {
   DecorationDriftError,
   DisabledCountryError,
   MemberAccessDriftError,
+  MinimumOrderValueError,
   MixedShippingAddressError,
   MoqViolationError,
   StockShortfallError,
@@ -351,6 +353,15 @@ export async function submitCustomerOrder(
     openPeriod,
     preOrderItemIds,
   } = preparedCheckoutInternalsFor(prepared)
+
+  // The $500 hard stop. READ the prepared verdict, never recompute it — prepare
+  // resolved all four exemptions, and re-deriving here would let the displayed
+  // and enforced answers drift apart. Placed before every side effect so nothing
+  // is written for an order that cannot be placed.
+  if (!prepared.minimumOrder.met) {
+    throw new MinimumOrderValueError(prepared.minimumOrder)
+  }
+
   const isStockOnHandOrder = orderType === 'stock_on_hand'
   // Enabled: the partition's exact country. Flag off: the org's default
   // country row. Either way the prepared config is the only billing source.

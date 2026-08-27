@@ -94,7 +94,12 @@ function line(overrides: Partial<CheckoutLineInput>): CheckoutLineInput {
 
 function buildInput(lines: CheckoutLineInput[]): CheckoutInput {
   return {
-    context: makeContext(ORG) as CheckoutInput['context'],
+    context: {
+      // Unrelated to the $500 minimum: this suite's fixtures are sub-minimum
+      // purchase orders. Exempt the ORG, never soften the gate.
+      ...makeContext(ORG),
+      minOrderExempt: true,
+    } as CheckoutInput['context'],
     idempotency_key: 'idem-char-1',
     required_by: null,
     notes: null,
