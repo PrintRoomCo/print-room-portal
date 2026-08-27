@@ -157,6 +157,11 @@ describe('checkout preview request lines', () => {
           taxLabel: 'GST 10%', isDefault: false,
         },
         orderType: 'stock_on_hand',
+        // Stock orders are never gated by the $500 purchase-order minimum.
+        minimumOrder: {
+          applies: false, met: true, threshold: 500,
+          currency: 'AUD', value: 156, shortfall: 0,
+        },
         lines: [{
           ...requestLines[0], cartLineId: 'line-1', unitPrice: 11,
           decorationUnitPrice: 2, billingMode: 'invoice_on_dispatch', billed: true,

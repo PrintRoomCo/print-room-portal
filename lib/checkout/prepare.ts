@@ -22,6 +22,11 @@ import {
   type MoqViolation,
   type UnitPriceDrift,
 } from '@/lib/checkout/errors'
+import {
+  allLinesArePreOrder,
+  evaluateMinimumOrder,
+  type MinimumOrderStatus,
+} from '@/lib/checkout/minimum-order'
 import { getGrantedCatalogueItemIds } from '@/lib/shop/member-access'
 import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
@@ -61,6 +66,14 @@ export interface PreparedCheckoutPartition {
   key: string
   country: BillingCountryConfig
   orderType: 'purchase_order' | 'stock_on_hand'
+  /**
+   * The AUTHORITATIVE $500 minimum verdict for this partition. All four
+   * exemptions are resolvable here, so submit READS this rather than
+   * recomputing — the displayed verdict and the enforced verdict cannot diverge.
+   * Never throws: a throw would collapse the partition into an ok:false pricing
+   * failure and discard the totals the customer needs in order to act.
+   */
+  minimumOrder: MinimumOrderStatus
   lines: PreparedCheckoutLine[]
   pricingPoolLines: CheckoutLineInput[]
   totals: {
@@ -1538,11 +1551,26 @@ export async function prepareCustomerOrderPartition(
     })),
     pickFee,
   )
+  const minimumOrder = evaluateMinimumOrder({
+    orderType,
+    // Already goods + decoration, ex-GST, ex pick fee, prepaid lines at full
+    // value. The gate introduces no pricing arithmetic of its own.
+    notionalValue: goodsValueForBand,
+    // Flag on: this partition's country. Flag off: the org's default row.
+    currency: billingCountry.currency,
+    exemptions: {
+      orgExempt: input.context.minOrderExempt === true,
+      isTest: input.context.isTest,
+      isInventoryIntent: input.intent === 'inventory',
+      allPreOrder: allLinesArePreOrder(input.lines, preOrderItemIds),
+    },
+  })
   const tax = round2(billedTotal * options.country.taxRate)
   const prepared: PreparedCheckoutPartition = {
     key: options.partitionKey,
     country: options.country,
     orderType,
+    minimumOrder,
     lines: repriced.map((line, index) => {
       const decorationUnitPrice =
         decorationCostByLineKey.get(
