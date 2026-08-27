@@ -832,7 +832,7 @@ totalInfo?: ReactNode             // rendered beside each "Country total" label
 
 The default `formatMoney` is the current exact formatter (`formatCurrency(amount, currency) + ' ' + currency`). Defaulting to exact is the deliberate polarity: the safe default renders authored figures verbatim (billing surfaces), and `/checkout` opts into display conversion. `/checkout/review` therefore needs no edits at all, and the existing tests in this file stay green.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `components/checkout/BilledOrderSummary.test.tsx` (inside the file, after the existing `CountryBilledOrderSummary` describe; it reuses the existing `previewGroup` and `renderLine` helpers):
 
@@ -888,12 +888,12 @@ describe('CountryBilledOrderSummary display formatting for /checkout', () => {
 })
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run components/checkout/BilledOrderSummary.test.tsx`
 Expected: the three new-prop tests FAIL (unknown props / unchanged output); the default-formatter test PASSES already (it pins current behaviour before the change). All pre-existing tests PASS.
 
-- [ ] **Step 3: Implement the props**
+- [x] **Step 3: Implement the props**
 
 In `components/checkout/BilledOrderSummary.tsx`:
 
@@ -964,12 +964,12 @@ and replace all five `exact(` call sites (`partition.total`, `group.subtotal`, `
 
 6. The flag-off `BilledOrderSummaryProps.format` (line 179) renames its parameter: `format: (amount: number) => string`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run components/checkout/BilledOrderSummary.test.tsx`
 Expected: PASS, including every pre-existing test (the default path is unchanged behaviour).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/checkout/BilledOrderSummary.tsx components/checkout/BilledOrderSummary.test.tsx

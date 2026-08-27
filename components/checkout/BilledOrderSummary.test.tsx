@@ -156,6 +156,56 @@ describe('CountryBilledOrderSummary', () => {
   })
 })
 
+describe('CountryBilledOrderSummary display formatting for /checkout', () => {
+  const nzShape = () =>
+    checkoutBillingShape([
+      previewGroup({ key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand' }),
+    ])
+
+  it('renders exact authored figures with the currency code by default', () => {
+    render(<CountryBilledOrderSummary shape={nzShape()} renderLine={renderLine} />)
+    expect(screen.getAllByText('$115.00 NZD').length).toBeGreaterThan(0)
+    expect(screen.getByText('$100.00 NZD')).toBeInTheDocument()
+  })
+
+  it('routes every money figure through formatMoney when provided', () => {
+    render(
+      <CountryBilledOrderSummary
+        shape={nzShape()}
+        renderLine={renderLine}
+        formatMoney={(amount, currency) => `DISPLAY(${amount}:${currency})`}
+      />,
+    )
+    expect(screen.getAllByText('DISPLAY(115:NZD)').length).toBeGreaterThan(0)
+    expect(screen.getByText('DISPLAY(100:NZD)')).toBeInTheDocument()
+    expect(screen.queryByText('$115.00 NZD')).not.toBeInTheDocument()
+  })
+
+  it('drops the currency chip from the heading when showCurrencyInHeading is false', () => {
+    render(
+      <CountryBilledOrderSummary
+        shape={nzShape()}
+        renderLine={renderLine}
+        showCurrencyInHeading={false}
+      />,
+    )
+    expect(screen.getByText('New Zealand')).toBeInTheDocument()
+    expect(screen.queryByText('New Zealand · NZD')).not.toBeInTheDocument()
+  })
+
+  it('renders totalInfo beside the country total', () => {
+    render(
+      <CountryBilledOrderSummary
+        shape={nzShape()}
+        renderLine={renderLine}
+        totalInfo={<span data-testid="invoice-info" />}
+      />,
+    )
+    expect(screen.getByTestId('invoice-info')).toBeInTheDocument()
+    expect(screen.getByText('Country total')).toBeInTheDocument()
+  })
+})
+
 describe('BilledOrderSummary: single prepaid order', () => {
   it('shows the billed total, not the goods value', () => {
     render(

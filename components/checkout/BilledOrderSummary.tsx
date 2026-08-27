@@ -29,11 +29,24 @@ export function CountryBilledOrderSummary({
   failures = [],
   partitionOutcomes = {},
   renderLine,
+  formatMoney,
+  showCurrencyInHeading = true,
+  totalInfo,
 }: {
   shape: CheckoutBillingShape
   failures?: CheckoutCountryFailure[]
   partitionOutcomes?: Record<string, StoredPartitionOutcome>
   renderLine: (line: BilledLine, currency: string, countryName: string) => ReactNode
+  /**
+   * Formats one amount denominated in a group's billing currency. The default
+   * renders the authored figure verbatim ("$123.45 NZD"): the truthful choice
+   * for billing surfaces. /checkout passes a display-currency converter.
+   */
+  formatMoney?: (amount: number, billingCurrency: string) => string
+  /** /checkout drops the currency chip: it would contradict converted figures below it. */
+  showCurrencyInHeading?: boolean
+  /** Rendered beside each "Country total" label; /checkout mounts InvoiceCurrencyInfo here. */
+  totalInfo?: ReactNode
 }) {
   const countries: Array<{
     key: string
@@ -58,15 +71,16 @@ export function CountryBilledOrderSummary({
       failures: failures.filter((item) => item.countryCode === failure.countryCode),
     })
   }
-  const exact = (amount: number, currency: string) =>
-    `${formatCurrency(amount, currency)} ${currency}`
+  const money =
+    formatMoney ??
+    ((amount: number, currency: string) => `${formatCurrency(amount, currency)} ${currency}`)
 
   return (
     <div className="space-y-6">
       {countries.map(({ key, group, countryName, currency, failures: countryFailures }) => (
         <section key={key}>
           <h2 className="text-lg font-medium text-black">
-            {countryName} · {currency}
+            {showCurrencyInHeading ? `${countryName} · ${currency}` : countryName}
           </h2>
 
           {countryFailures.map((failure) => (
@@ -106,7 +120,7 @@ export function CountryBilledOrderSummary({
               <div className="mt-4 flex items-baseline justify-between text-sm">
                 <span className="text-black/60">Order total</span>
                 <span className="font-medium tabular-nums text-black">
-                  {exact(partition.total, currency)}
+                  {money(partition.total, currency)}
                 </span>
               </div>
             </section>
@@ -114,12 +128,22 @@ export function CountryBilledOrderSummary({
 
           {group && (
             <dl className="mt-5 space-y-2 pt-5 text-sm">
-              <CountryRow label="Subtotal" value={exact(group.subtotal, currency)} />
+              <CountryRow label="Subtotal" value={money(group.subtotal, currency)} />
               {group.pickingFee > 0 && (
-                <CountryRow label="Picking fee" value={exact(group.pickingFee, currency)} />
+                <CountryRow label="Picking fee" value={money(group.pickingFee, currency)} />
               )}
-              <CountryRow label={group.taxLabel} value={exact(group.tax, currency)} />
-              <CountryRow label="Country total" value={exact(group.total, currency)} bold />
+              <CountryRow label={group.taxLabel} value={money(group.tax, currency)} />
+              <CountryRow
+                label={
+                  totalInfo ? (
+                    <span className="flex items-center gap-1.5">Country total {totalInfo}</span>
+                  ) : (
+                    'Country total'
+                  )
+                }
+                value={money(group.total, currency)}
+                bold
+              />
             </dl>
           )}
         </section>
@@ -160,7 +184,7 @@ function CountryRow({
   value,
   bold = false,
 }: {
-  label: string
+  label: ReactNode
   value: string
   bold?: boolean
 }) {
@@ -176,7 +200,7 @@ function CountryRow({
 
 interface BilledOrderSummaryProps {
   shape: BilledOrderShape
-  format: (nzdAmount: number) => string
+  format: (amount: number) => string
   /** Renders one cart line row. Called per line, in partition order. */
   renderLine: (line: BilledLine) => ReactNode
   /** Review opens the breakdown by default; checkout leaves it collapsed. */
