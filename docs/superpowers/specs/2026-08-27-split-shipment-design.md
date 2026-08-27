@@ -1,7 +1,7 @@
 # Split shipment — design spec
 
 **Date:** 2026-08-27
-**Status:** Approved design, pending fee-schedule values (see Open inputs)
+**Status:** Approved design; fee schedule confirmed to 47 SKUs, extrapolation above that awaiting confirmation (see Open inputs)
 **Repos affected:** `print-room-portal` (customer checkout, tracker, emails, Starshipit push), `print-room-staff-portal` (schema/migrations, staff order views, packing slips, amendment RPCs)
 
 ## 1. Summary
@@ -18,7 +18,7 @@ Customers ordering for a multi-location organisation add the *sum* of the order 
 | Allocation rule | A split item must be **fully allocated** (every size shows 0 left) before checkout is allowed |
 | Address sets | Free per-item: each split item allocates across any destinations independently |
 | Pricing | Pooled across the whole order — splitting never changes unit price |
-| Freight | Per-destination **split fee**, banded by item/SKU count at that destination (fee schedule from Jon's spreadsheet — pending). **Replaces** the NZ stock-on-hand picking fee on split orders |
+| Freight | Per-destination **split fee** — every destination pays, including the first — banded by distinct SKU count at that destination (schedule in §6, NZD, converted for non-NZ destinations). **Replaces** the NZ stock-on-hand picking fee on split orders |
 | Minimums | $500 PO minimum and MOQ evaluated on the **pooled** order, never per destination (requires pooling fix, §6) |
 | Countries | Cross-country splits allowed; existing country×fulfilment partitioning fans them into per-country orders, destinations nested within |
 | Line types | All: made-to-order, stocked, prepaid |
@@ -97,7 +97,18 @@ RLS mirrors `quotes` (org members read own org's rows; staff full access).
 - **Tier pricing: no change.** Client pooling (`recomputeProductTierPrices`, keyed `productId::decorationSignature`) and server pooling (`pricing_pool_lines` → `prepareCustomerOrderPartition`) both ignore destination already.
 - **MOQ pooling fix:** `lib/checkout/prepare.ts` currently builds `totalQtyByProductId` / `moqViolations` from the partition's own lines (`prepare.ts:416-531`). Seed them from `poolLines` (the same source tier pricing uses) so a product's run split across destinations/countries is judged on its pooled quantity.
 - **$500 PO minimum pooling fix:** `evaluateMinimumOrder` currently receives the partition's own `goodsValueForBand` (`prepare.ts:1554-1567`). For split orders, evaluate against the pooled order's notional value, converted into the partition's billing currency via the existing display/billing currency conversion. One pooled order clearing $500 must never fail per-partition.
-- **Split fee:** computed per `order_destinations` row, banded by item/SKU count allocated to that destination, per Jon's fee spreadsheet (**values pending — Open inputs**). On split orders it **replaces** `orderPickingFee` (`lib/pricing/order-picking-fee.ts` must return 0 when `quotes.split_shipment`); on single-destination orders the picking fee is untouched. Fee band table lives in code beside `lib/pricing/picking-fee.ts`, same pattern.
+- **Split fee:** computed per `order_destinations` row — **every destination pays, including the first**. Banded by the count of **distinct SKUs** allocated to that destination, where a SKU = garment style + colourway + size (i.e. distinct `(product_id, variant_id, size_id)`; decorations and unit quantities never change the count):
+
+  | Distinct SKUs at destination | Fee (NZD) |
+  |---|---|
+  | 1–10 | $15.00 |
+  | 11–20 | $17.50 |
+  | 21–30 | $20.00 |
+  | 31–40 | $22.50 |
+  | 41–50 | $30.00 |
+  | each further block of 10 | +$2.50 (51–60 → $32.50, 61–70 → $35.00, … uncapped) |
+
+  Source: Jon's fee spreadsheet (2026-08-27), which enumerates 1–47; the 41-band's upper edge and everything above 47 are an **extrapolation Jon has not yet confirmed** — bands of 10 continuing from the $30 step. Fees are NZD; non-NZ destinations get the checkout's existing display/billing currency conversion applied. On split orders the fee **replaces** `orderPickingFee` (`lib/pricing/order-picking-fee.ts` must return 0 when `quotes.split_shipment`); on single-destination orders the picking fee is untouched. Fee band table lives in code beside `lib/pricing/picking-fee.ts`, same pattern.
 - Split fees are surfaced pre-submit in the preview totals per destination, persisted on `order_destinations.split_fee`, summed into `quotes.billed_total`, and itemised on the Xero draft.
 
 ## 7. Downstream consumers
@@ -124,7 +135,7 @@ RLS mirrors `quotes` (org members read own org's rows; staff full access).
 4. **Staff-buyer branch guard** (`checkStaffBranchScope`) currently *throws* on multi-store lines — it must become "all destinations ⊆ granted branches", not be deleted.
 5. **`checkoutReviewState` sessionStorage** carries the split between `/checkout` and `/checkout/review`; both pages must validate it against the live cart (lines added/removed in between invalidate allocations).
 6. **Saved ad-hoc stores** enter the same `stores` table Starshipit and staff tooling read — they'll have no `xero_contact_id` (fine: org invoicing) but must satisfy the Starshipit street+city push gate.
-7. **Prepaid/stocked lines**: picking fee suppression (§6) changes stock-on-hand economics on split orders; the fee spreadsheet is assumed to price pick/pack per location — confirm when values arrive.
+7. **Prepaid/stocked lines**: picking fee suppression (§6) changes stock-on-hand economics on split orders — the per-destination fee is flat per SKU-band, so a split stock order can cost less than today's banded picking fee at high goods values and more at low ones. Accepted: the fee schedule prices pick/pack per location by design.
 
 ## 9. Phasing (each independently deployable, flag-gated)
 
@@ -143,4 +154,4 @@ RLS mirrors `quotes` (org members read own org's rows; staff full access).
 
 ## 11. Open inputs
 
-1. **Split-fee schedule** — Jon to paste the spreadsheet values (per-location fee banded by item/SKU count). Blocks: fee implementation in phase 1; interaction check with prepaid/stock-on-hand economics (§8.7).
+1. **Fee bands above 47 SKUs** — the spreadsheet enumerates 1–47; §6's continuation (41–50 → $30, +$2.50 per further block of 10, uncapped) is Claude's extrapolation awaiting Jon's confirmation. Everything else in the fee schedule is confirmed verbatim.
