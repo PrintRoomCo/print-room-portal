@@ -57,6 +57,9 @@ export async function buildPreviewContext(
     allowsMultiStoreOrdering:
       (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
     moqExempt: false,
+    // Staff previews never bypass the $500 minimum — a preview must show the
+    // customer exactly what the customer would hit.
+    minOrderExempt: false,
     // EFFECTIVE permission (org_admin -> 'both'), matching requireB2BCustomer so
     // staff "preview as member" of an admin doesn't hit a spurious checkout
     // PERMISSION_DENIED the real member would never see.

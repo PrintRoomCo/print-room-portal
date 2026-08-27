@@ -54,6 +54,13 @@ export interface B2BCustomerContext {
    */
   moqExempt: boolean
   /**
+   * organizations.min_order_exempt. Clears the $500 purchase-order minimum for
+   * negotiated accounts. Optional because ~17 sites construct this context
+   * (mostly checkout tests); absent is read as NOT exempt, so the gate applies —
+   * the conservative direction for a hard stop.
+   */
+  minOrderExempt?: boolean
+  /**
    * EFFECTIVE Layer-2 ordering permission, already resolved via
    * effectivePermission(role, stored): org_admin is always 'both'; staff use
    * their stored user_organizations.ordering_permission (default 'stock_only').
@@ -133,6 +140,8 @@ export async function requireB2BCustomer(
   ])
   if (!org) return { kind: 'org_not_found' }
 
+  const minOrderExempt = await readMinOrderExempt(admin, membership.organization_id)
+
   if (opts.requireCustomerCode && !org.customer_code) {
     return { kind: 'missing_customer_code' }
   }
@@ -169,6 +178,7 @@ export async function requireB2BCustomer(
       allowsMultiStoreOrdering:
         (b2b as { tenant_type?: B2BCustomerContext['tenantType'] } | null)?.tenant_type === 'studio_plus_inventory',
       moqExempt: Boolean((org as { moq_exempt?: boolean | null }).moq_exempt),
+      minOrderExempt,
       // EFFECTIVE permission: org_admin is always elevated to 'both' (role
       // overrides the stored value), staff fall back to least-privilege. This
       // mirrors the PDP (effectivePermission) so the store UI and the checkout
@@ -176,6 +186,30 @@ export async function requireB2BCustomer(
       // made_to_order product but rejected by submit_b2b_order (PERMISSION_DENIED).
       orderingPermission: effectivePermission(role, storedPermission ?? null),
     } satisfies B2BCustomerContext,
+  }
+}
+
+/**
+ * Own query on purpose. The column ships from print-room-staff-portal on its own
+ * schedule; folding it into the `organizations` select would make PostgREST error
+ * the whole row while it is missing, blanking the checkout context for everyone.
+ * Any failure reads as "not exempt" — same posture as the b2b_member_store_grants
+ * read above.
+ */
+export async function readMinOrderExempt(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await admin
+      .from('organizations')
+      .select('min_order_exempt')
+      .eq('id', organizationId)
+      .maybeSingle()
+    if (error) return false
+    return Boolean((data as { min_order_exempt?: boolean | null } | null)?.min_order_exempt)
+  } catch {
+    return false
   }
 }
 
