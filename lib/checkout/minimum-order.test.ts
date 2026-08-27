@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PURCHASE_ORDER_MINIMUM,
   allLinesArePreOrder,
+  evaluateCartMinimumOrder,
   evaluateMinimumOrder,
   type MinimumOrderExemptions,
 } from './minimum-order'
@@ -105,5 +106,83 @@ describe('allLinesArePreOrder', () => {
   it('is false with no open period and false for an empty cart', () => {
     expect(allLinesArePreOrder([{ catalogueItemId: 'a' }], new Set())).toBe(false)
     expect(allLinesArePreOrder([], new Set(['a']))).toBe(false)
+  })
+})
+
+function cartView(overrides: Partial<Parameters<typeof evaluateCartMinimumOrder>[0]> = {}) {
+  return evaluateCartMinimumOrder({
+    orderType: 'purchase_order',
+    notionalValue: 380,
+    currency: 'NZD',
+    orgExempt: false,
+    isTest: false,
+    canRouteToInventory: false,
+    periodLookupPending: false,
+    preOrderItemIdsInCart: new Set<string>(),
+    lineCatalogueItemIds: ['item-1'],
+    ...overrides,
+  })
+}
+
+describe('evaluateCartMinimumOrder', () => {
+  it('blocks when no exemption is still possible', () => {
+    const view = cartView()
+    expect(view.blocks).toBe(true)
+    expect(view.tentative).toBe(false)
+    expect(view.status.shortfall).toBe(120)
+  })
+
+  it('warns without blocking when the org can route to inventory', () => {
+    const view = cartView({ canRouteToInventory: true })
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(true)
+  })
+
+  it('warns without blocking when a cart line is a pre-order item', () => {
+    const view = cartView({
+      preOrderItemIdsInCart: new Set(['item-1']),
+      lineCatalogueItemIds: ['item-1', 'item-2'],
+    })
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(true)
+  })
+
+  it('warns without blocking while the period lookup is still in flight', () => {
+    const view = cartView({ periodLookupPending: true })
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(true)
+  })
+
+  it('shows nothing when every line is a pre-order item', () => {
+    const view = cartView({
+      preOrderItemIdsInCart: new Set(['item-1']),
+      lineCatalogueItemIds: ['item-1'],
+    })
+    expect(view.status.applies).toBe(false)
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(false)
+  })
+
+  it('shows nothing for an exempt org, even under the minimum', () => {
+    const view = cartView({ orgExempt: true })
+    expect(view.status.applies).toBe(false)
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(false)
+  })
+
+  it('shows nothing for a test org', () => {
+    expect(cartView({ isTest: true }).status.applies).toBe(false)
+  })
+
+  it('shows nothing at or over the minimum', () => {
+    const view = cartView({ notionalValue: 500 })
+    expect(view.blocks).toBe(false)
+    expect(view.tentative).toBe(false)
+  })
+
+  it('shows nothing for a stock-on-hand cart', () => {
+    const view = cartView({ orderType: 'stock_on_hand', notionalValue: 10 })
+    expect(view.status.applies).toBe(false)
+    expect(view.blocks).toBe(false)
   })
 })

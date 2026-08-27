@@ -76,3 +76,62 @@ export function allLinesArePreOrder(
     (line) => Boolean(line.catalogueItemId) && preOrderItemIds.has(line.catalogueItemId as string),
   )
 }
+
+export interface CartMinimumOrderView {
+  status: MinimumOrderStatus
+  /** Under the minimum, but an exemption may still apply at checkout — warn, do not block. */
+  tentative: boolean
+  /** Under the minimum with no exemption left to apply — safe to disable checkout. */
+  blocks: boolean
+}
+
+/**
+ * Cart-layer verdict. The cart is pre-partition and pre-intent, so two of the
+ * four exemptions are not knowable here: `intent` is a checkout-time toggle
+ * (`addToInventory`, offered to franchise and studio_plus_inventory orgs) and the
+ * open period may still be loading. This function therefore degrades to a warning
+ * rather than a block whenever an exemption could still land — the cart hint
+ * saves a wasted trip to checkout, it is never the only thing blocking an order.
+ */
+export function evaluateCartMinimumOrder(input: {
+  orderType: OrderType
+  notionalValue: number
+  currency: string
+  orgExempt: boolean
+  isTest: boolean
+  /** The org may flip this order to an inventory restock at checkout. */
+  canRouteToInventory: boolean
+  /** The open-period lookup has not resolved yet. */
+  periodLookupPending: boolean
+  /** Cart catalogue item ids that belong to the org's open ordering period. */
+  preOrderItemIdsInCart: ReadonlySet<string>
+  /** Every cart line's catalogue item id, in cart order. */
+  lineCatalogueItemIds: ReadonlyArray<string | null | undefined>
+}): CartMinimumOrderView {
+  const status = evaluateMinimumOrder({
+    orderType: input.orderType,
+    notionalValue: input.notionalValue,
+    currency: input.currency,
+    exemptions: {
+      orgExempt: input.orgExempt,
+      isTest: input.isTest,
+      // Unknowable in the cart. Left false so the gate still evaluates; the
+      // `canRouteToInventory` downgrade below is what prevents a false block.
+      isInventoryIntent: false,
+      allPreOrder: allLinesArePreOrder(
+        input.lineCatalogueItemIds.map((catalogueItemId) => ({ catalogueItemId })),
+        input.preOrderItemIdsInCart,
+      ),
+    },
+  })
+  const under = status.applies && !status.met
+  const exemptionStillPossible =
+    input.canRouteToInventory ||
+    input.periodLookupPending ||
+    input.preOrderItemIdsInCart.size > 0
+  return {
+    status,
+    tentative: under && exemptionStillPossible,
+    blocks: under && !exemptionStillPossible,
+  }
+}
