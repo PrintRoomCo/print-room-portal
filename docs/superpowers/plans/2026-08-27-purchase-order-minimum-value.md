@@ -42,15 +42,15 @@ Read these before starting — three of them contradict what the spec assumed.
 
 8. **Mixed carts are already split into two orders before pricing.** `partitionCheckoutLines` (`lib/checkout/partition.ts:59`) sends every `made_to_order` and legacy line to a `purchase_order` partition and every `stocked` line to a `stock_on_hand` partition; the route calls it at `app/api/checkout/route.ts:412` (flag off) and via `buildCheckoutExecutionPlan` (flag on). **Every partition reaching `prepare` is homogeneous.** The spec's mixed-cart worked example ("$600 of stock tees plus one $80 made-to-order hoodie = $680, which passes") therefore cannot happen: the hoodie becomes its own $80 purchase order. This plan implements **per-order** measurement — see "Open decision" below.
 
-## Open decision — per-order vs per-cart measurement
+## Resolved — per-order, not per-cart
 
-The spec says the minimum is tested against the "whole order". Finding 8 shows one cart can be two orders, which makes that phrase ambiguous, and the two readings give different answers for the same cart.
+The spec said the minimum is tested against the "whole order". Finding 8 shows one cart can be two orders, which made that phrase ambiguous.
 
-**This plan implements per-order** (the purchase-order partition is measured alone). That is the reading the architecture already has: `prepare` sees one homogeneous partition, so the annotation and the submit backstop measure the same thing, and the backstop cannot be bypassed by calling the API directly.
+**Decided 2026-08-27 (Jon): per-order.** The purchase-order partition is measured alone. A $600-stock + $80-made-to-order cart becomes an $80 purchase order (gated, $420 short) and a $600 stock order (never gated).
 
-The alternative — summing both halves of the cart — would need the route to prepare every partition, total their notional values, and re-evaluate once; the submit backstop would then only ever see one half, so a direct API call could place a small purchase order that the UI would have blocked.
+This is the reading the architecture already has: `prepare` sees one homogeneous partition, so the annotation the customer is shown and the value the submit backstop enforces are the same number, and a direct API call cannot bypass it. The rejected alternative — summing both halves — would have left the backstop measuring only one of them.
 
-If per-cart is what is wanted, Tasks 2, 5, 7 and 8 change shape. Confirm before starting.
+The spec's "Mixed carts" section has been corrected to match. No task in this plan changes as a result.
 
 ---
 

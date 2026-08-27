@@ -40,13 +40,28 @@ reads that existing value; it introduces no new pricing arithmetic.
 
 ### Mixed carts
 
-A cart containing both stock-on-hand and made-to-order lines is one
-`purchase_order`, and its **whole** notional value is tested. Example: $600 of
-stock tees plus one $80 made-to-order hoodie line = $680, which passes.
+A cart containing both stock-on-hand and made-to-order lines is **already split
+into two separate orders before pricing** — `partitionCheckoutLines`
+(`lib/checkout/partition.ts:59`) sends every `made_to_order` and legacy line to a
+`purchase_order` partition and every `stocked` line to a `stock_on_hand` one, and
+the route calls it at `app/api/checkout/route.ts:412` (flag off) and via
+`buildCheckoutExecutionPlan` (flag on). Every partition that reaches `prepare` is
+therefore homogeneous.
 
-Rationale: this is the rule customers can predict and staff can explain. Testing
-only the made-to-order portion would fail that example and require the UI to
-explain a distinction the customer did not make.
+The minimum is tested against **each purchase order on its own**. Example: $600
+of stock tees plus one $80 made-to-order hoodie becomes an $80 purchase order and
+a $600 stock order; the $80 order is gated and needs $420 more, while the stock
+order is never gated.
+
+Rationale: this is the reading the architecture already has. `prepare` sees one
+homogeneous partition, so the annotation the customer is shown and the value the
+submit backstop enforces are the same number. Summing the two halves back
+together would leave the backstop measuring only one of them, so a direct API
+call posting just the $80 hoodie could place an order the UI had blocked.
+
+(Decided 2026-08-27, after tracing the F1 split. An earlier draft of this section
+claimed the $680 cart would pass — it described a single-order world the code
+does not have.)
 
 ### Currency and country partitions
 
