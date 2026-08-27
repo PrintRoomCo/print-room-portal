@@ -152,7 +152,7 @@ Why threading, not `??` at the call site: `resolveCurrency` hard-defaults to NZD
 
 The only callers of these three functions are `lib/currency/server-currency.ts` and `app/(portal)/layout.tsx` (verified by grep), so the signature change is contained.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `lib/currency/__tests__/detect.test.ts`:
 
@@ -191,12 +191,12 @@ describe('resolveCurrency fallback chain (saved, then geo, then base)', () => {
 })
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run lib/currency/__tests__/detect.test.ts`
 Expected: FAIL. `currencyForCountry('JP', 'AUD')` returns `'NZD'` (second argument ignored), and the `fallback` property is not part of `resolveCurrency`'s parameter type.
 
-- [ ] **Step 3: Implement the fallback threading**
+- [x] **Step 3: Implement the fallback threading**
 
 In `lib/currency/detect.ts`, replace `currencyForCountry` and `resolveCurrency` (lines 23-48) with:
 
@@ -257,12 +257,12 @@ export async function resolveInitialCurrency(
 }
 ```
 
-- [ ] **Step 4: Run the tests and the typecheck**
+- [x] **Step 4: Run the tests and the typecheck**
 
 Run: `npx vitest run lib/currency/__tests__/detect.test.ts` then `npx tsc --noEmit`
 Expected: PASS (all detect tests, old and new); typecheck clean (existing callers pass no fallback and get the NZD default).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/currency/detect.ts lib/currency/server-currency.ts lib/currency/__tests__/detect.test.ts
@@ -1585,3 +1585,4 @@ Expected: empty. The server-side billing derivation and the review page are byte
 
 - Before Task 1, the baseline full suite reported 1,721 passing and 5 failing tests. The failures are in `OrdersTable.test.tsx`, `TeamClient.branch.test.tsx`, and `CartProvider.test.tsx`, outside this plan's change surfaces. `OrdersTable.tsx` is also protected by D7 and remains untouched.
 - Task 1's supplied test contains 8 cases, although Step 4 says to expect 9. The exact supplied test was kept and all 8 cases pass.
+- Task 2's required typecheck reported 14 pre-existing errors in `lib/__tests__/next-config-redirects.test.ts` and `lib/email/__tests__/tracker-notification.test.ts`. No error points to a Task 2 file; the 19 targeted detection tests pass.

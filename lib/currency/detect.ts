@@ -21,30 +21,36 @@ const COUNTRY_CURRENCY_MAP: Record<string, SupportedCurrency> = {
 };
 
 /**
- * Map a visitor's country code to a display currency, defaulting to NZD for
- * unknown countries and when the country is unavailable (local dev, bots,
- * regions we don't price).
+ * Map a visitor's country code to a display currency. The fallback covers
+ * unknown countries and an unavailable country (local dev, bots, regions we
+ * don't price); callers pass the org's base currency so an AU org lands on
+ * AUD, not NZD.
  */
-export function currencyForCountry(country: string | null | undefined): SupportedCurrency {
-  if (!country) return 'NZD';
-  return COUNTRY_CURRENCY_MAP[country.toUpperCase()] ?? 'NZD';
+export function currencyForCountry(
+  country: string | null | undefined,
+  fallback: SupportedCurrency = 'NZD',
+): SupportedCurrency {
+  if (!country) return fallback;
+  return COUNTRY_CURRENCY_MAP[country.toUpperCase()] ?? fallback;
 }
 
 /**
  * Resolve the currency a visitor should land on, in priority order:
  *   1. their saved preference (if valid)
  *   2. the geo-detected country
- *   3. NZD (default)
+ *   3. the fallback (the org's base currency; NZD when unknown)
  */
 export function resolveCurrency({
   saved,
   country,
+  fallback = 'NZD',
 }: {
   saved: string | null | undefined;
   country: string | null | undefined;
+  fallback?: SupportedCurrency;
 }): SupportedCurrency {
   if (isSupportedCurrency(saved)) return saved;
-  return currencyForCountry(country);
+  return currencyForCountry(country, fallback);
 }
 
 const LOCALE_CURRENCY_MAP: Record<string, SupportedCurrency> = {
