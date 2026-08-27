@@ -24,7 +24,7 @@ export function PrepaidLinePrice({
   goodsValue: number
   /** false ⇒ prepaid stock draw: struck through, invoiced at $0. */
   billed: boolean
-  format: (nzdAmount: number) => string
+  format: (amount: number) => string
   /** New country-cutover surfaces use the OEM monochrome tokens; legacy stays frozen. */
   oemPresentation?: boolean
 }) {

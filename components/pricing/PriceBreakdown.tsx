@@ -14,7 +14,7 @@ interface PriceBreakdownProps {
    * `useCurrency().format` from the parent client component. When omitted,
    * falls back to NZD-only formatPrice (for server-rendered contexts only).
    */
-  format?: (nzdAmount: number) => string
+  format?: (amount: number) => string
 }
 
 /**

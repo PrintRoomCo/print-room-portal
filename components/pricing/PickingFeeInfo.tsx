@@ -6,7 +6,7 @@ import { activeBandIndex, pickingFeeBandRows } from '@/lib/pricing/picking-fee-d
 interface PickingFeeInfoProps {
   /** The goods value the fee band is derived from (partition goodsValueForBand / stocked cart goods). */
   goodsBasis: number
-  format: (nzdAmount: number) => string
+  format: (amount: number) => string
   /** 'up' when the mount sits at the bottom of an overflow-hidden panel (cart drawer). */
   direction?: 'up' | 'down'
 }

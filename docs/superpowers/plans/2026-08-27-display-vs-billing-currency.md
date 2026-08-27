@@ -1473,7 +1473,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Interfaces:** none change; these are parameter names inside function-type annotations (`format: (nzdAmount: number) => string` becomes `format: (amount: number) => string`). Post Task 3 these callbacks receive base-currency amounts (AUD for WHITEFOX), so the `nzd` name lies about its unit. Every other rename site from the spec's section 7 inventory was handled by earlier tasks (format.ts/index.ts/context in Tasks 1 and 3, Money/ProductCard/price.ts in Task 4, BilledOrderSummary in Task 5).
 
-- [ ] **Step 1: Rename the three annotation parameters**
+- [x] **Step 1: Rename the three annotation parameters**
 
 In each file, change the one line:
 
@@ -1492,7 +1492,7 @@ In each file, change the one line:
   format: (amount: number) => string
 ```
 
-- [ ] **Step 2: Sweep for stragglers**
+- [x] **Step 2: Sweep for stragglers**
 
 Run:
 
@@ -1502,12 +1502,12 @@ grep -rn "nzdAmount\|nzd={\|convertNZD" --include='*.ts' --include='*.tsx' compo
 
 Expected: no output.
 
-- [ ] **Step 3: Typecheck and run the full suite**
+- [x] **Step 3: Typecheck and run the full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean and PASS (type-level parameter names cannot break call sites, so this is a pure confirmation).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/pricing/PickingFeeInfo.tsx components/pricing/PriceBreakdown.tsx components/checkout/PrepaidLinePrice.tsx
@@ -1593,3 +1593,4 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - Task 4's 107 shopping tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.
 - Task 7's checkout suite exposed `CheckoutClient.review-redirect.test.tsx` as an unlisted coupled test whose currency-context mock lacked `formatFrom`, display currency, and rates, and whose assertions expected the old billing-currency checkout presentation. The mock and assertions now cover the converted country total, collapsed sticky total, currency-free heading, and tooltip trigger.
 - After that Task 7 coupled-test update, all 91 checkout tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.
+- Task 9's chained `npx tsc --noEmit && npm test` stopped at the same 14 baseline type errors, so `npm test` was run separately. It reported 1,759 passing and the same 5 baseline failures across 1,764 tests; the rename grep is empty.
