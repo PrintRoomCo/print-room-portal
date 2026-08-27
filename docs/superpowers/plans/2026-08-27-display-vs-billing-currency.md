@@ -1174,7 +1174,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Consumes: `formatFrom`, `currency`, `rates` from the context (Task 3); `CountryBilledOrderSummary`'s new props (Task 5); `InvoiceCurrencyInfo` (Task 6); `convertBetween` (Task 1).
 - Produces: `displayCurrencyTotals(totals: CurrencyTotal[], displayCurrency: SupportedCurrency, rates: ExchangeRates | null): CurrencyTotal[]`, used only by `/checkout`'s sticky bar. `CheckoutCTAStickyBar` itself is untouched: it already renders whatever denominations it is handed (the flag-off branch feeds it converted display totals today), so the split lives in what each page passes it.
 
-- [ ] **Step 1: Write the failing test for the totals helper**
+- [x] **Step 1: Write the failing test for the totals helper**
 
 Create `lib/checkout/display-totals.test.ts`:
 
@@ -1224,12 +1224,12 @@ describe('displayCurrencyTotals', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run lib/checkout/display-totals.test.ts`
 Expected: FAIL, module not found.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 Create `lib/checkout/display-totals.ts`:
 
@@ -1262,12 +1262,12 @@ export function displayCurrencyTotals(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run lib/checkout/display-totals.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Wire `CheckoutClient.tsx`**
+- [x] **Step 5: Wire `CheckoutClient.tsx`**
 
 Five edits:
 
@@ -1328,7 +1328,7 @@ import { displayCurrencyTotals } from '@/lib/checkout/display-totals'
         }
 ```
 
-- [ ] **Step 6: Verify the review page is untouched and the invoice path is display-free**
+- [x] **Step 6: Verify the review page is untouched and the invoice path is display-free**
 
 Run:
 
@@ -1339,12 +1339,12 @@ grep -n "formatFrom\|displayCurrencyTotals\|convert(" lib/checkout/submit.ts
 
 Expected: empty diff for the review client; no hits in `submit.ts` (display FX still cannot reach an invoice; the server derives billing currency from `billingCountry.currency`).
 
-- [ ] **Step 7: Run the checkout tests and the typecheck**
+- [x] **Step 7: Run the checkout tests and the typecheck**
 
 Run: `npx vitest run components/checkout lib/checkout/display-totals.test.ts` then `npx tsc --noEmit`
 Expected: PASS and clean.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lib/checkout/display-totals.ts lib/checkout/display-totals.test.ts components/checkout/CheckoutClient.tsx
@@ -1591,3 +1591,5 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - Task 3's full suite exposed `app/(portal)/layout.test.ts` as an unlisted coupled test that asserted the removed AU pin. It now asserts the org base fallback and verifies that no `billingCurrency` prop remains.
 - After the Task 3 coupled-test update, the full suite reported 1,741 passing and the same 5 baseline failures. The required typecheck still reports only the 14 baseline errors documented under Task 2.
 - Task 4's 107 shopping tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.
+- Task 7's checkout suite exposed `CheckoutClient.review-redirect.test.tsx` as an unlisted coupled test whose currency-context mock lacked `formatFrom`, display currency, and rates, and whose assertions expected the old billing-currency checkout presentation. The mock and assertions now cover the converted country total, collapsed sticky total, currency-free heading, and tooltip trigger.
+- After that Task 7 coupled-test update, all 91 checkout tests pass. Its required typecheck repeats only the 14 baseline errors documented under Task 2.

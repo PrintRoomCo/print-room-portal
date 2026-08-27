@@ -13,6 +13,7 @@ import type { EnabledCountry } from '@/lib/account/org-countries'
 import { AddAllToInventoryToggle } from './AddAllToInventoryToggle'
 import { CheckoutCTAStickyBar } from './CheckoutCTAStickyBar'
 import { CustomerCodeNotice } from './CustomerCodeNotice'
+import { InvoiceCurrencyInfo } from './InvoiceCurrencyInfo'
 import {
   EMPTY_CUSTOM_ADDRESS,
   writeCheckoutReviewState,
@@ -34,7 +35,7 @@ import { PortalEmptyState } from '@/components/ui/PortalEmptyState'
 import { decorationPerUnit } from '@/lib/cart/types'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCompany } from '@/contexts/CompanyContext'
-import { formatCurrency } from '@/lib/currency/format'
+import { displayCurrencyTotals } from '@/lib/checkout/display-totals'
 import {
   buildCheckoutRequestLines,
   useCheckoutPreview,
@@ -91,7 +92,7 @@ export function CheckoutClient({
   const cart = useCart()
   const router = useRouter()
   const currencyContext = useCurrency()
-  const { format } = currencyContext
+  const { format, formatFrom, currency: displayCurrency, rates } = currencyContext
   const { defaultBillingCountry } = useCompany()
   const frontImageByLineId = useCartLineFrontImages(cart.lines)
 
@@ -312,7 +313,7 @@ export function CheckoutClient({
     const line = lineById.get(billedLine.lineId)
     if (!line) return null
     const lineFormat = currency
-      ? (amount: number) => `${formatCurrency(amount, currency)} ${currency}`
+      ? (amount: number) => formatFrom(amount, currency)
       : format
     return (
       <ShipToRow
@@ -420,6 +421,14 @@ export function CheckoutClient({
               shape={countryShape}
               failures={previewFailures}
               renderLine={renderShipLine}
+              formatMoney={(amount, currency) => formatFrom(amount, currency)}
+              showCurrencyInHeading={false}
+              totalInfo={
+                <InvoiceCurrencyInfo
+                  billingCurrencies={countryShape.countryGroups.map((group) => group.currency)}
+                  displayCurrency={displayCurrency}
+                />
+              }
             />
           ) : (
             <div>
@@ -622,7 +631,7 @@ export function CheckoutClient({
         totalsByCurrency={
           countryPartitionEnabled
             ? preview.status === 'ready'
-              ? preview.totalsByCurrency
+              ? displayCurrencyTotals(preview.totalsByCurrency, displayCurrency, rates)
               : []
             : [{
                 currency: currencyContext.currency ?? defaultBillingCountry.currency,

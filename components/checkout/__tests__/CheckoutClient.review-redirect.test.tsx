@@ -35,7 +35,11 @@ vi.mock('@/lib/pricing/usePricingContext', () => ({
 
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({
+    currency: 'NZD',
+    rates: { NZD: 1, AUD: 0.8, USD: 0.6, GBP: 0.44, EUR: 0.51 },
+    convert: (n: number) => n,
     format: (n: number) => `$${n.toFixed(2)}`,
+    formatFrom: (n: number, sourceCurrency: string) => `DISPLAY(${n}:${sourceCurrency})`,
   }),
 }))
 // Supply the complete NZ country config used by this component's price display.
@@ -179,9 +183,12 @@ describe('CheckoutClient review step', () => {
       }),
     } as Response))
 
-    expect(await screen.findByText('Australia · AUD')).toBeInTheDocument()
+    expect(await screen.findByText('Australia')).toBeInTheDocument()
+    expect(screen.queryByText('Australia · AUD')).not.toBeInTheDocument()
     expect(screen.getByText(/Repriced from NZD for delivery to Australia/)).toBeInTheDocument()
-    expect(screen.getAllByText('$145.20 AUD')).not.toHaveLength(0)
+    expect(screen.getAllByText('DISPLAY(145.2:AUD)')).not.toHaveLength(0)
+    expect(screen.getByText('$181.50 NZD')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Invoicing currency' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review order' })).toBeEnabled()
   })
 
