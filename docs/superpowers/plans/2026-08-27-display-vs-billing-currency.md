@@ -35,7 +35,7 @@
 
 The rate table is NZD-base: `rates[NZD] = 1`, `rates[AUD] = 0.83392`, `rates[USD] = 0.597219` (values refreshed 2026-08-26). Cross-rate is `amount * rates[to] / rates[from]`. The guard (spec D2): a missing or zero rate on either side returns the amount unconverted, matching `fetchExchangeRates`'s fail-safe posture, so a malformed table can never paint `$NaN` on a price.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `lib/currency/__tests__/format.test.ts`:
 
@@ -96,12 +96,12 @@ describe('formatCurrency', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run lib/currency/__tests__/format.test.ts`
 Expected: FAIL, `convertBetween` is not exported from `../format`.
 
-- [ ] **Step 3: Implement `convertBetween`**
+- [x] **Step 3: Implement `convertBetween`**
 
 In `lib/currency/format.ts`, add below `formatCurrency` (keep `convertNZD` untouched for now; Task 3 removes it):
 
@@ -122,12 +122,12 @@ export function convertBetween(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run lib/currency/__tests__/format.test.ts`
 Expected: PASS (9 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/currency/format.ts lib/currency/__tests__/format.test.ts
@@ -1580,3 +1580,8 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - **Deviations from the spec, deliberate:** (a) `formatMoney` is optional with the exact formatter as default, so the safe default is the billing-faithful one and `/checkout/review` needs no edit; (b) the sticky-bar split is implemented in what each page passes `CheckoutCTAStickyBar` rather than inside it, matching how the flag-off branch already feeds it converted totals; (c) `InvoiceCurrencyInfo.test.tsx` is colocated (this directory's convention) rather than in `__tests__/`; (d) multi-currency display totals are summed into one figure, since two amounts in the same display currency side by side would read as a broken duplicate.
 - **Type consistency:** `formatFrom(amount: number, sourceCurrency: string)` is defined in Task 3 and consumed with that signature in Tasks 4 and 7. `formatMoney(amount: number, billingCurrency: string)` is defined in Task 5 and passed as `(amount, currency) => formatFrom(amount, currency)` in Task 7. `displayCurrencyTotals(totals, displayCurrency, rates)` is defined and consumed in Task 7. `baseCurrency: SupportedCurrency` flows from `EnabledCountry.currency` (already `SupportedCurrency`).
 - **Placeholder scan:** none found; every code step carries the code.
+
+## Execution deviations
+
+- Before Task 1, the baseline full suite reported 1,721 passing and 5 failing tests. The failures are in `OrdersTable.test.tsx`, `TeamClient.branch.test.tsx`, and `CartProvider.test.tsx`, outside this plan's change surfaces. `OrdersTable.tsx` is also protected by D7 and remains untouched.
+- Task 1's supplied test contains 8 cases, although Step 4 says to expect 9. The exact supplied test was kept and all 8 cases pass.

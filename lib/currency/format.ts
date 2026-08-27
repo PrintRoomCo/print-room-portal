@@ -16,6 +16,21 @@ export function formatCurrency(amount: number, currency: string): string {
   }).format(amount);
 }
 
+export function convertBetween(
+  amount: number,
+  from: SupportedCurrency,
+  to: SupportedCurrency,
+  rates: ExchangeRates,
+): number {
+  if (from === to) return amount;
+  const fromRate = rates[from];
+  const toRate = rates[to];
+  // Fail-safe, matching fetchExchangeRates's posture: a missing or zero rate
+  // renders the figure unconverted rather than as Infinity or NaN.
+  if (!fromRate || !toRate) return amount;
+  return amount * (toRate / fromRate);
+}
+
 export function convertNZD(
   nzdAmount: number,
   currency: SupportedCurrency,
