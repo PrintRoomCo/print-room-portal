@@ -420,7 +420,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
             {!mondaySynced && !awaitingApproval && (
               <p className="mt-4 text-xs text-gray-500">
                 Production sync is still finishing. If it takes more than a few
-                minutes our staff will reconcile it from their side &mdash;
+                minutes our staff will reconcile it from their side
                 your order is safe.
               </p>
             )}
