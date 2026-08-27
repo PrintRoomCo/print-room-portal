@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { CURRENCY_OPTIONS, type SupportedCurrency } from '@/lib/currency/types'
 
@@ -8,6 +9,7 @@ export function CurrencyPicker() {
   const { currency, setCurrency } = useCurrency()
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!open) return
@@ -25,6 +27,10 @@ export function CurrencyPicker() {
       document.removeEventListener('keydown', handleKey)
     }
   }, [open])
+
+  // /checkout/review renders billing currency only; a visible picker there is
+  // a false affordance, since nothing on the page responds to it (spec D4).
+  if (pathname === '/checkout/review') return null
 
   return (
     <div ref={wrapperRef} className="relative z-30">

@@ -1368,7 +1368,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Consumes: `usePathname` from `next/navigation`; `currency`/`setCurrency` from the context.
 - Produces: nothing new; `CurrencyPicker` returns `null` when `pathname === '/checkout/review'`. The check lives inside `CurrencyPicker` rather than `PortalTopBar` so the visibility rule sits where someone debugging the picker will look for it (spec D4).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `components/layout/__tests__/CurrencyPicker.test.tsx`:
 
@@ -1421,12 +1421,12 @@ describe('CurrencyPicker', () => {
 
 (`getByRole('menu', { hidden: true })` is needed for the closed state: testing-library excludes `aria-hidden` elements from role queries by default.)
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run components/layout/__tests__/CurrencyPicker.test.tsx`
 Expected: the first two PASS (they pin behaviour that already works and would have caught Defect 1's silent no-op at the context layer); "renders nothing on /checkout/review" FAILS.
 
-- [ ] **Step 3: Implement the hide**
+- [x] **Step 3: Implement the hide**
 
 In `components/layout/CurrencyPicker.tsx`, add the import:
 
@@ -1448,12 +1448,12 @@ then inside the component add the hook alongside the existing ones (before the `
 
 The early return must come after every hook call so the hook order is stable across renders.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run components/layout/__tests__/CurrencyPicker.test.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/layout/CurrencyPicker.tsx components/layout/__tests__/CurrencyPicker.test.tsx
