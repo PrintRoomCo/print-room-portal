@@ -15,7 +15,7 @@ describe('convertBetween', () => {
     expect(convertBetween(123.45, 'AUD', 'AUD', rates)).toBe(123.45)
   })
 
-  it('converts from the NZD base exactly like the old convertNZD path', () => {
+  it('converts from the NZD base exactly like the previous conversion path', () => {
     expect(convertBetween(100, 'NZD', 'AUD', rates)).toBeCloseTo(83.392, 10)
   })
 

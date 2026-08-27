@@ -21,18 +21,21 @@ async function CountryAwareCompanyProvider({
   initialUserId,
   countryPartitionEnabled,
   initialRates,
-  initialCurrency,
 }: {
   children: React.ReactNode
   initialAccess: Awaited<ReturnType<typeof getPortalCompanyAccess>>
   initialUserId: string | null
   countryPartitionEnabled: boolean
   initialRates: Awaited<ReturnType<typeof getServerExchangeRates>>['rates']
-  initialCurrency: Awaited<ReturnType<typeof resolveInitialCurrency>>
 }) {
   const defaultBillingCountry = initialAccess?.companyId
     ? await getOrgDefaultBillingCountry(getSupabaseServer(), initialAccess.companyId)
     : await getPlatformBillingCountry(getSupabaseServer(), 'NZ')
+
+  // Saved cookie -> geo country -> org base currency. Resolved here rather
+  // than in PortalLayout because the terminal fallback is the org's base
+  // currency, which is only known once defaultBillingCountry loads.
+  const initialCurrency = await resolveInitialCurrency(defaultBillingCountry.currency)
 
   return (
     <CompanyProvider
@@ -43,16 +46,8 @@ async function CountryAwareCompanyProvider({
     >
       <CurrencyProvider
         initialRates={initialRates}
-        initialCurrency={
-          defaultBillingCountry.currency === 'NZD'
-            ? initialCurrency
-            : defaultBillingCountry.currency
-        }
-        billingCurrency={
-          initialAccess?.companyId && defaultBillingCountry.currency !== 'NZD'
-            ? defaultBillingCountry.currency
-            : null
-        }
+        initialCurrency={initialCurrency}
+        baseCurrency={defaultBillingCountry.currency}
       >
         {children}
       </CurrencyProvider>
@@ -61,11 +56,10 @@ async function CountryAwareCompanyProvider({
 }
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
-  const [user, access, exchangeRates, initialCurrency] = await Promise.all([
+  const [user, access, exchangeRates] = await Promise.all([
     getPortalUser(),
     getPortalCompanyAccess(),
     getServerExchangeRates(),
-    resolveInitialCurrency(),
   ])
   const countryPartitionEnabled = isCheckoutCountryPartitionEnabled()
 
@@ -77,7 +71,6 @@ export default async function PortalLayout({ children }: { children: React.React
           initialUserId={user?.id ?? null}
           countryPartitionEnabled={countryPartitionEnabled}
           initialRates={exchangeRates.rates}
-          initialCurrency={initialCurrency}
         >
           <PreviewBanner />
           <CartProvider>

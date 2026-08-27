@@ -4,10 +4,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { SupportedCurrency, ExchangeRates } from '@/lib/currency/types';
 import { CURRENCY_STORAGE_KEY } from '@/lib/currency/types';
 import { fetchExchangeRates } from '@/lib/currency/exchange-rates';
-import { formatCurrency, convertNZD } from '@/lib/currency/format';
+import { formatCurrency, convertBetween } from '@/lib/currency/format';
+import { isSupportedCurrency } from '@/lib/currency/detect';
 
 const STORAGE_KEY = CURRENCY_STORAGE_KEY;
-// 1 year — keep the preference around long enough to feel permanent.
+// 1 year: keep the preference around long enough to feel permanent.
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function persistCurrency(c: SupportedCurrency) {
@@ -29,12 +30,13 @@ interface CurrencyContextValue {
   setCurrency: (c: SupportedCurrency) => void;
   rates: ExchangeRates | null;
   loading: boolean;
-  convert: (nzdAmount: number) => number;
-  format: (nzdAmount: number) => string;
+  /** Denomination of the org's stored numbers (default billing country). */
+  baseCurrency: SupportedCurrency;
+  convert: (amount: number) => number;
+  format: (amount: number) => string;
+  /** Formats an amount denominated in an arbitrary currency into the display currency. */
+  formatFrom: (amount: number, sourceCurrency: string) => string;
   formatDirect: (amount: number) => string;
-  /** AU Stage 1 — true when the provider is pinned to an org's billing currency
-   *  (AU orgs): the FX layer is bypassed and setCurrency is a no-op. */
-  billingLocked: boolean;
 }
 
 const CurrencyContext = createContext<CurrencyContextValue | undefined>(undefined);
@@ -56,24 +58,21 @@ export function CurrencyProvider({
   children,
   initialRates = null,
   initialCurrency = 'NZD',
-  billingCurrency = null,
+  baseCurrency = 'NZD',
 }: {
   children: React.ReactNode
   initialRates?: ExchangeRates | null
   initialCurrency?: SupportedCurrency
   /**
-   * AU Stage 1 — pin every displayed figure to the org's BILLING currency.
-   * For an AU org the stored numbers ARE AUD, so the NZD-base FX layer would
-   * corrupt them; it must be bypassed, not fed. Null (the default, every NZ
-   * org) leaves today's user/geo-driven behaviour untouched.
+   * Denomination of the org's stored numbers (its default billing country's
+   * currency). convert/format cross-rate FROM this INTO the picked display
+   * currency; when they are equal the amount passes through untouched.
    */
-  billingCurrency?: SupportedCurrency | null
+  baseCurrency?: SupportedCurrency
 }) {
-  // `initialCurrency` is resolved server-side (saved cookie -> geo country -> NZD)
-  // so the first paint already shows the right currency.
-  const pinned = billingCurrency ?? null;
-  const [currencyState, setCurrencyState] = useState<SupportedCurrency>(initialCurrency);
-  const currency = pinned ?? currencyState;
+  // `initialCurrency` is resolved server-side (saved cookie -> geo country ->
+  // org base currency) so the first paint already shows the right currency.
+  const [currency, setCurrencyState] = useState<SupportedCurrency>(initialCurrency);
   const [rates, setRates] = useState<ExchangeRates | null>(initialRates);
   const [loading, setLoading] = useState(!initialRates);
 
@@ -81,13 +80,6 @@ export function CurrencyProvider({
   // before the cookie existed have it in localStorage but not in the cookie the
   // server reads. Honour it and backfill the cookie so the next load is correct.
   useEffect(() => {
-    // Pinned (AU org): a stored viewer preference must not override the billing
-    // currency, and rates are never consulted by convert/format under the pin.
-    if (pinned) {
-      setLoading(false);
-      return;
-    }
-
     const saved = getStoredCurrency();
     if (saved && saved !== initialCurrency) {
       // Intentional: localStorage isn't readable during SSR, so the first render
@@ -115,31 +107,37 @@ export function CurrencyProvider({
     return () => {
       stale = true;
     };
-  }, [initialRates, initialCurrency, pinned]);
+  }, [initialRates, initialCurrency]);
 
   const setCurrency = useCallback((c: SupportedCurrency) => {
-    if (pinned) return;
     setCurrencyState(c);
     persistCurrency(c);
-  }, [pinned]);
+  }, []);
 
   const convert = useCallback(
-    (nzdAmount: number): number => {
-      if (pinned) return nzdAmount; // stored numbers are already the billing currency
-      if (!rates) return nzdAmount;
-      return convertNZD(nzdAmount, currency, rates);
+    (amount: number): number => {
+      if (!rates) return amount;
+      return convertBetween(amount, baseCurrency, currency, rates);
     },
-    [pinned, currency, rates],
+    [baseCurrency, currency, rates],
+  );
+
+  const formatFrom = useCallback(
+    (amount: number, sourceCurrency: string): string => {
+      // An unconvertible amount (no rates yet, or a currency outside the rate
+      // table) renders verbatim in its own currency rather than relabelled in
+      // the display currency.
+      if (!rates || !isSupportedCurrency(sourceCurrency)) {
+        return formatCurrency(amount, sourceCurrency);
+      }
+      return formatCurrency(convertBetween(amount, sourceCurrency, currency, rates), currency);
+    },
+    [currency, rates],
   );
 
   const format = useCallback(
-    (nzdAmount: number): string => {
-      if (pinned) return formatCurrency(nzdAmount, pinned);
-      if (!rates) return formatCurrency(nzdAmount, 'NZD');
-      const converted = convertNZD(nzdAmount, currency, rates);
-      return formatCurrency(converted, currency);
-    },
-    [pinned, currency, rates],
+    (amount: number): string => formatFrom(amount, baseCurrency),
+    [formatFrom, baseCurrency],
   );
 
   const formatDirect = useCallback(
@@ -153,12 +151,13 @@ export function CurrencyProvider({
       setCurrency,
       rates,
       loading,
+      baseCurrency,
       convert,
       format,
+      formatFrom,
       formatDirect,
-      billingLocked: pinned !== null,
     }),
-    [currency, setCurrency, rates, loading, convert, format, formatDirect, pinned],
+    [currency, setCurrency, rates, loading, baseCurrency, convert, format, formatFrom, formatDirect],
   );
 
   return (

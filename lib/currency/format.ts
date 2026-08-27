@@ -30,11 +30,3 @@ export function convertBetween(
   if (!fromRate || !toRate) return amount;
   return amount * (toRate / fromRate);
 }
-
-export function convertNZD(
-  nzdAmount: number,
-  currency: SupportedCurrency,
-  rates: ExchangeRates,
-): number {
-  return nzdAmount * (rates[currency] ?? 1);
-}

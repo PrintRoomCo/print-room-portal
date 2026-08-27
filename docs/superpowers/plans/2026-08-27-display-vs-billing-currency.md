@@ -306,7 +306,7 @@ interface CurrencyContextValue {
 
 This is one task because the provider prop change and the layout's prop passing are coupled: splitting them leaves a commit that does not compile.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `contexts/__tests__/CurrencyContext.test.tsx`:
 
@@ -396,12 +396,12 @@ describe('formatFrom', () => {
 
 The `setCurrency` test is the one that would have caught the original defect.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run contexts/__tests__/CurrencyContext.test.tsx`
 Expected: FAIL. `baseCurrency` and `formatFrom` do not exist on the context value, and the typecheck inside vitest rejects the `baseCurrency` prop.
 
-- [ ] **Step 3: Rewrite `contexts/CurrencyContext.tsx`**
+- [x] **Step 3: Rewrite `contexts/CurrencyContext.tsx`**
 
 Replace the whole file with:
 
@@ -584,7 +584,7 @@ export function useCurrency() {
 }
 ```
 
-- [ ] **Step 4: Rewire `app/(portal)/layout.tsx`**
+- [x] **Step 4: Rewire `app/(portal)/layout.tsx`**
 
 Three edits:
 
@@ -632,7 +632,7 @@ Three edits:
 
 `defaultBillingCountry.currency` is already typed `SupportedCurrency` (`lib/account/org-countries.ts:13`), so no cast is needed.
 
-- [ ] **Step 5: Delete `convertNZD`**
+- [x] **Step 5: Delete `convertNZD`**
 
 In `lib/currency/format.ts`, delete the whole `convertNZD` function (its last callers were replaced in Step 3). In `lib/currency/index.ts` line 7, change:
 
@@ -640,7 +640,7 @@ In `lib/currency/format.ts`, delete the whole `convertNZD` function (its last ca
 export { formatCurrency, convertBetween } from './format';
 ```
 
-- [ ] **Step 6: Run tests, typecheck, and the leftover grep**
+- [x] **Step 6: Run tests, typecheck, and the leftover grep**
 
 Run: `npx vitest run contexts/__tests__/CurrencyContext.test.tsx lib/currency` then `npx tsc --noEmit` then:
 
@@ -650,12 +650,12 @@ grep -rn "convertNZD\|billingLocked\|billingCurrency=" --include='*.ts' --includ
 
 Expected: tests PASS, typecheck clean, grep returns nothing (the server-side `billingCurrency` variable in `lib/checkout/submit.ts` has no `=` JSX form and is untouched by design).
 
-- [ ] **Step 7: Run the full suite to catch consumer fallout**
+- [x] **Step 7: Run the full suite to catch consumer fallout**
 
 Run: `npm test`
 Expected: PASS. The ten `useCurrency()` consumers all route through `format()` and are untouched. `Money.test.tsx` and `CatalogueGrid.test.tsx` mock the context module wholesale, so the interface change does not break them yet; `Money` itself still has its old props until Task 4.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add contexts/CurrencyContext.tsx "app/(portal)/layout.tsx" lib/currency/format.ts lib/currency/index.ts contexts/__tests__/CurrencyContext.test.tsx
@@ -1586,3 +1586,7 @@ Expected: empty. The server-side billing derivation and the review page are byte
 - Before Task 1, the baseline full suite reported 1,721 passing and 5 failing tests. The failures are in `OrdersTable.test.tsx`, `TeamClient.branch.test.tsx`, and `CartProvider.test.tsx`, outside this plan's change surfaces. `OrdersTable.tsx` is also protected by D7 and remains untouched.
 - Task 1's supplied test contains 8 cases, although Step 4 says to expect 9. The exact supplied test was kept and all 8 cases pass.
 - Task 2's required typecheck reported 14 pre-existing errors in `lib/__tests__/next-config-redirects.test.ts` and `lib/email/__tests__/tracker-notification.test.ts`. No error points to a Task 2 file; the 19 targeted detection tests pass.
+- Task 3's supplied context test assumes jsdom owns a usable global `localStorage`. Under the installed Node 26.4.0, that global is unavailable unless Node receives a storage-file flag, which also explains the baseline `CartProvider.test.tsx` failure. The context test now installs a file-local in-memory `Storage` stub before each case so it reaches the planned assertions.
+- Task 3's leftover grep would match Task 1's supplied test name containing the removed symbol. The test name now says "previous conversion path" so the exact removal sweep returns no output.
+- Task 3's full suite exposed `app/(portal)/layout.test.ts` as an unlisted coupled test that asserted the removed AU pin. It now asserts the org base fallback and verifies that no `billingCurrency` prop remains.
+- After the Task 3 coupled-test update, the full suite reported 1,741 passing and the same 5 baseline failures. The required typecheck still reports only the 14 baseline errors documented under Task 2.

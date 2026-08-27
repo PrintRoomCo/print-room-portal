@@ -17,10 +17,11 @@ describe('PortalLayout navigation boundary', () => {
     expect(source).toContain('defaultBillingCountry={defaultBillingCountry}')
   })
 
-  it('pins non-NZD organisations to their country currency and preserves NZD preferences', () => {
+  it('threads the org base currency without pinning display selection', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/(portal)/layout.tsx'), 'utf8')
 
-    expect(source).toContain("defaultBillingCountry.currency === 'NZD'")
-    expect(source).toContain("defaultBillingCountry.currency !== 'NZD'")
+    expect(source).toContain('resolveInitialCurrency(defaultBillingCountry.currency)')
+    expect(source).toContain('baseCurrency={defaultBillingCountry.currency}')
+    expect(source).not.toContain('billingCurrency={')
   })
 })
