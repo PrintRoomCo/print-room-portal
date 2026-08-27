@@ -92,7 +92,7 @@ describe('CartDrawer $500 minimum', () => {
       expect(screen.getByTestId('minimum-order-notice')).toBeTruthy(),
     )
     expect(screen.getByTestId('minimum-order-notice').textContent).toContain(
-      'add $120 to continue',
+      'Add $120 to continue',
     )
     expect(
       screen.getByRole('button', { name: 'Proceed to Checkout' }),

@@ -24,7 +24,7 @@ describe('readMinimumOrderRejection', () => {
         status,
         message: minimumOrderCopy(status).sentence,
       }),
-    ).toContain('add $120 to continue')
+    ).toContain('Add $120 to continue')
   })
 
   it('rebuilds the message from the status when the API omits it', () => {
@@ -40,7 +40,7 @@ describe('readMinimumOrderRejection', () => {
           shortfall: 40,
         },
       }),
-    ).toContain('add $40 to continue')
+    ).toContain('Add $40 to continue')
   })
 
   it('falls back to a generic sentence when the body is unusable', () => {

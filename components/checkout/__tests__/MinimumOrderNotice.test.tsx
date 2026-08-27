@@ -16,8 +16,8 @@ describe('MinimumOrderNotice', () => {
     render(<MinimumOrderNotice status={GATED} />)
     const notice = screen.getByTestId('minimum-order-notice')
     expect(notice.textContent).toBe(
-      'Made-to-order orders have a $500 minimum (excl. GST). This order is $380 — ' +
-        'add $120 to continue, or talk to us about smaller runs.',
+      'Purchase orders have a $500 minimum (excl. GST). This order is $380. ' +
+        'Add $120 to continue, or talk to us about smaller runs.',
     )
   })
 

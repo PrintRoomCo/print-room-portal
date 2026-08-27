@@ -32,10 +32,10 @@ export function minimumOrderCopy(
   const value = money(status.value, status.currency)
   const shortfall = money(status.shortfall, status.currency)
   const lead = options.tentative
-    ? `Made-to-order orders have a ${threshold} minimum (excl. GST). This order may be ` +
-      `below the minimum at ${value} — add ${shortfall}, or `
-    : `Made-to-order orders have a ${threshold} minimum (excl. GST). This order is ` +
-      `${value} — add ${shortfall} to continue, or `
+    ? `Purchase orders have a ${threshold} minimum (excl. GST). This order may be ` +
+      `below the minimum at ${value}. Add ${shortfall}, or `
+    : `Purchase orders have a ${threshold} minimum (excl. GST). This order is ` +
+      `${value}. Add ${shortfall} to continue, or `
   const ctaLabel = 'talk to us about smaller runs'
   return {
     sentence: `${lead}${ctaLabel}.`,
