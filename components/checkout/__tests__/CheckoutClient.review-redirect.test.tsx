@@ -166,6 +166,11 @@ describe('CheckoutClient review step', () => {
               taxLabel: 'GST 10%', isDefault: true,
             },
             orderType: 'purchase_order',
+            // Not what this suite tests: a cleared verdict, as for an exempt org.
+            minimumOrder: {
+              applies: false, met: true, threshold: 500,
+              currency: 'AUD', value: 132, shortfall: 0,
+            },
             lines: [{
               product_id: 'product-1', product_name: 'Test tee', variant_id: 'variant-1',
               qty: 12, cart_line_id: 'line-1', cartLineId: 'line-1', unitPrice: 11,
