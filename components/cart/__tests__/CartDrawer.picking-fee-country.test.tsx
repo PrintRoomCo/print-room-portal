@@ -47,6 +47,8 @@ vi.mock('@/contexts/CompanyContext', () => ({
     access: { role: 'org_admin' },
     countryPartitionEnabled: state.countryPartitionEnabled,
     defaultBillingCountry: state.defaultBillingCountry,
+    // Not what this suite tests — an exempt org, so the $500 notice stays hidden.
+    minimumOrderExemptions: { orgExempt: true, isTest: false },
   }),
 }))
 vi.mock('next/navigation', () => ({
@@ -57,6 +59,12 @@ vi.mock('../CartTable', () => ({ CartTable: () => <div>Cart lines</div> }))
 vi.mock('@/app/(portal)/cart/PeriodSavingsBar', () => ({
   PeriodSavingsBar: () => null,
 }))
+
+// usePeriodSummary fires on mount; no open ordering period in this suite.
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => ({ ok: true, json: async () => ({ period: null, items: [] }) })),
+)
 
 describe('CartDrawer picking-fee country estimate', () => {
   beforeEach(() => {

@@ -91,6 +91,25 @@ interface CheckoutPartitionResponse {
   >
 }
 
+import type { MinimumOrderStatus } from '@/lib/checkout/minimum-order'
+import { minimumOrderCopy } from '@/lib/checkout/minimum-order-copy'
+import { MinimumOrderNotice } from './MinimumOrderNotice'
+
+/**
+ * Turns a 422 body into banner text. The server already sends the finished
+ * sentence; the status rebuild is the belt-and-braces path for an older
+ * deployment that sends only `status`.
+ */
+export function readMinimumOrderRejection(body: {
+  code?: string
+  status?: MinimumOrderStatus
+  message?: string
+}): string {
+  if (body.message) return body.message
+  if (body.status) return minimumOrderCopy(body.status).sentence
+  return 'This order could not be submitted.'
+}
+
 export function CheckoutReviewClient({
   stores,
   customerCode,
@@ -226,6 +245,11 @@ export function CheckoutReviewClient({
       code: outcome.code,
       error: outcome.error,
     }))
+  // Only populated when country partitioning is on — useCheckoutPreview does not
+  // fire otherwise, and the 422 handler above carries the block in that case.
+  const minimumOrderBlocks = previewSuccesses
+    .map((outcome) => outcome.partition.minimumOrder)
+    .filter((status) => !status.met)
   const countryShape = checkoutBillingShape(
     previewSuccesses.map((outcome) => checkoutOrderGroupFromPrepared(outcome.partition)),
   )
@@ -436,6 +460,16 @@ export function CheckoutReviewClient({
         navigating = true
         router.push(`/checkout/confirmation/${primary.orderId}`)
         cart.clear()
+        return
+      }
+
+      if (res.status === 422) {
+        const data = (await res.json().catch(() => ({}))) as {
+          code?: string
+          status?: MinimumOrderStatus
+          message?: string
+        }
+        setBanner({ kind: 'error', msg: readMinimumOrderRejection(data) })
         return
       }
 
@@ -760,6 +794,10 @@ export function CheckoutReviewClient({
         </div>
       )}
 
+      {minimumOrderBlocks.map((status) => (
+        <MinimumOrderNotice key={`${status.currency}-${status.value}`} status={status} />
+      ))}
+
       {!customerCode && <CustomerCodeNotice />}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
@@ -983,6 +1021,7 @@ export function CheckoutReviewClient({
           !pricingReady ||
           isPreview ||
           !customerCode ||
+          minimumOrderBlocks.length > 0 ||
           (countryPartitionEnabled &&
             (preview.status !== 'ready' ||
               preview.partitions.length === 0 ||

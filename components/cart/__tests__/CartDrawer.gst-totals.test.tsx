@@ -60,6 +60,8 @@ vi.mock('@/contexts/CompanyContext', () => ({
       taxLabel: 'GST 15%',
       isDefault: true,
     },
+    // Not what this suite tests — an exempt org, so the $500 notice stays hidden.
+    minimumOrderExemptions: { orgExempt: true, isTest: false },
   }),
 }))
 vi.mock('next/navigation', () => ({
@@ -70,6 +72,12 @@ vi.mock('../CartTable', () => ({ CartTable: () => <div>Cart lines</div> }))
 vi.mock('@/app/(portal)/cart/PeriodSavingsBar', () => ({
   PeriodSavingsBar: () => null,
 }))
+
+// usePeriodSummary fires on mount; no open ordering period in this suite.
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => ({ ok: true, json: async () => ({ period: null, items: [] }) })),
+)
 
 /**
  * 60 x 26.75 = 1,605.00 and 190 x 52.66 = 10,005.40 are the ex-GST line

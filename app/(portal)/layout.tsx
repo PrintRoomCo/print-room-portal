@@ -14,6 +14,7 @@ import {
   getPlatformBillingCountry,
 } from '@/lib/account/org-countries'
 import { getSupabaseServer } from '@/lib/supabase'
+import { readMinOrderExempt, readOrgIsTest } from '@/lib/checkout/server'
 
 async function CountryAwareCompanyProvider({
   children,
@@ -32,6 +33,15 @@ async function CountryAwareCompanyProvider({
     ? await getOrgDefaultBillingCountry(getSupabaseServer(), initialAccess.companyId)
     : await getPlatformBillingCountry(getSupabaseServer(), 'NZ')
 
+  // Same tolerant read as the checkout context: min_order_exempt ships from the
+  // staff repo on its own schedule, so a missing column must not blank the org.
+  const minimumOrderExemptions = initialAccess?.companyId
+    ? {
+        orgExempt: await readMinOrderExempt(getSupabaseServer(), initialAccess.companyId),
+        isTest: await readOrgIsTest(getSupabaseServer(), initialAccess.companyId),
+      }
+    : { orgExempt: false, isTest: false }
+
   // Saved cookie -> geo country -> org base currency. Resolved here rather
   // than in PortalLayout because the terminal fallback is the org's base
   // currency, which is only known once defaultBillingCountry loads.
@@ -43,6 +53,7 @@ async function CountryAwareCompanyProvider({
       initialUserId={initialUserId}
       countryPartitionEnabled={countryPartitionEnabled}
       defaultBillingCountry={defaultBillingCountry}
+      minimumOrderExemptions={minimumOrderExemptions}
     >
       <CurrencyProvider
         initialRates={initialRates}

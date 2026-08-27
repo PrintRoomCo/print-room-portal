@@ -133,7 +133,7 @@ function buildInput(): CheckoutInput {
       b2bAccountId: null, tierLevel: null, paymentTerms: 'net20', contractNotes: null,
       pricingMode: null, defaultDepositPercent: null, storeIds: [], defaultStoreId: null,
       branchStoreIds: [], tenantType: null, allowsMultiStoreOrdering: false,
-      moqExempt: true, orderingPermission: 'both',
+      moqExempt: true, minOrderExempt: true, orderingPermission: 'both',
     },
     idempotency_key: 'idem-terms-1',
     required_by: '2026-06-01',

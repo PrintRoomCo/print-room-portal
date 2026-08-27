@@ -184,6 +184,9 @@ function buildInput(): CheckoutInput {
       tenantType: null,
       allowsMultiStoreOrdering: false,
       moqExempt: true,
+      // Unrelated to the $500 minimum: this suite's fixtures are sub-minimum
+      // purchase orders. Exempt the ORG, never soften the gate.
+      minOrderExempt: true,
       orderingPermission: 'both',
     },
     idempotency_key: 'idem-batch-1',

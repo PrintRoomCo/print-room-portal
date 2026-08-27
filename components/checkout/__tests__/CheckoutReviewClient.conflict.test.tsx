@@ -226,6 +226,11 @@ describe('CheckoutReviewClient independent country outcomes', () => {
       line: Record<string, unknown>,
     ) => ({
       key, country, orderType,
+      // Not what this suite tests: a cleared verdict, as for an exempt org.
+      minimumOrder: {
+        applies: false, met: true, threshold: 500,
+        currency: country.currency, value: 120, shortfall: 0,
+      },
       lines: [{
         ...line,
         cartLineId: line.cart_line_id,

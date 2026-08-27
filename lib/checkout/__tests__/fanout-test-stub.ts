@@ -105,6 +105,13 @@ export interface StubConfig {
   openPeriod?: { id: string; closesAt: string } | null
   /** Inject an error for a table's select (message → PostgREST-style error). */
   selectErrorFor?: Record<string, string>
+  /**
+   * variant_inventory.billing_mode per variant. Absent variants resolve to
+   * 'invoice_on_dispatch', the same conservative default prepare applies to an
+   * unknown variant. Needed to model a prepaid DRAW, which is the only case
+   * where the billed subtotal diverges from the notional goods value.
+   */
+  variantBillingModes?: Record<string, 'prepaid' | 'invoice_on_dispatch'>
   /** Organization facts read by checkout side-effect gates. */
   organization?: { isTest?: boolean }
   /** ISO countries enabled for one-time-address validation. */
@@ -206,6 +213,20 @@ export function makeFanoutStub(config: StubConfig) {
         if (f.op === 'in' && f.column === 'id') {
           const ids = new Set(f.value as string[])
           rows = rows.filter((r) => ids.has(r.id))
+        }
+      }
+      return { data: rows, error: null }
+    }
+    if (table === 'variant_inventory') {
+      const modes = config.variantBillingModes ?? {}
+      let rows = Object.entries(modes).map(([variant_id, billing_mode]) => ({
+        variant_id,
+        billing_mode,
+      }))
+      for (const f of filters) {
+        if (f.op === 'in' && f.column === 'variant_id') {
+          const ids = new Set(f.value as string[])
+          rows = rows.filter((r) => ids.has(r.variant_id))
         }
       }
       return { data: rows, error: null }

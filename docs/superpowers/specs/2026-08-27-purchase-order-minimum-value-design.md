@@ -270,3 +270,26 @@ Order of operations:
 - Promoting `PURCHASE_ORDER_MINIMUM` from a code constant to per-country DB
   config if thresholds ever need to diverge per market or change without a
   deploy.
+- **`organizations.moq_exempt` is never read.** `lib/checkout/server.ts:117` selects
+  `'id, name, customer_code, is_test'` but line 171 reads `org.moq_exempt`, so
+  `context.moqExempt` is permanently `false`. `lib/preview/context.ts:21` documents
+  the omission. Deliberately not fixed alongside the minimum-order work: fixing it
+  would silently relax MOQ for every org staff has already flagged exempt, which
+  needs its own decision.
+- **Duplicate `/api/period/summary` GET in the cart drawer.** `usePeriodSummary` and
+  `PeriodSavingsBar` each fetch it. Collapsing them means lifting the summary into
+  `CartDrawer` and making `PeriodSavingsBar` presentational, which rewrites
+  `components/cart/__tests__/PeriodSavingsBar.test.tsx`.
+- **The checkout-layer banner is dark while `CHECKOUT_COUNTRY_PARTITION_ENABLED` is
+  off**, because `useCheckoutPreview` does not fire in that configuration. The 422
+  banner and the cart hint carry the block until the flag is on everywhere.
+- **The "prepaid lines at full value" clause is vacuous under per-order measurement.**
+  `isPrepaidDrawn` (`lib/shop/prepaid-tag.ts:28`) is false unless a line is
+  `stocked`, and a homogeneous `purchase_order` partition has no stocked lines — so
+  `goodsValueForBand` always equals the billed goods subtotal there. The clause only
+  bit in the per-cart world the 2026-08-27 per-order decision replaced. It is still
+  pinned by a deliberately MIXED partition in
+  `lib/checkout/__tests__/prepare.minimum-order.test.ts` (defence-in-depth, should
+  `partitionCheckoutLines` ever stop splitting), which needed a `variantBillingModes`
+  hook on `lib/checkout/__tests__/fanout-test-stub.ts`. Discovered during
+  implementation, 2026-08-27.

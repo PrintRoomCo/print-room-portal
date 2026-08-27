@@ -16,6 +16,11 @@ interface CompanyContextType {
   loading: boolean
   countryPartitionEnabled: boolean
   defaultBillingCountry: BillingCountryConfig
+  /**
+   * organizations.min_order_exempt + is_test, resolved server-side in the portal
+   * layout. Read by the cart drawer so an exempt org never sees the $500 notice.
+   */
+  minimumOrderExemptions: { orgExempt: boolean; isTest: boolean }
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined)
@@ -30,12 +35,14 @@ export function CompanyProvider({
   initialUserId = null,
   countryPartitionEnabled = false,
   defaultBillingCountry,
+  minimumOrderExemptions = { orgExempt: false, isTest: false },
 }: {
   children: ReactNode
   initialAccess?: B2BCustomerAccess | null
   initialUserId?: string | null
   countryPartitionEnabled?: boolean
   defaultBillingCountry: BillingCountryConfig
+  minimumOrderExemptions?: { orgExempt: boolean; isTest: boolean }
 }) {
   const { user, loading: authLoading } = useAuth()
   const [access, setAccess] = useState<B2BCustomerAccess | null>(initialAccess)
@@ -94,6 +101,7 @@ export function CompanyProvider({
         loading,
         countryPartitionEnabled,
         defaultBillingCountry,
+        minimumOrderExemptions,
       }}
     >
       {children}

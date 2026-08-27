@@ -1,4 +1,6 @@
 import type { BillingMode } from '@/lib/shop/billing-mode'
+import type { MinimumOrderStatus } from '@/lib/checkout/minimum-order'
+import { minimumOrderCopy } from '@/lib/checkout/minimum-order-copy'
 
 export interface DecorationDrift {
   cartLineId: string | null
@@ -143,5 +145,20 @@ export class CountryPriceUnavailableError extends Error {
   ) {
     super(`${detail.productName} is not orderable to ${detail.countryCode} yet`)
     this.name = 'CountryPriceUnavailableError'
+  }
+}
+
+export class MinimumOrderValueError extends Error {
+  readonly code = 'minimum_order_value'
+  readonly status: MinimumOrderStatus
+
+  constructor(status: MinimumOrderStatus) {
+    // The message IS the customer-facing sentence, not a code. With country
+    // partitioning on, submit failures come back as a 207 outcome whose `error`
+    // string is rendered verbatim (app/api/checkout/route.ts:388), so a bare
+    // code would surface to the customer as gibberish.
+    super(minimumOrderCopy(status).sentence)
+    this.name = 'MinimumOrderValueError'
+    this.status = status
   }
 }

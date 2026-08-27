@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import { MinimumOrderNotice } from './MinimumOrderNotice'
 import {
   AddressAutocompleteInput,
   type AddressPlace,
@@ -257,6 +258,9 @@ export function CheckoutClient({
       code: outcome.code,
       error: outcome.error,
     }))
+  const minimumOrderBlocks = previewSuccesses
+    .map((outcome) => outcome.partition.minimumOrder)
+    .filter((status) => !status.met)
   const countryShape = checkoutBillingShape(
     previewSuccesses.map((outcome) => checkoutOrderGroupFromPrepared(outcome.partition)),
   )
@@ -278,6 +282,7 @@ export function CheckoutClient({
     !mixedCustom &&
     !customIncomplete &&
     !buyerMisconfigured &&
+    minimumOrderBlocks.length === 0 &&
     (!countryPartitionEnabled ||
       (preview.status === 'ready' &&
         preview.partitions.length > 0 &&
@@ -381,6 +386,10 @@ export function CheckoutClient({
           {banner.msg}
         </div>
       )}
+
+      {minimumOrderBlocks.map((status) => (
+        <MinimumOrderNotice key={`${status.currency}-${status.value}`} status={status} />
+      ))}
 
       {customerCodeMissing && <CustomerCodeNotice />}
 

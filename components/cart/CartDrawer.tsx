@@ -12,8 +12,12 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { formatCurrency } from '@/lib/currency/format'
 import { useCompany } from '@/contexts/CompanyContext'
 import { PeriodSavingsBar } from '@/app/(portal)/cart/PeriodSavingsBar'
+import { classifyOrderType } from '@/lib/orders/order-type'
+import { evaluateCartMinimumOrder } from '@/lib/checkout/minimum-order'
+import { MinimumOrderNotice } from '@/components/checkout/MinimumOrderNotice'
 import { CartTable } from './CartTable'
 import { useCart } from './useCart'
+import { usePeriodSummary } from './usePeriodSummary'
 
 export function CartDrawer() {
   const cart = useCart()
@@ -21,6 +25,7 @@ export function CartDrawer() {
     access,
     countryPartitionEnabled,
     defaultBillingCountry,
+    minimumOrderExemptions,
   } = useCompany()
   const isOrgAdmin = access?.role === 'org_admin'
   const drawer = useCartDrawer()
@@ -68,6 +73,49 @@ export function CartDrawer() {
     ],
   )
   const stockedGoods = useMemo(() => stockedGoodsValue(cart.lines), [cart.lines])
+  // Declared before the minimum-order memo below, which reads it.
+  const canonicalCurrency = cart.lines[0]?.priceCurrency
+  const cartCatalogueItemIds = useMemo(
+    () => cart.lines.flatMap((line) => (line.catalogueItemId ? [line.catalogueItemId] : [])),
+    [cart.lines],
+  )
+  const period = usePeriodSummary(cartCatalogueItemIds)
+  // Mirrors CheckoutClient exactly: only these tenant types are offered the
+  // inventory toggle, and only for a non-buyer.
+  const canRouteToInventory =
+    !access?.isBuyer &&
+    (access?.tenantType === 'studio_plus_inventory' || access?.tenantType === 'franchise')
+  const minimumOrder = useMemo(
+    () =>
+      evaluateCartMinimumOrder({
+        // Same mapping the checkout preview sends, so cart and server agree:
+        // an absent fulfilmentType is NOT 'stocked' and makes the cart a
+        // purchase order.
+        orderType: classifyOrderType(
+          cart.lines.map((line) => ({ fulfilment_type: line.fulfilmentType })),
+        ),
+        // netSubtotal is goods + decoration ex-GST, excluding the picking fee.
+        notionalValue: breakdown.netSubtotal,
+        currency: canonicalCurrency ?? defaultBillingCountry.currency,
+        orgExempt: minimumOrderExemptions.orgExempt,
+        isTest: minimumOrderExemptions.isTest,
+        canRouteToInventory: Boolean(canRouteToInventory),
+        periodLookupPending: period.loading,
+        preOrderItemIdsInCart: period.preOrderItemIds,
+        lineCatalogueItemIds: cart.lines.map((line) => line.catalogueItemId),
+      }),
+    [
+      cart.lines,
+      breakdown.netSubtotal,
+      canonicalCurrency,
+      defaultBillingCountry.currency,
+      minimumOrderExemptions.orgExempt,
+      minimumOrderExemptions.isTest,
+      canRouteToInventory,
+      period.loading,
+      period.preOrderItemIds,
+    ],
+  )
   // CartTable prints ex-GST line amounts while the total is GST-inclusive, so
   // without these rows the two never reconcile on screen — and the gap grows
   // with the order (Jon, 2026-08-26). Suppressed when no tax applies, so a
@@ -75,8 +123,8 @@ export function CartDrawer() {
   const showsTax = breakdown.gst > 0
   const taxLabel =
     defaultBillingCountry.taxLabel || `GST (${Math.round(breakdown.gstRate * 100)}%)`
-  const canCheckout = cart.lines.length > 0 && !oversell && !moqShort
-  const canonicalCurrency = cart.lines[0]?.priceCurrency
+  const canCheckout =
+    cart.lines.length > 0 && !oversell && !moqShort && !minimumOrder.blocks
   const formatCartMoney = (amount: number) =>
     canonicalCurrency ? formatCurrency(amount, canonicalCurrency) : format(amount)
 
@@ -184,6 +232,14 @@ export function CartDrawer() {
                   {formatCartMoney(breakdown.total)}
                 </span>
               </div>
+              {(minimumOrder.blocks || minimumOrder.tentative) && (
+                <div className="mb-2">
+                  <MinimumOrderNotice
+                    status={minimumOrder.status}
+                    tentative={minimumOrder.tentative}
+                  />
+                </div>
+              )}
               {(oversell || moqShort) && (
                 <p className="mt-2 text-xs text-rose-700">
                   Resolve cart quantity warnings before checkout.
