@@ -6,6 +6,7 @@ import {
   BuyerScopeError,
   DecorationDriftError,
   MemberAccessDriftError,
+  MinimumOrderValueError,
   MixedShippingAddressError,
   DisabledCountryError,
   MoqViolationError,
@@ -103,6 +104,11 @@ function partitionFailureOutcome(input: {
   }
   if (error instanceof MemberAccessDriftError) {
     return { ...base, code: 'member_access_drift', error: error.message, detail: error.drift }
+  }
+  if (error instanceof MinimumOrderValueError) {
+    // `error` renders verbatim in the partition failure UI, and
+    // MinimumOrderValueError.message is already the finished sentence.
+    return { ...base, code: error.code, error: error.message, detail: error.status }
   }
   if (error instanceof MoqViolationError) {
     return { ...base, code: 'moq_violation', error: error.message, detail: error.violations }
@@ -468,6 +474,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'member_access_drift', drift: e.drift },
         { status: 409 },
+      )
+    }
+    if (e instanceof MinimumOrderValueError) {
+      // 422, not 409: nothing raced or drifted — the order is simply too small.
+      return NextResponse.json(
+        { code: e.code, status: e.status, message: e.message },
+        { status: 422 },
       )
     }
     if (e instanceof MoqViolationError) {

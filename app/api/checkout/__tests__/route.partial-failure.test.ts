@@ -12,6 +12,7 @@ vi.mock('@/lib/checkout/submit', () => {
   class MixedShippingAddressError extends Error {}
   class DisabledCountryError extends Error {}
   class BillingModeDriftError extends Error {}
+  class MinimumOrderValueError extends Error {}
   return {
     DecorationDriftError,
     UnitPriceDriftError,
@@ -22,6 +23,7 @@ vi.mock('@/lib/checkout/submit', () => {
     MixedShippingAddressError,
     DisabledCountryError,
     BillingModeDriftError,
+    MinimumOrderValueError,
     submitCustomerOrder: vi.fn(),
   }
 })
