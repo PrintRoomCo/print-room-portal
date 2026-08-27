@@ -994,7 +994,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Produces: `InvoiceCurrencyInfo({ billingCurrencies, displayCurrency, direction? })`. Renders `null` when the distinct billing set is exactly `[displayCurrency]` (spec D5). Task 7 mounts it via `CountryBilledOrderSummary`'s `totalInfo` prop.
 - Modelled on `components/pricing/PickingFeeInfo.tsx`: same trigger button, hover/focus handlers, Escape-to-close, `role="dialog"`, same popover classes.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `components/checkout/InvoiceCurrencyInfo.test.tsx`:
 
@@ -1050,12 +1050,12 @@ describe('InvoiceCurrencyInfo', () => {
 })
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run components/checkout/InvoiceCurrencyInfo.test.tsx`
 Expected: FAIL, module not found.
 
-- [ ] **Step 3: Implement the component**
+- [x] **Step 3: Implement the component**
 
 Create `components/checkout/InvoiceCurrencyInfo.tsx`:
 
@@ -1146,12 +1146,12 @@ export function InvoiceCurrencyInfo({
 
 Note the hook ordering: `useState` and `useEffect` run before the early `return null`, keeping the rules of hooks satisfied on every render path.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run components/checkout/InvoiceCurrencyInfo.test.tsx`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/checkout/InvoiceCurrencyInfo.tsx components/checkout/InvoiceCurrencyInfo.test.tsx
