@@ -214,6 +214,12 @@ export function CheckoutClient({
     () => Object.fromEntries(splitDestinations.map((d) => [d.ref, d.label])),
     [splitDestinations],
   )
+  // An incomplete split has nothing to price: its destinations are omitted from
+  // the request body, and the route rightly refuses a body with neither a
+  // per-line store nor an order-level address. Hold the preview back rather
+  // than showing the customer a server error they can only fix by finishing the
+  // allocation, which the blocked CTA already tells them to do.
+  const splitPreviewHeld = splitMode && !splitComplete
   const splitAllocations = useMemo(
     () => (splitMode ? buildSplitAllocations(splitState, editorLines) : undefined),
     [splitMode, splitState, editorLines],
@@ -291,6 +297,7 @@ export function CheckoutClient({
     () =>
       countryPartitionEnabled &&
       pricingReady &&
+      !splitPreviewHeld &&
       !mixedCustom &&
       !customIncomplete &&
       !buyerMisconfigured
@@ -312,6 +319,7 @@ export function CheckoutClient({
     [
       countryPartitionEnabled,
       pricingReady,
+      splitPreviewHeld,
       mixedCustom,
       customIncomplete,
       buyerMisconfigured,
@@ -599,18 +607,18 @@ export function CheckoutClient({
             </>
           ) : (
             <div>
-              <div
-                role={preview.status === 'error' ? 'alert' : 'status'}
-                className={
-                  preview.status === 'error'
-                    ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
-                    : 'mb-5 rounded-2xl bg-white p-4 text-sm text-black/65'
-                }
-              >
-                {preview.status === 'error'
-                  ? preview.error
-                  : 'Updating country prices…'}
-              </div>
+              {!splitPreviewHeld && (
+                <div
+                  role={preview.status === 'error' ? 'alert' : 'status'}
+                  className={
+                    preview.status === 'error'
+                      ? 'mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800'
+                      : 'mb-5 rounded-2xl bg-white p-4 text-sm text-black/65'
+                  }
+                >
+                  {preview.status === 'error' ? preview.error : 'Updating country prices…'}
+                </div>
+              )}
               <div className="space-y-6">
                 {cartBilledLines.map((line) => (
                   <div key={line.lineId}>{renderShipLine(line)}</div>

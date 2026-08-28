@@ -350,7 +350,11 @@ export async function POST(request: Request) {
       }
 
       let customCountry: string | null = null
-      if (allNullShipTo) {
+      // `allNullShipTo` is read off the UN-EXPLODED lines, so it is always true
+      // for a split order: its lines carry no store, its destinations do. Only
+      // the single-address path has an order-level country to resolve, and only
+      // that path reads `customCountry` (see the non-split branch below).
+      if (!splitRequested && allNullShipTo) {
         const rawCountry = body.custom_shipping_address?.country
         customCountry = isoCountryOrNull(
           typeof rawCountry === 'string' ? rawCountry : null,

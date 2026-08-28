@@ -249,6 +249,12 @@ export function CheckoutReviewClient({
 
   const allCustom =
     reviewState != null && allLinesUseCustomAddress(cart.lines, reviewState.perLineShipTo)
+  /**
+   * A split order's lines carry no store, which reads as "all one-time
+   * address", but its addresses live on its destinations. The shared one-time
+   * address is neither collected nor applicable, so it is never sent.
+   */
+  const splitRequested = (reviewState?.destinations?.length ?? 0) > 0
 
   const checkoutLines = useMemo(
     () =>
@@ -283,14 +289,10 @@ export function CheckoutReviewClient({
             intent: reviewState.intent,
             lines: checkoutLines,
             custom_shipping_address:
-              (reviewState.destinations?.length ?? 0) > 0
-                ? null
-                : allCustom
-                  ? reviewState.customAddress
-                  : null,
+              splitRequested || !allCustom ? null : reviewState.customAddress,
             // Without these the preview would price the order WITHOUT its split
             // fees, and the customer would be quoted less than they are charged.
-            ...((reviewState.destinations?.length ?? 0) > 0
+            ...(splitRequested
               ? {
                   destinations: reviewState.destinations,
                   default_destination_ref: reviewState.defaultDestinationRef,
@@ -298,7 +300,7 @@ export function CheckoutReviewClient({
               : {}),
           }
         : null,
-    [countryPartitionEnabled, reviewState, pricingReady, checkoutLines, allCustom],
+    [countryPartitionEnabled, reviewState, pricingReady, checkoutLines, allCustom, splitRequested],
   )
   const preview = useCheckoutPreview(countryPartitionEnabled, previewRequest)
   const previewSuccesses = preview.partitions.filter((outcome) => outcome.ok)
@@ -461,7 +463,7 @@ export function CheckoutReviewClient({
               })),
           // Split shipment: the server re-validates and re-explodes from these,
           // so what travels is the customer's INTENT, never a priced result.
-          ...(reviewState.destinations && reviewState.destinations.length > 0
+          ...(splitRequested
             ? {
                 destinations: reviewState.destinations,
                 default_destination_ref: reviewState.defaultDestinationRef,
@@ -471,7 +473,8 @@ export function CheckoutReviewClient({
           // and 400s without these; the checkbox is not the only gate.
           terms_accepted: true,
           terms_version: TERMS_VERSION,
-          custom_shipping_address: allCustom ? reviewState.customAddress : null,
+          custom_shipping_address:
+            splitRequested || !allCustom ? null : reviewState.customAddress,
         }),
       })
 
