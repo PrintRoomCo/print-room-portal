@@ -40,7 +40,7 @@ export function LineAllocationFields({
 
   if (destinations.length === 0) {
     return (
-      <p className="text-xs text-gray-500">Add a destination above to split this line.</p>
+      <p className="text-right text-xs text-gray-500">Add a destination above to split this line.</p>
     )
   }
 
@@ -78,7 +78,7 @@ export function LineAllocationFields({
         : { text: `${remaining} left`, tone: 'text-amber-600' }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       {destinations.map((destination) => (
         <label key={destination.ref} className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{destination.label}</span>

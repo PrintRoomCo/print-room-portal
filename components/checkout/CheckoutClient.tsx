@@ -456,9 +456,10 @@ export function CheckoutClient({
           billedGoodsValue={billedLine.goodsValue}
         />
         {splitMode && (
-          // Indented past the 96px image plus its gap, so the fields line up
-          // with the product name they allocate.
-          <div className="mt-3 pl-28">
+          // Right-aligned under the row total rather than under the product
+          // name: the quantities being split are the same column of numbers as
+          // the price and qty above them, so they read as one stack.
+          <div className="mt-3 flex justify-end">
             <LineAllocationFields
               lineId={line.lineId}
               lineLabel={[line.productName, line.variantLabel].filter(Boolean).join(' ')}
