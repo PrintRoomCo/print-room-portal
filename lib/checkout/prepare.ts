@@ -41,6 +41,8 @@ import {
 import { orderNeedsInvoicing } from '@/lib/checkout/order-billing'
 import { resolveLineBillingModes } from '@/lib/checkout/resolve-line-billing-modes'
 import { checkoutPickingFee } from '@/lib/pricing/order-picking-fee'
+import { distinctSkuCount, splitFeeForSkuCount } from '@/lib/pricing/split-fee'
+import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 import { round2 } from '@/lib/pricing/pricingMath'
 import { isPrepaidDrawn } from '@/lib/shop/prepaid-tag'
 import type { BillingMode } from '@/lib/shop/billing-mode'
@@ -76,11 +78,20 @@ export interface PreparedCheckoutPartition {
   minimumOrder: MinimumOrderStatus
   lines: PreparedCheckoutLine[]
   pricingPoolLines: CheckoutLineInput[]
+  /**
+   * One entry per destination that has lines IN THIS PARTITION, ordered as the
+   * order's destinations were. Empty on non-split orders. A destination whose
+   * allocations all landed in another country is absent here: its fee belongs
+   * to that country's partition.
+   */
+  splitFees: Array<{ destinationRef: string; skuCount: number; fee: number }>
   totals: {
     goodsSubtotal: number
     decorationSubtotal: number
     pickingFee: number
     tax: number
+    /** Sum of splitFees. 0 on non-split orders. Replaces pickingFee when split. */
+    splitFeeTotal: number
     total: number
   }
 }
@@ -150,7 +161,7 @@ export function buildBillingModeDrift(
 
 export interface PreparedCheckoutInternals {
   shipToStoreIds: Array<string | null>
-  shippingAddress: Record<string, unknown>
+  shippingAddress: Record<string, unknown> | null
   formattedShippingAddress: string | null
   repriced: Array<CheckoutLineInput & { unit_price: number }>
   validatedByLineKey: Map<string, CheckoutLineDecorationInput[]>
@@ -275,10 +286,15 @@ export async function prepareCustomerOrderPartition(
     throw new Error('Preview only — nothing was saved.')
   }
 
+  // Split orders deliberately mix stores and one-time addresses across their
+  // destinations, so the single-address invariants below do not apply to them.
+  const splitActive = (input.destinations?.length ?? 0) > 0
+
   const shipToStoreIds = input.lines.map((l) => l.ship_to_store_id ?? null)
   const hasOneTimeLine = shipToStoreIds.some((sid) => sid === null)
   const allOneTimeLines = shipToStoreIds.every((sid) => sid === null)
-  if ((hasOneTimeLine || input.custom_shipping_address) && !allOneTimeLines) {
+  // Still guards the legacy path: only split orders are exempt, never removed.
+  if (!splitActive && (hasOneTimeLine || input.custom_shipping_address) && !allOneTimeLines) {
     throw new MixedShippingAddressError()
   }
 
@@ -322,9 +338,15 @@ export async function prepareCustomerOrderPartition(
     }
   }
 
-  // 1. Resolve shipping_address — either the custom JSON or the first line's store.
-  let shippingAddress: Record<string, unknown> = input.custom_shipping_address ?? {}
-  if (!input.custom_shipping_address && input.lines[0]?.ship_to_store_id) {
+  // 1. Resolve shipping_address, either the custom JSON or the first line's store.
+  // A split order has no single header address: every destination carries its
+  // own, so the header is null and the formatted string is a placeholder that
+  // Monday and the dispatch email render until Phase 2 makes them
+  // destination-aware.
+  let shippingAddress: Record<string, unknown> | null = splitActive
+    ? null
+    : (input.custom_shipping_address ?? {})
+  if (!splitActive && !input.custom_shipping_address && input.lines[0]?.ship_to_store_id) {
     if (options.countryPartitionEnabled) {
       const partitionStoreIds = Array.from(
         new Set(input.lines.map((line) => line.ship_to_store_id).filter(Boolean)),
@@ -359,7 +381,9 @@ export async function prepareCustomerOrderPartition(
       if (firstStore) shippingAddress = firstStore as unknown as Record<string, unknown>
     }
   }
-  const formattedShippingAddress = formatShippingAddress(shippingAddress)
+  const formattedShippingAddress = splitActive
+    ? `Split shipment: ${input.destinations?.length ?? 0} destinations`
+    : formatShippingAddress(shippingAddress)
 
   // 1b. Per-member access re-verify. Mid-flight: if staff revoked a catalogue
   //     or item grant between cart load and checkout, we MUST reject before
@@ -1532,12 +1556,53 @@ export async function prepareCustomerOrderPartition(
             isDefault: true,
           }
   }
+  // Per-destination split fees, banded by DISTINCT SKUs landing at each
+  // destination. Computed here rather than in the route so a partition's totals
+  // stay complete and authoritative: preview renders them and submit persists
+  // them, with no second computation that could drift.
+  const splitFees: Array<{ destinationRef: string; skuCount: number; fee: number }> = []
+  let splitFeeTotal = 0
+  if (splitActive) {
+    const linesByDestinationRef = new Map<string, typeof repriced>()
+    for (const line of repriced) {
+      const ref = line.destination_ref
+      if (typeof ref !== 'string' || ref === '') {
+        // The routes explode before calling prepare, so an unstamped line is a
+        // programmer error, not something a customer can provoke.
+        throw new Error('split checkout line missing destination_ref')
+      }
+      const group = linesByDestinationRef.get(ref) ?? []
+      group.push(line)
+      linesByDestinationRef.set(ref, group)
+    }
+
+    // The band table is NZD. Only pay for the rates lookup when this partition
+    // bills in something else; the non-split path never reaches this at all.
+    let nzdToPartitionRate = 1
+    if (options.country.currency !== 'NZD') {
+      const { rates } = await getServerExchangeRates()
+      nzdToPartitionRate = (rates as Record<string, number>)[options.country.currency] ?? 1
+    }
+
+    // Ordered by first appearance in input.destinations, not by line order.
+    for (const destination of input.destinations ?? []) {
+      const group = linesByDestinationRef.get(destination.ref)
+      if (!group || group.length === 0) continue
+      const skuCount = distinctSkuCount(group)
+      const feeNzd = splitFeeForSkuCount(skuCount)
+      const fee =
+        options.country.currency === 'NZD' ? feeNzd : round2(feeNzd * nzdToPartitionRate)
+      splitFees.push({ destinationRef: destination.ref, skuCount, fee })
+      splitFeeTotal = round2(splitFeeTotal + fee)
+    }
+  }
+
   const pickFee = checkoutPickingFee({
     countryPartitionEnabled: options.countryPartitionEnabled,
     orderType,
     billCountry: options.country.code,
     goodsSubtotal: goodsValueForBand,
-    legacyShipCountry: (shippingAddress as { country?: unknown }).country as
+    legacyShipCountry: (shippingAddress as { country?: unknown } | null)?.country as
       | string
       | null
       | undefined,
@@ -1563,7 +1628,9 @@ export async function prepareCustomerOrderPartition(
       goodsValue: repriced[index].unit_price * repriced[index].qty,
       decorationRevenue: decorationRevenueByLineIndex[index] ?? 0,
     })),
-    pickFee,
+    // The split fee REPLACES the picking fee (which Task 5's gate already
+    // zeroed on split orders); it rides the identical seam into the total.
+    splitActive ? splitFeeTotal : pickFee,
   )
   const minimumOrder = evaluateMinimumOrder({
     orderType,
@@ -1615,11 +1682,13 @@ export async function prepareCustomerOrderPartition(
       }
     }),
     pricingPoolLines: input.pricing_pool_lines ?? input.lines,
+    splitFees,
     totals: {
       goodsSubtotal: billedGoodsSubtotal,
       decorationSubtotal: billedDecorationSubtotal,
       pickingFee: round2(pickFee),
       tax,
+      splitFeeTotal: round2(splitFeeTotal),
       total: round2(billedTotal + tax),
     },
   }

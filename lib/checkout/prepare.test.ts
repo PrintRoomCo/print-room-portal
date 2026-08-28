@@ -263,6 +263,46 @@ describe('prepareCustomerOrderPartition', () => {
       ),
     ).rejects.toBeInstanceOf(MoqViolationError)
   })
+  it('computes per-destination split fees and suppresses the picking fee on split orders', async () => {
+    const stub = makeFanoutStub(config())
+    const base = input()
+    const d1Line = { ...base.lines[0], qty: 16, destination_ref: 'd1', ship_to_store_id: null }
+    const d2Line = { ...base.lines[0], cart_line_id: 'line-1b', qty: 8, destination_ref: 'd2', ship_to_store_id: null }
+
+    const prepared = await prepareCustomerOrderPartition(
+      stub.admin,
+      {
+        ...base,
+        lines: [d1Line, d2Line],
+        destinations: [
+          { ref: 'd1', custom_address: { name: 'A', address: '1 A St', city: 'Auckland', postal_code: '1010', country: 'NZ' } },
+          { ref: 'd2', custom_address: { name: 'B', address: '2 B St', city: 'Nelson', postal_code: '7010', country: 'NZ' } },
+        ],
+      },
+      { countryPartitionEnabled: false, partitionKey: 'purchase_order', country: NZ },
+    )
+
+    // one SKU (product-1, no variant/size) at each destination -> $15 + $15
+    expect(prepared.splitFees).toEqual([
+      { destinationRef: 'd1', skuCount: 1, fee: 15 },
+      { destinationRef: 'd2', skuCount: 1, fee: 15 },
+    ])
+    expect(prepared.totals.pickingFee).toBe(0)
+    expect(prepared.totals.splitFeeTotal).toBe(30)
+    // goods 24 × 12.5 = 300; + 30 fees = 330; GST 15% = 49.5
+    expect(prepared.totals.tax).toBe(49.5)
+    expect(prepared.totals.total).toBe(379.5)
+  })
+
+  it('keeps splitFees empty and totals identical on non-split orders', async () => {
+    const stub = makeFanoutStub(config())
+    const prepared = await prepareCustomerOrderPartition(stub.admin, input(), {
+      countryPartitionEnabled: false, partitionKey: 'purchase_order', country: NZ,
+    })
+    expect(prepared.splitFees).toEqual([])
+    expect(prepared.totals.splitFeeTotal).toBe(0)
+    expect(prepared.totals.total).toBe(345) // unchanged from the file's first test
+  })
 })
 
 function countryConfig(overrides: Partial<StubConfig> = {}): StubConfig {

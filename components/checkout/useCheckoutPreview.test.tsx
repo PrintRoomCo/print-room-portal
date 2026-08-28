@@ -167,9 +167,10 @@ describe('checkout preview request lines', () => {
           decorationUnitPrice: 2, billingMode: 'invoice_on_dispatch', billed: true,
         }],
         pricingPoolLines: requestLines,
+        splitFees: [],
         totals: {
           goodsSubtotal: 132, decorationSubtotal: 24, pickingFee: 0,
-          tax: 15.6, total: 171.6,
+          tax: 15.6, splitFeeTotal: 0, total: 171.6,
         },
       },
     }])).toEqual([
