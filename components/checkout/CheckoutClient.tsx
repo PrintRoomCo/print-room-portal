@@ -12,6 +12,7 @@ import {
   EMPTY_SPLIT_STATE,
   buildDestinationInputs,
   buildSplitAllocations,
+  defaultDestinationRefForRequest,
   splitBlockReason,
   type EditorCartLine,
   type SplitShipmentState,
@@ -213,15 +214,16 @@ export function CheckoutClient({
     () => Object.fromEntries(splitDestinations.map((d) => [d.ref, d.label])),
     [splitDestinations],
   )
-  const defaultDestinationLabel =
-    splitDestinations.find((d) => d.ref === splitState.defaultDestinationRef)?.label ?? null
   const splitAllocations = useMemo(
     () => (splitMode ? buildSplitAllocations(splitState, editorLines) : undefined),
     [splitMode, splitState, editorLines],
   )
 
-  const anyCustom = Object.values(effectivePerLineShipTo).some((v) => v === null)
-  const allCustom = Object.values(effectivePerLineShipTo).every((v) => v === null)
+  // Split mode reads as "no store" per line, but its destinations carry the
+  // addresses: the shared one-time address below neither applies nor is asked
+  // for, so it must not be treated as an all-custom order.
+  const anyCustom = !splitMode && Object.values(effectivePerLineShipTo).some((v) => v === null)
+  const allCustom = !splitMode && Object.values(effectivePerLineShipTo).every((v) => v === null)
   const mixedCustom = !inventoryMode && anyCustom && !allCustom
   const customAddressErrors = {
     address: !inventoryMode && allCustom && !customAddress.address ? 'Street address is required.' : null,
@@ -298,11 +300,11 @@ export function CheckoutClient({
             notes: notes || null,
             intent,
             lines: checkoutLines,
-            custom_shipping_address: splitMode || !allCustom ? null : customAddress,
+            custom_shipping_address: allCustom ? customAddress : null,
             ...(splitMode && splitComplete
               ? {
                   destinations: buildDestinationInputs(splitState),
-                  default_destination_ref: splitState.defaultDestinationRef,
+                  default_destination_ref: defaultDestinationRefForRequest(splitState),
                 }
               : {}),
           }
@@ -392,7 +394,7 @@ export function CheckoutClient({
         ...(splitMode && splitComplete
           ? {
               destinations: buildDestinationInputs(splitState),
-              defaultDestinationRef: splitState.defaultDestinationRef,
+              defaultDestinationRef: defaultDestinationRefForRequest(splitState),
               allocationsByLineId: buildSplitAllocations(splitState, editorLines),
             }
           : {}),
@@ -445,7 +447,6 @@ export function CheckoutClient({
               lineLabel={[line.productName, line.variantLabel].filter(Boolean).join(' ')}
               qty={line.qty}
               destinations={splitDestinations}
-              defaultDestinationLabel={defaultDestinationLabel}
               allocations={splitState.allocations}
               onChange={(allocations) => setSplitState((prev) => ({ ...prev, allocations }))}
               disabled={submitting !== false}

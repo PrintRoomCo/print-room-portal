@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildDestinationInputs,
   buildSplitAllocations,
+  defaultDestinationRefForRequest,
   removeDestination,
   splitBlockReason,
   splitShipmentComplete,
@@ -12,7 +13,6 @@ import {
 const lines: EditorCartLine[] = [
   { lineId: 'l-s', qty: 12 },
   { lineId: 'l-m', qty: 20 },
-  { lineId: 'l-other', qty: 10 },
 ]
 
 function state(overrides: Partial<SplitShipmentState> = {}): SplitShipmentState {
@@ -21,7 +21,6 @@ function state(overrides: Partial<SplitShipmentState> = {}): SplitShipmentState 
       { ref: 'd1', storeId: 'store-a', customAddress: null },
       { ref: 'd2', storeId: 'store-b', customAddress: null },
     ],
-    defaultDestinationRef: 'd1',
     allocations: {
       'l-s': { d1: 8, d2: 4 },
       'l-m': { d1: 10, d2: 10 },
@@ -35,17 +34,16 @@ describe('splitShipmentComplete', () => {
     expect(splitShipmentComplete(state(), lines)).toBe(true)
   })
 
-  it('sends a line with no entries whole to the default', () => {
+  it('rejects a line nobody allocated: there is no default to catch it', () => {
     expect(
       splitShipmentComplete(
         {
           destinations: [{ ref: 'd1', storeId: 'store-a', customAddress: null }],
-          defaultDestinationRef: 'd1',
-          allocations: {},
+          allocations: { 'l-s': { d1: 12 } },
         },
         lines,
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('rejects an under- or over-allocated line', () => {
@@ -71,8 +69,14 @@ describe('splitShipmentComplete', () => {
   it('ignores an allocation whose cart line is gone', () => {
     expect(
       splitShipmentComplete(
-        state({ allocations: { 'l-s': { d1: 8, d2: 4 }, 'l-deleted': { d2: 99 } } }),
-        [lines[0], { lineId: 'l-m', qty: 20 }, lines[2]],
+        state({
+          allocations: {
+            'l-s': { d1: 8, d2: 4 },
+            'l-m': { d1: 10, d2: 10 },
+            'l-deleted': { d2: 99 },
+          },
+        }),
+        lines,
       ),
     ).toBe(true)
   })
@@ -91,17 +95,8 @@ describe('splitBlockReason', () => {
 
   it('asks for a destination before anything else', () => {
     expect(
-      splitBlockReason(
-        state({ destinations: [], defaultDestinationRef: null, allocations: {} }),
-        lines,
-      ),
+      splitBlockReason(state({ destinations: [], allocations: {} }), lines),
     ).toBe('Add a destination to split this order across.')
-  })
-
-  it('asks for a default when the current one is not among the destinations', () => {
-    expect(splitBlockReason(state({ defaultDestinationRef: 'gone' }), lines)).toBe(
-      'Choose which destination is the default.',
-    )
   })
 
   it('asks for the address before counting units', () => {
@@ -131,7 +126,13 @@ describe('splitBlockReason', () => {
   it('reports an unfinished line', () => {
     expect(
       splitBlockReason(state({ allocations: { 'l-s': { d1: 8 }, 'l-m': { d2: 20 } } }), lines),
-    ).toBe('Every split line has to add up to its cart quantity.')
+    ).toBe('Every line has to add up to its cart quantity.')
+  })
+
+  it('reports a line nobody has touched at all', () => {
+    expect(splitBlockReason(state({ allocations: { 'l-s': { d1: 8, d2: 4 } } }), lines)).toBe(
+      'Every line has to add up to its cart quantity.',
+    )
   })
 
   it('reports an untouched destination last', () => {
@@ -155,8 +156,10 @@ describe('buildSplitAllocations', () => {
     })
   })
 
-  it('omits a line with no entries, so the server sends it whole to the default', () => {
-    expect(buildSplitAllocations(state(), lines)['l-other']).toBeUndefined()
+  it('omits a line with no entries', () => {
+    expect(
+      buildSplitAllocations(state({ allocations: { 'l-s': { d1: 12 } } }), lines)['l-m'],
+    ).toBeUndefined()
   })
 
   it('drops allocations pointing at destinations that no longer exist', () => {
@@ -191,46 +194,33 @@ describe('buildDestinationInputs', () => {
 })
 
 describe('removeDestination', () => {
-  it('moves the removed destination units to the default instead of dropping them', () => {
-    const { state: next, movedUnits } = removeDestination(
-      state({ allocations: { 'l-s': { d1: 8, d2: 4 }, 'l-m': { d1: 10, d2: 10 } } }),
+  it('reports the units it released instead of dropping them silently', () => {
+    const { state: next, releasedUnits } = removeDestination(state(), 'd2')
+    expect(releasedUnits).toBe(14)
+    expect(next.destinations.map((d) => d.ref)).toEqual(['d1'])
+    expect(next.allocations).toEqual({ 'l-s': { d1: 8 }, 'l-m': { d1: 10 } })
+  })
+
+  it('leaves the released units unallocated rather than re-homing them', () => {
+    const { state: next } = removeDestination(state(), 'd2')
+    expect(splitBlockReason(next, lines)).toBe('Every line has to add up to its cart quantity.')
+  })
+
+  it('drops a line entirely when the removed destination held all of it', () => {
+    const { state: next } = removeDestination(
+      state({ allocations: { 'l-s': { d1: 12 }, 'l-m': { d2: 20 } } }),
       'd2',
     )
-    expect(movedUnits).toBe(14)
-    expect(next.destinations.map((d) => d.ref)).toEqual(['d1'])
-    // Everything now goes to the default, so the lines read as untouched again.
-    expect(next.allocations).toEqual({})
-    expect(splitShipmentComplete(next, lines)).toBe(true)
+    expect(next.allocations).toEqual({ 'l-s': { d1: 12 } })
+  })
+})
+
+describe('defaultDestinationRefForRequest', () => {
+  it('nominates the first destination for the API field the UI no longer asks about', () => {
+    expect(defaultDestinationRefForRequest(state())).toBe('d1')
   })
 
-  it('keeps a line split when it still reaches another destination', () => {
-    const three = state({
-      destinations: [
-        { ref: 'd1', storeId: 'store-a', customAddress: null },
-        { ref: 'd2', storeId: 'store-b', customAddress: null },
-        { ref: 'd3', storeId: 'store-c', customAddress: null },
-      ],
-      allocations: { 'l-s': { d2: 4, d3: 8 } },
-    })
-    const { state: next, movedUnits } = removeDestination(three, 'd2')
-    expect(movedUnits).toBe(4)
-    expect(next.allocations).toEqual({ 'l-s': { d3: 8, d1: 4 } })
-  })
-
-  it('moves the default when the default itself is removed', () => {
-    const { state: next } = removeDestination(state(), 'd1')
-    expect(next.defaultDestinationRef).toBe('d2')
-    expect(next.allocations).toEqual({})
-  })
-
-  it('clears every allocation when the last destination goes', () => {
-    const one = state({
-      destinations: [{ ref: 'd1', storeId: 'store-a', customAddress: null }],
-      allocations: { 'l-s': { d1: 12 } },
-    })
-    const { state: next } = removeDestination(one, 'd1')
-    expect(next.destinations).toEqual([])
-    expect(next.defaultDestinationRef).toBeNull()
-    expect(next.allocations).toEqual({})
+  it('is null while there is nothing to nominate', () => {
+    expect(defaultDestinationRefForRequest(state({ destinations: [] }))).toBeNull()
   })
 })

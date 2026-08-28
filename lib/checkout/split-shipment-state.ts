@@ -12,7 +12,6 @@ export interface EditorDestination {
 
 export interface SplitShipmentState {
   destinations: EditorDestination[]
-  defaultDestinationRef: string | null
   allocations: AllocationMap
 }
 
@@ -28,8 +27,18 @@ export interface EditorCartLine {
 
 export const EMPTY_SPLIT_STATE: SplitShipmentState = {
   destinations: [],
-  defaultDestinationRef: null,
   allocations: {},
+}
+
+/**
+ * The API requires a `default_destination_ref`: it is where the server sends a
+ * line that carries no allocations. This editor never leaves one unallocated,
+ * so the value is unreachable, and the first destination is as good a nominee
+ * as any. Kept at the request boundary rather than in the state above, so the
+ * customer is never asked to pick something that cannot be used.
+ */
+export function defaultDestinationRefForRequest(state: SplitShipmentState): string | null {
+  return state.destinations[0]?.ref ?? null
 }
 
 /**
@@ -48,12 +57,6 @@ export function splitBlockReason(
   if (state.destinations.length === 0) {
     return 'Add a destination to split this order across.'
   }
-  if (
-    !state.defaultDestinationRef ||
-    !state.destinations.some((destination) => destination.ref === state.defaultDestinationRef)
-  ) {
-    return 'Choose which destination is the default.'
-  }
   if (state.destinations.some((d) => !d.storeId && !d.customAddress)) {
     return 'Finish the address for every destination.'
   }
@@ -62,24 +65,19 @@ export function splitBlockReason(
   const touched = new Set<string>()
 
   for (const line of cartLines) {
-    const perDestination = state.allocations[line.lineId] ?? {}
-    const entries = Object.entries(perDestination)
-    if (entries.length === 0) {
-      // Nothing said about this line: it ships whole to the default.
-      touched.add(state.defaultDestinationRef)
-      continue
-    }
+    const entries = Object.entries(state.allocations[line.lineId] ?? {})
     let allocated = 0
     for (const [ref, qty] of entries) {
       // A stale ref (its destination was removed) invalidates rather than crashes.
       if (!refs.has(ref)) return 'Some units are assigned to a destination that no longer exists.'
       if (!Number.isInteger(qty) || qty <= 0) {
-        return 'Every split line has to add up to its cart quantity.'
+        return 'Every line has to add up to its cart quantity.'
       }
       allocated += qty
       touched.add(ref)
     }
-    if (allocated !== line.qty) return 'Every split line has to add up to its cart quantity.'
+    // No default to fall back on: a line nobody assigned is an unfinished line.
+    if (allocated !== line.qty) return 'Every line has to add up to its cart quantity.'
   }
 
   if (!state.destinations.every((d) => touched.has(d.ref))) {
@@ -129,39 +127,32 @@ export function buildDestinationInputs(state: SplitShipmentState): CheckoutDesti
 }
 
 /**
- * Remove a destination, moving whatever was going there to the default and
- * reporting how many units moved so the UI can say so out loud. Silently
- * dropping quantities is the one behaviour this editor must never have, and
- * leaving them stranded would hold the order in a blocked state the customer
- * did not ask for.
+ * Remove a destination, reporting how many units it was holding so the UI can
+ * say so out loud. Those units go back to being unallocated, which the affected
+ * rows show as "N left": silently dropping quantities, or quietly re-homing
+ * them somewhere the customer did not choose, is the one behaviour this editor
+ * must never have.
  */
 export function removeDestination(
   state: SplitShipmentState,
   ref: string,
-): { state: SplitShipmentState; movedUnits: number } {
-  const destinations = state.destinations.filter((destination) => destination.ref !== ref)
-  const defaultDestinationRef =
-    state.defaultDestinationRef === ref
-      ? destinations[0]?.ref ?? null
-      : state.defaultDestinationRef
-
-  let movedUnits = 0
+): { state: SplitShipmentState; releasedUnits: number } {
+  let releasedUnits = 0
   const allocations: AllocationMap = {}
   for (const [lineId, perDestination] of Object.entries(state.allocations)) {
     const kept: Record<string, number> = {}
     for (const [destinationRef, qty] of Object.entries(perDestination)) {
-      if (destinationRef === ref) movedUnits += qty
+      if (destinationRef === ref) releasedUnits += qty
       else kept[destinationRef] = qty
     }
-    if (defaultDestinationRef === null) continue
-    const moved = perDestination[ref] ?? 0
-    if (moved > 0) kept[defaultDestinationRef] = (kept[defaultDestinationRef] ?? 0) + moved
-    const keys = Object.keys(kept)
-    // A line that now goes entirely to the default is a line the customer never
-    // split: clear it so the row reads "to <default>" rather than a lone number.
-    if (keys.length === 1 && keys[0] === defaultDestinationRef) continue
-    if (keys.length > 0) allocations[lineId] = kept
+    if (Object.keys(kept).length > 0) allocations[lineId] = kept
   }
 
-  return { state: { destinations, defaultDestinationRef, allocations }, movedUnits }
+  return {
+    state: {
+      destinations: state.destinations.filter((destination) => destination.ref !== ref),
+      allocations,
+    },
+    releasedUnits,
+  }
 }

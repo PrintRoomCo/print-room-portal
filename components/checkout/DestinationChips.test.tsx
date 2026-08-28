@@ -16,7 +16,6 @@ const twoStores: SplitShipmentState = {
     { ref: 'd1', storeId: 'store-a', customAddress: null },
     { ref: 'd2', storeId: 'store-b', customAddress: null },
   ],
-  defaultDestinationRef: 'd1',
   allocations: { 'l-s': { d1: 8, d2: 4 } },
 }
 
@@ -54,20 +53,18 @@ describe('destinationLabel', () => {
 })
 
 describe('DestinationChips', () => {
-  it('marks the default chip and moves the marker when the default changes', () => {
+  it('privileges no destination: there is no default to pick', () => {
     render(<Controlled />)
-    expect(screen.getByRole('button', { name: /Default: Albany/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Albany' })).toBeInTheDocument()
+    expect(screen.queryByText(/default/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Takapuna' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Make Takapuna the default' }))
-
-    expect(screen.getByRole('button', { name: /Default: Takapuna/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Default: Albany/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /the default/ })).not.toBeInTheDocument()
   })
 
   it('keeps one editor panel open at a time', () => {
     render(<Controlled />)
-    fireEvent.click(screen.getByRole('button', { name: /Default: Albany/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Albany' }))
     expect(screen.getByLabelText('Store for Albany')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Takapuna' }))
@@ -82,11 +79,11 @@ describe('DestinationChips', () => {
     expect(screen.queryByLabelText('Store for Takapuna')).not.toBeInTheDocument()
   })
 
-  it('says where the removed destination units went instead of dropping them silently', () => {
+  it('reports the units a removal released instead of dropping them silently', () => {
     render(<Controlled />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove Takapuna' }))
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Removed Takapuna. 4 units now ship to Albany.',
+      'Removed Takapuna and released 4 units. Send them somewhere before checking out.',
     )
     expect(screen.queryByRole('button', { name: 'Takapuna' })).not.toBeInTheDocument()
   })
@@ -108,25 +105,17 @@ describe('DestinationChips', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('makes the first destination the default and opens a new address for editing', () => {
-    render(
-      <Controlled
-        initial={{ destinations: [], defaultDestinationRef: null, allocations: {} }}
-      />,
-    )
+  it('opens a new one-time address for editing, since it is unusable until typed', () => {
+    render(<Controlled initial={{ destinations: [], allocations: {} }} />)
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
     fireEvent.click(screen.getByRole('button', { name: 'One-time address' }))
 
-    expect(screen.getByRole('button', { name: /Default: One-time address/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'One-time address' })).toBeInTheDocument()
     expect(screen.getByLabelText('Search for an address')).toBeInTheDocument()
   })
 
   it('reveals manual address fields when Places cannot find it', () => {
-    render(
-      <Controlled
-        initial={{ destinations: [], defaultDestinationRef: null, allocations: {} }}
-      />,
-    )
+    render(<Controlled initial={{ destinations: [], allocations: {} }} />)
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
     fireEvent.click(screen.getByRole('button', { name: 'One-time address' }))
     fireEvent.click(screen.getByRole('button', { name: /Enter the address manually/ }))

@@ -16,7 +16,6 @@ function fields(props: Partial<Parameters<typeof LineAllocationFields>[0]> = {})
       lineLabel="Everyday Pullover Hoodie Navy / S"
       qty={12}
       destinations={destinations}
-      defaultDestinationLabel="Albany"
       allocations={{}}
       onChange={vi.fn()}
       {...props}
@@ -31,9 +30,9 @@ function Controlled({ initial }: { initial: AllocationMap }) {
 }
 
 describe('LineAllocationFields status', () => {
-  it('names the default destination while the line is untouched', () => {
+  it('counts the whole line as still to allocate while it is untouched', () => {
     render(fields())
-    expect(screen.getByTestId('remaining-l-s')).toHaveTextContent('Albany')
+    expect(screen.getByTestId('remaining-l-s')).toHaveTextContent('12 left')
   })
 
   it('counts down the units still to allocate', () => {
@@ -96,8 +95,8 @@ describe('LineAllocationFields editing', () => {
     ) as HTMLInputElement
     fireEvent.change(input, { target: { value: '0' } })
     expect(input.value).toBe('0')
-    // 0 is not an allocation, so the line still follows the default.
-    expect(screen.getByTestId('remaining-l-s')).toHaveTextContent('Albany')
+    // 0 is not an allocation, so none of the line has been sent anywhere.
+    expect(screen.getByTestId('remaining-l-s')).toHaveTextContent('12 left')
   })
 
   it('renders every other field straight from props while one is being edited', () => {

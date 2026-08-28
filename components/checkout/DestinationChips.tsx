@@ -47,6 +47,9 @@ interface DestinationChipsProps {
  * The whole destinations surface: a compact chip per destination, one editor
  * panel expanding beneath the row at a time, and the add control. Allocation
  * itself lives on the checkout line rows, not here.
+ *
+ * No destination is privileged: every unit is allocated explicitly, so there is
+ * nothing for a "default" to catch.
  */
 export function DestinationChips({
   stores,
@@ -79,7 +82,6 @@ export function DestinationChips({
         ...value.destinations,
         { ref, storeId, customAddress: storeId ? null : { ...EMPTY_ADDRESS } },
       ],
-      defaultDestinationRef: value.defaultDestinationRef ?? ref,
     })
   }
 
@@ -100,13 +102,10 @@ export function DestinationChips({
       value.destinations.find((destination) => destination.ref === ref)!,
       stores,
     )
-    const { state: next, movedUnits } = removeDestination(value, ref)
-    const fallback = next.destinations.find(
-      (destination) => destination.ref === next.defaultDestinationRef,
-    )
+    const { state: next, releasedUnits } = removeDestination(value, ref)
     setNotice(
-      movedUnits > 0 && fallback
-        ? `Removed ${label}. ${movedUnits} unit${movedUnits === 1 ? '' : 's'} now ship to ${destinationLabel(fallback, stores)}.`
+      releasedUnits > 0
+        ? `Removed ${label} and released ${releasedUnits} unit${releasedUnits === 1 ? '' : 's'}. Send them somewhere before checking out.`
         : `Removed ${label}.`,
     )
     if (openRef === ref) setOpenRef(null)
@@ -120,13 +119,10 @@ export function DestinationChips({
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {value.destinations.map((destination) => {
           const label = destinationLabel(destination, stores)
-          const isDefault = value.defaultDestinationRef === destination.ref
           return (
             <span
               key={destination.ref}
-              className={`flex items-center gap-1 rounded-full border px-1 py-0.5 text-sm ${
-                isDefault ? 'border-gray-900 bg-gray-900/5' : 'border-gray-200'
-              }`}
+              className="flex items-center gap-1 rounded-full border border-gray-200 px-1 py-0.5 text-sm"
             >
               <button
                 type="button"
@@ -135,12 +131,6 @@ export function DestinationChips({
                 disabled={disabled}
                 className="rounded-full px-2 py-0.5 text-gray-900 hover:bg-gray-100"
               >
-                {isDefault && <span className="sr-only">Default: </span>}
-                {isDefault && (
-                  <span aria-hidden="true" className="mr-1 text-gray-900">
-                    ★
-                  </span>
-                )}
                 {label}
               </button>
               <button
@@ -202,7 +192,6 @@ export function DestinationChips({
       {value.destinations.map((destination) => {
         if (openRef !== destination.ref) return null
         const label = destinationLabel(destination, stores)
-        const isDefault = value.defaultDestinationRef === destination.ref
         const manual = manualRefs.includes(destination.ref)
         return (
           <div
@@ -290,23 +279,11 @@ export function DestinationChips({
               </div>
             )}
 
-            <div className="mt-3 flex items-center gap-3">
-              {!isDefault && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onChange({ ...value, defaultDestinationRef: destination.ref })
-                  }
-                  disabled={disabled}
-                  className="text-xs text-gray-500 underline hover:text-gray-900"
-                >
-                  Make {label} the default
-                </button>
-              )}
+            <div className="mt-3 flex justify-end">
               <button
                 type="button"
                 onClick={() => setOpenRef(null)}
-                className="ml-auto rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-900 hover:bg-gray-50"
+                className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-900 hover:bg-gray-50"
               >
                 Done
               </button>

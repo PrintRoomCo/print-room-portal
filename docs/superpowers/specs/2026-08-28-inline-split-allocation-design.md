@@ -17,11 +17,12 @@ Split-mode-only: none of these fields render unless the order-level "Ships to" c
 
 | Question | Decision |
 |---|---|
-| Split opt-in | **No per-item checkbox.** A line with no allocation entries ships whole to the default destination; a line with any entry must allocate exactly its cart qty |
+| Split opt-in | **No per-item checkbox.** Every line must allocate exactly its cart qty. There is no default destination to catch what the customer leaves unassigned |
 | Allocation grain | Per **cart line** (product + colourway + size), matching the checkout rows, not per product/colourway group as today |
 | Field visibility | Always visible on every line row while in split mode; never rendered otherwise |
-| Destinations UI | Compact chip row (`★ default`, name, remove) with one inline editor panel expanding beneath, one open at a time |
-| Removing a destination | Its units return to the default rather than holding the order in a blocked state. A notice says how many units moved and where; a line that now goes entirely to the default has its entries cleared, so its row reverts to `→ <default>` |
+| Destinations UI | Compact chip row (name, remove) with one inline editor panel expanding beneath, one open at a time. No destination is privileged |
+| Removing a destination | Its units go back to being unallocated, which the affected rows show as `N left`. A notice says how many were released |
+| One-time shipping address | Not shown and not required in split mode: the destinations carry the addresses |
 | Blocked-submit messaging | A single reason string above the CTA, from one shared rule set, alongside the per-row remaining counters |
 | Country-partition line rows | In split mode the item list renders **once** from the cart; per-country sections render totals only |
 
@@ -39,7 +40,7 @@ Both were found while reading the current code; neither is a regression introduc
 Ships to  [ Split shipment across destinations ▾ ]
 
 Destinations
-[ ★ AUS HQ  × ] [ Wellington depot  × ] [ + Add ▾ ]
+[ AUS HQ  × ] [ Wellington depot  × ] [ + Add ▾ ]
 └─ editor panel expands here, one at a time
 
 ─── items, one row per cart line ───
@@ -49,7 +50,7 @@ Destinations
 
 [img] Everyday Pullover Hoodie    $78.28 × 2   $156.56
       Navy / M
-      AUS HQ [   ]  Wellington [   ]      → AUS HQ
+      AUS HQ [   ]  Wellington [   ]        2 left
 
 ─── per-country order totals ───
 ```
@@ -66,8 +67,7 @@ One cart line's allocation. One number input per destination plus a status cell:
 
 | Line state | Status cell |
 |---|---|
-| no entries | `→ <default label>`, gray |
-| remaining > 0 | `N left`, amber |
+| remaining > 0 (including a line with no entries) | `N left`, amber |
 | remaining = 0 | `0 left`, gray |
 | remaining < 0 | `N over`, red |
 | no destinations yet | fields replaced by "Add a destination above to split this line" |
@@ -91,14 +91,15 @@ Unchanged. `renderShipLine` in `CheckoutClient` composes `LineAllocationFields` 
 `lib/checkout/split-shipment-state.ts`:
 
 - **`SplitShipmentState.splitItemKeys` removed**, with `isItemSplit` and `itemKey`.
+- **`SplitShipmentState.defaultDestinationRef` removed.** The API still requires a `default_destination_ref`, so `defaultDestinationRefForRequest(state)` nominates the first destination at the request boundary. Full allocation makes it unreachable, and the customer is never asked to pick something that cannot be used.
 - **`buildSplitAllocations`** drops its `isItemSplit` filter and emits entries for any line holding at least one valid entry.
 - **`EditorCartLine`** narrows to `{ lineId, qty }`. With `itemKey` gone nothing in this module reads a product or variant id.
-- **`removeDestination`** returns `movedUnits` rather than `discardedUnits`, and adds those units to the default destination instead of stranding the line part-allocated.
+- **`removeDestination`** returns `releasedUnits` and leaves them unallocated. Quietly re-homing units somewhere the customer did not choose would be as wrong as dropping them.
 - **`splitBlockReason(input): string | null`** is new: the first blocker in a fixed order, human-readable. `splitShipmentComplete` becomes a thin wrapper (`splitBlockReason(...) === null`) so completeness and messaging can never disagree.
 
 `lib/checkout/allocation.ts` is new and holds `AllocationMap`, `AllocationDestination`, `allocatedForLine`, `remainingForLine` and `lineFollowsDefault`, moved out of `AllocationGrid`. Today `lib/checkout/split-shipment-state.ts` imports `AllocationMap` from a component; that dependency direction is backwards and the component is being deleted anyway.
 
-The completeness rule, restated: for each cart line, if it has allocation entries they must all reference live destinations, each be a positive integer, and sum to exactly the line's qty; if it has none, it counts as reaching the default destination. Every destination must receive something. Evaluated against the **live** cart lines, as today, so a qty edit in the cart pill re-invalidates immediately.
+The completeness rule, restated: for each cart line, its allocation entries must all reference live destinations, each be a positive integer, and sum to exactly the line's qty. A line with no entries fails that sum, which is what makes full allocation compulsory. Every destination must receive something. Evaluated against the **live** cart lines, as today, so a qty edit in the cart pill re-invalidates immediately.
 
 ## 6. Country-partition path
 
@@ -121,3 +122,4 @@ That removes the duplicate keys and the qty/value mismatch in §3, and it makes 
 - `/checkout/review` and the confirmation page. `CheckoutReviewClient` reads `reviewState.destinations` + `allocationsByLineId`, whose shapes do not change.
 - The request body sent to `/api/checkout` and `/api/checkout/preview`. `buildDestinationInputs` and `buildSplitAllocations` keep their output shapes, so no route, `prepare`, or `submit` change is required.
 - The order-level `OrderShipToControl`.
+- The server contract. `default_destination_ref` stays required by `destination-request.ts` and `explodeCheckoutLines` keeps its unallocated-line path; this change only stops the client from ever exercising it.

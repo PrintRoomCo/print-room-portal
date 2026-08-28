@@ -14,8 +14,6 @@ interface LineAllocationFieldsProps {
   lineLabel: string
   qty: number
   destinations: AllocationDestination[]
-  /** Where this line goes while the customer has said nothing about it. */
-  defaultDestinationLabel: string | null
   allocations: AllocationMap
   onChange: (next: AllocationMap) => void
   disabled?: boolean
@@ -23,15 +21,14 @@ interface LineAllocationFieldsProps {
 
 /**
  * One cart line's split allocation, rendered under that line's checkout row.
- * A line with no entries is not a line in limbo: it ships whole to the default,
- * which is why the status cell names the default rather than counting units.
+ * Every unit has to be sent somewhere, so the status cell counts down rather
+ * than offering anywhere for the remainder to land.
  */
 export function LineAllocationFields({
   lineId,
   lineLabel,
   qty,
   destinations,
-  defaultDestinationLabel,
   allocations,
   onChange,
   disabled = false,
@@ -48,7 +45,6 @@ export function LineAllocationFields({
   }
 
   const perDestination = allocations[lineId] ?? {}
-  const untouched = Object.keys(perDestination).length === 0
   const remaining = remainingForLine(allocations, lineId, qty)
 
   function displayValue(destinationRef: string): string {
@@ -74,9 +70,8 @@ export function LineAllocationFields({
     onChange(next)
   }
 
-  const status = untouched
-    ? { text: `→ ${defaultDestinationLabel ?? 'default destination'}`, tone: 'text-gray-500' }
-    : remaining < 0
+  const status =
+    remaining < 0
       ? { text: `${-remaining} over`, tone: 'text-red-600' }
       : remaining === 0
         ? { text: '0 left', tone: 'text-gray-500' }
