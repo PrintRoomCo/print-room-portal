@@ -172,3 +172,20 @@ describe('stockedGoodsValue / estimateCartPickingFee', () => {
     ).toBe(0)
   })
 })
+
+describe('checkoutPickingFee split-shipment suppression', () => {
+  it('returns 0 on split-shipment orders regardless of band', () => {
+    expect(
+      checkoutPickingFee({
+        countryPartitionEnabled: true,
+        orderType: 'stock_on_hand',
+        billCountry: 'NZ',
+        goodsSubtotal: 50, // would be the $35 band
+        legacyShipCountry: null,
+        legacyDefaultBillCountry: 'NZ',
+        splitShipment: true,
+      }),
+    ).toBe(0)
+  })
+})
+

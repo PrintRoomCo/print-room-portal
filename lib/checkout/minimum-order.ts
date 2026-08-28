@@ -135,3 +135,53 @@ export function evaluateCartMinimumOrder(input: {
     blocks: under && !exemptionStillPossible,
   }
 }
+
+/**
+ * The whole cart's purchase-order notional, expressed in `targetCurrency`.
+ *
+ * The $500 minimum is a whole-order rule, but checkout evaluates it per
+ * partition — so a cart split across countries (or across split-shipment
+ * destinations) gets measured on a slice and blocked spuriously. The routes
+ * compute this across every partition and pass it INTO the partition that needs
+ * it, so `PreparedCheckoutPartition.minimumOrder` stays the single authoritative
+ * verdict rather than something patched from outside.
+ *
+ * `ratesFromNzd` is NZD-base: `AUD: 0.92` means 1 NZD = 0.92 AUD. A currency
+ * with no rate is counted at FACE value rather than dropped — under-counting the
+ * pool would wrongly block an order, whereas over-counting merely lets one
+ * through, and the partition's own currency gate still applies.
+ */
+export function pooledMinimumNotional(input: {
+  partitions: Array<{
+    currency: string
+    orderType: OrderType
+    notionalValue: number
+  }>
+  targetCurrency: string
+  ratesFromNzd: Record<string, number>
+}): number {
+  const { partitions, targetCurrency, ratesFromNzd } = input
+  const warned = new Set<string>()
+
+  const rateFor = (currency: string): number => {
+    const rate = ratesFromNzd[currency]
+    if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) return rate
+    if (!warned.has(currency)) {
+      warned.add(currency)
+      console.warn(
+        `pooledMinimumNotional: no NZD rate for ${currency}; counting it at face value`,
+      )
+    }
+    return 1
+  }
+
+  // Stock-on-hand partitions never carried the minimum, so they never join the pool.
+  const totalNzd = partitions
+    .filter((partition) => partition.orderType === 'purchase_order')
+    .reduce(
+      (total, partition) => total + partition.notionalValue / rateFor(partition.currency),
+      0,
+    )
+
+  return round2(totalNzd * rateFor(targetCurrency))
+}

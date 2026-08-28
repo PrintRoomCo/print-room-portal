@@ -1542,6 +1542,8 @@ export async function prepareCustomerOrderPartition(
       | null
       | undefined,
     legacyDefaultBillCountry: billingCountry.code,
+    // Split orders pay per-destination split fees instead (Task 7 computes them).
+    splitShipment: (input.destinations?.length ?? 0) > 0,
   })
 
   let billedGoodsSubtotal = 0
@@ -1567,7 +1569,12 @@ export async function prepareCustomerOrderPartition(
     orderType,
     // Already goods + decoration, ex-GST, ex pick fee, prepaid lines at full
     // value. The gate introduces no pricing arithmetic of its own.
-    notionalValue: goodsValueForBand,
+    //
+    // The routes pass pooled_minimum_notional when the cart spans more than one
+    // partition, so the $500 rule is judged on the whole order rather than on
+    // whichever slice landed here. Absent → this partition's own value, which
+    // is the pre-split behaviour.
+    notionalValue: input.pooled_minimum_notional ?? goodsValueForBand,
     // Flag on: this partition's country. Flag off: the org's default row.
     currency: billingCountry.currency,
     exemptions: {

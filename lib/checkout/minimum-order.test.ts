@@ -4,6 +4,7 @@ import {
   allLinesArePreOrder,
   evaluateCartMinimumOrder,
   evaluateMinimumOrder,
+  pooledMinimumNotional,
   type MinimumOrderExemptions,
 } from './minimum-order'
 
@@ -184,5 +185,38 @@ describe('evaluateCartMinimumOrder', () => {
     const view = cartView({ orderType: 'stock_on_hand', notionalValue: 10 })
     expect(view.status.applies).toBe(false)
     expect(view.blocks).toBe(false)
+  })
+})
+
+describe('pooledMinimumNotional', () => {
+  const rates = { NZD: 1, AUD: 0.9, USD: 0.6, GBP: 0.5, EUR: 0.55 }
+  const partitions = [
+    { currency: 'NZD', orderType: 'purchase_order' as const, notionalValue: 300 },
+    { currency: 'AUD', orderType: 'purchase_order' as const, notionalValue: 270 }, // = 300 NZD at 0.9
+  ]
+
+  it('sums purchase_order partitions into the target currency', () => {
+    expect(pooledMinimumNotional({ partitions, targetCurrency: 'NZD', ratesFromNzd: rates })).toBe(600)
+    expect(pooledMinimumNotional({ partitions, targetCurrency: 'AUD', ratesFromNzd: rates })).toBe(540)
+  })
+
+  it('ignores stock_on_hand partitions — the minimum never applied to them', () => {
+    expect(
+      pooledMinimumNotional({
+        partitions: [...partitions, { currency: 'NZD', orderType: 'stock_on_hand', notionalValue: 5000 }],
+        targetCurrency: 'NZD',
+        ratesFromNzd: rates,
+      }),
+    ).toBe(600)
+  })
+
+  it('falls back to face value for a currency with no rate', () => {
+    expect(
+      pooledMinimumNotional({
+        partitions: [{ currency: 'XXX', orderType: 'purchase_order', notionalValue: 200 }],
+        targetCurrency: 'NZD',
+        ratesFromNzd: rates,
+      }),
+    ).toBe(200)
   })
 })

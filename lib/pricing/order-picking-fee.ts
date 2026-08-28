@@ -49,7 +49,14 @@ export function checkoutPickingFee(input: {
   goodsSubtotal: number
   legacyShipCountry: string | null | undefined
   legacyDefaultBillCountry: string | null | undefined
+  /**
+   * Split-shipment orders pay a per-destination split fee instead
+   * (lib/pricing/split-fee.ts), which REPLACES the picking fee rather than
+   * adding to it. Checked before every other gate, the legacy adapter included.
+   */
+  splitShipment?: boolean
 }): number {
+  if (input.splitShipment === true) return 0
   if (!input.countryPartitionEnabled) {
     return legacyPickingFeeWhenCountryPartitionOff({
       orderType: input.orderType,
