@@ -552,7 +552,7 @@ export function CheckoutClient({
             reads as belonging to that column rather than as a banner over
             the items. */}
         {splitShippingEnabled && !inventoryMode && (
-          <div className="mb-6 ml-auto w-full max-w-md rounded-xl border border-gray-100 bg-white p-4">
+          <div className="mb-6 ml-auto w-full max-w-md">
             <div className="flex justify-end">
               <OrderShipToControl
                 stores={selectableStores}

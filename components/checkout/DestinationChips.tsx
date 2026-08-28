@@ -147,47 +147,52 @@ export function DestinationChips({
         })}
 
         {(unusedStores.length > 0 || allowCustom) && (
-          <button
-            type="button"
-            onClick={() => setAddOpen((open) => !open)}
-            aria-expanded={addOpen}
-            disabled={disabled}
-            className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-gray-400 hover:text-gray-900"
-          >
-            + Add
-          </button>
+          // The menu is anchored to this button and lifted out of flow, so
+          // opening it never reflows the order lines underneath: a customer
+          // reaching for a destination should not have the page move first.
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setAddOpen((open) => !open)}
+              aria-expanded={addOpen}
+              disabled={disabled}
+              className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-gray-400 hover:text-gray-900"
+            >
+              + Add
+            </button>
+
+            {addOpen && (
+              <ul className="absolute right-0 top-full z-20 mt-2 w-80 rounded-xl border border-gray-100 bg-white p-1 text-sm shadow-lg">
+                {unusedStores.map((store) => (
+                  <li key={store.id}>
+                    <button
+                      type="button"
+                      onClick={() => addDestination(store.id)}
+                      disabled={disabled}
+                      className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
+                    >
+                      {store.name ?? 'Store'}
+                      {store.city ? `, ${store.city}` : ''}
+                    </button>
+                  </li>
+                ))}
+                {allowCustom && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => addDestination(null)}
+                      disabled={disabled}
+                      className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
+                    >
+                      One-time address
+                    </button>
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
         )}
       </div>
-
-      {addOpen && (
-        <ul className="ml-auto mt-2 w-full max-w-xs rounded-xl border border-gray-100 bg-white p-1 text-sm shadow-sm">
-          {unusedStores.map((store) => (
-            <li key={store.id}>
-              <button
-                type="button"
-                onClick={() => addDestination(store.id)}
-                disabled={disabled}
-                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
-              >
-                {store.name ?? 'Store'}
-                {store.city ? `, ${store.city}` : ''}
-              </button>
-            </li>
-          ))}
-          {allowCustom && (
-            <li>
-              <button
-                type="button"
-                onClick={() => addDestination(null)}
-                disabled={disabled}
-                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
-              >
-                One-time address
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
 
       {value.destinations.map((destination) => {
         if (openRef !== destination.ref) return null
