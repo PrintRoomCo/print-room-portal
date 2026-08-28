@@ -217,7 +217,7 @@ browser provides it, on Node 26.
   `npx vitest run components/cart/__tests__/CartProvider.test.tsx --reporter=basic --no-color`
   → expect **1 passed**
 
-- [ ] **4. Run the regression trio.** This is the step that proves you got the
+- [x] **4. Run the regression trio.** This is the step that proves you got the
   boundary right, not just the symptom:
 
   ```bash
@@ -230,12 +230,12 @@ browser provides it, on Node 26.
   setup-level stub is fighting its per-file stub — that's the boundary error this
   task is about.
 
-- [ ] **5. Run the guards.** `npm run lint && npx tsc --noEmit 2>&1 | grep -c 'error TS'`
+- [x] **5. Run the guards.** `npm run lint && npx tsc --noEmit 2>&1 | grep -c 'error TS'`
   Expect: **199 warnings / 0 errors**, and **14** tsc errors. No new failures against baseline.
 
-- [ ] **6. Commit.** `git commit -m "test: repair localStorage global shadowed by Node 26"`
+- [x] **6. Commit.** `git commit -m "test: repair localStorage global shadowed by Node 26"`
 
-- [ ] **7. Checkpoint.** Ask Claude: *"review Task 1 against the plan"*.
+- [x] **7. Checkpoint.** Ask Claude: *"review Task 1 against the plan"*.
 
 **Why this shape:** the `IntersectionObserver` shim already establishes that this repo
 puts "browser API our runtime lacks" in `vitest.setup.ts`. `localStorage` under Node 26
@@ -264,24 +264,24 @@ and `CurrencyContext.test.tsx` still passes.
 - Do **not** modify: `app/(portal)/users/TeamClient.tsx`
 
 **Read first:**
-- [ ] `app/(portal)/users/TeamClient.tsx:297-482` — the whole component. In particular
+- [x] `app/(portal)/users/TeamClient.tsx:297-482` — the whole component. In particular
       the affordances your queries must use:
       - granted branch → `<button aria-label={`Remove ${s.name}`}>` (a chip)
       - the search box → `<input type="search" aria-label="Add a branch this member manages">`,
         dropdown opens on **focus or change**, starts closed (`useState(false)`)
       - a dropdown row → `<button>` whose accessible name is just the branch name
       - save → `<button disabled={!dirty || saving}>Save branches</button>`
-- [ ] `app/(portal)/users/TeamClient.tsx:302-304` — the comment explaining why
+- [x] `app/(portal)/users/TeamClient.tsx:302-304` — the comment explaining why
       checkboxes were dropped ("Orgs can have ~65 branches, so a checkbox-per-branch
       list is unusable"). This is why the old test is the thing that's wrong.
-- [ ] `app/api/team/members/[membershipId]/store-grants/route.test.ts:90-118` — what
+- [x] `app/api/team/members/[membershipId]/store-grants/route.test.ts:90-118` — what
       the **server** already covers (403 / 404 / 422 / happy-path diff + audit). Your
       test must not duplicate this. The gap it fills is the *client* half: that the
       component sends `{ storeIds: [...] }` to the right URL at all.
 
 **Steps:**
 
-- [ ] **1. Replace the test file.** Copy verbatim into
+- [x] **1. Replace the test file.** Copy verbatim into
       `app/(portal)/users/__tests__/TeamClient.branch.test.tsx`:
 
   ```tsx
@@ -350,7 +350,7 @@ and `CurrencyContext.test.tsx` still passes.
   mock and the two-store fixture are carried over unchanged from the old file; what
   changed is every query and the assertion about *when* saving is possible.
 
-- [ ] **2. Run it.**
+- [x] **2. Run it.**
   `npx vitest run 'app/(portal)/users/__tests__/TeamClient.branch.test.tsx' --reporter=basic --no-color`
   → expect **2 passed**
 
@@ -367,10 +367,10 @@ and `CurrencyContext.test.tsx` still passes.
   one — that an ungranted branch does *not* render a chip. Decide whether that's worth
   a test or whether it belongs folded into test 2.
 
-- [ ] **4. Run the guards.** `npm run lint && npx tsc --noEmit 2>&1 | grep -c 'error TS'`
+- [x] **4. Run the guards.** `npm run lint && npx tsc --noEmit 2>&1 | grep -c 'error TS'`
   Expect: **199 warnings / 0 errors**, **14** tsc errors.
 
-- [ ] **5. Commit.** `git commit -m "test: rewrite branch-grants test against chips+combobox UI"`
+- [x] **5. Commit.** `git commit -m "test: rewrite branch-grants test against chips+combobox UI"`
 
 - [ ] **6. Checkpoint.** Ask Claude: *"review Task 2 against the plan"*.
 

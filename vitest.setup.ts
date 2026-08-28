@@ -46,26 +46,33 @@ class NoopIntersectionObserver {
 
 globalThis.IntersectionObserver ??=
   NoopIntersectionObserver as unknown as typeof IntersectionObserver
+
+/* Node 26 ships its own `localStorage` global that resolves to `undefined`
+ * unless the process was started with `--localstorage-file`, and it shadows the
+ * one jsdom provides — so `window.localStorage` is undefined in tests while
+ * `sessionStorage` (which Node does not claim) still works. Restore a
+ * Map-backed Storage so tests get it the way a browser provides it.
+ * Cleared before each test: one object is shared by every test in the worker. */
 const localStorageValues = new Map<string, string>()
-  const localStorageShim: Storage = {
-    get length() {
-      return localStorageValues.size
-    },
-    clear: () => localStorageValues.clear(),
-    getItem: (key) => localStorageValues.get(key) ?? null,
-    key: (index) => Array.from(localStorageValues.keys())[index] ?? null,
-    removeItem: (key) => localStorageValues.delete(key),
-    setItem: (key, value) => localStorageValues.set(key, String(value)),
-  }
+const localStorageShim: Storage = {
+  get length() {
+    return localStorageValues.size
+  },
+  clear: () => localStorageValues.clear(),
+  getItem: (key) => localStorageValues.get(key) ?? null,
+  key: (index) => Array.from(localStorageValues.keys())[index] ?? null,
+  removeItem: (key) => localStorageValues.delete(key),
+  setItem: (key, value) => localStorageValues.set(key, String(value)),
+}
 
-  if (!globalThis.localStorage) {
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: localStorageShim,
-      configurable: true,
-      writable: true,
-    })
-  }
-
-  beforeEach(() => {
-    localStorageValues.clear()
+if (!globalThis.localStorage) {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: localStorageShim,
+    configurable: true,
+    writable: true,
   })
+}
+
+beforeEach(() => {
+  localStorageValues.clear()
+})

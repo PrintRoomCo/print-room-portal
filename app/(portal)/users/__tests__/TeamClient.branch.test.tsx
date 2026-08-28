@@ -1,4 +1,5 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { MemberBranchGrants } from '../TeamClient'
 
@@ -34,18 +35,23 @@ beforeEach(() => {
 })
 
 describe('MemberBranchGrants', () => {
-  it('renders the org stores with their granted state', async () => {
+  it('shows granted branches as chips and leaves ungranted ones out', async () => {
     render(<MemberBranchGrants membershipId="m-1" />)
-    await waitFor(() => expect(screen.getByLabelText('Avalon')).toBeTruthy())
-    expect((screen.getByLabelText('Avalon') as HTMLInputElement).checked).toBe(true)
-    expect((screen.getByLabelText('CBD') as HTMLInputElement).checked).toBe(false)
+    expect(await screen.findByRole('button', { name: 'Remove Avalon' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Remove CBD' })).toBeNull()
   })
 
-  it('saves the checked branch ids to the mirror route', async () => {
+  it('PUTs the granted branch ids to the mirror route when a branch is added', async () => {
+    const user = userEvent.setup()
     render(<MemberBranchGrants membershipId="m-1" />)
-    await waitFor(() => expect(screen.getByLabelText('CBD')).toBeTruthy())
-    fireEvent.click(screen.getByLabelText('CBD')) // now both checked
-    fireEvent.click(screen.getByRole('button', { name: /save branches/i }))
+    await screen.findByRole('button', { name: 'Remove Avalon' })
+
+    expect(screen.getByRole('button', { name: 'Save branches' })).toBeDisabled()
+
+    await user.click(screen.getByLabelText('Add a branch this member manages'))
+    await user.click(await screen.findByRole('button', { name: 'CBD' }))
+    await user.click(screen.getByRole('button', { name: 'Save branches' }))
+
     await waitFor(() => expect(lastPut).not.toBeNull())
     expect(lastPut?.url).toContain('/api/team/members/m-1/store-grants')
     expect(lastPut?.body).toEqual({ storeIds: ['s-1', 's-2'] })

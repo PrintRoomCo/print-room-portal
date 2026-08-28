@@ -54,7 +54,16 @@ Ships dark until Task 16 flips `split_shipping_enabled` for the pilot org. Safe 
 
 print-room-portal:
 
-- [ ] `npm test` → record failures here: ____
+- [x] `npm test` → record failures here: ____
+  FAIL  app/(portal)/users/__tests__/TeamClient.branch.test.tsx > MemberBranchGrants > saves the checked branch ids to the mirror route
+   TestingLibraryElementError: Unable to find a label with the text of: CBD
+
+  Ignored nodes: comments, script, style
+
+
+
+____
+
 - [ ] `npx tsc --noEmit` → record error count here: ____ (was ~5 known errors as of the billed-total-parity epic)
 - [ ] `npm run lint` → record warning count here: ____
 
