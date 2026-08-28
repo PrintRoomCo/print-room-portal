@@ -161,6 +161,19 @@ export interface CheckoutLineInput {
   location_label?: string | null
   /** Feature 2 — optional PDP custom name; snapshotted to quote_items.line_custom_name. */
   custom_name?: string | null
+  /**
+   * Split shipment, PRE-explosion. How this cart line's qty divides across the
+   * order's destinations, sent by the checkout grid. Must sum to exactly `qty`.
+   * explodeCheckoutLines consumes and strips this; nothing downstream reads it.
+   */
+  allocations?: Array<{ destination_ref: string; qty: number }>
+  /**
+   * Split shipment, POST-explosion. Which destination this (exploded) row ships
+   * to, stamped SERVER-SIDE by explodeCheckoutLines. Never trust a value that
+   * arrived on the request body — the routes always re-explode from
+   * `allocations`, which overwrites this.
+   */
+  destination_ref?: string | null
 }
 
 export interface CheckoutInput {
