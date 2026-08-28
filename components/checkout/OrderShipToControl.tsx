@@ -3,17 +3,19 @@
 import type { StoreOption } from './ShipToRow'
 
 /**
- * Where the whole order ships. Discriminated rather than a bare string so a
- * caller can never confuse "the store whose id is __split__" with the split
- * mode; the sentinels below stay inside this component.
+ * Where the whole order ships when it ships to ONE place. Discriminated rather
+ * than a bare string so a caller can never confuse "the store whose id is
+ * __custom__" with the one-time address mode; the sentinel stays inside this
+ * component.
+ *
+ * Splitting is deliberately NOT a variant here. It is a separate mode, toggled
+ * by SplitShipmentToggle, that suspends this control rather than replacing its
+ * value: keeping the two orthogonal is what lets the customer flip split off
+ * and land back on the store they had picked.
  */
-export type OrderShipToValue =
-  | { kind: 'store'; storeId: string }
-  | { kind: 'custom' }
-  | { kind: 'split' }
+export type OrderShipToValue = { kind: 'store'; storeId: string } | { kind: 'custom' }
 
 const CUSTOM_SENTINEL = '__custom__'
-const SPLIT_SENTINEL = '__split__'
 
 interface OrderShipToControlProps {
   stores: StoreOption[]
@@ -21,11 +23,7 @@ interface OrderShipToControlProps {
   onChange: (next: OrderShipToValue) => void
   /** The one-time address option, governed by the existing buyer-misconfigured rules. */
   allowCustom: boolean
-  /**
-   * Branch-scoped buyers CAN split, within their granted branches (the editor
-   * filters their choices). This is false only while a submit is in flight.
-   */
-  allowSplit: boolean
+  /** True while a submit is in flight, or while split mode owns the destinations. */
   disabled?: boolean
 }
 
@@ -34,15 +32,9 @@ export function OrderShipToControl({
   value,
   onChange,
   allowCustom,
-  allowSplit,
   disabled = false,
 }: OrderShipToControlProps) {
-  const selectValue =
-    value.kind === 'store'
-      ? value.storeId
-      : value.kind === 'custom'
-        ? CUSTOM_SENTINEL
-        : SPLIT_SENTINEL
+  const selectValue = value.kind === 'store' ? value.storeId : CUSTOM_SENTINEL
 
   return (
     <label className="flex items-center gap-2">
@@ -52,7 +44,6 @@ export function OrderShipToControl({
         onChange={(event) => {
           const next = event.target.value
           if (next === CUSTOM_SENTINEL) onChange({ kind: 'custom' })
-          else if (next === SPLIT_SENTINEL) onChange({ kind: 'split' })
           else onChange({ kind: 'store', storeId: next })
         }}
         disabled={disabled}
@@ -65,7 +56,6 @@ export function OrderShipToControl({
           </option>
         ))}
         {allowCustom && <option value={CUSTOM_SENTINEL}>Pick a one-time address</option>}
-        {allowSplit && <option value={SPLIT_SENTINEL}>Split shipment across destinations</option>}
       </select>
     </label>
   )

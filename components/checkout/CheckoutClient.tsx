@@ -7,6 +7,7 @@ import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages
 import { ShipToRow, type StoreOption } from './ShipToRow'
 import { OrderShipToControl, type OrderShipToValue } from './OrderShipToControl'
 import { DestinationChips, destinationLabel } from './DestinationChips'
+import { SplitShipmentToggle } from './SplitShipmentToggle'
 import { LineAllocationFields } from './LineAllocationFields'
 import {
   EMPTY_SPLIT_STATE,
@@ -140,6 +141,10 @@ export function CheckoutClient({
     initialStoreId ? { kind: 'store', storeId: initialStoreId } : { kind: 'custom' },
   )
   const [splitState, setSplitState] = useState<SplitShipmentState>(EMPTY_SPLIT_STATE)
+  // Split is a MODE over the order-level choice above, not one of its values.
+  // Holding it separately is what lets the dropdown keep the store the customer
+  // picked, so turning split back off lands there rather than on nothing.
+  const [splitEnabled, setSplitEnabled] = useState(false)
 
   const [customAddress, setCustomAddress] = useState<CustomAddress>({
     ...EMPTY_CUSTOM_ADDRESS,
@@ -178,20 +183,24 @@ export function CheckoutClient({
   const inventoryMode = canRouteToInventory && addToInventory
   const intent: 'customer' | 'inventory' = inventoryMode ? 'inventory' : 'customer'
 
+  const splitMode = splitShippingEnabled && splitEnabled
+
   // DERIVED, never stored: a flag-on org's per-line map is a pure function of
   // the order-level choice. Keeping it out of state is what stops the two
   // representations drifting, and it means every existing consumer below
   // (preview body, review state, submit) works untouched.
+  //
+  // A split order carries no per-line store: the destinations hold the
+  // addresses, so the dropdown's store is held aside rather than sent, and the
+  // request body stays byte-identical to the pre-pill one.
   const effectivePerLineShipTo: Record<string, string | null> = splitShippingEnabled
     ? Object.fromEntries(
         cart.lines.map((line) => [
           line.lineId,
-          orderShipTo.kind === 'store' ? orderShipTo.storeId : null,
+          !splitMode && orderShipTo.kind === 'store' ? orderShipTo.storeId : null,
         ]),
       )
     : perLineShipTo
-
-  const splitMode = splitShippingEnabled && orderShipTo.kind === 'split'
   // Lines in the shape the split logic reasons about, straight from the LIVE
   // cart so an edit in the cart pill re-validates the allocation immediately.
   const editorLines: EditorCartLine[] = useMemo(
@@ -550,7 +559,15 @@ export function CheckoutClient({
                 value={orderShipTo}
                 onChange={setOrderShipTo}
                 allowCustom={!buyerMisconfigured}
-                allowSplit={submitting === false}
+                // Split owns the destinations while it is on, so the single
+                // ship-to is visibly inert rather than silently ignored.
+                disabled={submitting !== false || splitEnabled}
+              />
+            </div>
+            <div className="mt-3 flex justify-end">
+              <SplitShipmentToggle
+                pressed={splitEnabled}
+                onChange={setSplitEnabled}
                 disabled={submitting !== false}
               />
             </div>
