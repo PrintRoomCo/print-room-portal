@@ -236,7 +236,7 @@ describe('prepareCustomerOrderPartition', () => {
       {
         ...base,
         // makeContext is MOQ-exempt by default, which would make this assertion
-        // vacuous — MOQ has to actually apply for pooling to be observable.
+        // vacuous: MOQ has to actually apply for pooling to be observable.
         context: { ...base.context, moqExempt: false },
         lines: [partitionSlice],
         pricing_pool_lines: [partitionSlice, otherPartitionSlice],

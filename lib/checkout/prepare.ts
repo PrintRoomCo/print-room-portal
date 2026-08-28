@@ -504,12 +504,12 @@ export async function prepareCustomerOrderPartition(
   // conservatively still counts toward MOQ. Built AFTER coercion on purpose.
   //
   // Seeded from poolLines, not input.lines: MOQ exists because a production run
-  // has a minimum economic size, and the run IS the pooled quantity — the same
+  // has a minimum economic size, and the run IS the pooled quantity, the same
   // reason pricing pools. Judging a partition's slice alone would spuriously
   // block a cart split across countries or split-shipment destinations.
   // NOTE: pool lines belonging to OTHER partitions keep their client-claimed
   // fulfilment_type here (the coercion above runs on input.lines only). That is
-  // deliberate — each partition's own prepare coerces its own lines, and a bogus
+  // deliberate: each partition's own prepare coerces its own lines, and a bogus
   // 'stocked' claim fails there. Do not coerce poolLines here: these are shared
   // object references and you would double-coerce them.
   const productionQtyByProductId = new Map<string, number>()

@@ -200,7 +200,7 @@ describe('pooledMinimumNotional', () => {
     expect(pooledMinimumNotional({ partitions, targetCurrency: 'AUD', ratesFromNzd: rates })).toBe(540)
   })
 
-  it('ignores stock_on_hand partitions — the minimum never applied to them', () => {
+  it('ignores stock_on_hand partitions: the minimum never applied to them', () => {
     expect(
       pooledMinimumNotional({
         partitions: [...partitions, { currency: 'NZD', orderType: 'stock_on_hand', notionalValue: 5000 }],

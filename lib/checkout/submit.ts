@@ -172,7 +172,7 @@ export interface CheckoutLineInput {
   /**
    * Split shipment, POST-explosion. Which destination this (exploded) row ships
    * to, stamped SERVER-SIDE by explodeCheckoutLines. Never trust a value that
-   * arrived on the request body — the routes always re-explode from
+   * arrived on the request body: the routes always re-explode from
    * `allocations`, which overwrites this.
    */
   destination_ref?: string | null
@@ -209,7 +209,7 @@ export interface CheckoutInput {
   terms_accepted?: boolean
   terms_version?: string
   /**
-   * Split shipment — the order's destinations. SERVER-OWNED: both routes parse
+   * Split shipment: the order's destinations. SERVER-OWNED: both routes parse
    * the request body, then OVERWRITE this from values they validated against
    * the org's stores. Never copy it straight off the body; a client could
    * otherwise name a store it does not own.

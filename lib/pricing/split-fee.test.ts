@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest'
       expect(splitFeeForSkuCount(skus)).toBe(fee)
     })
 
-    it('returns 0 for zero/negative/NaN — a destination with no SKUs has no fee', () => {
+    it('returns 0 for zero/negative/NaN: a destination with no SKUs has no fee', () => {
       expect(splitFeeForSkuCount(0)).toBe(0)
       expect(splitFeeForSkuCount(-3)).toBe(0)
       expect(splitFeeForSkuCount(Number.NaN)).toBe(0)

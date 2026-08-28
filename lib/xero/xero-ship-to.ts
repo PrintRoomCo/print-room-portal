@@ -9,7 +9,7 @@ import type { CheckoutLineInput } from '@/lib/checkout/submit'
  * order, and no single destination store can speak for the others.
  *
  * Otherwise the store contact is used only when EVERY line agrees on the same
- * store — the behaviour location-manager and DOC orders rely on. A mixed or
+ * store, the behaviour location-manager and DOC orders rely on. A mixed or
  * custom-address order resolves to the org rather than silently adopting
  * whichever store happened to sort first.
  */

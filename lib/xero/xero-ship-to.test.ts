@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { xeroShipToStoreId } from './xero-ship-to'
 
 describe('xeroShipToStoreId', () => {
-  it('split orders always invoice the org — never a destination store', () => {
+  it('split orders always invoice the org, never a destination store', () => {
     expect(
       xeroShipToStoreId({
         splitShipment: true,

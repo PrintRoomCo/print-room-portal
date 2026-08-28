@@ -3,7 +3,7 @@ import type { CheckoutLineInput } from './submit'
 
 /**
  * One shipping destination on a split-shipment order, as the checkout sends it.
- * Exactly one of `ship_to_store_id` / `custom_address` must be set — the same
+ * Exactly one of `ship_to_store_id` / `custom_address` must be set: the same
  * XOR the `order_destinations_one_address` DB constraint enforces.
  */
 export interface CheckoutDestinationInput {
@@ -57,7 +57,7 @@ function rowForDestination(
  * one line per destination, or a precise refusal the route can turn into a 400
  * pointing at the offending cart line / destination.
  *
- * Pure — no fetches, no org or store checks. "Does this store belong to the
+ * Pure: no fetches, no org or store checks. "Does this store belong to the
  * org" is the route's job, because only the route has the org context.
  */
 export function explodeCheckoutLines(input: {
