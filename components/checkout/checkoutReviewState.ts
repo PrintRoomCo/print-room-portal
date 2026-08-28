@@ -1,4 +1,5 @@
 import type { CartLine } from '@/lib/cart/types'
+import type { CheckoutDestinationInput } from '@/lib/checkout/destinations'
 
 export interface CustomAddress {
   name: string
@@ -17,6 +18,14 @@ export interface CheckoutReviewState {
   customAddress: CustomAddress
   createdAt: string
   partitionOutcomes?: Record<string, StoredPartitionOutcome>
+  /**
+   * Split shipment. All optional so readCheckoutReviewState keeps tolerating
+   * the legacy shape: a state written before split shipment existed, or by a
+   * flag-off org, simply has none of these.
+   */
+  destinations?: CheckoutDestinationInput[]
+  defaultDestinationRef?: string | null
+  allocationsByLineId?: Record<string, Array<{ destination_ref: string; qty: number }>>
 }
 
 export type StoredPartitionOutcome =

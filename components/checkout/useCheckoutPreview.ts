@@ -57,6 +57,11 @@ export function buildCheckoutRequestLines(input: {
   modeByVariantId: Record<string, BillingMode>
   /** Display provenance for persisted pre-SP3 lines that lack a currency stamp. */
   defaultPriceCurrency?: string
+  /**
+   * Split shipment: per-line allocations keyed by cart line id. Only split
+   * items appear; anything absent ships whole to the default destination.
+   */
+  allocationsByLineId?: Record<string, Array<{ destination_ref: string; qty: number }>>
 }): CheckoutLineInput[] {
   return input.lines.map((line) => ({
     product_id: line.productId,
@@ -83,6 +88,10 @@ export function buildCheckoutRequestLines(input: {
     claimed_billing_mode: line.variantId
       ? input.modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
       : null,
+    // Omitted entirely when absent so a non-split request stays byte-identical.
+    ...(input.allocationsByLineId?.[line.lineId]
+      ? { allocations: input.allocationsByLineId[line.lineId] }
+      : {}),
   }))
 }
 

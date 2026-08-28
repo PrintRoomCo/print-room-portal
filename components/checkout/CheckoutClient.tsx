@@ -6,6 +6,14 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
 import { OrderShipToControl, type OrderShipToValue } from './OrderShipToControl'
+import { SplitShipmentEditor, type EditorLine } from './SplitShipmentEditor'
+import {
+  EMPTY_SPLIT_STATE,
+  buildDestinationInputs,
+  buildSplitAllocations,
+  splitShipmentComplete,
+  type SplitShipmentState,
+} from '@/lib/checkout/split-shipment-state'
 import { MinimumOrderNotice } from './MinimumOrderNotice'
 import {
   AddressAutocompleteInput,
@@ -128,6 +136,7 @@ export function CheckoutClient({
   const [orderShipTo, setOrderShipTo] = useState<OrderShipToValue>(() =>
     initialStoreId ? { kind: 'store', storeId: initialStoreId } : { kind: 'custom' },
   )
+  const [splitState, setSplitState] = useState<SplitShipmentState>(EMPTY_SPLIT_STATE)
 
   const [customAddress, setCustomAddress] = useState<CustomAddress>({
     ...EMPTY_CUSTOM_ADDRESS,
@@ -179,6 +188,28 @@ export function CheckoutClient({
       )
     : perLineShipTo
 
+  const splitMode = splitShippingEnabled && orderShipTo.kind === 'split'
+  // Lines in the shape the split logic reasons about, straight from the LIVE
+  // cart so an edit in the cart pill re-validates the allocation immediately.
+  const editorLines: EditorLine[] = useMemo(
+    () =>
+      cart.lines.map((line) => ({
+        lineId: line.lineId,
+        productId: line.productId,
+        variantId: line.variantId || null,
+        qty: line.qty,
+        productName: line.productName,
+        variantLabel: line.variantLabel ?? null,
+        sizeLabel: line.sizeLabel ?? null,
+      })),
+    [cart.lines],
+  )
+  const splitComplete = splitMode && splitShipmentComplete(splitState, editorLines)
+  const splitAllocations = useMemo(
+    () => (splitMode ? buildSplitAllocations(splitState, editorLines) : undefined),
+    [splitMode, splitState, editorLines],
+  )
+
   const anyCustom = Object.values(effectivePerLineShipTo).some((v) => v === null)
   const allCustom = Object.values(effectivePerLineShipTo).every((v) => v === null)
   const mixedCustom = !inventoryMode && anyCustom && !allCustom
@@ -229,6 +260,7 @@ export function CheckoutClient({
       perLineShipTo: effectivePerLineShipTo,
       allCustom,
       modeByVariantId,
+      allocationsByLineId: splitAllocations,
       defaultPriceCurrency: countryPartitionEnabled
         ? defaultPriceCurrency ?? undefined
         : undefined,
@@ -238,6 +270,7 @@ export function CheckoutClient({
       effectivePerLineShipTo,
       allCustom,
       modeByVariantId,
+      splitAllocations,
       countryPartitionEnabled,
       defaultPriceCurrency,
     ],
@@ -255,7 +288,13 @@ export function CheckoutClient({
             notes: notes || null,
             intent,
             lines: checkoutLines,
-            custom_shipping_address: allCustom ? customAddress : null,
+            custom_shipping_address: splitMode || !allCustom ? null : customAddress,
+            ...(splitMode && splitComplete
+              ? {
+                  destinations: buildDestinationInputs(splitState),
+                  default_destination_ref: splitState.defaultDestinationRef,
+                }
+              : {}),
           }
         : null,
     [
@@ -271,6 +310,9 @@ export function CheckoutClient({
       allCustom,
       customAddress,
       idempotencyKey,
+      splitMode,
+      splitComplete,
+      splitState,
     ],
   )
   const preview = useCheckoutPreview(countryPartitionEnabled, previewRequest)
@@ -304,7 +346,7 @@ export function CheckoutClient({
   const customerCodeMissing = !customerCode
   // Split mode is unfinished until the editor lands (Task 12): a split order
   // with no destinations would be refused by the route anyway, so block here.
-  const splitBlocksSubmit = splitShippingEnabled && orderShipTo.kind === 'split'
+  const splitBlocksSubmit = splitMode && !splitComplete
 
   const canSubmitOrder =
     !submitting &&
@@ -333,6 +375,13 @@ export function CheckoutClient({
         perLineShipTo: effectivePerLineShipTo,
         customAddress,
         createdAt: new Date().toISOString(),
+        ...(splitMode && splitComplete
+          ? {
+              destinations: buildDestinationInputs(splitState),
+              defaultDestinationRef: splitState.defaultDestinationRef,
+              allocationsByLineId: buildSplitAllocations(splitState, editorLines),
+            }
+          : {}),
       })
       router.push('/checkout/review')
     } catch (e) {
@@ -458,15 +507,15 @@ export function CheckoutClient({
               allowSplit={submitting === false}
               disabled={submitting !== false}
             />
-            {orderShipTo.kind === 'split' && (
-              <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm">
-                <p className="font-medium text-gray-900">
-                  Split shipment: configure destinations
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  Add the destinations for this order and allocate each item across them.
-                </p>
-              </div>
+            {splitMode && (
+              <SplitShipmentEditor
+                lines={editorLines}
+                stores={selectableStores}
+                allowCustom={!buyerMisconfigured}
+                value={splitState}
+                onChange={setSplitState}
+                disabled={submitting !== false}
+              />
             )}
           </div>
         )}
