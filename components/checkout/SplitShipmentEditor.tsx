@@ -10,6 +10,7 @@ import {
   type EditorCartLine,
   type SplitShipmentState,
 } from '@/lib/checkout/split-shipment-state'
+import { AddressAutocompleteInput } from './AddressAutocompleteInput'
 import { AllocationGrid, type AllocationDestination } from './AllocationGrid'
 import type { CustomAddress } from './checkoutReviewState'
 import type { StoreOption } from './ShipToRow'
@@ -58,6 +59,10 @@ export function SplitShipmentEditor({
   disabled = false,
 }: SplitShipmentEditorProps) {
   const [notice, setNotice] = useState<string | null>(null)
+  // Refs whose address the customer chose to type in by hand. Autocomplete is
+  // the default; this is the escape hatch, so a Places outage never blocks an
+  // order.
+  const [manualRefs, setManualRefs] = useState<string[]>([])
 
   // Grouped by product + colourway: the grid's rows are that item's sizes.
   const items = useMemo(() => {
@@ -195,7 +200,39 @@ export function SplitShipmentEditor({
                 </button>
               </div>
 
-              {!destination.storeId && (
+              {!destination.storeId && !manualRefs.includes(destination.ref) && (
+                <div className="mt-3">
+                  <AddressAutocompleteInput
+                    name={destination.customAddress?.name ?? ''}
+                    countryBias={destination.customAddress?.country ?? null}
+                    onResolved={(address) =>
+                      patchDestination(destination.ref, { customAddress: address })
+                    }
+                    onManualEntry={() =>
+                      setManualRefs((previous) =>
+                        previous.includes(destination.ref)
+                          ? previous
+                          : [...previous, destination.ref],
+                      )
+                    }
+                    disabled={disabled}
+                  />
+                  {destination.customAddress?.address && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      {[
+                        destination.customAddress.address,
+                        destination.customAddress.city,
+                        destination.customAddress.postal_code,
+                        destination.customAddress.country,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!destination.storeId && manualRefs.includes(destination.ref) && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {(
                     [
