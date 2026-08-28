@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import type { ReactNode } from 'react'
 import {
   allInLineTotal,
   allInUnitPrice,
@@ -49,6 +50,13 @@ interface ShipToRowProps {
   /** Full goods value from the billed shape. Falls back to the cart's own
    *  all-in line total when the shape hasn't resolved yet. */
   billedGoodsValue?: number
+  /**
+   * Rendered inside the right-hand column, directly under the line total.
+   * Checkout hangs the split allocation fields here so they sit against the
+   * numbers they divide up, rather than dropping to the bottom of the row
+   * where the taller product image ends.
+   */
+  belowTotal?: ReactNode
 }
 
 export function ShipToRow({
@@ -64,6 +72,7 @@ export function ShipToRow({
   prepaidDrawn = false,
   billedUnitPrice,
   billedGoodsValue,
+  belowTotal = null,
 }: ShipToRowProps) {
   const selectValue = value ?? CUSTOM_SHIP_TO
   const imageUrl = cartLineDisplayImageUrl(line, { catalogueFrontImageUrl })
@@ -127,6 +136,7 @@ export function ShipToRow({
             />
           </div>
         </div>
+        {belowTotal}
       </div>
     </div>
   )

@@ -435,31 +435,30 @@ export function CheckoutClient({
       ? (amount: number) => formatFrom(amount, currency)
       : format
     return (
-      <div>
-        <ShipToRow
-          line={line}
-          stores={selectableStores}
-          format={lineFormat}
-          value={effectivePerLineShipTo[line.lineId] ?? null}
-          catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
-          onChange={(next) =>
-            setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
-          }
-          disabled={submitting !== false}
-          allowCustom={!buyerMisconfigured}
-          // Flag-on orgs choose once, at order level, so the per-line dropdowns go.
-          hideShipTo={inventoryMode || splitShippingEnabled}
-          prepaidDrawn={!billedLine.billed}
-          billedUnitPrice={
-            currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
-          }
-          billedGoodsValue={billedLine.goodsValue}
-        />
-        {splitMode && (
-          // Right-aligned under the row total rather than under the product
-          // name: the quantities being split are the same column of numbers as
-          // the price and qty above them, so they read as one stack.
-          <div className="mt-3 flex justify-end">
+      <ShipToRow
+        line={line}
+        stores={selectableStores}
+        format={lineFormat}
+        value={effectivePerLineShipTo[line.lineId] ?? null}
+        catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
+        onChange={(next) =>
+          setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+        }
+        disabled={submitting !== false}
+        allowCustom={!buyerMisconfigured}
+        // Flag-on orgs choose once, at order level, so the per-line dropdowns go.
+        hideShipTo={inventoryMode || splitShippingEnabled}
+        prepaidDrawn={!billedLine.billed}
+        billedUnitPrice={
+          currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
+        }
+        billedGoodsValue={billedLine.goodsValue}
+        // Inside the row's right-hand column, not under it: the quantities
+        // being split belong to the same stack of numbers as the price and
+        // total above them, and the product image is the taller side of the
+        // row, so anything hung below the row floats away from the total.
+        belowTotal={
+          splitMode ? (
             <LineAllocationFields
               lineId={line.lineId}
               lineLabel={[line.productName, line.variantLabel].filter(Boolean).join(' ')}
@@ -469,9 +468,9 @@ export function CheckoutClient({
               onChange={(allocations) => setSplitState((prev) => ({ ...prev, allocations }))}
               disabled={submitting !== false}
             />
-          </div>
-        )}
-      </div>
+          ) : null
+        }
+      />
     )
   }
 
