@@ -1,4 +1,6 @@
 import { after } from 'next/server'
+import { xeroShipToStoreId } from '@/lib/xero/xero-ship-to'
+import type { CheckoutDestinationInput } from './destinations'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { B2BCustomerContext } from '@/lib/checkout/server'
 import { sendOrderConfirmation } from '@/lib/email/order-confirmation'
@@ -206,6 +208,21 @@ export interface CheckoutInput {
    */
   terms_accepted?: boolean
   terms_version?: string
+  /**
+   * Split shipment — the order's destinations. SERVER-OWNED: both routes parse
+   * the request body, then OVERWRITE this from values they validated against
+   * the org's stores. Never copy it straight off the body; a client could
+   * otherwise name a store it does not own.
+   */
+  destinations?: CheckoutDestinationInput[]
+  /**
+   * The whole cart's purchase-order notional, in THIS partition's currency,
+   * for the $500 gate. SERVER-OWNED, same rule as `destinations`: only the
+   * routes may set it (from pooledMinimumNotional), never the request body.
+   * Absent → the gate falls back to this partition's own goods value, which is
+   * today's behaviour.
+   */
+  pooled_minimum_notional?: number
 }
 
 export interface CheckoutResult {
@@ -1167,9 +1184,13 @@ export async function submitCustomerOrder(
         quoteId: quote_id,
         organizationId: input.context.organizationId,
         organizationName: input.context.organizationName,
-        // Quote is made out to the ship-to location; one destination per order
-        // (mixed-address guard), so the first line's store speaks for all.
-        shipToStoreId: input.lines[0]?.ship_to_store_id ?? null,
+        // Quote is made out to the ship-to location, but only when the order
+        // HAS one: a split order invoices the org, and so does any order whose
+        // lines disagree about the store. See xeroShipToStoreId.
+        shipToStoreId: xeroShipToStoreId({
+          splitShipment: (input.destinations?.length ?? 0) > 0,
+          lines: input.lines,
+        }),
         actorUserId: input.context.userId,
         ordererEmail: input.context.email ?? null,
         paymentTerms: input.context.paymentTerms ?? null,
