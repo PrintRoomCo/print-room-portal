@@ -64,6 +64,7 @@ function previewGroup(
     currency: au ? 'AUD' : 'NZD',
     taxLabel: au ? 'GST 10%' : 'GST 15%',
     lines: [], subtotal: 100, tax: au ? 10 : 15, pickingFee: 0,
+    splitFees: [],
     total: au ? 110 : 115,
     ...over,
   }
@@ -82,7 +83,8 @@ describe('CountryBilledOrderSummary', () => {
       }),
       previewGroup({
         key: 'NZ:stock_on_hand', countryCode: 'NZ', orderType: 'stock_on_hand',
-        pickingFee: 20, tax: 18, total: 138,
+        pickingFee: 20,
+        splitFees: [], tax: 18, total: 138,
       }),
     ])
 

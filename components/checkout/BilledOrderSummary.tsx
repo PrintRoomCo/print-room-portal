@@ -32,6 +32,7 @@ export function CountryBilledOrderSummary({
   formatMoney,
   showCurrencyInHeading = true,
   totalInfo,
+  destinationLabels,
 }: {
   shape: CheckoutBillingShape
   failures?: CheckoutCountryFailure[]
@@ -47,6 +48,11 @@ export function CountryBilledOrderSummary({
   showCurrencyInHeading?: boolean
   /** Rendered beside each "Country total" label; /checkout mounts InvoiceCurrencyInfo here. */
   totalInfo?: ReactNode
+  /**
+   * Split shipment: destination ref to human label, so the fee rows can name
+   * where each parcel is going. Missing labels fall back to a positional name.
+   */
+  destinationLabels?: Record<string, string>
 }) {
   const countries: Array<{
     key: string
@@ -126,12 +132,31 @@ export function CountryBilledOrderSummary({
             </section>
           ))}
 
-          {group && (
+          {group && (() => {
+            // ?? [] because a partition rehydrated from stored preview JSON
+            // predates this field; flatMap would otherwise yield [undefined].
+            const groupSplitFees = group.partitions.flatMap(
+              (partition) => partition.splitFees ?? [],
+            )
+            return (
             <dl className="mt-5 space-y-2 pt-5 text-sm">
               <CountryRow label="Subtotal" value={money(group.subtotal, currency)} />
-              {group.pickingFee > 0 && (
-                <CountryRow label="Picking fee" value={money(group.pickingFee, currency)} />
-              )}
+              {/* Split fees REPLACE the picking fee, they never sit beside it.
+                  Read off the partitions rather than duplicated onto the country
+                  group: one source, so the two can never disagree. */}
+              {groupSplitFees.length > 0
+                ? groupSplitFees.map((splitFee, index) => (
+                    <CountryRow
+                      key={splitFee.destinationRef}
+                      label={`Split delivery: ${
+                        destinationLabels?.[splitFee.destinationRef] ?? `Destination ${index + 1}`
+                      }`}
+                      value={money(splitFee.fee, currency)}
+                    />
+                  ))
+                : group.pickingFee > 0 && (
+                    <CountryRow label="Picking fee" value={money(group.pickingFee, currency)} />
+                  )}
               <CountryRow label={group.taxLabel} value={money(group.tax, currency)} />
               <CountryRow
                 label={
@@ -145,7 +170,8 @@ export function CountryBilledOrderSummary({
                 bold
               />
             </dl>
-          )}
+            )
+          })()}
         </section>
       ))}
     </div>

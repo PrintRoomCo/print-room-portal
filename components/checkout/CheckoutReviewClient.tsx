@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { summariseDestinations } from '@/lib/checkout/destination-summary'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
@@ -157,6 +158,58 @@ export function CheckoutReviewClient({
     return map
   }, [stores])
 
+  // Split shipment: one row per destination, built from the SAME summariser the
+  // confirmation page uses, so the two surfaces cannot disagree about what is
+  // going where. Empty on every non-split order.
+  const splitDestinationLabels = useMemo(() => {
+    const labels: Record<string, string> = {}
+    for (const destination of reviewState?.destinations ?? []) {
+      labels[destination.ref] = destination.ship_to_store_id
+        ? storeById.get(destination.ship_to_store_id)?.name ?? 'Store'
+        : destination.custom_address?.name?.trim() || 'One-time address'
+    }
+    return labels
+  }, [reviewState?.destinations, storeById])
+
+  const splitSummaries = useMemo(() => {
+    const destinations = reviewState?.destinations ?? []
+    if (destinations.length === 0) return []
+    const allocations = reviewState?.allocationsByLineId ?? {}
+    const defaultRef = reviewState?.defaultDestinationRef ?? null
+    // Rebuild the exploded view the server will produce: allocated lines split
+    // across their destinations, everything else whole to the default.
+    const exploded = cart.lines.flatMap((line) => {
+      const perLine = allocations[line.lineId]
+      if (perLine && perLine.length > 0) {
+        return perLine.map((allocation) => ({
+          destination_ref: allocation.destination_ref,
+          product_name: line.productName,
+          variant_label: line.variantLabel ?? null,
+          size_label: line.sizeLabel ?? null,
+          qty: allocation.qty,
+        }))
+      }
+      return defaultRef
+        ? [
+            {
+              destination_ref: defaultRef,
+              product_name: line.productName,
+              variant_label: line.variantLabel ?? null,
+              size_label: line.sizeLabel ?? null,
+              qty: line.qty,
+            },
+          ]
+        : []
+    })
+    return summariseDestinations({
+      destinations: destinations.map((destination) => ({
+        ref: destination.ref,
+        label: splitDestinationLabels[destination.ref] ?? 'Destination',
+      })),
+      lines: exploded,
+    })
+  }, [reviewState?.destinations, reviewState?.allocationsByLineId, reviewState?.defaultDestinationRef, cart.lines, splitDestinationLabels])
+
   const { modeByVariantId, status: billingStatus } = useFreshBillingModes(cart.lines)
   const pricingReady = billingStatus !== 'loading'
 
@@ -205,6 +258,7 @@ export function CheckoutReviewClient({
             perLineShipTo: reviewState.perLineShipTo,
             allCustom,
             modeByVariantId,
+            allocationsByLineId: reviewState.allocationsByLineId,
             defaultPriceCurrency: countryPartitionEnabled
               ? defaultPriceCurrency ?? undefined
               : undefined,
@@ -228,7 +282,20 @@ export function CheckoutReviewClient({
             notes: reviewState.notes || null,
             intent: reviewState.intent,
             lines: checkoutLines,
-            custom_shipping_address: allCustom ? reviewState.customAddress : null,
+            custom_shipping_address:
+              (reviewState.destinations?.length ?? 0) > 0
+                ? null
+                : allCustom
+                  ? reviewState.customAddress
+                  : null,
+            // Without these the preview would price the order WITHOUT its split
+            // fees, and the customer would be quoted less than they are charged.
+            ...((reviewState.destinations?.length ?? 0) > 0
+              ? {
+                  destinations: reviewState.destinations,
+                  default_destination_ref: reviewState.defaultDestinationRef,
+                }
+              : {}),
           }
         : null,
     [countryPartitionEnabled, reviewState, pricingReady, checkoutLines, allCustom],
@@ -392,6 +459,14 @@ export function CheckoutReviewClient({
               ? modeByVariantId[line.variantId] ?? 'invoice_on_dispatch'
               : null,
               })),
+          // Split shipment: the server re-validates and re-explodes from these,
+          // so what travels is the customer's INTENT, never a priced result.
+          ...(reviewState.destinations && reviewState.destinations.length > 0
+            ? {
+                destinations: reviewState.destinations,
+                default_destination_ref: reviewState.defaultDestinationRef,
+              }
+            : {}),
           // Consent for this order (design 2026-08-11). The server re-validates
           // and 400s without these; the checkbox is not the only gate.
           terms_accepted: true,
@@ -914,18 +989,39 @@ export function CheckoutReviewClient({
                   </dd>
                 </div>
               )}
-              {cart.lines.map((line) => {
-                const storeId = reviewState.perLineShipTo[line.lineId]
-                const store = storeId ? storeById.get(storeId) : null
-                return (
-                  <div key={line.lineId} className="flex justify-between gap-4">
-                    <dt className="text-gray-500">{line.productName}</dt>
-                    <dd className="text-right text-gray-900">
-                      {store ? `${store.name ?? 'Store'}${store.city ? ` - ${store.city}` : ''}` : 'Not selected'}
-                    </dd>
-                  </div>
-                )
-              })}
+              {/* Split orders replace the per-line store list with a per-destination
+                  breakdown: on a split order every line's header store is null, so
+                  the list below would read "Not selected" for all of them. */}
+              {splitSummaries.length > 0
+                ? splitSummaries.map((summary) => (
+                    <div key={summary.ref} className="flex justify-between gap-4">
+                      <dt className="text-gray-500">
+                        {summary.label}
+                        <span className="ml-2 text-xs text-gray-400">
+                          {summary.unitTotal} unit{summary.unitTotal === 1 ? '' : 's'}
+                        </span>
+                      </dt>
+                      <dd className="text-right text-gray-900">
+                        {summary.lines
+                          .map((line) =>
+                            [line.productName, line.sizeLabel].filter(Boolean).join(' '),
+                          )
+                          .join(', ')}
+                      </dd>
+                    </div>
+                  ))
+                : cart.lines.map((line) => {
+                    const storeId = reviewState.perLineShipTo[line.lineId]
+                    const store = storeId ? storeById.get(storeId) : null
+                    return (
+                      <div key={line.lineId} className="flex justify-between gap-4">
+                        <dt className="text-gray-500">{line.productName}</dt>
+                        <dd className="text-right text-gray-900">
+                          {store ? `${store.name ?? 'Store'}${store.city ? ` - ${store.city}` : ''}` : 'Not selected'}
+                        </dd>
+                      </div>
+                    )
+                  })}
             </>
           )}
           <div className="flex justify-between gap-4">

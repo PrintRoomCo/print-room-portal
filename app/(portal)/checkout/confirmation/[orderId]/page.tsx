@@ -1,4 +1,32 @@
 import { notFound } from 'next/navigation'
+import {
+  summariseDestinations,
+  type DestinationSummary,
+} from '@/lib/checkout/destination-summary'
+
+
+/** Address snapshot to display lines, tolerating whatever shape was stored. */
+function formatSnapshotAddress(snapshot: Record<string, unknown> | null): string[] {
+  if (!snapshot) return []
+  const pick = (key: string) => {
+    const value = snapshot[key]
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
+  }
+  return [
+    pick('name'),
+    pick('address') ?? pick('street'),
+    [pick('city'), pick('postal_code')].filter(Boolean).join(' ') || null,
+    pick('country'),
+  ].filter((line): line is string => Boolean(line))
+}
+
+/** Best-effort human name for an address snapshot row. */
+function addressLabel(snapshot: Record<string, unknown> | null): string | null {
+  if (!snapshot) return null
+  const name = typeof snapshot.name === 'string' ? snapshot.name.trim() : ''
+  const city = typeof snapshot.city === 'string' ? snapshot.city.trim() : ''
+  return name || city || null
+}
 import { requireB2BCustomer } from '@/lib/checkout/server'
 import { handleAuthFailure } from '@/lib/checkout/page-auth'
 import { billedFigures } from '@/lib/checkout/billed-figures'
@@ -125,7 +153,7 @@ export default async function ConfirmationPage({
        quotes!inner (
          id, order_ref, monday_item_id, organization_id,
          subtotal, decoration_cost, tax, picking_fee, billed_total,
-         shipping_address, required_by, bill_country, currency,
+         shipping_address, split_shipment, required_by, bill_country, currency,
          countries!quotes_bill_country_fkey(name, tax_rate, tax_label)
        )`,
     )
@@ -212,7 +240,7 @@ export default async function ConfirmationPage({
   const { data: rawLines, error: linesError } = await admin
     .from('quote_items')
     .select(
-      `id, product_id, product_name, catalogue_item_id, quantity, unit_price, decorations, ship_to_store_id, size_label,
+      `id, product_id, product_name, catalogue_item_id, quantity, unit_price, decorations, ship_to_store_id, size_label, destination_id,
        product_variants (
          color_swatch_id,
          product_color_swatches (label)
@@ -316,17 +344,47 @@ export default async function ConfirmationPage({
     }
   })
 
-  // Fulfilment label — multi-store split vs single ship-to vs make-to-stock
-  // signals already live on quote_items.ship_to_store_id. We summarise without
-  // re-fetching the store rows: the per-line address detail is implicitly the
-  // order-level shipping_address fallback below.
-  const distinctShipTo = new Set(
-    lineRows.map((r) => r.ship_to_store_id ?? '__custom__'),
-  )
-  const fulfilmentLabel =
-    distinctShipTo.size > 1
-      ? `Split across ${distinctShipTo.size} delivery locations`
-      : 'Single delivery'
+  // Split shipment: the order says so on its header flag, so the old
+  // ship_to_store_id heuristic is gone. Destinations carry their own snapshot
+  // address, which is what makes this readable after a later store edit.
+  const isSplitShipment = (order.quotes as { split_shipment?: boolean }).split_shipment === true
+  let destinationSummaries: DestinationSummary[] = []
+  let destinationAddressByRef: Record<string, Record<string, unknown> | null> = {}
+
+  if (isSplitShipment) {
+    const { data: destinationRows } = await admin
+      .from('order_destinations')
+      .select('id, position, ship_to_store_id, address_snapshot, split_fee')
+      .eq('quote_id', order.quotes.id)
+      .order('position')
+
+    const rows = (destinationRows ?? []) as Array<{
+      id: string
+      position: number
+      address_snapshot: Record<string, unknown> | null
+      split_fee: number | null
+    }>
+    destinationAddressByRef = Object.fromEntries(
+      rows.map((row) => [row.id, row.address_snapshot ?? null]),
+    )
+    destinationSummaries = summariseDestinations({
+      destinations: rows.map((row) => ({
+        ref: row.id,
+        label: addressLabel(row.address_snapshot) ?? `Destination ${row.position}`,
+      })),
+      lines: lineRows.map((row) => ({
+        destination_ref: (row as { destination_id?: string | null }).destination_id ?? null,
+        product_name: row.product_name ?? '',
+        size_label: row.size_label ?? null,
+        qty: Number(row.quantity ?? 0),
+      })),
+      feesByRef: Object.fromEntries(rows.map((row) => [row.id, Number(row.split_fee ?? 0)])),
+    })
+  }
+
+  const fulfilmentLabel = isSplitShipment
+    ? `Split across ${destinationSummaries.length} delivery location${destinationSummaries.length === 1 ? '' : 's'}`
+    : 'Single delivery'
 
   const shippingAddress = asAddress(order.quotes.shipping_address)
 
@@ -344,6 +402,17 @@ export default async function ConfirmationPage({
           isStockOnHandOrder={order.order_type === 'stock_on_hand'}
           customerEmail={context.email}
           shippingAddress={shippingAddress}
+          destinations={destinationSummaries.map((summary) => ({
+            ref: summary.ref,
+            label: summary.label,
+            unitTotal: summary.unitTotal,
+            addressLines: formatSnapshotAddress(destinationAddressByRef[summary.ref] ?? null),
+            lines: summary.lines.map((line) => ({
+              productName: line.productName,
+              sizeLabel: line.sizeLabel,
+              qty: line.qty,
+            })),
+          }))}
           fulfilmentLabel={fulfilmentLabel}
           requiredBy={order.quotes.required_by}
           lines={lines}

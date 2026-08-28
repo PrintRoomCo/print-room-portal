@@ -147,6 +147,7 @@ describe('checkout <-> Xero draft parity', () => {
         subtotal: partition.billedSubtotal,
         tax: partition.gst,
         pickingFee: partition.pickingFee,
+        splitFees: [],
         total: partition.total,
       }))
     }

@@ -84,6 +84,12 @@ export interface CheckoutOrderGroup {
   subtotal: number
   tax: number
   pickingFee: number
+  /**
+   * Split shipment: one entry per destination in this partition. Empty on a
+   * normal order. These REPLACE the picking fee rather than adding to it, which
+   * is why pickingFee is 0 whenever this is non-empty.
+   */
+  splitFees: Array<{ destinationRef: string; skuCount: number; fee: number }>
   total: number
 }
 
@@ -201,6 +207,7 @@ export function checkoutOrderGroupFromPrepared(
     ),
     tax: prepared.totals.tax,
     pickingFee: prepared.totals.pickingFee,
+    splitFees: prepared.splitFees,
     total: prepared.totals.total,
   }
 }

@@ -54,6 +54,18 @@ interface ConfirmationViewProps {
   isStockOnHandOrder?: boolean
   customerEmail: string
   shippingAddress: ConfirmationAddress | null
+  /**
+   * Split shipment: one block per destination, each with its OWN snapshot
+   * address. Empty on a normal order, where the single header address above is
+   * the whole story.
+   */
+  destinations?: Array<{
+    ref: string
+    label: string
+    unitTotal: number
+    addressLines: string[]
+    lines: Array<{ productName: string; sizeLabel: string | null; qty: number }>
+  }>
   fulfilmentLabel: string
   requiredBy: string | null
   lines: ConfirmationLine[]
@@ -106,6 +118,7 @@ export function ConfirmationView(props: ConfirmationViewProps) {
     mondaySynced,
     isInventoryOrder,
     shippingAddress,
+    destinations = [],
     fulfilmentLabel,
     requiredBy,
     lines,
@@ -264,6 +277,28 @@ export function ConfirmationView(props: ConfirmationViewProps) {
                     <p className="text-xs text-gray-500">
                       Stock lands on your inventory shelf at Print Room.
                     </p>
+                  </div>
+                ) : destinations.length > 0 ? (
+                  <div className="space-y-4">
+                    {destinations.map((destination) => (
+                      <div key={destination.ref}>
+                        <p className="font-medium text-gray-900">{destination.label}</p>
+                        <div className="mt-0.5 space-y-0.5 text-gray-900">
+                          {destination.addressLines.map((line) => (
+                            <p key={line}>{line}</p>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {destination.lines
+                            .map((line) =>
+                              [line.productName, line.sizeLabel, `x${line.qty}`]
+                                .filter(Boolean)
+                                .join(' '),
+                            )
+                            .join(', ')}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 ) : addressLines.length > 0 ? (
                   <div className="space-y-0.5 text-gray-900">

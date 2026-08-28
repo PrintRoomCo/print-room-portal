@@ -37,6 +37,7 @@ function countryOrder(
     subtotal: 100,
     tax: isAu ? 10 : 15,
     pickingFee: 0,
+    splitFees: [],
     total: isAu ? 110 : 115,
     ...over,
   }
