@@ -490,14 +490,30 @@ export async function prepareCustomerOrderPartition(
     }
   }
 
+  // Pooling seeds from the FULL cart when the route split it into partitions
+  // (pricing_pool_lines), so a product spanning both partitions still prices
+  // at the tier the whole cart earned — identical to a single submit call.
+  // Declared here rather than at the pricing loop because MOQ reads it too.
+  const poolLines = input.pricing_pool_lines ?? input.lines
+
   // Qty per product destined for a NEW production run — i.e. excluding lines
   // fulfilled from existing stock. MOQ is checked against this, not the grand
   // total: stock that has already been made carries no minimum. A line only
   // escapes MOQ when it declares fulfilment_type 'stocked' AND the claim
   // survived the nature coercion above; an absent value (legacy carts)
   // conservatively still counts toward MOQ. Built AFTER coercion on purpose.
+  //
+  // Seeded from poolLines, not input.lines: MOQ exists because a production run
+  // has a minimum economic size, and the run IS the pooled quantity — the same
+  // reason pricing pools. Judging a partition's slice alone would spuriously
+  // block a cart split across countries or split-shipment destinations.
+  // NOTE: pool lines belonging to OTHER partitions keep their client-claimed
+  // fulfilment_type here (the coercion above runs on input.lines only). That is
+  // deliberate — each partition's own prepare coerces its own lines, and a bogus
+  // 'stocked' claim fails there. Do not coerce poolLines here: these are shared
+  // object references and you would double-coerce them.
   const productionQtyByProductId = new Map<string, number>()
-  for (const line of input.lines) {
+  for (const line of poolLines) {
     if (line.fulfilment_type === 'stocked') continue
     productionQtyByProductId.set(
       line.product_id,
@@ -539,10 +555,6 @@ export async function prepareCustomerOrderPartition(
   // the cart's historical tier behavior for decorated runs. Decoration pricing
   // below keeps its own product+decoration aggregation, so item-aware garment
   // pricing does not silently alter decoration-tier pooling.
-  // Pooling seeds from the FULL cart when the route split it into partitions
-  // (pricing_pool_lines), so a product spanning both partitions still prices
-  // at the tier the whole cart earned — identical to a single submit call.
-  const poolLines = input.pricing_pool_lines ?? input.lines
   const totalQtyByDecorationTierKey = new Map<string, number>()
   for (const line of poolLines) {
     const k = tierAggregationKey(line.product_id, line.decorations)

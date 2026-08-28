@@ -10,6 +10,7 @@ import { makeContext, makeFanoutStub, type StubConfig } from './__tests__/fanout
 import type { CheckoutInput } from './submit'
 import {
   CountryPriceUnavailableError,
+  MoqViolationError,
   UnitPriceDriftError,
 } from './errors'
 
@@ -222,6 +223,45 @@ describe('prepareCustomerOrderPartition', () => {
     })).rejects.toThrow(
       'No active artwork rendition is available for Logo on variant variant-navy.',
     )
+  })
+
+  it('pools MOQ across partitions via pricing_pool_lines (split shipment)', async () => {
+    const stub = makeFanoutStub(config()) // product-1 has moq: 24
+    const base = input()
+    const partitionSlice = { ...base.lines[0], qty: 12 }
+    const otherPartitionSlice = { ...base.lines[0], cart_line_id: 'line-2', qty: 12 }
+
+    const prepared = await prepareCustomerOrderPartition(
+      stub.admin,
+      {
+        ...base,
+        // makeContext is MOQ-exempt by default, which would make this assertion
+        // vacuous — MOQ has to actually apply for pooling to be observable.
+        context: { ...base.context, moqExempt: false },
+        lines: [partitionSlice],
+        pricing_pool_lines: [partitionSlice, otherPartitionSlice],
+      },
+      { countryPartitionEnabled: false, partitionKey: 'purchase_order', country: NZ },
+    )
+
+    expect(prepared.lines).toEqual([expect.objectContaining({ cartLineId: 'line-1', unitPrice: 12.5 })])
+  })
+
+  it('still throws MoqViolationError when even the pooled quantity misses MOQ', async () => {
+    const stub = makeFanoutStub(config())
+    const base = input()
+
+    await expect(
+      prepareCustomerOrderPartition(
+        stub.admin,
+        {
+          ...base,
+          context: { ...base.context, moqExempt: false },
+          lines: [{ ...base.lines[0], qty: 12 }],
+        },
+        { countryPartitionEnabled: false, partitionKey: 'purchase_order', country: NZ },
+      ),
+    ).rejects.toBeInstanceOf(MoqViolationError)
   })
 })
 
