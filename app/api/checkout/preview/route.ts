@@ -26,6 +26,12 @@ import {
   type PreparedCheckoutPartition,
 } from '@/lib/checkout/prepare'
 import { requireB2BCustomerApi } from '@/lib/checkout/server'
+import {
+  validateDestinationRequest,
+  type DestinationRequestAccepted,
+} from '@/lib/checkout/destination-request'
+import { pooledMinimumNotional } from '@/lib/checkout/minimum-order'
+import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import type { CheckoutLineInput } from '@/lib/checkout/submit'
 import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
@@ -38,6 +44,9 @@ interface PreviewRequestBody {
   intent?: 'customer' | 'inventory'
   lines?: CheckoutLineInput[]
   custom_shipping_address?: Record<string, unknown> | null
+  /** Split shipment. Validated and re-derived server-side; never trusted as sent. */
+  destinations?: unknown
+  default_destination_ref?: unknown
 }
 
 export type PreviewPartitionOutcome =
@@ -162,9 +171,14 @@ export async function POST(request: Request) {
     )
   }
 
+  // A split order carries its addresses on its destinations, not its lines, so
+  // the single-address invariants below do not apply to it. They still guard
+  // every other order.
+  const splitRequested = body.destinations != null
+
   const hasNullShipTo = body.lines.some((line) => !line.ship_to_store_id)
   const allNullShipTo = body.lines.every((line) => !line.ship_to_store_id)
-  if (hasNullShipTo && !allNullShipTo) {
+  if (!splitRequested && hasNullShipTo && !allNullShipTo) {
     return NextResponse.json(
       {
         error:
@@ -173,19 +187,27 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
-  if (allNullShipTo && !body.custom_shipping_address) {
+  if (!splitRequested && allNullShipTo && !body.custom_shipping_address) {
     return NextResponse.json(
       { error: 'custom_shipping_address required when no ship_to_store_id provided' },
       { status: 400 },
     )
   }
 
+  // On the split path the stores to vet are the DESTINATIONS' stores; the lines
+  // have not been exploded yet and carry none.
+  const destinationStoreIds = splitRequested
+    ? (Array.isArray(body.destinations) ? body.destinations : [])
+        .map((destination) => (destination as { ship_to_store_id?: unknown })?.ship_to_store_id)
+        .filter((value): value is string => typeof value === 'string')
+    : []
   const storeIds = Array.from(
-    new Set(
-      body.lines
+    new Set([
+      ...body.lines
         .map((line) => line.ship_to_store_id)
         .filter((value): value is string => typeof value === 'string'),
-    ),
+      ...destinationStoreIds,
+    ]),
   )
   for (const storeId of storeIds) {
     if (!auth.context.storeIds.includes(storeId)) {
@@ -237,7 +259,7 @@ export async function POST(request: Request) {
     intent = 'inventory'
   }
 
-  if (auth.context.role === 'staff') {
+  if (!splitRequested && auth.context.role === 'staff') {
     const branchScope = checkStaffBranchScope({
       shipToStoreIds: body.lines.map((line) => line.ship_to_store_id ?? null),
       allowedBranches: resolveBranchStoreIds(
@@ -316,12 +338,52 @@ export async function POST(request: Request) {
     body.custom_shipping_address.country = customCountry
   }
 
-  const lines: CheckoutExecutionLine[] = body.lines.map((line) => ({
-    ...line,
-    ship_country: line.ship_to_store_id
-      ? countryByStoreId.get(line.ship_to_store_id)
-      : customCountry ?? undefined,
-  }))
+  let splitContext: DestinationRequestAccepted | null = null
+  if (splitRequested) {
+    const { data: orgRow } = await auth.admin
+      .from('organizations')
+      .select('split_shipping_enabled')
+      .eq('id', auth.context.organizationId)
+      .maybeSingle()
+
+    const validated = validateDestinationRequest({
+      destinations: body.destinations,
+      defaultDestinationRef: body.default_destination_ref,
+      lines: body.lines,
+      splitShippingEnabled: orgRow?.split_shipping_enabled === true,
+      orgStoreCountryById: new Map(
+        storeIds.map((storeId) => [storeId, countryByStoreId.get(storeId) ?? null]),
+      ),
+      staffScope:
+        auth.context.role === 'staff'
+          ? {
+              allowedBranchIds: resolveBranchStoreIds(
+                auth.context.branchStoreIds,
+                auth.context.defaultStoreId,
+              ),
+              defaultStoreId: auth.context.defaultStoreId ?? null,
+            }
+          : null,
+    })
+    if (!validated.ok) {
+      return NextResponse.json(validated.body, { status: validated.status })
+    }
+    splitContext = validated
+  }
+
+  // On the split path each EXPLODED line takes its destination's country, which
+  // is what partitions a cross-country split into one order per country.
+  const lines: CheckoutExecutionLine[] = splitContext
+    ? splitContext.lines.map((line) => ({
+        ...line,
+        ship_country: splitContext!.countryByRef.get(line.destination_ref ?? ''),
+      }))
+    : body.lines.map((line) => ({
+        ...line,
+        ship_country: line.ship_to_store_id
+          ? countryByStoreId.get(line.ship_to_store_id)
+          : customCountry ?? undefined,
+      }))
   const executionPlan = buildCheckoutExecutionPlan(
     {
       idempotencyKey: body.idempotency_key,
@@ -331,38 +393,110 @@ export async function POST(request: Request) {
     true,
   )
 
+  const preparePartition = async (
+    partition: (typeof executionPlan.partitions)[number],
+    country: BillingCountryConfig,
+    pooledMinimum?: number,
+  ) =>
+    prepareCustomerOrderPartition(
+      auth.admin,
+      {
+        context: auth.context,
+        idempotency_key: partition.idempotencyKey,
+        required_by: body.required_by ?? null,
+        notes: body.notes ?? null,
+        internal_notes: null,
+        lines: partition.lines,
+        // The FULL exploded set: pooling (pricing, MOQ) must see the whole cart.
+        // These are the same object references every partition got, which is why
+        // explodeCheckoutLines must never mutate its input.
+        pricing_pool_lines: lines,
+        custom_shipping_address: body.custom_shipping_address ?? null,
+        intent,
+        // SERVER-OWNED. Built here from validated data, never read off the body.
+        ...(splitContext
+          ? {
+              destinations: splitContext.destinations.filter((destination) =>
+                partition.lines.some((line) => line.destination_ref === destination.ref),
+              ),
+            }
+          : {}),
+        ...(pooledMinimum === undefined ? {} : { pooled_minimum_notional: pooledMinimum }),
+      },
+      {
+        countryPartitionEnabled: true,
+        partitionKey: partition.key,
+        country,
+      },
+    )
+
   const outcomes: PreviewPartitionOutcome[] = []
-  const totalsByCurrency: Record<string, number> = {}
   for (const partition of executionPlan.partitions) {
-    const countryCode = partition.countryCode!
-    const country = countryByCode.get(countryCode)!
+    const country = countryByCode.get(partition.countryCode!)!
     try {
-      const prepared = await prepareCustomerOrderPartition(
-        auth.admin,
-        {
-          context: auth.context,
-          idempotency_key: partition.idempotencyKey,
-          required_by: body.required_by ?? null,
-          notes: body.notes ?? null,
-          internal_notes: null,
-          lines: partition.lines,
-          pricing_pool_lines: lines,
-          custom_shipping_address: body.custom_shipping_address ?? null,
-          intent,
-        },
-        {
-          countryPartitionEnabled: true,
-          partitionKey: partition.key,
-          country,
-        },
-      )
-      outcomes.push({ ok: true, partition: prepared })
-      totalsByCurrency[country.currency] = Number(
-        ((totalsByCurrency[country.currency] ?? 0) + prepared.totals.total).toFixed(2),
-      )
+      outcomes.push({ ok: true, partition: await preparePartition(partition, country) })
     } catch (error) {
       outcomes.push(pricingFailure(error, partition.key, country))
     }
+  }
+
+  // The $500 minimum is a whole-order rule. A partition judged on its own slice
+  // can fail it while the cart clears it comfortably, so any partition that came
+  // back unmet is re-priced against the pooled notional. Only unmet partitions
+  // are redone: a met verdict cannot change by adding value to the pool.
+  const unmetIndexes = outcomes.flatMap((outcome, index) =>
+    outcome.ok &&
+    outcome.partition.orderType === 'purchase_order' &&
+    outcome.partition.minimumOrder.applies &&
+    !outcome.partition.minimumOrder.met
+      ? [index]
+      : [],
+  )
+  // Gated on the split path only. Task 8's step 1 requires a request WITHOUT
+  // destinations to take the existing code path character-identically, so
+  // pooling the minimum for ordinary cross-country carts stays a separate call.
+  if (splitContext && unmetIndexes.length > 0 && executionPlan.partitions.length > 1) {
+    const { rates } = await getServerExchangeRates()
+    const poolPartitions = outcomes.flatMap((outcome) =>
+      outcome.ok
+        ? [
+            {
+              currency: outcome.partition.country.currency,
+              orderType: outcome.partition.orderType,
+              notionalValue: outcome.partition.minimumOrder.value,
+            },
+          ]
+        : [],
+    )
+    for (const index of unmetIndexes) {
+      const partition = executionPlan.partitions[index]
+      const country = countryByCode.get(partition.countryCode!)!
+      try {
+        outcomes[index] = {
+          ok: true,
+          partition: await preparePartition(
+            partition,
+            country,
+            pooledMinimumNotional({
+              partitions: poolPartitions,
+              targetCurrency: country.currency,
+              ratesFromNzd: rates as unknown as Record<string, number>,
+            }),
+          ),
+        }
+      } catch (error) {
+        outcomes[index] = pricingFailure(error, partition.key, country)
+      }
+    }
+  }
+
+  const totalsByCurrency: Record<string, number> = {}
+  for (const outcome of outcomes) {
+    if (!outcome.ok) continue
+    const currency = outcome.partition.country.currency
+    totalsByCurrency[currency] = Number(
+      ((totalsByCurrency[currency] ?? 0) + outcome.partition.totals.total).toFixed(2),
+    )
   }
 
   return NextResponse.json({ outcomes, totalsByCurrency })
