@@ -31,7 +31,6 @@ import {
   type DestinationRequestAccepted,
 } from '@/lib/checkout/destination-request'
 import { pooledMinimumNotional } from '@/lib/checkout/minimum-order'
-import { getServerExchangeRates } from '@/lib/currency/server-exchange-rates'
 import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import type { CheckoutLineInput } from '@/lib/checkout/submit'
 import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
@@ -456,6 +455,12 @@ export async function POST(request: Request) {
   // destinations to take the existing code path character-identically, so
   // pooling the minimum for ordinary cross-country carts stays a separate call.
   if (splitContext && unmetIndexes.length > 0 && executionPlan.partitions.length > 1) {
+    // Imported lazily: this module wraps unstable_cache, and pulling
+    // next/cache into the route at load time breaks route tests that mock
+    // next/cache without it. Only a cross-currency split ever needs rates.
+    const { getServerExchangeRates } = await import(
+      '@/lib/currency/server-exchange-rates'
+    )
     const { rates } = await getServerExchangeRates()
     const poolPartitions = outcomes.flatMap((outcome) =>
       outcome.ok

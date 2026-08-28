@@ -24,6 +24,11 @@ import { buildCheckoutExecutionPlan } from '@/lib/checkout/execution-plan'
 import { isoCountryOrNull } from '@/lib/checkout/shipping-address'
 import { CountryPriceUnavailableError } from '@/lib/checkout/errors'
 import { checkStaffBranchScope } from '@/lib/checkout/branch-scope'
+import {
+  validateDestinationRequest,
+  type DestinationRequestAccepted,
+} from '@/lib/checkout/destination-request'
+import { pooledMinimumNotional } from '@/lib/checkout/minimum-order'
 import { resolveBranchStoreIds } from '@/lib/orders/branch-grants'
 
 interface CheckoutRequestBody {
@@ -42,6 +47,9 @@ interface CheckoutRequestBody {
    */
   terms_accepted?: boolean
   terms_version?: string
+  /** Split shipment. Validated and re-derived server-side; never trusted as sent. */
+  destinations?: unknown
+  default_destination_ref?: unknown
 }
 
 export type CheckoutPartitionOutcome =
@@ -193,9 +201,12 @@ export async function POST(request: Request) {
   // Mixed per-line custom addresses are NOT supported in v1 (spec §9.1 /
   // plan ambiguity #3). If any line omits ship_to_store_id, ALL must, and a
   // custom_shipping_address must be present.
+  // A split order carries its addresses on its destinations, not its lines.
+  const splitRequested = body.destinations != null
+
   const hasNullShipTo = body.lines.some((l) => !l.ship_to_store_id)
   const allNullShipTo = body.lines.every((l) => !l.ship_to_store_id)
-  if (hasNullShipTo && !allNullShipTo) {
+  if (!splitRequested && hasNullShipTo && !allNullShipTo) {
     return NextResponse.json(
       {
         error:
@@ -204,17 +215,27 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
-  if (allNullShipTo && !body.custom_shipping_address) {
+  if (!splitRequested && allNullShipTo && !body.custom_shipping_address) {
     return NextResponse.json(
       { error: 'custom_shipping_address required when no ship_to_store_id provided' },
       { status: 400 }
     )
   }
 
-  // Every ship_to_store_id must belong to the caller's org.
-  const storeIds = body.lines
-    .map((l) => l.ship_to_store_id)
-    .filter((x): x is string => typeof x === 'string')
+  // Every ship_to_store_id must belong to the caller's org. On the split path
+  // the stores to vet live on the destinations, since the lines are not yet
+  // exploded and carry none.
+  const destinationStoreIds = splitRequested
+    ? (Array.isArray(body.destinations) ? body.destinations : [])
+        .map((destination) => (destination as { ship_to_store_id?: unknown })?.ship_to_store_id)
+        .filter((value): value is string => typeof value === 'string')
+    : []
+  const storeIds = [
+    ...body.lines
+      .map((l) => l.ship_to_store_id)
+      .filter((x): x is string => typeof x === 'string'),
+    ...destinationStoreIds,
+  ]
   for (const sid of storeIds) {
     if (!auth.context.storeIds.includes(sid)) {
       return NextResponse.json({ error: `Store ${sid} not on your account` }, { status: 400 })
@@ -278,7 +299,7 @@ export async function POST(request: Request) {
 
   try {
     if (isCheckoutCountryPartitionEnabled()) {
-      if (auth.context.role === 'staff') {
+      if (!splitRequested && auth.context.role === 'staff') {
         const branchScope = checkStaffBranchScope({
           shipToStoreIds: body.lines.map((line) => line.ship_to_store_id ?? null),
           allowedBranches: resolveBranchStoreIds(
@@ -340,12 +361,86 @@ export async function POST(request: Request) {
         body.custom_shipping_address!.country = customCountry
       }
 
-      const lines = body.lines.map((line) => ({
-        ...line,
-        ship_country: line.ship_to_store_id
-          ? countryByStoreId.get(line.ship_to_store_id)
-          : customCountry ?? undefined,
-      }))
+      let splitContext: DestinationRequestAccepted | null = null
+      // address_snapshot is resolved HERE, at submit, by the actor that just
+      // validated the address: a later edit to the store must never rewrite the
+      // history of an order already placed.
+      const addressSnapshotByRef = new Map<string, Record<string, unknown>>()
+      if (splitRequested) {
+        const { data: orgRow } = await auth.admin
+          .from('organizations')
+          .select('split_shipping_enabled')
+          .eq('id', auth.context.organizationId)
+          .maybeSingle()
+
+        const validated = validateDestinationRequest({
+          destinations: body.destinations,
+          defaultDestinationRef: body.default_destination_ref,
+          lines: body.lines,
+          splitShippingEnabled: orgRow?.split_shipping_enabled === true,
+          orgStoreCountryById: new Map(
+            uniqueStoreIds.map((storeId) => [storeId, countryByStoreId.get(storeId) ?? null]),
+          ),
+          staffScope:
+            auth.context.role === 'staff'
+              ? {
+                  allowedBranchIds: resolveBranchStoreIds(
+                    auth.context.branchStoreIds,
+                    auth.context.defaultStoreId,
+                  ),
+                  defaultStoreId: auth.context.defaultStoreId ?? null,
+                }
+              : null,
+        })
+        if (!validated.ok) {
+          return NextResponse.json(validated.body, { status: validated.status })
+        }
+        splitContext = validated
+
+        // Store destinations snapshot the store row in the same shape prepare
+        // builds a header shippingAddress from; ad-hoc ones snapshot the address
+        // the customer entered, verbatim.
+        const snapshotStoreIds = splitContext.destinations
+          .map((destination) => destination.ship_to_store_id)
+          .filter((value): value is string => typeof value === 'string')
+        const storeRowById = new Map<string, Record<string, unknown>>()
+        if (snapshotStoreIds.length > 0) {
+          const { data: snapshotRows, error: snapshotError } = await auth.admin
+            .from('stores')
+            .select('id, name, address, city, state, country, postal_code')
+            .eq('organization_id', auth.context.organizationId)
+            .in('id', snapshotStoreIds)
+          if (snapshotError || (snapshotRows ?? []).length !== snapshotStoreIds.length) {
+            return NextResponse.json(
+              { error: 'One or more destination stores are unavailable', code: 'unknown_destination' },
+              { status: 400 },
+            )
+          }
+          for (const row of snapshotRows ?? []) {
+            storeRowById.set(row.id as string, row as Record<string, unknown>)
+          }
+        }
+        for (const destination of splitContext.destinations) {
+          addressSnapshotByRef.set(
+            destination.ref,
+            destination.ship_to_store_id
+              ? storeRowById.get(destination.ship_to_store_id) ?? {}
+              : ((destination.custom_address ?? {}) as unknown as Record<string, unknown>),
+          )
+        }
+      }
+
+      const lines = splitContext
+        ? splitContext.lines.map((line) => ({
+            ...line,
+            ship_country: splitContext!.countryByRef.get(line.destination_ref ?? ''),
+          }))
+        : body.lines.map((line) => ({
+            ...line,
+            ship_country: line.ship_to_store_id
+              ? countryByStoreId.get(line.ship_to_store_id)
+              : customCountry ?? undefined,
+          }))
       const executionPlan = buildCheckoutExecutionPlan(
         {
           idempotencyKey: body.idempotency_key,
@@ -354,6 +449,62 @@ export async function POST(request: Request) {
         },
         true,
       )
+      // The $500 minimum is a whole-order rule. Submit cannot price, check and
+      // retry the way preview does (it writes), so for a split order spanning
+      // more than one partition the pooled notional is derived up front from a
+      // read-only prepare pass and handed to every submit call.
+      let pooledMinimumNotionals: Array<{
+        currency: string
+        orderType: 'purchase_order' | 'stock_on_hand'
+        notionalValue: number
+      }> | null = null
+      let pooledMinimumRates: Record<string, number> | null = null
+      if (splitContext && executionPlan.partitions.length > 1) {
+        // Lazy, like the rates module below: prepare.ts pulls next/cache in
+        // transitively, and this route's tests mock submit but not prepare.
+        const { prepareCustomerOrderPartition } = await import('@/lib/checkout/prepare')
+        const notionals: Array<{
+          currency: string
+          orderType: 'purchase_order' | 'stock_on_hand'
+          notionalValue: number
+        }> = []
+        for (const partition of executionPlan.partitions) {
+          const country = countryByCode.get(partition.countryCode!)!
+          const probe = await prepareCustomerOrderPartition(
+            auth.admin,
+            {
+              context: auth.context,
+              idempotency_key: partition.idempotencyKey,
+              required_by: body.required_by ?? null,
+              notes: body.notes ?? null,
+              internal_notes: null,
+              lines: partition.lines,
+              pricing_pool_lines: lines,
+              custom_shipping_address: body.custom_shipping_address ?? null,
+              intent,
+              destinations: splitContext.destinations.filter((destination) =>
+                partition.lines.some((line) => line.destination_ref === destination.ref),
+              ),
+            },
+            { countryPartitionEnabled: true, partitionKey: partition.key, country },
+          )
+          notionals.push({
+            currency: probe.country.currency,
+            orderType: probe.orderType,
+            notionalValue: probe.minimumOrder.value,
+          })
+        }
+        // Imported lazily: this module wraps unstable_cache, and pulling
+        // next/cache into the route at load time breaks route tests that mock
+        // next/cache without it. Only a cross-currency split ever needs rates.
+        const { getServerExchangeRates } = await import(
+          '@/lib/currency/server-exchange-rates'
+        )
+        const { rates } = await getServerExchangeRates()
+        pooledMinimumRates = rates as unknown as Record<string, number>
+        pooledMinimumNotionals = notionals
+      }
+
       const outcomes: CheckoutPartitionOutcome[] = []
       for (const partition of executionPlan.partitions) {
         const countryCode = partition.countryCode!
@@ -373,6 +524,28 @@ export async function POST(request: Request) {
               intent,
               terms_accepted: body.terms_accepted,
               terms_version: body.terms_version,
+              // SERVER-OWNED. Built from validated data above, never off the body.
+              ...(splitContext
+                ? {
+                    destinations: splitContext.destinations
+                      .filter((destination) =>
+                        partition.lines.some((line) => line.destination_ref === destination.ref),
+                      )
+                      .map((destination) => ({
+                        ...destination,
+                        address_snapshot: addressSnapshotByRef.get(destination.ref) ?? {},
+                      })),
+                  }
+                : {}),
+              ...(pooledMinimumNotionals
+                ? {
+                    pooled_minimum_notional: pooledMinimumNotional({
+                      partitions: pooledMinimumNotionals,
+                      targetCurrency: country.currency,
+                      ratesFromNzd: pooledMinimumRates ?? {},
+                    }),
+                  }
+                : {}),
             },
             {
               countryPartitionEnabled: true,

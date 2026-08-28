@@ -283,6 +283,8 @@ interface QuoteItemRow {
   variant_id: string | null
   size_id: number | null
   product_name: string
+  /** Part of the step 4 match key so exploded split twins match their own row. */
+  quantity: number
 }
 
 interface QuoteRowForEmail {
@@ -333,9 +335,15 @@ function makeLineKey(productId: string, variantId: string | null, sizeId: number
  */
 export function buildLineSnapshotUpdate(
   inLine: Pick<CheckoutLineInput, 'ship_to_store_id' | 'location_label' | 'custom_name'>,
+  options: { splitOrder?: boolean } = {},
 ): Record<string, unknown> {
   const update: Record<string, unknown> = {}
-  if (inLine.ship_to_store_id !== undefined) update.ship_to_store_id = inLine.ship_to_store_id ?? null
+  // On a split order the RPC has already stamped ship_to_store_id per
+  // destination at INSERT time. Re-stamping from the pre-explosion line would
+  // flatten every exploded twin onto whichever store the line happened to name.
+  if (!options.splitOrder && inLine.ship_to_store_id !== undefined) {
+    update.ship_to_store_id = inLine.ship_to_store_id ?? null
+  }
   if (inLine.location_label !== undefined) update.line_location_label = inLine.location_label ?? null
   if (inLine.custom_name !== undefined) update.line_custom_name = inLine.custom_name ?? null
   return update
@@ -403,6 +411,25 @@ export async function submitCustomerOrder(
   // and trust the line's id (it is the authoritative line identity).
   let warnedCatalogueDrift = false
 
+  // Split shipment: the destinations THIS order actually ships to. A ref whose
+  // allocations all landed in another country has no fee entry in this
+  // partition, so it belongs to that country's order, not this one. Positions
+  // are renumbered densely from 1 because the RPC requires that.
+  const splitFeeByRef = new Map(prepared.splitFees.map((fee) => [fee.destinationRef, fee.fee]))
+  const splitDestinationsPayload =
+    prepared.splitFees.length === 0
+      ? null
+      : (input.destinations ?? [])
+          .filter((destination) => splitFeeByRef.has(destination.ref))
+          .map((destination, index) => ({
+            ref: destination.ref,
+            position: index + 1,
+            ship_to_store_id: destination.ship_to_store_id ?? null,
+            custom_address: destination.custom_address ?? null,
+            address_snapshot: destination.address_snapshot ?? {},
+            split_fee: splitFeeByRef.get(destination.ref) ?? 0,
+          }))
+
   const { data, error } = await admin.rpc('submit_b2b_order_for_country', {
     p_idempotency_key: input.idempotency_key,
     p_organization_id: input.context.organizationId,
@@ -453,6 +480,10 @@ export async function submitCustomerOrder(
         // (L751-760), so a line that claimed a stock draw on an item that does
         // not offer one arrives demoted rather than trusted.
         fulfilment_route: routeForFulfilmentType(l.fulfilment_type),
+        // Split shipment: which destination this exploded row ships to. The RPC
+        // resolves it to a destination_id and stamps it at INSERT time. Omitted
+        // entirely on legacy lines so their RPC payload stays byte-identical.
+        ...(l.destination_ref ? { destination_ref: l.destination_ref } : {}),
       }
     }),
     p_rendition_snapshot_plan: {
@@ -472,6 +503,7 @@ export async function submitCustomerOrder(
     p_intent: input.intent ?? 'customer',
     p_member_permission: input.context.orderingPermission ?? 'both',
     p_bill_country: billCountry,
+    p_destinations: splitDestinationsPayload,
   })
   if (error) {
     if (error.message === 'INSUFFICIENT_STOCK' || error.message === 'NO_INVENTORY') {
@@ -631,7 +663,7 @@ export async function submitCustomerOrder(
   //    rendition provenance was already committed atomically by the RPC.
   const { data: newLines } = await admin
     .from('quote_items')
-    .select('id, product_id, variant_id, size_id, product_name')
+    .select('id, product_id, variant_id, size_id, product_name, quantity')
     .eq('quote_id', quote_id)
   if (newLines) {
     const rows = newLines as QuoteItemRow[]
@@ -646,11 +678,15 @@ export async function submitCustomerOrder(
           x.product_id === inLine.product_id &&
           (x.variant_id ?? null) === (inLine.variant_id ?? null) &&
           (x.size_id ?? null) === (inLine.size_id ?? null) &&
+          // qty joins the key so exploded twins (same product/variant/size,
+          // different destination) match their own row. Harmless on the legacy
+          // path: cart merging means no two lines share a signature there.
+          x.quantity === inLine.qty &&
           x.product_name === inLine.product_name,
       )
       if (!match) continue
       consumed.add(match.id)
-      const update = buildLineSnapshotUpdate(inLine)
+      const update = buildLineSnapshotUpdate(inLine, { splitOrder: splitDestinationsPayload !== null })
       if (Object.keys(update).length > 0) {
         // Collect and dispatch concurrently — one round-trip per line, but all
         // in flight at once instead of a serial await chain (N× faster tail on
@@ -672,7 +708,9 @@ export async function submitCustomerOrder(
   //     held migration. Until it is applied this update no-ops with a swallowed
   //     PostgREST error — the order must never fail because of a dark feature.
   const orderShipToStoreId = shipToStoreIds.find((sid) => sid !== null) ?? null
-  if (orderShipToStoreId) {
+  // Split orders have no single header branch: the RPC set split_shipment and
+  // nulled the header addresses, and stamping one here would undo that.
+  if (orderShipToStoreId && splitDestinationsPayload === null) {
     const { error: shipStampError } = await admin
       .from('quotes')
       .update({ ship_to_store_id: orderShipToStoreId })

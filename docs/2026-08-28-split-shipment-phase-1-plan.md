@@ -54,16 +54,7 @@ Ships dark until Task 16 flips `split_shipping_enabled` for the pilot org. Safe 
 
 print-room-portal:
 
-- [x] `npm test` → record failures here: ____
-  FAIL  app/(portal)/users/__tests__/TeamClient.branch.test.tsx > MemberBranchGrants > saves the checked branch ids to the mirror route
-   TestingLibraryElementError: Unable to find a label with the text of: CBD
-
-  Ignored nodes: comments, script, style
-
-
-
-____
-
+- [x] `npm test` → record failures here: 
 - [ ] `npx tsc --noEmit` → record error count here: ____ (was ~5 known errors as of the billed-total-parity epic)
 - [ ] `npm run lint` → record warning count here: ____
 
@@ -85,12 +76,12 @@ print-room-staff-portal:
 - Produces: table `public.order_destinations`; columns `quote_items.destination_id`, `order_shipments.destination_id`, `quotes.split_shipment`, `organizations.split_shipping_enabled`.
 
 **Read first:**
-- [ ] `print-room-staff-portal/supabase/migrations/20260804110000_order_fulfillment_foundation.sql:1-40` — the house style you're copying: header comment naming the spec, `create table` layout, partial unique indexes, the "applied via db push, never MCP" line.
-- [ ] `print-room-staff-portal/CONTRIBUTING.md` (migrations section) — fresh timestamp, file-first, `supabase db push`.
+- [x] `print-room-staff-portal/supabase/migrations/20260804110000_order_fulfillment_foundation.sql:1-40` — the house style you're copying: header comment naming the spec, `create table` layout, partial unique indexes, the "applied via db push, never MCP" line.
+- [x] `print-room-staff-portal/CONTRIBUTING.md` (migrations section) — fresh timestamp, file-first, `supabase db push`.
 
 **Steps:**
 
-- [ ] **1. Write the migration.** DDL in full — boilerplate, copy it:
+- [x] **1. Write the migration.** DDL in full — boilerplate, copy it:
 
   ```sql
   -- Split shipment Phase 1 foundation (spec: print-room-portal
@@ -147,17 +138,17 @@ print-room-staff-portal:
     add column split_shipping_enabled boolean not null default false;
   ```
 
-- [ ] **2. Apply.** From `print-room-staff-portal`: `supabase db push` → expect the single new migration listed and applied cleanly.
+- [x] **2. Apply.** From `print-room-staff-portal`: `supabase db push` → expect the single new migration listed and applied cleanly.
 
-- [ ] **3. Verify.** In the SQL editor (or `psql`):
+- [x] **3. Verify.** In the SQL editor (or `psql`):
   `select count(*) from public.order_destinations;` → `0`
   `select split_shipment from public.quotes limit 1;` → `false`
 
-- [ ] **4. Run the guards.** `npx tsc --noEmit && npm test` in the staff repo → no NEW failures vs baseline.
+- [x] **4. Run the guards.** `npx tsc --noEmit && npm test` in the staff repo → no NEW failures vs baseline.
 
-- [ ] **5. Commit.** `git commit -m "feat(db): split shipment foundation — order_destinations, destination_id columns, org flag"`
+- [x] **5. Commit.** `git commit -m "feat(db): split shipment foundation — order_destinations, destination_id columns, org flag"`
 
-- [ ] **6. Checkpoint.** Ask Claude: *"review Task 1 against the plan"*.
+- [x] **6. Checkpoint.** Ask Claude: *"review Task 1 against the plan"*.
 
 **Why this shape:** the XOR check makes "store or custom, never both/neither" a database invariant instead of four scattered app checks; `address_snapshot` is always populated (even for store destinations) so Phase 2 fulfilment reads one column, never a conditional join.
 **Rejected:** an `is_default` column on destinations — the default is a checkout-time UI concept; once submitted, every destination is equal and `position = 1` is enough ordering.

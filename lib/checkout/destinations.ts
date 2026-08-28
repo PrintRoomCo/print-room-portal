@@ -16,6 +16,13 @@ export interface CheckoutDestinationInput {
    * shape is stable; nothing acts on it in Phase 1.
    */
   save_to_address_book?: boolean
+  /**
+   * The address as resolved at submit time, written to
+   * order_destinations.address_snapshot so a later store edit never rewrites
+   * order history. SERVER-OWNED: built by the submit route, never sent by a
+   * client. Absent on the preview path, which persists nothing.
+   */
+  address_snapshot?: Record<string, unknown> | null
 }
 
 export type DestinationFailure = {
