@@ -27,6 +27,15 @@ export default async function CheckoutPage() {
   const stores = ((rawStores ?? []) as StoreOption[]) ?? []
   const enabledCountries = await getOrgEnabledCountries(admin, context.organizationId)
 
+  // Pilot gate for split shipment. Absent column or row reads as OFF, so an
+  // org can only ever opt IN, never accidentally in.
+  const { data: orgRow } = await admin
+    .from('organizations')
+    .select('split_shipping_enabled')
+    .eq('id', context.organizationId)
+    .maybeSingle()
+  const splitShippingEnabled = orgRow?.split_shipping_enabled === true
+
   return (
     <CheckoutClient
       stores={stores}
@@ -40,6 +49,7 @@ export default async function CheckoutPage() {
       enabledCountries={enabledCountries}
       defaultPriceCurrency={enabledCountries.find((country) => country.isDefault)?.currency ?? null}
       countryPartitionEnabled={isCheckoutCountryPartitionEnabled()}
+      splitShippingEnabled={splitShippingEnabled}
     />
   )
 }

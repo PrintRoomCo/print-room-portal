@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
+import { OrderShipToControl, type OrderShipToValue } from './OrderShipToControl'
 import { MinimumOrderNotice } from './MinimumOrderNotice'
 import {
   AddressAutocompleteInput,
@@ -43,6 +44,12 @@ import {
 } from './useCheckoutPreview'
 
 interface CheckoutClientProps {
+  /**
+   * organizations.split_shipping_enabled. When false this component behaves
+   * exactly as it did before split shipment existed: per-line ship-to
+   * dropdowns, per-line state, no order-level control.
+   */
+  splitShippingEnabled?: boolean
   stores: StoreOption[]
   customerCode: string | null
   paymentTerms: string | null
@@ -78,6 +85,7 @@ interface CheckoutClientProps {
 }
 
 export function CheckoutClient({
+  splitShippingEnabled = false,
   stores,
   customerCode,
   paymentTerms,
@@ -114,6 +122,12 @@ export function CheckoutClient({
     for (const l of cart.lines) m[l.lineId] = initialStoreId
     return m
   })
+
+  // Order-level ship-to. Only consulted when splitShippingEnabled; the per-line
+  // state above stays the single source of truth for every other org.
+  const [orderShipTo, setOrderShipTo] = useState<OrderShipToValue>(() =>
+    initialStoreId ? { kind: 'store', storeId: initialStoreId } : { kind: 'custom' },
+  )
 
   const [customAddress, setCustomAddress] = useState<CustomAddress>({
     ...EMPTY_CUSTOM_ADDRESS,
@@ -152,8 +166,21 @@ export function CheckoutClient({
   const inventoryMode = canRouteToInventory && addToInventory
   const intent: 'customer' | 'inventory' = inventoryMode ? 'inventory' : 'customer'
 
-  const anyCustom = Object.values(perLineShipTo).some((v) => v === null)
-  const allCustom = Object.values(perLineShipTo).every((v) => v === null)
+  // DERIVED, never stored: a flag-on org's per-line map is a pure function of
+  // the order-level choice. Keeping it out of state is what stops the two
+  // representations drifting, and it means every existing consumer below
+  // (preview body, review state, submit) works untouched.
+  const effectivePerLineShipTo: Record<string, string | null> = splitShippingEnabled
+    ? Object.fromEntries(
+        cart.lines.map((line) => [
+          line.lineId,
+          orderShipTo.kind === 'store' ? orderShipTo.storeId : null,
+        ]),
+      )
+    : perLineShipTo
+
+  const anyCustom = Object.values(effectivePerLineShipTo).some((v) => v === null)
+  const allCustom = Object.values(effectivePerLineShipTo).every((v) => v === null)
   const mixedCustom = !inventoryMode && anyCustom && !allCustom
   const customAddressErrors = {
     address: !inventoryMode && allCustom && !customAddress.address ? 'Street address is required.' : null,
@@ -199,7 +226,7 @@ export function CheckoutClient({
   const checkoutLines = useMemo(
     () => buildCheckoutRequestLines({
       lines: cart.lines,
-      perLineShipTo,
+      perLineShipTo: effectivePerLineShipTo,
       allCustom,
       modeByVariantId,
       defaultPriceCurrency: countryPartitionEnabled
@@ -208,7 +235,7 @@ export function CheckoutClient({
     }),
     [
       cart.lines,
-      perLineShipTo,
+      effectivePerLineShipTo,
       allCustom,
       modeByVariantId,
       countryPartitionEnabled,
@@ -275,10 +302,15 @@ export function CheckoutClient({
   const depositAmount = (shape.billedSubtotal * depositPct) / 100
 
   const customerCodeMissing = !customerCode
+  // Split mode is unfinished until the editor lands (Task 12): a split order
+  // with no destinations would be refused by the route anyway, so block here.
+  const splitBlocksSubmit = splitShippingEnabled && orderShipTo.kind === 'split'
+
   const canSubmitOrder =
     !submitting &&
     cart.lines.length > 0 &&
     !customerCodeMissing &&
+    !splitBlocksSubmit &&
     !mixedCustom &&
     !customIncomplete &&
     !buyerMisconfigured &&
@@ -298,7 +330,7 @@ export function CheckoutClient({
         requiredBy,
         notes,
         intent,
-        perLineShipTo,
+        perLineShipTo: effectivePerLineShipTo,
         customAddress,
         createdAt: new Date().toISOString(),
       })
@@ -325,14 +357,15 @@ export function CheckoutClient({
         line={line}
         stores={selectableStores}
         format={lineFormat}
-        value={perLineShipTo[line.lineId] ?? null}
+        value={effectivePerLineShipTo[line.lineId] ?? null}
         catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
         onChange={(next) =>
           setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
         }
         disabled={submitting !== false}
         allowCustom={!buyerMisconfigured}
-        hideShipTo={inventoryMode}
+        // Flag-on orgs choose once, at order level, so the per-line dropdowns go.
+        hideShipTo={inventoryMode || splitShippingEnabled}
         prepaidDrawn={!billedLine.billed}
         billedUnitPrice={
           currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
@@ -415,6 +448,28 @@ export function CheckoutClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
+        {splitShippingEnabled && !inventoryMode && (
+          <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
+            <OrderShipToControl
+              stores={selectableStores}
+              value={orderShipTo}
+              onChange={setOrderShipTo}
+              allowCustom={!buyerMisconfigured}
+              allowSplit={submitting === false}
+              disabled={submitting !== false}
+            />
+            {orderShipTo.kind === 'split' && (
+              <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm">
+                <p className="font-medium text-gray-900">
+                  Split shipment: configure destinations
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Add the destinations for this order and allocate each item across them.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         {inventoryMode && (
           <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4 text-sm">
             <p className="font-medium text-gray-900">Print Room warehouse</p>
