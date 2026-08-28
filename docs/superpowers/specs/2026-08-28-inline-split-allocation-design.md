@@ -21,7 +21,7 @@ Split-mode-only: none of these fields render unless the order-level "Ships to" c
 | Allocation grain | Per **cart line** (product + colourway + size), matching the checkout rows, not per product/colourway group as today |
 | Field visibility | Always visible on every line row while in split mode; never rendered otherwise |
 | Destinations UI | Compact chip row (`★ default`, name, remove) with one inline editor panel expanding beneath, one open at a time |
-| Removing a destination | Its units return to the default rather than holding the order in a blocked state. The existing "released N units" notice stays; the affected rows visibly revert to `→ <default>` |
+| Removing a destination | Its units return to the default rather than holding the order in a blocked state. A notice says how many units moved and where; a line that now goes entirely to the default has its entries cleared, so its row reverts to `→ <default>` |
 | Blocked-submit messaging | A single reason string above the CTA, from one shared rule set, alongside the per-row remaining counters |
 | Country-partition line rows | In split mode the item list renders **once** from the cart; per-country sections render totals only |
 
@@ -92,15 +92,17 @@ Unchanged. `renderShipLine` in `CheckoutClient` composes `LineAllocationFields` 
 
 - **`SplitShipmentState.splitItemKeys` removed**, with `isItemSplit` and `itemKey`.
 - **`buildSplitAllocations`** drops its `isItemSplit` filter and emits entries for any line holding at least one valid entry.
+- **`EditorCartLine`** narrows to `{ lineId, qty }`. With `itemKey` gone nothing in this module reads a product or variant id.
+- **`removeDestination`** returns `movedUnits` rather than `discardedUnits`, and adds those units to the default destination instead of stranding the line part-allocated.
 - **`splitBlockReason(input): string | null`** is new: the first blocker in a fixed order, human-readable. `splitShipmentComplete` becomes a thin wrapper (`splitBlockReason(...) === null`) so completeness and messaging can never disagree.
 
-`lib/checkout/allocation.ts` is new and holds `AllocationMap`, `allocatedForLine`, `remainingForLine`, moved out of `AllocationGrid`. Today `lib/checkout/split-shipment-state.ts` imports `AllocationMap` from a component; that dependency direction is backwards and the component is being deleted anyway.
+`lib/checkout/allocation.ts` is new and holds `AllocationMap`, `AllocationDestination`, `allocatedForLine`, `remainingForLine` and `lineFollowsDefault`, moved out of `AllocationGrid`. Today `lib/checkout/split-shipment-state.ts` imports `AllocationMap` from a component; that dependency direction is backwards and the component is being deleted anyway.
 
 The completeness rule, restated: for each cart line, if it has allocation entries they must all reference live destinations, each be a positive integer, and sum to exactly the line's qty; if it has none, it counts as reaching the default destination. Every destination must receive something. Evaluated against the **live** cart lines, as today, so a qty edit in the cart pill re-invalidates immediately.
 
 ## 6. Country-partition path
 
-In split mode, `CheckoutClient` renders the item list once from `cart.lines`, and passes a totals-only flag to `BilledOrderSummary` / `CountryBilledOrderSummary`. Each country order keeps its own subtotal, split fees, tax and total; only the per-line rows stop being emitted from the prepared partitions.
+In split mode, `CheckoutClient` renders the item list once from the billed shape (one row per cart line) and passes `showLines={false}` to `CountryBilledOrderSummary`. Only that component needs the flag: the flag-off `BilledOrderSummary` reads a shape built from the cart, which never explodes a line. Each country order keeps its own subtotal, split fees, tax and total; only the per-line rows stop being emitted from the prepared partitions.
 
 That removes the duplicate keys and the qty/value mismatch in §3, and it makes the row's price column describe the whole cart line, which is what the fields under it allocate. The cost, stated plainly: on a cross-country split the row shows the line's default-currency price rather than each destination country's repriced figure. The per-country sections below carry the invoicing truth. Rejected alternative: keep exploded rows for money and attach fields to only the first occurrence of each `lineId`, which needs render-order-dependent bookkeeping inside a callback the summary components own.
 

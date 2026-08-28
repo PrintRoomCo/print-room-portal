@@ -6,12 +6,14 @@ import { useCart } from '@/components/cart/useCart'
 import { useCartLineFrontImages } from '@/components/cart/useCartLineFrontImages'
 import { ShipToRow, type StoreOption } from './ShipToRow'
 import { OrderShipToControl, type OrderShipToValue } from './OrderShipToControl'
-import { SplitShipmentEditor, type EditorLine } from './SplitShipmentEditor'
+import { DestinationChips, destinationLabel } from './DestinationChips'
+import { LineAllocationFields } from './LineAllocationFields'
 import {
   EMPTY_SPLIT_STATE,
   buildDestinationInputs,
   buildSplitAllocations,
-  splitShipmentComplete,
+  splitBlockReason,
+  type EditorCartLine,
   type SplitShipmentState,
 } from '@/lib/checkout/split-shipment-state'
 import { MinimumOrderNotice } from './MinimumOrderNotice'
@@ -191,20 +193,28 @@ export function CheckoutClient({
   const splitMode = splitShippingEnabled && orderShipTo.kind === 'split'
   // Lines in the shape the split logic reasons about, straight from the LIVE
   // cart so an edit in the cart pill re-validates the allocation immediately.
-  const editorLines: EditorLine[] = useMemo(
-    () =>
-      cart.lines.map((line) => ({
-        lineId: line.lineId,
-        productId: line.productId,
-        variantId: line.variantId || null,
-        qty: line.qty,
-        productName: line.productName,
-        variantLabel: line.variantLabel ?? null,
-        sizeLabel: line.sizeLabel ?? null,
-      })),
+  const editorLines: EditorCartLine[] = useMemo(
+    () => cart.lines.map((line) => ({ lineId: line.lineId, qty: line.qty })),
     [cart.lines],
   )
-  const splitComplete = splitMode && splitShipmentComplete(splitState, editorLines)
+  // One rule set for both: the CTA blocks on exactly what this message names,
+  // so the two can never disagree about why an order is not ready.
+  const splitBlockedReason = splitMode ? splitBlockReason(splitState, editorLines) : null
+  const splitComplete = splitMode && splitBlockedReason === null
+  const splitDestinations = useMemo(
+    () =>
+      splitState.destinations.map((destination) => ({
+        ref: destination.ref,
+        label: destinationLabel(destination, selectableStores),
+      })),
+    [splitState.destinations, selectableStores],
+  )
+  const splitDestinationLabels = useMemo(
+    () => Object.fromEntries(splitDestinations.map((d) => [d.ref, d.label])),
+    [splitDestinations],
+  )
+  const defaultDestinationLabel =
+    splitDestinations.find((d) => d.ref === splitState.defaultDestinationRef)?.label ?? null
   const splitAllocations = useMemo(
     () => (splitMode ? buildSplitAllocations(splitState, editorLines) : undefined),
     [splitMode, splitState, editorLines],
@@ -338,14 +348,18 @@ export function CheckoutClient({
     () => new Map(cart.lines.map((line) => [line.lineId, line])),
     [cart.lines],
   )
+  // One billed line per CART line, in the default billing currency. The country
+  // partitions below explode split lines; this does not.
+  const cartBilledLines = useMemo(
+    () => shape.partitions.flatMap((partition) => partition.lines),
+    [shape],
+  )
   const depositPct = defaultDepositPercent ?? 0
   // Off the BILLED subtotal: a deposit on stock the org already paid for would
   // be asking twice.
   const depositAmount = (shape.billedSubtotal * depositPct) / 100
 
   const customerCodeMissing = !customerCode
-  // Split mode is unfinished until the editor lands (Task 12): a split order
-  // with no destinations would be refused by the route anyway, so block here.
   const splitBlocksSubmit = splitMode && !splitComplete
 
   const canSubmitOrder =
@@ -402,25 +416,43 @@ export function CheckoutClient({
       ? (amount: number) => formatFrom(amount, currency)
       : format
     return (
-      <ShipToRow
-        line={line}
-        stores={selectableStores}
-        format={lineFormat}
-        value={effectivePerLineShipTo[line.lineId] ?? null}
-        catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
-        onChange={(next) =>
-          setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
-        }
-        disabled={submitting !== false}
-        allowCustom={!buyerMisconfigured}
-        // Flag-on orgs choose once, at order level, so the per-line dropdowns go.
-        hideShipTo={inventoryMode || splitShippingEnabled}
-        prepaidDrawn={!billedLine.billed}
-        billedUnitPrice={
-          currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
-        }
-        billedGoodsValue={billedLine.goodsValue}
-      />
+      <div>
+        <ShipToRow
+          line={line}
+          stores={selectableStores}
+          format={lineFormat}
+          value={effectivePerLineShipTo[line.lineId] ?? null}
+          catalogueFrontImageUrl={frontImageByLineId[line.lineId] ?? null}
+          onChange={(next) =>
+            setPerLineShipTo((prev) => ({ ...prev, [line.lineId]: next }))
+          }
+          disabled={submitting !== false}
+          allowCustom={!buyerMisconfigured}
+          // Flag-on orgs choose once, at order level, so the per-line dropdowns go.
+          hideShipTo={inventoryMode || splitShippingEnabled}
+          prepaidDrawn={!billedLine.billed}
+          billedUnitPrice={
+            currency ? billedLine.unitPrice + billedLine.decorationPerUnit : undefined
+          }
+          billedGoodsValue={billedLine.goodsValue}
+        />
+        {splitMode && (
+          // Indented past the 96px image plus its gap, so the fields line up
+          // with the product name they allocate.
+          <div className="mt-3 pl-28">
+            <LineAllocationFields
+              lineId={line.lineId}
+              lineLabel={[line.productName, line.variantLabel].filter(Boolean).join(' ')}
+              qty={line.qty}
+              destinations={splitDestinations}
+              defaultDestinationLabel={defaultDestinationLabel}
+              allocations={splitState.allocations}
+              onChange={(allocations) => setSplitState((prev) => ({ ...prev, allocations }))}
+              disabled={submitting !== false}
+            />
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -508,8 +540,7 @@ export function CheckoutClient({
               disabled={submitting !== false}
             />
             {splitMode && (
-              <SplitShipmentEditor
-                lines={editorLines}
+              <DestinationChips
                 stores={selectableStores}
                 allowCustom={!buyerMisconfigured}
                 value={splitState}
@@ -530,19 +561,35 @@ export function CheckoutClient({
         )}
         {countryPartitionEnabled ? (
           preview.status === 'ready' ? (
-            <CountryBilledOrderSummary
-              shape={countryShape}
-              failures={previewFailures}
-              renderLine={renderShipLine}
-              formatMoney={(amount, currency) => formatFrom(amount, currency)}
-              showCurrencyInHeading={false}
-              totalInfo={
-                <InvoiceCurrencyInfo
-                  billingCurrencies={countryShape.countryGroups.map((group) => group.currency)}
-                  displayCurrency={displayCurrency}
-                />
-              }
-            />
+            <>
+              {/* Split lines are exploded one-per-destination inside the
+                  prepared partitions. Rendering those would repeat every item
+                  and pair the whole line's qty with one destination's slice, so
+                  in split mode the items are listed once from the cart and the
+                  country sections carry totals only. */}
+              {splitMode && (
+                <div className="mb-6 space-y-6">
+                  {cartBilledLines.map((line) => (
+                    <div key={line.lineId}>{renderShipLine(line)}</div>
+                  ))}
+                </div>
+              )}
+              <CountryBilledOrderSummary
+                shape={countryShape}
+                failures={previewFailures}
+                renderLine={renderShipLine}
+                showLines={!splitMode}
+                destinationLabels={splitDestinationLabels}
+                formatMoney={(amount, currency) => formatFrom(amount, currency)}
+                showCurrencyInHeading={false}
+                totalInfo={
+                  <InvoiceCurrencyInfo
+                    billingCurrencies={countryShape.countryGroups.map((group) => group.currency)}
+                    displayCurrency={displayCurrency}
+                  />
+                }
+              />
+            </>
           ) : (
             <div>
               <div
@@ -558,7 +605,7 @@ export function CheckoutClient({
                   : 'Updating country prices…'}
               </div>
               <div className="space-y-6">
-                {shape.partitions.flatMap((partition) => partition.lines).map((line) => (
+                {cartBilledLines.map((line) => (
                   <div key={line.lineId}>{renderShipLine(line)}</div>
                 ))}
               </div>
@@ -731,6 +778,12 @@ export function CheckoutClient({
           />
         </div>
       </section>
+
+      {splitBlockedReason && (
+        <p role="status" className="text-sm text-amber-700">
+          {splitBlockedReason}
+        </p>
+      )}
 
         </div>
       </div>

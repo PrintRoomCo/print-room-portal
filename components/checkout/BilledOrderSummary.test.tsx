@@ -313,3 +313,39 @@ describe('BilledOrderSummary: non-prepaid order', () => {
     expect(screen.queryByText('Drawn from pre-paid stock')).not.toBeInTheDocument()
   })
 })
+
+describe('CountryBilledOrderSummary totals-only mode', () => {
+  // A split line is exploded one prepared line per destination, all keeping the
+  // cart line's id: rendering those on /checkout is what repeats every item.
+  const splitShape = () =>
+    checkoutBillingShape([
+      previewGroup({
+        key: 'NZ:stock_on_hand',
+        countryCode: 'NZ',
+        orderType: 'stock_on_hand',
+        lines: [previewLine, { ...previewLine, goodsValue: 50 }],
+        splitFees: [{ destinationRef: 'r1', skuCount: 2, fee: 12 }],
+      }),
+    ])
+
+  it('emits no line rows but keeps the split fees, tax and total', () => {
+    render(
+      <CountryBilledOrderSummary
+        shape={splitShape()}
+        renderLine={renderLine}
+        showLines={false}
+        destinationLabels={{ r1: 'Albany' }}
+      />,
+    )
+    expect(screen.queryByTestId('row-au-tee')).not.toBeInTheDocument()
+    expect(screen.getByText('Split delivery: Albany')).toBeInTheDocument()
+    expect(screen.getByText('$12.00 NZD')).toBeInTheDocument()
+    expect(screen.getByText('GST 15%')).toBeInTheDocument()
+    expect(screen.getAllByText('$115.00 NZD').length).toBeGreaterThan(0)
+  })
+
+  it('renders the rows by default, so no other caller changes', () => {
+    render(<CountryBilledOrderSummary shape={splitShape()} renderLine={renderLine} />)
+    expect(screen.getAllByTestId('row-au-tee')).toHaveLength(2)
+  })
+})

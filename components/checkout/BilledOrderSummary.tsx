@@ -29,6 +29,7 @@ export function CountryBilledOrderSummary({
   failures = [],
   partitionOutcomes = {},
   renderLine,
+  showLines = true,
   formatMoney,
   showCurrencyInHeading = true,
   totalInfo,
@@ -38,6 +39,12 @@ export function CountryBilledOrderSummary({
   failures?: CheckoutCountryFailure[]
   partitionOutcomes?: Record<string, StoredPartitionOutcome>
   renderLine: (line: BilledLine, currency: string, countryName: string) => ReactNode
+  /**
+   * False turns this into a totals-only view. A split order's prepared lines are
+   * exploded one per destination, so /checkout lists the items once from the
+   * cart and leaves the money to these sections.
+   */
+  showLines?: boolean
   /**
    * Formats one amount denominated in a group's billing currency. The default
    * renders the authored figure verbatim ("$123.45 NZD"): the truthful choice
@@ -110,19 +117,21 @@ export function CountryBilledOrderSummary({
                 partitionKey={partition.key}
                 outcome={partitionOutcomes[partition.key]}
               />
-              <div className="mt-4 space-y-6">
-                {partition.lines.map((line) => (
-                  <div key={line.lineId}>
-                    {renderLine(line, currency, countryName)}
-                    {line.repricedFromCurrency &&
-                      line.repricedFromCurrency !== partition.currency && (
-                        <p className="mt-2 text-xs text-black/60">
-                          Repriced from {line.repricedFromCurrency} for delivery to {countryName}.
-                        </p>
-                      )}
-                  </div>
-                ))}
-              </div>
+              {showLines && (
+                <div className="mt-4 space-y-6">
+                  {partition.lines.map((line) => (
+                    <div key={line.lineId}>
+                      {renderLine(line, currency, countryName)}
+                      {line.repricedFromCurrency &&
+                        line.repricedFromCurrency !== partition.currency && (
+                          <p className="mt-2 text-xs text-black/60">
+                            Repriced from {line.repricedFromCurrency} for delivery to {countryName}.
+                          </p>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="mt-4 flex items-baseline justify-between text-sm">
                 <span className="text-black/60">Order total</span>
                 <span className="font-medium tabular-nums text-black">
