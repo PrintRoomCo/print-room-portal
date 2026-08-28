@@ -115,12 +115,9 @@ export function DestinationChips({
 
   return (
     <div className="mt-4">
-      <h3 className="text-sm font-medium text-gray-900">Destinations</h3>
-      <p className="mt-1 text-xs text-gray-500">
-        Split any item across these below. Anything you leave alone ships whole to the default.
-      </p>
+      <h3 className="text-right text-sm font-medium text-gray-900">Destinations</h3>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {value.destinations.map((destination) => {
           const label = destinationLabel(destination, stores)
           const isDefault = value.defaultDestinationRef === destination.ref
@@ -173,7 +170,7 @@ export function DestinationChips({
       </div>
 
       {addOpen && (
-        <ul className="mt-2 w-full max-w-xs rounded-xl border border-gray-100 bg-white p-1 text-sm shadow-sm">
+        <ul className="ml-auto mt-2 w-full max-w-xs rounded-xl border border-gray-100 bg-white p-1 text-sm shadow-sm">
           {unusedStores.map((store) => (
             <li key={store.id}>
               <button
@@ -319,7 +316,7 @@ export function DestinationChips({
       })}
 
       {notice && (
-        <p role="status" className="mt-3 text-xs text-amber-700">
+        <p role="status" className="mt-3 text-right text-xs text-amber-700">
           {notice}
         </p>
       )}

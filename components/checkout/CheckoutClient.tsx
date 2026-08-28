@@ -529,16 +529,22 @@ export function CheckoutClient({
       )}
 
       <section className="rounded-[32px] bg-white p-7 md:p-8">
+        {/* Sits right, in the same column as each line's price and the
+            per-line ship-to control it replaced, so the order-level choice
+            reads as belonging to that column rather than as a banner over
+            the items. */}
         {splitShippingEnabled && !inventoryMode && (
-          <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
-            <OrderShipToControl
-              stores={selectableStores}
-              value={orderShipTo}
-              onChange={setOrderShipTo}
-              allowCustom={!buyerMisconfigured}
-              allowSplit={submitting === false}
-              disabled={submitting !== false}
-            />
+          <div className="mb-6 ml-auto w-full max-w-md rounded-xl border border-gray-100 bg-white p-4">
+            <div className="flex justify-end">
+              <OrderShipToControl
+                stores={selectableStores}
+                value={orderShipTo}
+                onChange={setOrderShipTo}
+                allowCustom={!buyerMisconfigured}
+                allowSplit={submitting === false}
+                disabled={submitting !== false}
+              />
+            </div>
             {splitMode && (
               <DestinationChips
                 stores={selectableStores}
