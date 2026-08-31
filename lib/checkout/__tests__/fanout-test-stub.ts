@@ -149,7 +149,8 @@ export function makeFanoutStub(config: StubConfig) {
     fulfilment_type_override: i.fulfilmentTypeOverride ?? null,
     catalogue_id: i.catalogueId ?? 'cat-stub',
     stock_unit_price: i.stockUnitPrice ?? null,
-    b2b_catalogues: { decoration_pooling_enabled: i.poolingEnabled === true },
+    // decoration_pooling_enabled embed removed 2026-08-28: the column was
+    // dropped (always-pool); the real DB can no longer return it.
     products: {
       fulfilment_type:
         config.products.find((product) => product.id === i.sourceProductId)?.fulfilmentType ??

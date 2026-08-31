@@ -592,7 +592,7 @@ export async function prepareCustomerOrderPartition(
   // Resolved here, above the garment price loop, because the per-catalogue flag
   // decides that loop's band quantity. This is the SAME once-per-checkout
   // b2b_catalogue_items read that already resolves price_mode for manual-final
-  // lines (it used to sit further down) — widened with catalogue_id + the flag,
+  // lines (it used to sit further down) — widened with catalogue_id,
   // and widened to poolLines so a partitioned submit still sees the whole cart's
   // items. Extra rows are inert: isManualCheckoutLine only ever asks about this
   // partition's own lines.
@@ -605,32 +605,32 @@ export async function prepareCustomerOrderPartition(
   )
   const manualItemIds = new Set<string>()
   const catalogueIdByItemId = new Map<string, string>()
-  const poolingEnabledItemIds = new Set<string>()
   if (catalogueItemIdsForPricing.length > 0) {
-    const { data: pmRows } = await admin
+    const { data: pmRows, error: pmError } = await admin
       .from('b2b_catalogue_items')
-      .select('id, price_mode, catalogue_id, b2b_catalogues(decoration_pooling_enabled)')
+      .select('id, price_mode, catalogue_id')
       .in('id', catalogueItemIdsForPricing)
+    // A silent miss here is a mispricing, not a degraded feature: with no rows,
+    // manual-final items price as computed and nothing pools. Fail the submit
+    // instead. (The 2026-08-28 dropped-column deploy hit exactly this path.)
+    if (pmError) {
+      throw new Error(`checkout catalogue-item pricing query failed: ${pmError.message}`)
+    }
     for (const r of (pmRows ?? []) as Array<{
       id: string
       price_mode: string | null
       catalogue_id?: string | null
-      b2b_catalogues?:
-        | { decoration_pooling_enabled?: boolean | null }
-        | { decoration_pooling_enabled?: boolean | null }[]
-        | null
     }>) {
       if (r.price_mode === 'manual_final') manualItemIds.add(r.id)
       if (r.catalogue_id) catalogueIdByItemId.set(r.id, r.catalogue_id)
-      const cat = Array.isArray(r.b2b_catalogues) ? r.b2b_catalogues[0] : r.b2b_catalogues
-      if (cat?.decoration_pooling_enabled === true) poolingEnabledItemIds.add(r.id)
     }
   }
 
-  // With every catalogue's flag false — the default and the ship-time state —
-  // this is false and every pooled branch below is skipped entirely, including
-  // the decoration read. Flag-off costs exactly one widened select and nothing else.
-  const poolingActive = poolingEnabledItemIds.size > 0
+  // Always pool (2026-08-28): the per-catalogue opt-in column is gone; every
+  // item with catalogue identity pools. Pooled band qty is
+  // greatest(pooled, line_group), so single-item artwork pools to itself and
+  // prices exactly as before.
+  const poolingActive = catalogueIdByItemId.size > 0
   const poolableDecorationIds = poolingActive
     ? await loadPoolableDecorationIds(admin, poolLines, input.context.organizationId)
     : new Set<string>()
@@ -640,7 +640,7 @@ export async function prepareCustomerOrderPartition(
     catalogueId: l.catalogueItemId
       ? catalogueIdByItemId.get(l.catalogueItemId) ?? null
       : null,
-    poolingEnabled: !!l.catalogueItemId && poolingEnabledItemIds.has(l.catalogueItemId),
+    poolingEnabled: !!l.catalogueItemId && catalogueIdByItemId.has(l.catalogueItemId),
     qty: l.qty,
     fulfilmentType: l.fulfilment_type ?? null,
     decorations: (l.decorations ?? []).map((d) => ({

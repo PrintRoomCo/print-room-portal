@@ -6,9 +6,10 @@
  * which RPC, and what never moves.
  *
  * Two properties matter most and are asserted directly:
- *   1. FLAG-OFF PARITY — with `decoration_pooling_enabled` false, the RPC
- *      arguments are identical to the pre-pooling ones. Same fixture, both flag
- *      states, compared.
+ *   1. ALWAYS POOL (2026-08-28) — the per-catalogue opt-in column was dropped;
+ *      pooling is unconditional and the legacy flag value must change nothing.
+ *      (The original flag-off parity guard died with the column: selecting it
+ *      became a PostgREST 400.)
  *   2. NEVER INFLATE REAL QUANTITIES — the pooled quantity appears ONLY as an
  *      RPC qty argument. `submit_b2b_order_for_country`'s line quantities, and therefore MOQ,
  *      billed totals and order-type classification, are untouched.
@@ -168,25 +169,26 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('flag OFF — byte-identical to pre-pooling behaviour', () => {
-  it('sends every RPC the same quantities as with pooling disabled', async () => {
+describe('always pool (2026-08-28) — the dropped per-catalogue flag gates nothing', () => {
+  // b2b_catalogues.decoration_pooling_enabled was dropped by the always-pool
+  // migration; prepare() must not read it (selecting it is a PostgREST 400) and
+  // must pool every catalogue item. The stub config's poolingEnabled is inert.
+  it('the legacy flag value changes no RPC quantity', async () => {
     const off = await run(world(false), checkout([TEE, HOOD, CAP]))
-    // Own-group quantities only: no line sees another product's qty.
-    expect(off.garmentQtys()).toEqual([50, 100, 500])
-    expect(off.decorationQtys(A)).toEqual([100, 500])
-    expect(off.decorationQtys(B)).toEqual([50, 100])
+    const on = await run(world(true), checkout([TEE, HOOD, CAP]))
+    expect(off.garmentQtys()).toEqual(on.garmentQtys())
+    expect(off.decorationQtys(A)).toEqual(on.decorationQtys(A))
+    expect(off.decorationQtys(B)).toEqual(on.decorationQtys(B))
   })
 
-  it('does not read org_decorations at all when no catalogue opts in', async () => {
-    // The poolability read is the one query pooling adds; it must not exist on
-    // the flag-off path, which is every catalogue at ship time.
+  it('performs the poolability read unconditionally', async () => {
     const off = await run(world(false), checkout([TEE, HOOD, CAP]))
-    expect(off.stub.fromCount('org_decorations')).toBe(0)
+    expect(off.stub.fromCount('org_decorations')).toBe(1)
   })
 
-  it('adds no b2b_catalogue_items round trip — the flag rides the existing select', async () => {
+  it('adds no b2b_catalogue_items round trip — pooling rides the existing select', async () => {
     // The absolute count is whatever the rest of checkout already does; what
-    // pooling must not do is add one. Turning the flag on changes it by zero.
+    // pooling must not do is add one.
     const off = await run(world(false), checkout([TEE, HOOD, CAP]))
     const on = await run(world(true), checkout([TEE, HOOD, CAP]))
     expect(on.stub.fromCount('b2b_catalogue_items')).toBe(
@@ -436,18 +438,18 @@ describe('manual_final pooled — the combined figure survives pooling', () => {
     expect(stub.rpcCalls.filter((c) => c.name === 'submit_b2b_order_for_country')).toHaveLength(0)
   })
 
-  it('flag OFF: each manual line reads the combined figure at its OWN qty', async () => {
+  it('always pool: the legacy flag value is inert — manual lines read the pooled band either way', async () => {
     const stub = makeFanoutStub(manualWorld(false))
     await submitCustomerOrder(
       stub.admin,
       checkout([
-        { ...M_TEE, claimed_manual_decoration: 8 },
-        { ...M_HOOD, claimed_manual_decoration: 22.5 },
+        { ...M_TEE, claimed_manual_decoration: 3.5 },
+        { ...M_HOOD, claimed_manual_decoration: 9.25 },
       ]),
     )
     expect(combinedPairs(stub)).toEqual([
-      [MANUAL_HOOD, 100],
-      [MANUAL_TEE, 500],
+      [MANUAL_HOOD, 600],
+      [MANUAL_TEE, 600],
     ])
   })
 

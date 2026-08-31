@@ -53,26 +53,31 @@ export type PdpCatalogueItem = {
 }
 
 const CAT_ITEM_SELECT =
-  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, limit_to_available_stock, price_mode, volume_display_hidden_bands, volume_display_band_order, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active, decoration_pooling_enabled)'
+  'id, name, description, sku_override, moq_override, max_order_qty_override, fulfilment_type_override, limit_to_available_stock, price_mode, volume_display_hidden_bands, volume_display_band_order, stock_unit_price, line_dataset_id, custom_name_max_length, image_layout_override, b2b_catalogues!inner(id, organization_id, is_active)'
 
 /**
  * Flatten the embedded catalogue row onto the item. PostgREST returns a
  * many-to-one embed as an object, but the generated types model it either way,
- * so normalise both shapes in one place rather than at every read site. A row
- * with no embed (older fixtures) degrades to "no catalogue identity, pooling
- * off", which is exactly today's behaviour.
+ * so normalise both shapes in one place rather than at every read site.
+ *
+ * Pooling is UNCONDITIONAL since the 2026-08-28 always-pool migration dropped
+ * b2b_catalogues.decoration_pooling_enabled — selecting the dead column made
+ * PostgREST reject the whole query and every PDP silently 404'd. The flag is
+ * kept on this type for the cart add-time snapshot and now means "this item
+ * has catalogue identity"; a row with no embed (older fixtures) degrades to
+ * "no catalogue identity, never pools", same as before.
  */
 function withCatalogueFields(row: unknown): PdpCatalogueItem {
   const raw = row as Record<string, unknown>
   const embedded = raw.b2b_catalogues
   const cat = (Array.isArray(embedded) ? embedded[0] : embedded) as
-    | { id?: string | null; decoration_pooling_enabled?: boolean | null }
+    | { id?: string | null }
     | null
     | undefined
   return {
     ...(raw as unknown as PdpCatalogueItem),
     catalogue_id: cat?.id ?? null,
-    decoration_pooling_enabled: cat?.decoration_pooling_enabled === true,
+    decoration_pooling_enabled: cat?.id != null,
   }
 }
 
@@ -144,13 +149,14 @@ export async function resolveCatalogueItemForPdp(
   const getGranted = deps.getGrantedItemIds ?? getGrantedCatalogueItemIds
 
   if (isPreview && previewItemId) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from('b2b_catalogue_items')
       .select(CAT_ITEM_SELECT)
       .eq('id', previewItemId)
       .eq('source_product_id', productId)
       .eq('b2b_catalogues.organization_id', organizationId)
       .maybeSingle()
+    if (error) throw new Error(`PDP preview catalogue-item query failed: ${error.message}`)
     if (data) return withCatalogueFields(data)
     // Stale / cross-product preview item — fall through to normal access.
   }
@@ -158,7 +164,7 @@ export async function resolveCatalogueItemForPdp(
   const grantedItemIds = await getGranted(admin, membershipId, organizationId)
   if (grantedItemIds.length === 0) return null
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('b2b_catalogue_items')
     .select(CAT_ITEM_SELECT)
     .eq('source_product_id', productId)
@@ -168,6 +174,10 @@ export async function resolveCatalogueItemForPdp(
     .in('id', grantedItemIds)
     .limit(1)
     .maybeSingle()
+
+  // A failed query is an outage, not a missing product. Swallowing it here is
+  // how the 2026-08-28 dropped-column deploy rendered EVERY PDP as a 404.
+  if (error) throw new Error(`PDP catalogue-item query failed: ${error.message}`)
 
   return data ? withCatalogueFields(data) : null
 }

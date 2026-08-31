@@ -13,7 +13,10 @@ type Row = Record<string, unknown>
 // both querying the same `b2b_catalogue_items` table. Filters on columns absent
 // from the canned row (e.g. the embedded `b2b_catalogues.*` or `is_active`) are
 // treated as no-ops, keeping fixtures minimal.
-function makeStub(byTable: Record<string, Row[]>): SupabaseClient {
+function makeStub(
+  byTable: Record<string, Row[]>,
+  observed: { selects?: string[] } = {},
+): SupabaseClient {
   function builder(table: string) {
     const eqs: Array<[string, unknown]> = []
     const ins: Array<[string, unknown[]]> = []
@@ -24,7 +27,10 @@ function makeStub(byTable: Record<string, Row[]>): SupabaseClient {
           ins.every(([c, vs]) => !(c in row) || vs.includes(row[c])),
       )
     const b: Record<string, unknown> = {
-      select: () => b,
+      select: (cols: string) => {
+        observed.selects?.push(cols)
+        return b
+      },
       eq: (c: string, v: unknown) => {
         eqs.push([c, v])
         return b
@@ -42,6 +48,24 @@ function makeStub(byTable: Record<string, Row[]>): SupabaseClient {
     return b
   }
   return { from: (table: string) => builder(table) } as unknown as SupabaseClient
+}
+
+/** Stub whose every query fails, the way PostgREST fails on an unknown column. */
+function makeErrorStub(message: string): SupabaseClient {
+  function builder() {
+    const b: Record<string, unknown> = {
+      select: () => b,
+      eq: () => b,
+      in: () => b,
+      order: () => b,
+      limit: () => b,
+      maybeSingle: async () => ({ data: null, error: { message } }),
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message } }).then(resolve, reject),
+    }
+    return b
+  }
+  return { from: () => builder() } as unknown as SupabaseClient
 }
 
 const HOOD_PRODUCT = '232b839b-eb86-4c56-8705-da4656c171c2'
@@ -155,7 +179,9 @@ describe('resolveCatalogueItemForPdp', () => {
     expect(result).toBeNull()
   })
 
-  it('flattens the embedded catalogue row into catalogue_id + pooling flag', async () => {
+  it('flattens the embedded catalogue row into catalogue_id + always-on pooling', async () => {
+    // The embed no longer carries decoration_pooling_enabled (dropped 2026-08-28);
+    // catalogue identity alone must yield pooling on.
     const admin = makeStub({
       b2b_catalogue_items: [
         {
@@ -166,7 +192,6 @@ describe('resolveCatalogueItemForPdp', () => {
             id: 'cat-1',
             organization_id: ORG,
             is_active: true,
-            decoration_pooling_enabled: true,
           },
         },
       ],
@@ -186,6 +211,52 @@ describe('resolveCatalogueItemForPdp', () => {
     expect(result?.decoration_pooling_enabled).toBe(true)
   })
 
+  it('REGRESSION: never selects the dropped decoration_pooling_enabled column (2026-08-28 always-pool migration made it a PostgREST 400 → every PDP silently 404ed)', async () => {
+    const observed: { selects: string[] } = { selects: [] }
+    const admin = makeStub(
+      {
+        b2b_catalogue_items: [
+          { id: HOOD_ITEM, source_product_id: HOOD_PRODUCT, name: 'Hood' },
+        ],
+      },
+      observed,
+    )
+    await resolveCatalogueItemForPdp(
+      admin,
+      {
+        productId: HOOD_PRODUCT,
+        organizationId: ORG,
+        membershipId: 'm1',
+        isPreview: true,
+        previewItemId: TEE_ITEM, // exercises BOTH the preview and granted selects
+      },
+      { getGrantedItemIds: async () => [HOOD_ITEM] },
+    )
+    expect(observed.selects.length).toBeGreaterThan(0)
+    for (const cols of observed.selects) {
+      expect(cols).not.toContain('decoration_pooling_enabled')
+    }
+  })
+
+  it('REGRESSION: a failed query throws instead of masquerading as a 404', async () => {
+    const admin = makeErrorStub(
+      'column b2b_catalogues.decoration_pooling_enabled does not exist',
+    )
+    await expect(
+      resolveCatalogueItemForPdp(
+        admin,
+        {
+          productId: HOOD_PRODUCT,
+          organizationId: ORG,
+          membershipId: 'm1',
+          isPreview: false,
+          previewItemId: null,
+        },
+        { getGrantedItemIds: async () => [HOOD_ITEM] },
+      ),
+    ).rejects.toThrow(/catalogue-item query failed/)
+  })
+
   it('handles the array embed shape and degrades to pooling-off with no embed', async () => {
     const arrayEmbed = makeStub({
       b2b_catalogue_items: [
@@ -193,7 +264,7 @@ describe('resolveCatalogueItemForPdp', () => {
           id: HOOD_ITEM,
           source_product_id: HOOD_PRODUCT,
           name: 'Hood',
-          b2b_catalogues: [{ id: 'cat-2', decoration_pooling_enabled: true }],
+          b2b_catalogues: [{ id: 'cat-2' }],
         },
       ],
     })
