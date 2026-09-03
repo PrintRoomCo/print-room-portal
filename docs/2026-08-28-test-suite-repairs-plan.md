@@ -372,7 +372,7 @@ and `CurrencyContext.test.tsx` still passes.
 
 - [x] **5. Commit.** `git commit -m "test: rewrite branch-grants test against chips+combobox UI"`
 
-- [ ] **6. Checkpoint.** Ask Claude: *"review Task 2 against the plan"*.
+- [] **6. Checkpoint.** Ask Claude: *"review Task 2 against the plan"*.
 
 **Why this shape:** the queries are all role+accessible-name rather than
 label+`.checked`. That ties the test to what a *user* can do ("remove Avalon", "save

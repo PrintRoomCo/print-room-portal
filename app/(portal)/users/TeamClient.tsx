@@ -10,9 +10,6 @@ import {
   type TenantType,
 } from '@/lib/team/ordering-permission'
 
-// Customer-facing wording for the three ordering permissions. Chris asked for
-// language consistent with the rest of the portal (Monday 2809639903): stock
-// draws are "from stock on hand", reorders are raised "with purchase order".
 const PERMISSION_LABELS: Record<MemberOrderingPermission, string> = {
   stock_only: 'Order from stock on hand',
   reorder_only: 'Order with purchase order',
@@ -147,7 +144,7 @@ export function TeamClient({
         <h2 className="text-lg font-medium text-gray-900">Add a staff member</h2>
         {noStores ? (
           <p className="mt-4 rounded-2xl bg-orange-50 px-4 py-3 text-sm text-orange-800">
-            Add a store on your Account page before inviting staff — every staff member needs a
+            Add a store on your Account page before inviting staff. Every staff member needs a
             default ship-to store.
           </p>
         ) : (
@@ -288,19 +285,11 @@ interface BranchGrant {
   granted: boolean
 }
 
-/**
- * Org_admin control (the whole /users page is org_admin-gated) to manage which
- * branches a STAFF member manages. Loads and replace-set saves via the mirror
- * route app/api/team/members/[membershipId]/store-grants. Zero granted branches
- * = plain staff (feature off for that member).
- */
 export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
   const [stores, setStores] = useState<BranchGrant[] | null>(null)
   const [original, setOriginal] = useState<BranchGrant[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Combobox: granted branches show as chips; the input searches the rest.
-  // Orgs can have ~65 branches, so a checkbox-per-branch list is unusable.
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -324,7 +313,6 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
     }
   }, [membershipId])
 
-  // Close the search dropdown when clicking anywhere outside this control.
   useEffect(() => {
     if (!open) return
     function onDocMouseDown(e: MouseEvent) {
@@ -388,7 +376,7 @@ export function MemberBranchGrants({ membershipId }: { membershipId: string }) {
       {/* Selected branches as removable mint chips */}
       {granted.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {granted.map((s) => (
+          {stores.map((s) => (
             <span
               key={s.id}
               className="inline-flex items-center rounded-full bg-[rgb(var(--accent-mint))] text-black transition-colors"
