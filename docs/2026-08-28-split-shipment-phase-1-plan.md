@@ -31,49 +31,37 @@
 
 ## Order of play
 
-- [x] Task 1 — Schema foundation migration (staff) — `order_destinations` + columns + flag — ~1h
-- [x] Task 2 — Split-fee module (portal) — band table + SKU counter — ~45m
-- [x] Task 3 — Destinations module (portal) — validate + explode — ~1.5h
-- [x] Task 4 — MOQ pools across partitions (portal) — ~1h
-- [x] Task 5 — Pooled $500 minimum + picking-fee suppression seams (portal) — ~1.5h
-- [x] Task 6 — Xero ship-to contact helper (portal) — ~45m
-- [x] Task 7 — Prepare computes per-destination split fees (portal) — ~2h
-- [x] Task 8 — Preview route accepts destinations (portal) — ~2h
-- [x] Task 9 — Submit RPC gains `p_destinations` (staff migration) — ~3h
-- [x] Task 10 — Submit wiring (portal) — ~2h
-- [x] Task 11 — Order-level ships-to control (portal) — ~2h
-- [x] Task 12 — Split shipment editor + allocation grid (portal) `[Stretch]` — ~3h
-- [x] Task 13 — Google Places autocomplete proxy + input (portal) — ~1.5h
-- [x] Task 14 — Review, summary + confirmation surfaces (portal) — ~2h
-- [x] Task 15 — Staff read-only breakdown + amendment guard (staff) — ~1.5h
+- [ ] Task 1 — Schema foundation migration (staff) — `order_destinations` + columns + flag — ~1h
+- [ ] Task 2 — Split-fee module (portal) — band table + SKU counter — ~45m
+- [ ] Task 3 — Destinations module (portal) — validate + explode — ~1.5h
+- [ ] Task 4 — MOQ pools across partitions (portal) — ~1h
+- [ ] Task 5 — Pooled $500 minimum + picking-fee suppression seams (portal) — ~1.5h
+- [ ] Task 6 — Xero ship-to contact helper (portal) — ~45m
+- [ ] Task 7 — Prepare computes per-destination split fees (portal) — ~2h
+- [ ] Task 8 — Preview route accepts destinations (portal) — ~2h
+- [ ] Task 9 — Submit RPC gains `p_destinations` (staff migration) — ~3h
+- [ ] Task 10 — Submit wiring (portal) — ~2h
+- [ ] Task 11 — Order-level ships-to control (portal) — ~2h
+- [ ] Task 12 — Split shipment editor + allocation grid (portal) `[Stretch]` — ~3h
+- [ ] Task 13 — Google Places autocomplete proxy + input (portal) — ~1.5h
+- [ ] Task 14 — Review, summary + confirmation surfaces (portal) — ~2h
+- [ ] Task 15 — Staff read-only breakdown + amendment guard (staff) — ~1.5h
 - [ ] Task 16 — Pilot enablement + end-to-end smoke — ~1h
 
 Ships dark until Task 16 flips `split_shipping_enabled` for the pilot org. Safe to stop after any ticked task: 1–3 are pure additions, 4 is strictly more lenient, 5–10 are inert until a request carries destinations (which no UI sends until 11–12, which no org sees until 16), 15's guard can only fire on orders that can't exist yet.
 
-## Baselines (measured 2026-08-28, before any code)
+## Baselines (measure before you start)
 
 print-room-portal:
 
-- [x] `npm test` -> **299 files / 1825 tests, all passing.** The
-  `TeamClient.branch.test.tsx` failure this plan recorded was already fixed by
-  commits 7d9408a + 4a59866.
-- [x] `npx tsc --noEmit` -> **14 errors**, all pre-existing, all in two test
-  files: `lib/__tests__/next-config-redirects.test.ts` and
-  `lib/email/__tests__/tracker-notification.test.ts`. (The plan guessed ~5.)
-- [x] `npm run lint` -> **199 warnings, 0 errors.**
+- [x] `npm test` → record failures here: 
+- [ ] `npx tsc --noEmit` → record error count here: ____ (was ~5 known errors as of the billed-total-parity epic)
+- [ ] `npm run lint` → record warning count here: ____
 
 print-room-staff-portal:
 
-- [x] `npm test` -> **480 files / 3350 tests, 5 failing** (all in
-  `src/components/catalogues/attach-designer/sections/swatch-edit-hint.test.ts`,
-  unrelated to this epic).
-- [x] `npx tsc --noEmit` -> **0 errors.**
-- [x] `npm run lint` -> **32 problems (18 errors, 14 warnings).**
-
-Verified after the work: the staff baseline is byte-identical with the changes
-stashed and unstashed, so this epic introduced no staff regressions. The portal
-finished at **310 files / 1903 tests passing, tsc 14, lint 199** — tests and
-files up, errors and warnings exactly at baseline.
+- [ ] `npm test` → record failures here: ____
+- [ ] `npx tsc --noEmit` → record error count here: ____
 
 ---
 
@@ -180,11 +168,11 @@ files up, errors and warnings exactly at baseline.
 - Produces: `splitFeeForSkuCount(count: number): number` and `distinctSkuCount(lines: Array<Pick<CheckoutLineInput, 'product_id' | 'variant_id' | 'size_id'>>): number` (import `CheckoutLineInput` from `@/lib/checkout/submit`). Consumed by Task 7.
 
 **Read first:**
-- [ ] `lib/pricing/picking-fee.ts` — the band-table idiom you're mirroring (exported band constant + tiny lookup fn, doc comment carrying the business numbers).
+- [x] `lib/pricing/picking-fee.ts` — the band-table idiom you're mirroring (exported band constant + tiny lookup fn, doc comment carrying the business numbers).
 
 **Steps:**
 
-- [ ] **1. Write the failing test.** Copy verbatim into `lib/pricing/split-fee.test.ts`:
+- [x] **1. Write the failing test.** Copy verbatim into `lib/pricing/split-fee.test.ts`:
 
   ```ts
   import { describe, it, expect } from 'vitest'
@@ -239,10 +227,10 @@ files up, errors and warnings exactly at baseline.
   })
   ```
 
-- [ ] **2. Run it and confirm it fails for the RIGHT reason.**
+- [x] **2. Run it and confirm it fails for the RIGHT reason.**
   `npx vitest run lib/pricing/split-fee.test.ts` → expect `Cannot find module './split-fee'` (module doesn't exist yet). Any other failure means the test itself is broken.
 
-- [ ] **3. Implement it.** Contract:
+- [x] **3. Implement it.** Contract:
   - Export a `SPLIT_FEE_BANDS` constant (mirroring `PICKING_FEE_BANDS`' shape) with a doc comment carrying the spreadsheet numbers and the words "extrapolated above 47, confirmed by Jon 2026-08-28".
   - `splitFeeForSkuCount` — bands of 10; the 41+ region is `30 + 2.5 * (whole blocks of 10 past 50)`; non-finite/≤0 input → 0.
   - `distinctSkuCount` — distinct by the string identity `product_id | variant_id ?? '' | size_id ?? ''`.
